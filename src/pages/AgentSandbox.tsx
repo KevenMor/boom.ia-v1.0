@@ -20,6 +20,7 @@ type Conversation = {
 };
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-agent`;
+const MSG_SPLIT = "<<MSG_SPLIT>>";
 
 // Extract image URLs from message content
 function extractImages(content: string): { text: string; images: string[] } {
@@ -193,16 +194,43 @@ export default function AgentSandbox() {
 
             const content = parsed.choices?.[0]?.delta?.content as string | undefined;
             if (content) {
-              assistantSoFar += content;
-              setMessages((prev) => {
-                const last = prev[prev.length - 1];
-                if (last?.role === "assistant") {
-                  return prev.map((m, i) =>
-                    i === prev.length - 1 ? { ...m, content: assistantSoFar } : m
-                  );
+              // Check for split marker
+              if (content.includes(MSG_SPLIT)) {
+                // The chunk may contain text + marker + text
+                const segments = content.split(MSG_SPLIT);
+                for (let si = 0; si < segments.length; si++) {
+                  if (si > 0) {
+                    // Start a new assistant bubble
+                    assistantSoFar = segments[si];
+                    setMessages((prev) => [
+                      ...prev,
+                      { role: "assistant", content: assistantSoFar, timestamp: new Date() },
+                    ]);
+                  } else {
+                    assistantSoFar += segments[si];
+                    setMessages((prev) => {
+                      const last = prev[prev.length - 1];
+                      if (last?.role === "assistant") {
+                        return prev.map((m, idx) =>
+                          idx === prev.length - 1 ? { ...m, content: assistantSoFar } : m
+                        );
+                      }
+                      return [...prev, { role: "assistant", content: assistantSoFar, timestamp: new Date() }];
+                    });
+                  }
                 }
-                return [...prev, { role: "assistant", content: assistantSoFar, timestamp: new Date() }];
-              });
+              } else {
+                assistantSoFar += content;
+                setMessages((prev) => {
+                  const last = prev[prev.length - 1];
+                  if (last?.role === "assistant") {
+                    return prev.map((m, idx) =>
+                      idx === prev.length - 1 ? { ...m, content: assistantSoFar } : m
+                    );
+                  }
+                  return [...prev, { role: "assistant", content: assistantSoFar, timestamp: new Date() }];
+                });
+              }
             }
           } catch {
             textBuffer = line + "\n" + textBuffer;
