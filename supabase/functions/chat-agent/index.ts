@@ -197,35 +197,49 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
 
         const { data, error } = await query;
 
-        // Debug: log photo data for first vehicle
-        if (data?.length) {
-          const sample = data[0];
-          console.log(`Inventory query result: ${data.length} vehicles found, error: ${error?.message ?? 'none'}`);
-          console.log(`Sample vehicle photos: photo_url=${sample.photo_url}, photos type=${typeof sample.photos}, photos count=${Array.isArray(sample.photos) ? sample.photos.length : 'N/A'}, photos=${JSON.stringify(sample.photos?.slice(0, 2))}`);
-        } else {
-          console.log(`Inventory query result: 0 vehicles found, error: ${error?.message ?? 'none'}`);
-        }
+        console.log(`Inventory query result: ${data?.length ?? 0} vehicles found, error: ${error?.message ?? 'none'}`);
 
         if (error) return JSON.stringify({ error: error.message });
         if (!data?.length) return JSON.stringify({ message: "Nenhum veículo encontrado com esses filtros" });
 
         return JSON.stringify({
           total: data.length,
-          vehicles: data.map((v: any) => ({
-            id: v.id,
-            brand: v.brand,
-            model: v.model,
-            version: v.version,
-            year: v.year,
-            price: v.price,
-            mileage: v.mileage,
-            fuel_type: v.fuel_type,
-            transmission: v.transmission,
-            color: v.color,
-            photo_url: v.photo_url,
-            photos: v.photos?.slice(0, 10),
-            detail_url: v.detail_url,
-          })),
+          vehicles: data.map((v: any) => {
+            let parsedPhotos: string[] = [];
+
+            if (Array.isArray(v.photos)) {
+              parsedPhotos = v.photos.filter((p: unknown) => typeof p === "string") as string[];
+            } else if (typeof v.photos === "string" && v.photos.trim()) {
+              try {
+                const decoded = JSON.parse(v.photos);
+                if (Array.isArray(decoded)) {
+                  parsedPhotos = decoded.filter((p: unknown) => typeof p === "string") as string[];
+                }
+              } catch {
+                // keep empty when invalid JSON
+              }
+            }
+
+            const allPhotos = Array.from(
+              new Set([...(v.photo_url ? [v.photo_url] : []), ...parsedPhotos])
+            ).slice(0, 10);
+
+            return {
+              id: v.id,
+              brand: v.brand,
+              model: v.model,
+              version: v.version,
+              year: v.year,
+              price: v.price,
+              mileage: v.mileage,
+              fuel_type: v.fuel_type,
+              transmission: v.transmission,
+              color: v.color,
+              photo_url: allPhotos[0] ?? v.photo_url,
+              photos: allPhotos,
+              detail_url: v.detail_url,
+            };
+          }),
         });
       }
 
