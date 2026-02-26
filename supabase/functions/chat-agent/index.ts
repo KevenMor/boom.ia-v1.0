@@ -649,6 +649,10 @@ Deno.serve(async (req) => {
         .toLowerCase();
       const userAskedForPhotos = /\bfotos?\b|\bimagens?\b/.test(userConversationText);
       let lastInventoryVehicles: any[] = [];
+      // Debug trace for sandbox
+      const debugTrace: any[] = [];
+
+      debugTrace.push({ type: "config", model, temperature, top_p, top_k, tools_count: openaiTools?.length || 0 });
 
       while (maxIterations-- > 0) {
         const toolCallResp = await fetch(baseUrl, {
@@ -708,6 +712,10 @@ Deno.serve(async (req) => {
             try {
               if (convId) {
                 await writer.write(encoder.encode(`data: ${JSON.stringify({ conversation_id: convId })}\n\n`));
+              }
+              // Send debug trace
+              if (debugTrace.length > 0) {
+                await writer.write(encoder.encode(`data: ${JSON.stringify({ debug: debugTrace })}\n\n`));
               }
               // Split into WhatsApp-style separate messages
               const messageParts = splitIntoMessages(finalContent);
@@ -771,7 +779,18 @@ Deno.serve(async (req) => {
           let toolResult: string;
           if (matchedTool) {
             console.log(`Executing tool: ${toolName} (${matchedTool.tool_type})`);
+            debugTrace.push({ type: "tool_call", tool: toolName, tool_type: matchedTool.tool_type, args: toolArgs, timestamp: Date.now() });
             toolResult = await executeTool(matchedTool, toolArgs, supabase, agent_id);
+
+            // Build a short preview of the result for debug
+            let resultPreview: any = {};
+            try {
+              const parsed = JSON.parse(toolResult);
+              resultPreview = { total: parsed.total, vehicle_count: parsed.vehicles?.length, hint: parsed._hint, error: parsed.error, message: parsed.message };
+            } catch {
+              resultPreview = { raw_length: toolResult.length };
+            }
+            debugTrace.push({ type: "tool_result", tool: toolName, preview: resultPreview, timestamp: Date.now() });
 
             if (matchedTool.tool_type === "inventory_query") {
               try {
@@ -785,6 +804,7 @@ Deno.serve(async (req) => {
             }
           } else {
             toolResult = JSON.stringify({ error: `Tool '${toolName}' not found` });
+            debugTrace.push({ type: "tool_error", tool: toolName, error: "Tool not found" });
           }
 
           currentMessages.push({
