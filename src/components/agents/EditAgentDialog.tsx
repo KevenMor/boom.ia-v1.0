@@ -26,6 +26,8 @@ const schema = z.object({
   model: z.string().optional(),
   system_prompt: z.string().optional(),
   temperature: z.number().min(0).max(2),
+  top_p: z.number().min(0).max(1),
+  top_k: z.number().min(1).max(100),
   status: z.string(),
 });
 
@@ -38,10 +40,13 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
   const { data: tenants } = useTenants();
   const { data: providers } = useProviders();
   const [temp, setTemp] = useState(0.7);
+  const [topP, setTopP] = useState(0.8);
+  const [topK, setTopK] = useState(40);
   const { register, handleSubmit, setValue, watch, reset } = useForm<FormData>({ resolver: zodResolver(schema) });
 
   useEffect(() => {
     if (agent) {
+      const cfg = agent.config || {};
       reset({
         name: agent.name,
         description: agent.description ?? "",
@@ -50,15 +55,20 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
         model: agent.model ?? "",
         system_prompt: agent.system_prompt ?? "",
         temperature: agent.temperature,
+        top_p: (cfg as any).top_p ?? 0.8,
+        top_k: (cfg as any).top_k ?? 40,
         status: agent.status,
       });
       setTemp(agent.temperature);
+      setTopP((cfg as any).top_p ?? 0.8);
+      setTopK((cfg as any).top_k ?? 40);
     }
   }, [agent, reset]);
 
   const onSubmit = async (data: FormData) => {
     if (!agent) return;
     try {
+      const currentConfig = (agent.config || {}) as Record<string, unknown>;
       await update.mutateAsync({
         id: agent.id,
         ...data,
@@ -66,6 +76,7 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
         provider_id: data.provider_id || null,
         model: data.model || null,
         system_prompt: data.system_prompt || null,
+        config: { ...currentConfig, top_p: data.top_p, top_k: data.top_k },
       });
       toast.success("Agente atualizado");
       onOpenChange(false);
@@ -164,6 +175,24 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
               <span className="font-mono text-xs text-primary">{temp.toFixed(2)}</span>
             </div>
             <Slider value={[temp]} onValueChange={([v]) => { setTemp(v); setValue("temperature", v); }} min={0} max={2} step={0.05} />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Top P</Label>
+              <span className="font-mono text-xs text-primary">{topP.toFixed(2)}</span>
+            </div>
+            <Slider value={[topP]} onValueChange={([v]) => { setTopP(v); setValue("top_p", v); }} min={0} max={1} step={0.05} />
+            <p className="text-[10px] text-muted-foreground">Limita palavras improváveis (0.8 = focado)</p>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Top K</Label>
+              <span className="font-mono text-xs text-primary">{topK}</span>
+            </div>
+            <Slider value={[topK]} onValueChange={([v]) => { setTopK(v); setValue("top_k", v); }} min={1} max={100} step={1} />
+            <p className="text-[10px] text-muted-foreground">Vocabulário considerado (40 = rico mas focado)</p>
           </div>
 
           <div className="space-y-2">

@@ -267,11 +267,13 @@ Deno.serve(async (req) => {
     // 6. Build request — merge tenant LLM config with agent defaults
     const isAnthropic = provider.name === "Anthropic";
     const model = agent.model || "gpt-4o";
+    const agentConfig = agent.config || {};
     const tenantSettings = agent.tenants?.settings || {};
     const llmConfig = tenantSettings.llm_config || {};
-    const temperature = llmConfig.temperature ?? agent.temperature ?? 0.7;
-    const top_p = llmConfig.top_p ?? undefined;
-    const top_k = llmConfig.top_k ?? undefined;
+    // Priority: agent-level > tenant-level > defaults
+    const temperature = agent.temperature ?? llmConfig.temperature ?? 0.7;
+    const top_p = agentConfig.top_p ?? llmConfig.top_p ?? undefined;
+    const top_k = agentConfig.top_k ?? llmConfig.top_k ?? undefined;
     const systemPrompt = agent.system_prompt || "You are a helpful AI assistant.";
     const startTime = Date.now();
     console.log(`LLM config: temperature=${temperature}, top_p=${top_p}, top_k=${top_k}`);

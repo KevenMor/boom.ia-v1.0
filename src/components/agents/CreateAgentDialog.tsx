@@ -25,6 +25,8 @@ const schema = z.object({
   model: z.string().optional(),
   system_prompt: z.string().optional(),
   temperature: z.number().min(0).max(2).default(0.7),
+  top_p: z.number().min(0).max(1).default(0.8),
+  top_k: z.number().min(1).max(100).default(40),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -40,10 +42,12 @@ export function CreateAgentDialog({ open, onOpenChange, defaultTenantId }: Props
   const { data: tenants } = useTenants();
   const { data: providers } = useProviders();
   const [temp, setTemp] = useState(0.7);
+  const [topP, setTopP] = useState(0.8);
+  const [topK, setTopK] = useState(40);
 
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { name: "", description: "", tenant_id: defaultTenantId ?? "", provider_id: "", model: "", system_prompt: "", temperature: 0.7 },
+    defaultValues: { name: "", description: "", tenant_id: defaultTenantId ?? "", provider_id: "", model: "", system_prompt: "", temperature: 0.7, top_p: 0.8, top_k: 40 },
   });
 
   const onSubmit = async (data: FormData) => {
@@ -56,10 +60,13 @@ export function CreateAgentDialog({ open, onOpenChange, defaultTenantId }: Props
         model: data.model || null,
         system_prompt: data.system_prompt || null,
         temperature: data.temperature,
+        config: { top_p: data.top_p, top_k: data.top_k },
       });
       toast.success(`Agente "${data.name}" criado`);
       reset();
       setTemp(0.7);
+      setTopP(0.8);
+      setTopK(40);
       onOpenChange(false);
     } catch (err: any) {
       toast.error("Erro: " + (err.message ?? "desconhecido"));
@@ -173,6 +180,24 @@ export function CreateAgentDialog({ open, onOpenChange, defaultTenantId }: Props
               <span>Preciso</span>
               <span>Criativo</span>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Top P</Label>
+              <span className="font-mono text-xs text-primary">{topP.toFixed(2)}</span>
+            </div>
+            <Slider value={[topP]} onValueChange={([v]) => { setTopP(v); setValue("top_p", v); }} min={0} max={1} step={0.05} />
+            <p className="text-[10px] text-muted-foreground">Limita palavras improváveis (0.8 = focado)</p>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Top K</Label>
+              <span className="font-mono text-xs text-primary">{topK}</span>
+            </div>
+            <Slider value={[topK]} onValueChange={([v]) => { setTopK(v); setValue("top_k", v); }} min={1} max={100} step={1} />
+            <p className="text-[10px] text-muted-foreground">Vocabulário considerado (40 = rico mas focado)</p>
           </div>
 
           <DialogFooter>
