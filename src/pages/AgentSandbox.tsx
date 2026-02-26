@@ -1,9 +1,8 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { ArrowLeft, Send, Loader2, Bot, User, Trash2, MessageSquare, Plus, Clock } from "lucide-react";
+import { ArrowLeft, Send, Loader2, Plus, Clock, MessageSquare, Trash2, Phone, Video, MoreVertical, Smile, Paperclip, Mic, Check, CheckCheck } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAgents } from "@/hooks/useAgents";
@@ -11,7 +10,7 @@ import { nexusDb } from "@/integrations/supabase/nexus-client";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
-type Msg = { role: "user" | "assistant"; content: string };
+type Msg = { role: "user" | "assistant"; content: string; timestamp?: Date };
 type Conversation = {
   id: string;
   channel: string;
@@ -21,6 +20,34 @@ type Conversation = {
 };
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-agent`;
+
+// Extract image URLs from message content
+function extractImages(content: string): { text: string; images: string[] } {
+  const images: string[] = [];
+  
+  // Match common image URL patterns
+  const imgRegex = /(?:!\[.*?\]\((https?:\/\/[^\s)]+\.(?:jpg|jpeg|png|gif|webp)[^\s)]*)\)|(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp)[^\s]*))/gi;
+  let match;
+  while ((match = imgRegex.exec(content)) !== null) {
+    const url = match[1] || match[2];
+    if (url && !images.includes(url)) images.push(url);
+  }
+
+  // Also detect photo_url patterns from tool output that the LLM might reference
+  const photoUrlRegex = /https?:\/\/[^\s"'<>]+\/fotos\/[^\s"'<>]+/gi;
+  while ((match = photoUrlRegex.exec(content)) !== null) {
+    if (!images.includes(match[0])) images.push(match[0]);
+  }
+
+  // Clean URLs from text display  
+  let text = content;
+  images.forEach(url => {
+    text = text.replace(url, '').replace(`![](${url})`, '');
+  });
+  text = text.replace(/\n{3,}/g, '\n\n').trim();
+
+  return { text, images };
+}
 
 export default function AgentSandbox() {
   const { agentId } = useParams<{ agentId: string }>();
@@ -36,12 +63,12 @@ export default function AgentSandbox() {
   const [showHistory, setShowHistory] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Load conversation list
   const loadConversations = useCallback(async () => {
     if (!agentId) return;
     try {
@@ -50,16 +77,13 @@ export default function AgentSandbox() {
         p_limit: 50,
       });
       if (!error && data) setConversations(data as Conversation[]);
-    } catch {
-      // Schema may not be provisioned yet
-    }
+    } catch {}
   }, [agentId]);
 
   useEffect(() => {
     loadConversations();
   }, [loadConversations]);
 
-  // Load messages from a conversation
   const loadConversation = async (convId: string) => {
     if (!agentId) return;
     setLoadingHistory(true);
@@ -70,11 +94,15 @@ export default function AgentSandbox() {
       });
       if (error) throw error;
       setMessages(
-        (data as any[]).map((m) => ({ role: m.role as "user" | "assistant", content: m.content }))
+        (data as any[]).map((m) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+          timestamp: new Date(m.created_at),
+        }))
       );
       setConversationId(convId);
       setShowHistory(false);
-    } catch (e: any) {
+    } catch {
       toast.error("Erro ao carregar conversa");
     } finally {
       setLoadingHistory(false);
@@ -91,7 +119,7 @@ export default function AgentSandbox() {
     const text = input.trim();
     if (!text || isLoading || !agentId) return;
 
-    const userMsg: Msg = { role: "user", content: text };
+    const userMsg: Msg = { role: "user", content: text, timestamp: new Date() };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setIsLoading(true);
@@ -148,7 +176,6 @@ export default function AgentSandbox() {
           try {
             const parsed = JSON.parse(jsonStr);
 
-            // Capture conversation_id from first event
             if (parsed.conversation_id && !conversationId) {
               setConversationId(parsed.conversation_id);
               continue;
@@ -164,7 +191,7 @@ export default function AgentSandbox() {
                     i === prev.length - 1 ? { ...m, content: assistantSoFar } : m
                   );
                 }
-                return [...prev, { role: "assistant", content: assistantSoFar }];
+                return [...prev, { role: "assistant", content: assistantSoFar, timestamp: new Date() }];
               });
             }
           } catch {
@@ -174,7 +201,6 @@ export default function AgentSandbox() {
         }
       }
 
-      // Refresh conversation list
       loadConversations();
     } catch (e: any) {
       console.error("Chat error:", e);
@@ -194,185 +220,221 @@ export default function AgentSandbox() {
     }
   };
 
+  const agentInitial = agent?.name?.charAt(0)?.toUpperCase() || "A";
+
   return (
     <div className="flex h-[calc(100vh-4rem)]">
       {/* Sidebar - Conversation History */}
       <div
-        className={`border-r border-border bg-muted/30 transition-all duration-200 ${
+        className={`border-r border-border bg-[#111b21] transition-all duration-200 ${
           showHistory ? "w-72" : "w-0 overflow-hidden"
         }`}
       >
-        <div className="flex items-center justify-between p-3 border-b border-border">
-          <span className="text-xs font-medium text-muted-foreground">Conversas</span>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={startNewConversation}>
+        <div className="flex items-center justify-between p-3 border-b border-[#2a3942]">
+          <span className="text-xs font-medium text-[#8696a0]">Conversas</span>
+          <Button variant="ghost" size="icon" className="h-7 w-7 text-[#8696a0] hover:text-white" onClick={startNewConversation}>
             <Plus className="h-3.5 w-3.5" />
           </Button>
         </div>
         <ScrollArea className="h-[calc(100%-3rem)]">
-          <div className="space-y-1 p-2">
+          <div className="space-y-0">
             {conversations.map((conv) => (
               <button
                 key={conv.id}
                 onClick={() => loadConversation(conv.id)}
-                className={`w-full text-left rounded-md px-3 py-2 text-xs transition-colors hover:bg-muted ${
-                  conversationId === conv.id ? "bg-muted border border-border" : ""
+                className={`w-full text-left px-4 py-3 text-xs transition-colors hover:bg-[#2a3942] border-b border-[#2a3942]/50 ${
+                  conversationId === conv.id ? "bg-[#2a3942]" : ""
                 }`}
               >
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="h-3 w-3 text-muted-foreground shrink-0" />
-                  <span className="truncate">
-                    {format(new Date(conv.started_at), "dd/MM HH:mm")}
-                  </span>
-                </div>
-                <div className="mt-1 flex items-center gap-2 text-muted-foreground">
-                  <span>{conv.message_count} msgs</span>
-                  <Badge variant="secondary" className="text-[9px] h-4">
-                    {conv.channel}
-                  </Badge>
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-[#00a884] flex items-center justify-center text-white text-sm font-medium shrink-0">
+                    {agentInitial}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-center">
+                      <span className="text-white text-sm truncate">{agent?.name || "Agent"}</span>
+                      <span className="text-[#8696a0] text-[10px]">
+                        {format(new Date(conv.started_at), "HH:mm")}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 text-[#8696a0]">
+                      <CheckCheck className="h-3 w-3 text-[#53bdeb] shrink-0" />
+                      <span className="truncate">{conv.message_count} mensagens</span>
+                    </div>
+                  </div>
                 </div>
               </button>
             ))}
-            {conversations.length === 0 && (
-              <p className="text-center text-xs text-muted-foreground py-4">
-                Nenhuma conversa ainda
-              </p>
-            )}
           </div>
         </ScrollArea>
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex flex-1 flex-col">
-        {/* Header */}
-        <div className="flex items-center gap-3 border-b border-border px-4 py-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/agents")}>
-            <ArrowLeft className="h-4 w-4" />
+      <div className="flex flex-1 flex-col bg-[#0b141a]">
+        {/* WhatsApp-style Header */}
+        <div className="flex items-center gap-3 bg-[#202c33] px-4 py-2">
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-[#8696a0] hover:text-white md:hidden" onClick={() => navigate("/agents")}>
+            <ArrowLeft className="h-5 w-5" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
+            className={`h-8 w-8 text-[#8696a0] hover:text-white ${showHistory ? "text-[#00a884]" : ""}`}
             onClick={() => setShowHistory(!showHistory)}
-            className={showHistory ? "bg-muted" : ""}
           >
             <Clock className="h-4 w-4" />
           </Button>
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-            <Bot className="h-4 w-4 text-primary" />
+          
+          {/* Avatar */}
+          <div className="h-10 w-10 rounded-full bg-[#00a884] flex items-center justify-center text-white text-lg font-medium cursor-pointer">
+            {agentInitial}
           </div>
-          <div className="flex-1">
-            <h2 className="text-sm font-semibold">{agent?.name ?? "Agent"}</h2>
-            <div className="flex items-center gap-2">
-              {agent?.model && (
-                <Badge variant="secondary" className="font-mono text-[10px]">{agent.model}</Badge>
-              )}
-              {(agent?.providers as any)?.name && (
-                <Badge variant="secondary" className="text-[10px]">{(agent.providers as any).name}</Badge>
-              )}
-              <span className="text-[10px] text-muted-foreground">temp: {agent?.temperature ?? 0.7}</span>
-              {conversationId && (
-                <Badge variant="outline" className="text-[9px] font-mono">
-                  {conversationId.slice(0, 8)}…
-                </Badge>
-              )}
-            </div>
+          
+          <div className="flex-1 min-w-0">
+            <h2 className="text-[#e9edef] text-base font-normal">{agent?.name ?? "Agent"}</h2>
+            <p className="text-[#8696a0] text-xs">
+              {isLoading ? "digitando..." : "online"}
+            </p>
           </div>
-          <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground" onClick={startNewConversation}>
-            <Plus className="h-3 w-3" />
-            Nova
-          </Button>
-          {messages.length > 0 && (
-            <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground" onClick={() => setMessages([])}>
-              <Trash2 className="h-3 w-3" />
-              Limpar
+
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" className="h-9 w-9 text-[#8696a0] hover:text-white" onClick={startNewConversation}>
+              <Plus className="h-5 w-5" />
             </Button>
-          )}
+            {messages.length > 0 && (
+              <Button variant="ghost" size="icon" className="h-9 w-9 text-[#8696a0] hover:text-white" onClick={() => setMessages([])}>
+                <Trash2 className="h-5 w-5" />
+              </Button>
+            )}
+            <Button variant="ghost" size="icon" className="h-9 w-9 text-[#8696a0] hover:text-white" onClick={() => navigate("/agents")}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
 
-        {/* Messages */}
-        <ScrollArea className="flex-1 px-4">
+        {/* Chat Messages - WhatsApp wallpaper style */}
+        <div 
+          className="flex-1 overflow-y-auto px-4 md:px-16 lg:px-24"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cg fill-opacity='0.03'%3E%3Cpath fill='%23ffffff' d='M20 20h10v10H20zM50 10h10v10H50zM80 30h10v10H80zM110 20h10v10h-10zM140 10h10v10h-10zM170 30h10v10h-10zM30 60h10v10H30zM60 50h10v10H60zM90 70h10v10H90zM120 60h10v10h-10zM150 50h10v10h-10zM180 70h10v10h-10zM10 100h10v10H10zM40 90h10v10H40zM70 110h10v10H70zM100 100h10v10h-10zM130 90h10v10h-10zM160 110h10v10h-10zM20 140h10v10H20zM50 130h10v10H50zM80 150h10v10H80zM110 140h10v10h-10zM140 130h10v10h-10zM170 150h10v10h-10zM30 180h10v10H30zM60 170h10v10H60zM90 190h10v10H90zM120 180h10v10h-10zM150 170h10v10h-10zM180 190h10v10h-10z'/%3E%3C/g%3E%3C/svg%3E")`,
+            backgroundColor: "#0b141a",
+          }}
+        >
           {loadingHistory && (
             <div className="flex items-center justify-center py-20">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <Loader2 className="h-6 w-6 animate-spin text-[#8696a0]" />
             </div>
           )}
 
           {!loadingHistory && messages.length === 0 && (
             <div className="flex h-full items-center justify-center py-20">
-              <div className="text-center">
-                <Bot className="mx-auto h-10 w-10 text-muted-foreground/30" />
-                <p className="mt-3 text-sm text-muted-foreground">
-                  Envie uma mensagem para testar o agente
+              <div className="bg-[#182229] rounded-lg px-4 py-2 text-center max-w-sm">
+                <p className="text-[#8696a0] text-xs">
+                  🔒 As mensagens neste sandbox são para teste. Envie uma mensagem para começar.
                 </p>
-                {agent?.system_prompt && (
-                  <p className="mt-1 max-w-md text-xs text-muted-foreground/60 line-clamp-3">
-                    System prompt: {agent.system_prompt}
-                  </p>
-                )}
               </div>
             </div>
           )}
 
-          <div className="space-y-4 py-4">
-            {messages.map((msg, i) => (
-              <div key={i} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                {msg.role === "assistant" && (
-                  <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                    <Bot className="h-3.5 w-3.5 text-primary" />
-                  </div>
-                )}
-                <div className={`max-w-[75%] rounded-xl px-4 py-2.5 text-sm ${
-                  msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
-                }`}>
-                  {msg.role === "assistant" ? (
-                    <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:my-1">
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+          <div className="space-y-1 py-4">
+            {messages.map((msg, i) => {
+              const { text, images } = msg.role === "assistant" 
+                ? extractImages(msg.content)
+                : { text: msg.content, images: [] };
+              const time = msg.timestamp ? format(msg.timestamp, "HH:mm") : "";
+
+              return (
+                <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} mb-1`}>
+                  <div
+                    className={`relative max-w-[85%] md:max-w-[65%] rounded-lg px-3 py-1.5 shadow-sm ${
+                      msg.role === "user"
+                        ? "bg-[#005c4b] text-[#e9edef]"
+                        : "bg-[#202c33] text-[#e9edef]"
+                    }`}
+                    style={{
+                      borderTopLeftRadius: msg.role === "assistant" ? 0 : undefined,
+                      borderTopRightRadius: msg.role === "user" ? 0 : undefined,
+                    }}
+                  >
+                    {/* Images */}
+                    {images.length > 0 && (
+                      <div className={`${images.length > 1 ? 'grid grid-cols-2 gap-1' : ''} mb-1 -mx-1 -mt-0.5`}>
+                        {images.map((url, imgIdx) => (
+                          <a key={imgIdx} href={url} target="_blank" rel="noopener noreferrer">
+                            <img
+                              src={url}
+                              alt="Foto do veículo"
+                              className="rounded-md w-full max-h-64 object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          </a>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Text content */}
+                    {msg.role === "assistant" ? (
+                      <div className="prose prose-sm prose-invert max-w-none [&>p]:my-0.5 [&>p]:leading-relaxed text-[13px]">
+                        <ReactMarkdown>{text}</ReactMarkdown>
+                      </div>
+                    ) : (
+                      <p className="whitespace-pre-wrap text-[13px] leading-relaxed">{text}</p>
+                    )}
+
+                    {/* Timestamp + read receipts */}
+                    <div className={`flex items-center gap-1 justify-end -mb-0.5 mt-0.5`}>
+                      <span className="text-[10px] text-[#8696a0] leading-none">{time}</span>
+                      {msg.role === "user" && (
+                        <CheckCheck className="h-3 w-3 text-[#53bdeb]" />
+                      )}
                     </div>
-                  ) : (
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
-                  )}
-                </div>
-                {msg.role === "user" && (
-                  <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-secondary">
-                    <User className="h-3.5 w-3.5 text-muted-foreground" />
                   </div>
-                )}
-              </div>
-            ))}
-            {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
-              <div className="flex gap-3">
-                <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                  <Bot className="h-3.5 w-3.5 text-primary" />
                 </div>
-                <div className="rounded-xl bg-muted px-4 py-2.5">
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              );
+            })}
+            
+            {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
+              <div className="flex justify-start mb-1">
+                <div className="bg-[#202c33] rounded-lg px-4 py-2.5 shadow-sm" style={{ borderTopLeftRadius: 0 }}>
+                  <div className="flex items-center gap-1">
+                    <span className="w-2 h-2 bg-[#8696a0] rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="w-2 h-2 bg-[#8696a0] rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="w-2 h-2 bg-[#8696a0] rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                  </div>
                 </div>
               </div>
             )}
             <div ref={bottomRef} />
           </div>
-        </ScrollArea>
+        </div>
 
-        {/* Input */}
-        <div className="border-t border-border p-4">
-          <div className="relative">
-            <Textarea
-              placeholder="Digite sua mensagem..."
+        {/* WhatsApp-style Input */}
+        <div className="bg-[#202c33] px-3 py-2 flex items-end gap-2">
+          <div className="flex-1 flex items-end bg-[#2a3942] rounded-3xl px-4 py-1">
+            <input
+              ref={inputRef}
+              type="text"
+              placeholder="Mensagem"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              rows={1}
-              className="min-h-[44px] resize-none pr-12"
+              className="flex-1 bg-transparent text-[#e9edef] text-sm py-2 outline-none placeholder:text-[#8696a0]"
               disabled={isLoading}
             />
-            <Button
-              size="icon"
-              className="absolute bottom-1.5 right-1.5 h-8 w-8"
-              onClick={send}
-              disabled={!input.trim() || isLoading}
-            >
-              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            </Button>
           </div>
+          <button
+            onClick={send}
+            disabled={!input.trim() || isLoading}
+            className="h-10 w-10 rounded-full bg-[#00a884] flex items-center justify-center text-white hover:bg-[#06cf9c] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+          >
+            {isLoading ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Send className="h-5 w-5" />
+            )}
+          </button>
         </div>
       </div>
     </div>
