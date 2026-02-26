@@ -437,11 +437,13 @@ Deno.serve(async (req) => {
           await writer.write(encoder.encode("data: [DONE]\n\n"));
           if (convId && fullContent) {
             const latency = Date.now() - startTime;
-            await supabase.rpc("save_message", {
-              p_agent_id: agent_id, p_conversation_id: convId,
-              p_role: "assistant", p_content: fullContent, p_model: model,
-              p_latency_ms: latency,
-            }).catch((e: any) => console.warn("Could not save assistant msg:", e));
+            try {
+              await supabase.rpc("save_message", {
+                p_agent_id: agent_id, p_conversation_id: convId,
+                p_role: "assistant", p_content: fullContent, p_model: model,
+                p_latency_ms: latency,
+              });
+            } catch (e: any) { console.warn("Could not save assistant msg:", e); }
           }
         } catch (e) { console.error("stream transform error:", e); }
         await writer.close();
@@ -499,11 +501,13 @@ Deno.serve(async (req) => {
           // Save to memory
           if (convId && finalContent) {
             const latency = Date.now() - startTime;
-            await supabase.rpc("save_message", {
-              p_agent_id: agent_id, p_conversation_id: convId,
-              p_role: "assistant", p_content: finalContent, p_model: model,
-              p_latency_ms: latency,
-            }).catch((e: any) => console.warn("Could not save assistant msg:", e));
+            try {
+              await supabase.rpc("save_message", {
+                p_agent_id: agent_id, p_conversation_id: convId,
+                p_role: "assistant", p_content: finalContent, p_model: model,
+                p_latency_ms: latency,
+              });
+            } catch (e: any) { console.warn("Could not save assistant msg:", e); }
           }
 
           // Stream-simulate the final response for the frontend
@@ -530,7 +534,7 @@ Deno.serve(async (req) => {
 
           // Refresh conversations
           if (convId) {
-            supabase.rpc("list_agent_conversations", { p_agent_id: agent_id, p_limit: 1 }).catch(() => {});
+            try { await supabase.rpc("list_agent_conversations", { p_agent_id: agent_id, p_limit: 1 }); } catch {}
           }
 
           return new Response(readable, {
@@ -579,10 +583,12 @@ Deno.serve(async (req) => {
 
           // Save tool result to memory
           if (convId) {
-            await supabase.rpc("save_message", {
-              p_agent_id: agent_id, p_conversation_id: convId,
-              p_role: "tool", p_content: toolResult,
-            }).catch(() => {});
+            try {
+              await supabase.rpc("save_message", {
+                p_agent_id: agent_id, p_conversation_id: convId,
+                p_role: "tool", p_content: toolResult,
+              });
+            } catch {}
           }
         }
 
@@ -651,11 +657,13 @@ Deno.serve(async (req) => {
         }
         if (convId && fullContent) {
           const latency = Date.now() - startTime;
-          await supabase.rpc("save_message", {
-            p_agent_id: agent_id, p_conversation_id: convId,
-            p_role: "assistant", p_content: fullContent, p_model: model,
-            p_latency_ms: latency,
-          }).catch((e: any) => console.warn("Could not save assistant msg:", e));
+          try {
+            await supabase.rpc("save_message", {
+              p_agent_id: agent_id, p_conversation_id: convId,
+              p_role: "assistant", p_content: fullContent, p_model: model,
+              p_latency_ms: latency,
+            });
+          } catch (e: any) { console.warn("Could not save assistant msg:", e); }
         }
       } catch (e) { console.error("stream error:", e); }
       await writer.close();
