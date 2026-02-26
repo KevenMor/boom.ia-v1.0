@@ -198,10 +198,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 1. Load agent + provider
+    // 1. Load agent + provider + tenant settings
     const { data: agent, error: agentErr } = await supabase
       .from("agents")
-      .select("*, providers(name, base_url, api_key_encrypted)")
+      .select("*, providers(name, base_url, api_key_encrypted), tenants(settings)")
       .eq("id", agent_id)
       .single();
 
@@ -264,12 +264,22 @@ Deno.serve(async (req) => {
       ? provider.base_url
       : PROVIDER_URLS[provider.name] || PROVIDER_URLS.OpenAI;
 
-    // 6. Build request
+    // 6. Build request — merge tenant LLM config with agent defaults
     const isAnthropic = provider.name === "Anthropic";
     const model = agent.model || "gpt-4o";
-    const temperature = agent.temperature ?? 0.7;
+    const tenantSettings = agent.tenants?.settings || {};
+    const llmConfig = tenantSettings.llm_config || {};
+    const temperature = llmConfig.temperature ?? agent.temperature ?? 0.7;
+    const top_p = llmConfig.top_p ?? undefined;
+    const top_k = llmConfig.top_k ?? undefined;
     const systemPrompt = agent.system_prompt || "You are a helpful AI assistant.";
     const startTime = Date.now();
+    console.log(`LLM config: temperature=${temperature}, top_p=${top_p}, top_k=${top_k}`);
+    // Helper: build optional LLM params (only include if defined)
+    const llmParams: Record<string, any> = { temperature };
+    if (top_p !== undefined) llmParams.top_p = top_p;
+    if (top_k !== undefined) llmParams.top_k = top_k;
+
     const openaiTools = agentTools.length > 0 ? toolsToOpenAI(agentTools) : undefined;
 
     // ---------- Anthropic path (no function calling for now) ----------
@@ -288,7 +298,7 @@ Deno.serve(async (req) => {
         },
         body: JSON.stringify({
           model, max_tokens: 4096, system: systemPrompt,
-          messages: anthropicMessages, temperature, stream: true,
+          messages: anthropicMessages, ...llmParams, stream: true,
         }),
       });
 
@@ -367,7 +377,7 @@ Deno.serve(async (req) => {
           method: "POST",
           headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({
-            model, messages: currentMessages, temperature,
+            model, messages: currentMessages, ...llmParams,
             tools: openaiTools, tool_choice: "auto",
             stream: false,
           }),
@@ -501,7 +511,7 @@ Deno.serve(async (req) => {
     const resp = await fetch(baseUrl, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model, messages: fullMessages, temperature, stream: true }),
+      body: JSON.stringify({ model, messages: fullMessages, ...llmParams, stream: true }),
     });
 
     if (!resp.ok) {
