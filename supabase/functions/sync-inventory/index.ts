@@ -58,19 +58,25 @@ function parseListingPage(html: string): VehicleCard[] {
         continue;
       }
       let detail_url = detailMatch[1];
-      if (detail_url.startsWith("/")) detail_url = "https://pplmotors.com.br" + detail_url;
+      if (!detail_url.startsWith("http")) {
+        detail_url = detail_url.startsWith("/")
+          ? "https://pplmotors.com.br" + detail_url
+          : "https://pplmotors.com.br/" + detail_url;
+      }
       const external_id = detailMatch[2];
 
       // Photo
       const photoMatch = item.match(/<img\s+src="([^"]+)"\s+alt=""/);
       const photo_url = photoMatch ? photoMatch[1] : "";
 
-      // Brand + Model from title
-      const titleMatch = item.match(/result-item-title[^>]*>[\s\S]*?<a[^>]*>\s*([A-ZÁÉÍÓÚÂÊÔÃÕÇÑ\s]+)<br>/i);
+      // Brand + Model from title — try multiple patterns
       let brand = "";
       let model = "";
+      const titleMatch = item.match(/result-item-title[^>]*>[\s\S]*?<a[^>]*>\s*([\s\S]*?)<\/a>/i);
       if (titleMatch) {
-        const parts = titleMatch[1].trim().split(/\s+/);
+        // Remove HTML tags and get clean text
+        const titleText = titleMatch[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        const parts = titleText.split(/\s+/);
         brand = parts[0] || "";
         model = parts.slice(1).join(" ") || "";
       }
