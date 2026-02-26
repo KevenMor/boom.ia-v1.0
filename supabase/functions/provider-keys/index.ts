@@ -48,9 +48,6 @@ Deno.serve(async (req) => {
     const nexusUrl = Deno.env.get("NEXUS_DB_URL");
     const nexusKey = Deno.env.get("NEXUS_DB_ANON_KEY");
 
-    console.log("NEXUS_DB_URL present:", !!nexusUrl, "starts with:", nexusUrl?.substring(0, 20));
-    console.log("NEXUS_DB_ANON_KEY present:", !!nexusKey);
-
     if (!nexusUrl || !nexusKey) {
       return new Response(
         JSON.stringify({ error: "NEXUS_DB_URL or NEXUS_DB_ANON_KEY not configured", nexusUrl: !!nexusUrl, nexusKey: !!nexusKey }),
