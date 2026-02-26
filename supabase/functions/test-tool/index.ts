@@ -10,22 +10,23 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const nexusUrl = Deno.env.get("NEXUS_DB_URL");
-    const nexusKey = Deno.env.get("NEXUS_DB_ANON_KEY");
+    const FALLBACK_URL = "https://boomsolution-supabase.kgn6uc.easypanel.host";
+    const FALLBACK_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE";
 
-    console.log("NEXUS_DB_URL:", nexusUrl);
-    console.log("NEXUS_DB_ANON_KEY present:", !!nexusKey);
+    const nexusUrl = Deno.env.get("NEXUS_DB_URL") || FALLBACK_URL;
+    const nexusKey = Deno.env.get("NEXUS_DB_ANON_KEY") || FALLBACK_KEY;
 
-    if (!nexusUrl || !nexusKey) {
-      return new Response(JSON.stringify({ error: "Missing server configuration" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    // Forward the user's Nexus auth token if provided
+    const nexusAuth = req.headers.get("x-nexus-auth");
 
-    const supabase = createClient(nexusUrl, nexusKey);
+    const supabase = createClient(nexusUrl, nexusKey, {
+      global: {
+        headers: nexusAuth ? { Authorization: `Bearer ${nexusAuth}` } : {},
+      },
+    });
     const { tool_id, tool_name, args } = await req.json();
 
-    console.log("tool_id:", tool_id, "tool_name:", tool_name);
+    console.log("tool_id:", tool_id, "tool_name:", tool_name, "hasNexusAuth:", !!nexusAuth);
 
     if (!tool_id && !tool_name) {
       return new Response(JSON.stringify({ error: "tool_id or tool_name is required" }), {
