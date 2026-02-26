@@ -80,6 +80,46 @@ function appendMissingVehiclePhotos(content: string, vehicles: any[], userContex
   return `${content.trim()}\n\n${photosBlock}`.trim();
 }
 
+// Split long messages into WhatsApp-friendly chunks
+// Separator used in SSE stream so frontend/webhook can render as separate bubbles
+const MSG_SPLIT = "<<MSG_SPLIT>>";
+
+function splitIntoMessages(content: string): string[] {
+  const parts: string[] = [];
+
+  // Separate photo blocks from text
+  const photoRegex = /!\[.*?\]\(https?:\/\/[^\s)]+\)/g;
+  const photos: string[] = [];
+  const textOnly = content.replace(photoRegex, (match) => {
+    photos.push(match);
+    return "";
+  }).replace(/\n{3,}/g, "\n\n").trim();
+
+  // Split text by double newlines (paragraphs)
+  if (textOnly) {
+    const paragraphs = textOnly.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+
+    // Group short paragraphs together (under ~300 chars), split long ones
+    let current = "";
+    for (const para of paragraphs) {
+      if (current && (current.length + para.length > 300)) {
+        parts.push(current.trim());
+        current = para;
+      } else {
+        current = current ? `${current}\n\n${para}` : para;
+      }
+    }
+    if (current.trim()) parts.push(current.trim());
+  }
+
+  // Send photos in batches of 3 as separate messages
+  for (let i = 0; i < photos.length; i += 3) {
+    parts.push(photos.slice(i, i + 3).join("\n"));
+  }
+
+  return parts.length ? parts : [content];
+}
+
 // ---------- provider base URLs ----------
 const PROVIDER_URLS: Record<string, string> = {
   "Google Gemini": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
@@ -625,12 +665,22 @@ Deno.serve(async (req) => {
               if (convId) {
                 await writer.write(encoder.encode(`data: ${JSON.stringify({ conversation_id: convId })}\n\n`));
               }
-              // Send content in chunks for smooth rendering
-              const chunkSize = 20;
-              for (let i = 0; i < finalContent.length; i += chunkSize) {
-                const chunk = finalContent.slice(i, i + chunkSize);
-                const ev = { choices: [{ delta: { content: chunk } }] };
-                await writer.write(encoder.encode(`data: ${JSON.stringify(ev)}\n\n`));
+              // Split into WhatsApp-style separate messages
+              const messageParts = splitIntoMessages(finalContent);
+              for (let partIdx = 0; partIdx < messageParts.length; partIdx++) {
+                const part = messageParts[partIdx];
+                // Send split marker between parts
+                if (partIdx > 0) {
+                  const splitEv = { choices: [{ delta: { content: MSG_SPLIT } }] };
+                  await writer.write(encoder.encode(`data: ${JSON.stringify(splitEv)}\n\n`));
+                }
+                // Send part content in chunks for smooth rendering
+                const chunkSize = 20;
+                for (let i = 0; i < part.length; i += chunkSize) {
+                  const chunk = part.slice(i, i + chunkSize);
+                  const ev = { choices: [{ delta: { content: chunk } }] };
+                  await writer.write(encoder.encode(`data: ${JSON.stringify(ev)}\n\n`));
+                }
               }
               await writer.write(encoder.encode("data: [DONE]\n\n"));
             } catch (e) { console.error("stream error:", e); }
