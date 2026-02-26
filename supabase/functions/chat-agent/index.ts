@@ -366,7 +366,10 @@ Deno.serve(async (req) => {
     const temperature = agent.temperature ?? llmConfig.temperature ?? 0.7;
     const top_p = agentConfig.top_p ?? llmConfig.top_p ?? undefined;
     const top_k = agentConfig.top_k ?? llmConfig.top_k ?? undefined;
-    const systemPrompt = agent.system_prompt || "You are a helpful AI assistant.";
+    const photoInstruction = agentTools.some(t => t.tool_type === "inventory_query")
+      ? "\n\nIMPORTANTE: Quando mostrar veículos ao cliente, SEMPRE inclua a foto usando markdown: ![foto](URL_DA_FOTO). Use o campo photo_url retornado pela consulta. Isso é obrigatório para cada veículo mencionado."
+      : "";
+    const systemPrompt = (agent.system_prompt || "You are a helpful AI assistant.") + photoInstruction;
     const startTime = Date.now();
     console.log(`LLM config: temperature=${temperature}, top_p=${top_p}, top_k=${top_k}, isGemini=${isGemini}`);
     // Helper: build optional LLM params (only include if defined)
