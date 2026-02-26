@@ -27,3 +27,31 @@ export function useCreateTenant() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tenants"] }),
   });
 }
+
+export function useUpdateTenant() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: Partial<Tenant> & { id: string }) => {
+      const { data, error } = await supabase
+        .from("tenants")
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as Tenant;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tenants"] }),
+  });
+}
+
+export function useDeleteTenant() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("tenants").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tenants"] }),
+  });
+}

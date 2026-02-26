@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Building2, Plus, Search, MoreHorizontal, ExternalLink } from "lucide-react";
+import { Building2, Plus, Search, MoreHorizontal, ExternalLink, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -8,14 +8,22 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useTenants } from "@/hooks/useTenants";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CreateTenantDialog } from "@/components/tenants/CreateTenantDialog";
+import { EditTenantDialog } from "@/components/tenants/EditTenantDialog";
+import { DeleteTenantDialog } from "@/components/tenants/DeleteTenantDialog";
+import type { Tenant } from "@/types/database";
 
 export default function Tenants() {
   const [search, setSearch] = useState("");
   const { data: tenants, isLoading, error } = useTenants();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editTenant, setEditTenant] = useState<Tenant | null>(null);
+  const [deleteTenant, setDeleteTenant] = useState<Tenant | null>(null);
 
   const filtered = (tenants ?? []).filter((t) =>
     t.name.toLowerCase().includes(search.toLowerCase())
@@ -28,7 +36,7 @@ export default function Tenants() {
           <h2 className="text-lg font-semibold">Empresas</h2>
           <p className="text-sm text-muted-foreground">{tenants?.length ?? 0} tenants registrados</p>
         </div>
-        <Button className="gap-2">
+        <Button className="gap-2" onClick={() => setCreateOpen(true)}>
           <Plus className="h-4 w-4" />
           Novo Tenant
         </Button>
@@ -101,10 +109,12 @@ export default function Tenants() {
                       className={
                         tenant.status === "active"
                           ? "bg-success/10 text-success border-success/20 hover:bg-success/20"
+                          : tenant.status === "suspended"
+                          ? "bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive/20"
                           : "bg-warning/10 text-warning border-warning/20 hover:bg-warning/20"
                       }
                     >
-                      {tenant.status === "active" ? "Ativo" : "Provisionando"}
+                      {tenant.status === "active" ? "Ativo" : tenant.status === "suspended" ? "Suspenso" : "Provisionando"}
                     </Badge>
                   </td>
                   <td className="px-5 py-3 text-center">
@@ -115,12 +125,18 @@ export default function Tenants() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
-                          <ExternalLink className="mr-2 h-3 w-3" />
-                          Abrir
+                        <DropdownMenuItem onClick={() => setEditTenant(tenant)}>
+                          <Pencil className="mr-2 h-3 w-3" />
+                          Editar
                         </DropdownMenuItem>
-                        <DropdownMenuItem>Editar</DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive">Suspender</DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={() => setDeleteTenant(tenant)}
+                        >
+                          <Trash2 className="mr-2 h-3 w-3" />
+                          Remover
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </td>
@@ -130,6 +146,10 @@ export default function Tenants() {
           </table>
         </div>
       </Card>
+
+      <CreateTenantDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <EditTenantDialog tenant={editTenant} open={!!editTenant} onOpenChange={(o) => !o && setEditTenant(null)} />
+      <DeleteTenantDialog tenant={deleteTenant} open={!!deleteTenant} onOpenChange={(o) => !o && setDeleteTenant(null)} />
     </div>
   );
 }
