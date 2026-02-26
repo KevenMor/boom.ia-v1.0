@@ -54,11 +54,17 @@ function normalizeVehiclePhotos(vehicle: any): string[] {
 }
 
 function appendMissingVehiclePhotos(content: string, vehicles: any[], userContext: string): string {
-  // Only append photos when user is asking about a SPECIFIC vehicle (not a listing)
-  // If multiple vehicles were returned and user didn't name a specific one, skip
   if (!vehicles.length) return content;
-  if (vehicles.length > 3) return content; // Listing query — don't flood with photos
 
+  // Determine if user is asking about a SPECIFIC vehicle
+  const isSpecificRequest = /\bfotos?\b|\bimagens?\b|\bmostrar?\b|\benviar?\b|\bver\b/.test(userContext);
+
+  if (!isSpecificRequest) return content; // General listing — let LLM handle with 1 photo per car
+
+  // For listings (many vehicles), don't append — the LLM shows 1 photo each
+  if (vehicles.length > 3) return content;
+
+  // Find the specific vehicle the user is asking about
   const targetVehicle =
     vehicles.length === 1
       ? vehicles[0]
@@ -68,11 +74,12 @@ function appendMissingVehiclePhotos(content: string, vehicles: any[], userContex
           return tokens.some((token) => userContext.includes(token));
         });
 
-  if (!targetVehicle) return content; // No specific match found — don't guess
+  if (!targetVehicle) return content;
 
   const allPhotos = normalizeVehiclePhotos(targetVehicle);
   if (!allPhotos.length) return content;
 
+  // Collect URLs already in the LLM response
   const existingUrls = new Set<string>();
   const imageMdRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/gi;
   let match: RegExpExecArray | null;
@@ -494,12 +501,14 @@ Deno.serve(async (req) => {
     const top_p = agentConfig.top_p ?? llmConfig.top_p ?? undefined;
     const top_k = agentConfig.top_k ?? llmConfig.top_k ?? undefined;
     const photoInstruction = agentTools.some(t => t.tool_type === "inventory_query")
-      ? `\n\nREGRAS OBRIGATÓRIAS SOBRE FOTOS DE VEÍCULOS:
-1. Quando mostrar veículos, SEMPRE inclua TODAS as fotos do array 'photos' retornado pela consulta, cada uma em linha separada usando: ![foto](URL)
-2. Se o array 'photos' estiver vazio, use o campo 'photo_url'.
-3. NUNCA escreva nomes de ferramentas (como ENVIAR_FOTOS_VEICULO) no texto.
-4. Se o cliente pedir MAIS fotos ou fotos adicionais de um veículo, você DEVE chamar a ferramenta consultar_estoque novamente filtrando pelo veículo específico para obter as fotos atualizadas. NUNCA responda apenas com texto dizendo que vai enviar — chame a ferramenta e envie as fotos de fato.
-5. Mostre as fotos naturalmente na conversa, sem mencionar URLs ou campos técnicos.`
+      ? `\n\nREGRAS OBRIGATÓRIAS SOBRE FOTOS DE VEÍCULOS (você é um SDR):
+1. LISTAGEM (múltiplos veículos): Mostre TODOS os veículos que atendem ao filtro. Para cada veículo, inclua UMA foto principal usando ![foto](photo_url). Liste TODOS, nunca limite a quantidade.
+2. VEÍCULO ESPECÍFICO: Quando o cliente perguntar sobre um carro específico, ou aceitar ver fotos de um veículo que você ofereceu, inclua TODAS as fotos do array 'photos' daquele veículo, cada uma em linha separada: ![foto](URL).
+3. Se o array 'photos' estiver vazio, use o campo 'photo_url'.
+4. NUNCA escreva nomes de ferramentas (como ENVIAR_FOTOS_VEICULO) no texto.
+5. Se o cliente pedir MAIS fotos de um veículo, chame a ferramenta consultar_estoque novamente filtrando pelo veículo específico. NUNCA responda só com texto — chame a ferramenta e envie as fotos.
+6. Mostre as fotos naturalmente na conversa, sem mencionar URLs ou campos técnicos.
+7. Seu papel é SDR: apresente TODAS as opções disponíveis, destaque diferenciais, e conduza o cliente para agendar visita ou fechar negócio.`
       : "";
     const systemPrompt = (agent.system_prompt || "You are a helpful AI assistant.") + photoInstruction;
     const startTime = Date.now();
