@@ -55,7 +55,7 @@ export function CreateProviderDialog({ open, onOpenChange }: Props) {
       await create.mutateAsync({
         name: data.name,
         base_url: data.base_url || null,
-        api_key_encrypted: data.api_key || null,
+        raw_api_key: data.api_key || undefined,
         model_default: data.model_default || null,
       });
       toast.success(`Provider "${data.name}" criado`);
