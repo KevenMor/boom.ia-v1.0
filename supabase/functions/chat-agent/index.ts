@@ -110,11 +110,9 @@ function splitIntoMessages(content: string): string[] {
   const parts: string[] = [];
 
   if (textOnly.trim()) {
-    // Split by double newlines (each paragraph = one bubble)
     const paragraphs = textOnly.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
     
     if (paragraphs.length > 1) {
-      // Multiple paragraphs: each becomes its own bubble (humanized flow)
       for (const para of paragraphs) {
         parts.push(para);
       }
@@ -123,15 +121,23 @@ function splitIntoMessages(content: string): string[] {
     }
   }
 
-  // Photos in batches of 3 as separate messages
+  // Photos in batches of 3
   for (let i = 0; i < photos.length; i += 3) {
     parts.push(photos.slice(i, i + 3).join("\n"));
   }
 
-  // Deduplicate identical consecutive parts
-  const deduped = (parts.length ? parts : [content]).filter(
-    (part, idx, arr) => idx === 0 || part !== arr[idx - 1]
-  );
+  const allParts = parts.length ? parts : [content];
+
+  // Aggressive dedup: normalize whitespace for comparison, remove ALL duplicates (not just consecutive)
+  const seen = new Set<string>();
+  const deduped: string[] = [];
+  for (const part of allParts) {
+    const normalized = part.replace(/\s+/g, " ").trim().toLowerCase();
+    if (!seen.has(normalized)) {
+      seen.add(normalized);
+      deduped.push(part);
+    }
+  }
 
   return deduped.length ? deduped : [content];
 }
@@ -314,7 +320,7 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         return JSON.stringify({
           total: data.length,
           _hint: isListing
-            ? `OBRIGATÓRIO: Liste TODOS os ${data.length} veículos abaixo numerados (1. 2. 3...) com marca, modelo, versão, ano, preço, km, cor e câmbio. NÃO omita nenhum. Após a lista, pergunte qual interessa para enviar fotos.`
+            ? `Apresente cada veículo em um PARÁGRAFO SEPARADO (separado por linha em branco). Use linguagem natural de vendedor WhatsApp. Comece com saudação, depois um veículo por parágrafo, e finalize com pergunta. Apresente TODOS os ${data.length} veículos. NÃO use listas numeradas.`
             : "Veículo específico. Inclua TODAS as fotos do array 'photos'.",
           vehicles: data.map((v: any) => {
             if (isListing) {
