@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
           .replace(/<[^>]+>/g, " ")
           .replace(/\s+/g, " ")
           .trim()
-          .slice(0, config.max_chars || 4000);
+          .slice(0, config.max_chars || 16000);
         result = { url: targetUrl, content: text, chars: text.length };
         break;
       }
