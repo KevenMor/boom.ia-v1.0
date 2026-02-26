@@ -72,13 +72,13 @@ export function TestToolDialog({ tool, open, onOpenChange }: Props) {
           "Authorization": `Bearer ${supabaseKey}`,
           "apikey": supabaseKey,
         },
-        body: JSON.stringify({ tool_id: tool.id, args: parsedArgs }),
+        body: JSON.stringify({ tool_id: tool.id, tool_name: tool.name, args: parsedArgs }),
       });
 
       const data = await resp.json();
 
       if (!resp.ok) {
-        setError(data.error || `HTTP ${resp.status}`);
+        setError([data.error, data.detail].filter(Boolean).join(" — ") || `HTTP ${resp.status}`);
       } else {
         setResult(JSON.stringify(data.result, null, 2));
       }
