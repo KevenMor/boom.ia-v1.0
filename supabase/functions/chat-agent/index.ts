@@ -222,7 +222,7 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
 
             const allPhotos = Array.from(
               new Set([...(v.photo_url ? [v.photo_url] : []), ...parsedPhotos])
-            ).slice(0, 10);
+            );
 
             return {
               id: v.id,
