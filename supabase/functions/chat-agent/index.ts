@@ -280,18 +280,22 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
           .eq("status", "available");
 
         // Apply optional filters — search across ALL text fields for model/brand
-        if (args.brand) query = query.or(`brand.ilike.%${args.brand}%,model.ilike.%${args.brand}%,version.ilike.%${args.brand}%,description.ilike.%${args.brand}%`);
-        if (args.model) query = query.or(`model.ilike.%${args.model}%,version.ilike.%${args.model}%,brand.ilike.%${args.model}%,description.ilike.%${args.model}%`);
+        const brandArg = args.brand || args.marca;
+        const modelArg = args.model || args.modelo;
+        if (brandArg) query = query.or(`brand.ilike.%${brandArg}%,model.ilike.%${brandArg}%,version.ilike.%${brandArg}%,description.ilike.%${brandArg}%`);
+        if (modelArg) query = query.or(`model.ilike.%${modelArg}%,version.ilike.%${modelArg}%,brand.ilike.%${modelArg}%,description.ilike.%${modelArg}%`);
         if (args.search || args.query || args.termo) {
           const term = args.search || args.query || args.termo;
           query = query.or(`brand.ilike.%${term}%,model.ilike.%${term}%,version.ilike.%${term}%,description.ilike.%${term}%,color.ilike.%${term}%`);
         }
-        if (args.year) query = query.eq("year", args.year);
-        if (args.fuel_type || args.fuel) query = query.ilike("fuel_type", `%${args.fuel_type || args.fuel}%`);
-        if (args.transmission) query = query.ilike("transmission", `%${args.transmission}%`);
-        if (args.min_price) query = query.gte("price", args.min_price);
-        if (args.max_price) query = query.lte("price", args.max_price);
-        if (args.color) query = query.ilike("color", `%${args.color}%`);
+        if (args.year || args.ano) query = query.eq("year", args.year || args.ano);
+        if (args.fuel_type || args.fuel || args.combustivel) query = query.ilike("fuel_type", `%${args.fuel_type || args.fuel || args.combustivel}%`);
+        if (args.transmission || args.cambio) query = query.ilike("transmission", `%${args.transmission || args.cambio}%`);
+        const minPrice = args.min_price || args.preco_min || args.preco_minimo || args.valor_min;
+        const maxPrice = args.max_price || args.preco_max || args.preco_maximo || args.valor_max;
+        if (minPrice) query = query.gte("price", minPrice);
+        if (maxPrice) query = query.lte("price", maxPrice);
+        if (args.color || args.cor) query = query.ilike("color", `%${args.color || args.cor}%`);
 
         // No limit — return all matching vehicles
         query = query.order("price", { ascending: true });
