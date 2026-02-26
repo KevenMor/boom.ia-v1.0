@@ -1,4 +1,4 @@
-import { Wrench, Plus, Search, MoreHorizontal, Pencil, Trash2, Database, Globe, Server } from "lucide-react";
+import { Wrench, Plus, Search, MoreHorizontal, Pencil, Trash2, Database, Globe, Server, Play } from "lucide-react";
 import { Search as SearchIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CreateToolDialog } from "@/components/tools/CreateToolDialog";
 import { EditToolDialog } from "@/components/tools/EditToolDialog";
 import { DeleteToolDialog } from "@/components/tools/DeleteToolDialog";
+import { TestToolDialog } from "@/components/tools/TestToolDialog";
 import type { Tool, ToolType } from "@/types/database";
 
 const TOOL_TYPE_ICON: Record<string, any> = {
@@ -35,6 +36,7 @@ export default function Tools() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editTool, setEditTool] = useState<Tool | null>(null);
   const [deleteTool, setDeleteTool] = useState<Tool | null>(null);
+  const [testTool, setTestTool] = useState<Tool | null>(null);
 
   const filtered = (tools ?? []).filter((t) =>
     t.name.toLowerCase().includes(search.toLowerCase())
@@ -91,6 +93,9 @@ export default function Tools() {
                     <Button variant="ghost" size="icon" className="h-7 w-7"><MoreHorizontal className="h-4 w-4" /></Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setTestTool(tool)}>
+                      <Play className="mr-2 h-3 w-3" />Testar
+                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setEditTool(tool)}>
                       <Pencil className="mr-2 h-3 w-3" />Editar
                     </DropdownMenuItem>
@@ -124,6 +129,7 @@ export default function Tools() {
       <CreateToolDialog open={createOpen} onOpenChange={setCreateOpen} />
       <EditToolDialog tool={editTool} open={!!editTool} onOpenChange={(o) => !o && setEditTool(null)} />
       <DeleteToolDialog tool={deleteTool} open={!!deleteTool} onOpenChange={(o) => !o && setDeleteTool(null)} />
+      <TestToolDialog tool={testTool} open={!!testTool} onOpenChange={(o) => !o && setTestTool(null)} />
     </div>
   );
 }
