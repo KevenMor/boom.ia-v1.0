@@ -21,6 +21,19 @@ async function decrypt(encoded: string, secret: string): Promise<string> {
   return new TextDecoder().decode(decrypted);
 }
 
+// ---------- sanitize LLM output ----------
+// Remove tool-call artifacts that LLMs sometimes leak into content
+function sanitizeLLMOutput(content: string): string {
+  let text = content;
+  // Remove lines like "ENVIAR_FOTOS_VEICULO: ...", "ENVIAR_FOTO: ...", etc.
+  text = text.replace(/^.*ENVIAR_FOTOS?_VEICULOS?[:\s].*$/gmi, '');
+  // Remove other common tool artifact patterns
+  text = text.replace(/^.*\b(TOOL_CALL|FUNCTION_CALL|ACTION_OUTPUT)[:\s].*$/gmi, '');
+  // Clean up excessive newlines left behind
+  text = text.replace(/\n{3,}/g, '\n\n').trim();
+  return text;
+}
+
 // ---------- provider base URLs ----------
 const PROVIDER_URLS: Record<string, string> = {
   "Google Gemini": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
@@ -506,7 +519,7 @@ Deno.serve(async (req) => {
 
         // If no tool calls, we have the final response
         if (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0) {
-          const finalContent = assistantMsg.content || "";
+          const finalContent = sanitizeLLMOutput(assistantMsg.content || "");
 
           // Save to memory
           if (convId && finalContent) {
