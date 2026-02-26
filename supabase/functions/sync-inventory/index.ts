@@ -203,48 +203,66 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 2. For each vehicle, fetch detail page for photos + features
+    // 2. Fetch detail pages in parallel batches of 6 to stay under timeout
     const results = { synced: 0, errors: 0, total: vehicles.length };
+    const BATCH_SIZE = 6;
 
-    for (const vehicle of vehicles) {
+    async function processVehicle(vehicle: VehicleCard) {
+      let photos: string[] = vehicle.photo_url ? [vehicle.photo_url] : [];
+      let description = "";
+
       try {
-        // Skip detail page fetch to avoid timeout — use listing data only
-        const photos: string[] = vehicle.photo_url ? [vehicle.photo_url] : [];
-
-        // Upsert into inventory
-        const record = {
-          external_id: vehicle.external_id,
-          tenant_id,
-          brand: vehicle.brand,
-          model: vehicle.model,
-          version: vehicle.version,
-          year: vehicle.year,
-          price: vehicle.price,
-          mileage: vehicle.mileage,
-          color: vehicle.color,
-          transmission: vehicle.transmission,
-          fuel_type: vehicle.fuel_type,
-          photo_url: vehicle.photo_url,
-          photos: JSON.stringify(photos),
-          detail_url: vehicle.detail_url,
-          status: "available",
-          last_synced_at: new Date().toISOString(),
-        };
-
-        const { error: upsertErr } = await supabase
-          .from("inventory")
-          .upsert(record, { onConflict: "external_id" });
-
-        if (upsertErr) {
-          console.error(`Upsert error for ${vehicle.external_id}:`, upsertErr.message);
-          results.errors++;
-        } else {
-          results.synced++;
+        const detailResp = await fetch(vehicle.detail_url, {
+          headers: { "User-Agent": "NexusAI-Bot/1.0" },
+          signal: AbortSignal.timeout(5000), // 5s max per detail page
+        });
+        if (detailResp.ok) {
+          const detailHtml = await detailResp.text();
+          const detail = parseDetailPage(detailHtml);
+          if (detail.photos.length > 0) photos = detail.photos;
+          description = [...detail.features, ...detail.optionals].join(", ");
         }
       } catch (e) {
-        console.error(`Error processing vehicle ${vehicle.external_id}:`, e);
-        results.errors++;
+        console.warn(`Detail fetch timeout/error for ${vehicle.external_id}`);
       }
+
+      const record = {
+        external_id: vehicle.external_id,
+        tenant_id,
+        brand: vehicle.brand,
+        model: vehicle.model,
+        version: vehicle.version,
+        year: vehicle.year,
+        price: vehicle.price,
+        mileage: vehicle.mileage,
+        color: vehicle.color,
+        transmission: vehicle.transmission,
+        fuel_type: vehicle.fuel_type,
+        photo_url: vehicle.photo_url,
+        photos: JSON.stringify(photos),
+        detail_url: vehicle.detail_url,
+        description,
+        status: "available",
+        raw_data: JSON.stringify({ photos }),
+        last_synced_at: new Date().toISOString(),
+      };
+
+      const { error: upsertErr } = await supabase
+        .from("inventory")
+        .upsert(record, { onConflict: "external_id" });
+
+      if (upsertErr) {
+        console.error(`Upsert error for ${vehicle.external_id}:`, upsertErr.message);
+        results.errors++;
+      } else {
+        results.synced++;
+      }
+    }
+
+    // Process in batches of BATCH_SIZE in parallel
+    for (let i = 0; i < vehicles.length; i += BATCH_SIZE) {
+      const batch = vehicles.slice(i, i + BATCH_SIZE);
+      await Promise.all(batch.map(processVehicle));
     }
 
     // 4. Mark vehicles NOT in this sync as potentially sold
