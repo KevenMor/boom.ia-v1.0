@@ -149,6 +149,59 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         return JSON.stringify(data ?? []);
       }
 
+      case "inventory_query": {
+        // Query inventory filtered by agent's tenant_id
+        const { data: agentData } = await supabase
+          .from("agents")
+          .select("tenant_id")
+          .eq("id", agentId)
+          .single();
+
+        if (!agentData?.tenant_id) return JSON.stringify({ error: "Agent has no tenant assigned" });
+
+        let query = supabase
+          .from("inventory")
+          .select("*")
+          .eq("tenant_id", agentData.tenant_id)
+          .eq("status", "active");
+
+        // Apply optional filters from args
+        if (args.brand) query = query.ilike("brand", `%${args.brand}%`);
+        if (args.model) query = query.ilike("model", `%${args.model}%`);
+        if (args.year) query = query.eq("year", args.year);
+        if (args.fuel) query = query.ilike("fuel", `%${args.fuel}%`);
+        if (args.transmission) query = query.ilike("transmission", `%${args.transmission}%`);
+        if (args.min_price) query = query.gte("price", args.min_price);
+        if (args.max_price) query = query.lte("price", args.max_price);
+        if (args.color) query = query.ilike("color", `%${args.color}%`);
+
+        const limit = args.limit || 10;
+        query = query.order("price", { ascending: true }).limit(limit);
+
+        const { data, error } = await query;
+
+        if (error) return JSON.stringify({ error: error.message });
+        if (!data?.length) return JSON.stringify({ message: "Nenhum veículo encontrado com esses filtros" });
+
+        return JSON.stringify({
+          total: data.length,
+          vehicles: data.map((v: any) => ({
+            id: v.id,
+            title: v.title,
+            brand: v.brand,
+            model: v.model,
+            year: v.year,
+            price: v.price,
+            mileage: v.mileage,
+            fuel: v.fuel,
+            transmission: v.transmission,
+            color: v.color,
+            photos: v.photos?.slice(0, 3),
+            url: v.url,
+          })),
+        });
+      }
+
       default:
         return JSON.stringify({ error: `Unknown tool type: ${tool.tool_type}` });
     }
