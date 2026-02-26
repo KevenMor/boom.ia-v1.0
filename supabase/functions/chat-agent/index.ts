@@ -54,14 +54,21 @@ function normalizeVehiclePhotos(vehicle: any): string[] {
 }
 
 function appendMissingVehiclePhotos(content: string, vehicles: any[], userContext: string): string {
+  // Only append photos when user is asking about a SPECIFIC vehicle (not a listing)
+  // If multiple vehicles were returned and user didn't name a specific one, skip
   if (!vehicles.length) return content;
+  if (vehicles.length > 3) return content; // Listing query — don't flood with photos
 
   const targetVehicle =
-    vehicles.find((v) => {
-      const hay = `${v?.brand || ""} ${v?.model || ""} ${v?.version || ""}`.toLowerCase();
-      const tokens = hay.split(/\s+/).filter((t) => t.length >= 3);
-      return tokens.some((token) => userContext.includes(token));
-    }) || vehicles[0];
+    vehicles.length === 1
+      ? vehicles[0]
+      : vehicles.find((v) => {
+          const hay = `${v?.brand || ""} ${v?.model || ""} ${v?.version || ""}`.toLowerCase();
+          const tokens = hay.split(/\s+/).filter((t) => t.length >= 3);
+          return tokens.some((token) => userContext.includes(token));
+        });
+
+  if (!targetVehicle) return content; // No specific match found — don't guess
 
   const allPhotos = normalizeVehiclePhotos(targetVehicle);
   if (!allPhotos.length) return content;
