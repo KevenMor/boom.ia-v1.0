@@ -1,17 +1,15 @@
-import { FileText, Download } from "lucide-react";
+import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-
-const mockLogs = [
-  { user: "admin@nexus.ai", action: "agent.version.publish", resource: "Agendamento v5", tenant: "Clínica Saúde+", time: "2min atrás" },
-  { user: "admin@nexus.ai", action: "tenant.create", resource: "Escola Saber", tenant: "—", time: "1h atrás" },
-  { user: "joao@clinica.com", action: "agent.edit", resource: "Agendamento", tenant: "Clínica Saúde+", time: "3h atrás" },
-  { user: "admin@nexus.ai", action: "secret.rotate", resource: "OPENAI_API_KEY", tenant: "Auto Peças JM", time: "1d atrás" },
-  { user: "admin@nexus.ai", action: "tool.create", resource: "cep_lookup", tenant: "—", time: "2d atrás" },
-];
+import { useAuditLogs } from "@/hooks/useAuditLogs";
+import { Skeleton } from "@/components/ui/skeleton";
+import { formatDistanceToNow } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 export default function Audit() {
+  const { data: logs, isLoading, error } = useAuditLogs();
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -25,27 +23,51 @@ export default function Audit() {
         </Button>
       </div>
 
+      {error && (
+        <p className="text-sm text-destructive">Erro ao carregar logs: {error.message}</p>
+      )}
+
       <Card className="border-border bg-card p-0 overflow-hidden">
         <table className="w-full">
           <thead>
             <tr className="border-b border-border text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              <th className="px-5 py-3 text-left">Usuário</th>
               <th className="px-5 py-3 text-left">Ação</th>
-              <th className="px-5 py-3 text-left">Recurso</th>
-              <th className="px-5 py-3 text-left">Tenant</th>
+              <th className="px-5 py-3 text-left">Entidade</th>
               <th className="px-5 py-3 text-right">Quando</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {mockLogs.map((log, i) => (
-              <tr key={i} className="hover:bg-muted/30 transition-colors animate-fade-in" style={{ animationDelay: `${i * 40}ms` }}>
-                <td className="px-5 py-3 text-sm font-mono text-muted-foreground">{log.user}</td>
+            {isLoading &&
+              Array.from({ length: 5 }).map((_, i) => (
+                <tr key={i}>
+                  <td className="px-5 py-3" colSpan={3}>
+                    <Skeleton className="h-6 w-full" />
+                  </td>
+                </tr>
+              ))}
+            {!isLoading && (logs?.length ?? 0) === 0 && (
+              <tr>
+                <td colSpan={3} className="px-5 py-8 text-center text-sm text-muted-foreground">
+                  Nenhum log de auditoria
+                </td>
+              </tr>
+            )}
+            {(logs ?? []).map((log, i) => (
+              <tr
+                key={log.id}
+                className="hover:bg-muted/30 transition-colors animate-fade-in"
+                style={{ animationDelay: `${i * 40}ms` }}
+              >
                 <td className="px-5 py-3">
                   <Badge variant="secondary" className="font-mono text-[10px]">{log.action}</Badge>
                 </td>
-                <td className="px-5 py-3 text-sm">{log.resource}</td>
-                <td className="px-5 py-3 text-sm text-muted-foreground">{log.tenant}</td>
-                <td className="px-5 py-3 text-right text-xs text-muted-foreground">{log.time}</td>
+                <td className="px-5 py-3 text-sm text-muted-foreground">
+                  {log.entity_type ? `${log.entity_type}` : "—"}
+                  {log.entity_id ? ` (${log.entity_id.slice(0, 8)}...)` : ""}
+                </td>
+                <td className="px-5 py-3 text-right text-xs text-muted-foreground">
+                  {formatDistanceToNow(new Date(log.created_at), { addSuffix: true, locale: ptBR })}
+                </td>
               </tr>
             ))}
           </tbody>
