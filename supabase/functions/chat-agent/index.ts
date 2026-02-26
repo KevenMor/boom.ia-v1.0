@@ -99,8 +99,6 @@ function appendMissingVehiclePhotos(content: string, vehicles: any[], userContex
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 
 function splitIntoMessages(content: string): string[] {
-  const parts: string[] = [];
-
   // Separate photo blocks from text
   const photoRegex = /!\[.*?\]\(https?:\/\/[^\s)]+\)/g;
   const photos: string[] = [];
@@ -109,34 +107,20 @@ function splitIntoMessages(content: string): string[] {
     return "";
   }).replace(/\n{3,}/g, "\n\n").trim();
 
-  // Split text by double newlines (paragraphs)
-  if (textOnly) {
-    const paragraphs = textOnly.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  const parts: string[] = [];
 
-    // Group short paragraphs together (under ~600 chars to avoid splitting lists), split long ones
-    let current = "";
-    for (const para of paragraphs) {
-      if (current && (current.length + para.length > 600)) {
-        parts.push(current.trim());
-        current = para;
-      } else {
-        current = current ? `${current}\n\n${para}` : para;
-      }
-    }
-    if (current.trim()) parts.push(current.trim());
+  // Text goes as ONE single block — no splitting for listings/conversations
+  // Splitting caused duplicated bubbles and broken vehicle lists
+  if (textOnly.trim()) {
+    parts.push(textOnly.trim());
   }
 
-  // Send photos in batches of 3 as separate messages
+  // Photos in batches of 3 as separate messages
   for (let i = 0; i < photos.length; i += 3) {
     parts.push(photos.slice(i, i + 3).join("\n"));
   }
 
-  // Deduplicate identical consecutive parts
-  const deduped = (parts.length ? parts : [content]).filter(
-    (part, idx, arr) => idx === 0 || part !== arr[idx - 1]
-  );
-
-  return deduped.length ? deduped : [content];
+  return parts.length ? parts : [content];
 }
 
 // ---------- provider base URLs ----------
@@ -317,7 +301,7 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         return JSON.stringify({
           total: data.length,
           _hint: isListing
-            ? "Esta é uma listagem. Mostre TODOS os veículos apenas com texto (sem fotos). Ofereça enviar fotos de algum que interesse o cliente."
+            ? `OBRIGATÓRIO: Liste TODOS os ${data.length} veículos abaixo numerados (1. 2. 3...) com marca, modelo, versão, ano, preço, km, cor e câmbio. NÃO omita nenhum. Após a lista, pergunte qual interessa para enviar fotos.`
             : "Veículo específico. Inclua TODAS as fotos do array 'photos'.",
           vehicles: data.map((v: any) => {
             if (isListing) {
