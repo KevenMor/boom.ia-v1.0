@@ -16,6 +16,7 @@ export interface Provider {
   id: string;
   name: string;
   base_url: string | null;
+  api_key_encrypted: string | null;
   model_default: string | null;
   status: string;
   created_at: string;

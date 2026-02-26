@@ -1,7 +1,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -11,11 +11,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useUpdateProvider } from "@/hooks/useProviders";
 import { toast } from "sonner";
+import { Eye, EyeOff } from "lucide-react";
 import type { Provider } from "@/types/database";
 
 const schema = z.object({
   name: z.string().min(2),
   base_url: z.string().optional(),
+  api_key: z.string().optional(),
   model_default: z.string().optional(),
   status: z.string(),
 });
@@ -30,16 +32,33 @@ interface Props {
 
 export function EditProviderDialog({ provider, open, onOpenChange }: Props) {
   const update = useUpdateProvider();
+  const [showKey, setShowKey] = useState(false);
   const { register, handleSubmit, setValue, reset } = useForm<FormData>({ resolver: zodResolver(schema) });
 
   useEffect(() => {
-    if (provider) reset({ name: provider.name, base_url: provider.base_url ?? "", model_default: provider.model_default ?? "", status: provider.status });
+    if (provider) {
+      reset({
+        name: provider.name,
+        base_url: provider.base_url ?? "",
+        api_key: provider.api_key_encrypted ?? "",
+        model_default: provider.model_default ?? "",
+        status: provider.status,
+      });
+      setShowKey(false);
+    }
   }, [provider, reset]);
 
   const onSubmit = async (data: FormData) => {
     if (!provider) return;
     try {
-      await update.mutateAsync({ id: provider.id, ...data, base_url: data.base_url || null, model_default: data.model_default || null });
+      await update.mutateAsync({
+        id: provider.id,
+        name: data.name,
+        base_url: data.base_url || null,
+        api_key_encrypted: data.api_key || null,
+        model_default: data.model_default || null,
+        status: data.status,
+      });
       toast.success("Provider atualizado");
       onOpenChange(false);
     } catch (err: any) {
@@ -59,6 +78,27 @@ export function EditProviderDialog({ provider, open, onOpenChange }: Props) {
           <div className="space-y-2">
             <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Base URL</Label>
             <Input {...register("base_url")} className="h-9 bg-background font-mono text-sm" />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">API Key</Label>
+            <div className="relative">
+              <Input
+                {...register("api_key")}
+                type={showKey ? "text" : "password"}
+                placeholder="sk-..."
+                className="h-9 bg-background font-mono text-sm pr-10"
+                autoComplete="off"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-0 top-0 h-9 w-9"
+                onClick={() => setShowKey(!showKey)}
+              >
+                {showKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              </Button>
+            </div>
           </div>
           <div className="space-y-2">
             <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Modelo Padrão</Label>

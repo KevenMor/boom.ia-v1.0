@@ -1,4 +1,4 @@
-import { Cpu, CheckCircle2, AlertTriangle, XCircle, Plus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Cpu, CheckCircle2, AlertTriangle, XCircle, Plus, MoreHorizontal, Pencil, Trash2, Key } from "lucide-react";
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -64,6 +64,11 @@ export default function Providers() {
                   <div className="flex items-center gap-1.5 mt-0.5">
                     {statusIcons[p.status] ?? statusIcons.active}
                     <span className="text-xs capitalize text-muted-foreground">{p.status}</span>
+                    {p.api_key_encrypted ? (
+                      <Badge variant="secondary" className="ml-1 text-[10px] gap-1"><Key className="h-2.5 w-2.5" />API Key ✓</Badge>
+                    ) : (
+                      <Badge variant="outline" className="ml-1 text-[10px] gap-1 text-warning border-warning/30"><Key className="h-2.5 w-2.5" />Sem Key</Badge>
+                    )}
                   </div>
                 </div>
               </div>
