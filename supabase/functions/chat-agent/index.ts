@@ -167,7 +167,7 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
 
         // Apply optional filters from args
         if (args.brand) query = query.ilike("brand", `%${args.brand}%`);
-        if (args.model) query = query.ilike("model", `%${args.model}%`);
+        if (args.model) query = query.or(`model.ilike.%${args.model}%,version.ilike.%${args.model}%`);
         if (args.year) query = query.eq("year", args.year);
         if (args.fuel_type || args.fuel) query = query.ilike("fuel_type", `%${args.fuel_type || args.fuel}%`);
         if (args.transmission) query = query.ilike("transmission", `%${args.transmission}%`);
