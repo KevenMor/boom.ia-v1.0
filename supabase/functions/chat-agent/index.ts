@@ -163,13 +163,13 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
           .from("inventory")
           .select("*")
           .eq("tenant_id", agentData.tenant_id)
-          .eq("status", "active");
+          .eq("status", "available");
 
         // Apply optional filters from args
         if (args.brand) query = query.ilike("brand", `%${args.brand}%`);
         if (args.model) query = query.ilike("model", `%${args.model}%`);
         if (args.year) query = query.eq("year", args.year);
-        if (args.fuel) query = query.ilike("fuel", `%${args.fuel}%`);
+        if (args.fuel_type || args.fuel) query = query.ilike("fuel_type", `%${args.fuel_type || args.fuel}%`);
         if (args.transmission) query = query.ilike("transmission", `%${args.transmission}%`);
         if (args.min_price) query = query.gte("price", args.min_price);
         if (args.max_price) query = query.lte("price", args.max_price);
@@ -180,6 +180,8 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
 
         const { data, error } = await query;
 
+        console.log(`Inventory query result: ${data?.length ?? 0} vehicles found, error: ${error?.message ?? 'none'}`);
+
         if (error) return JSON.stringify({ error: error.message });
         if (!data?.length) return JSON.stringify({ message: "Nenhum veículo encontrado com esses filtros" });
 
@@ -187,17 +189,18 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
           total: data.length,
           vehicles: data.map((v: any) => ({
             id: v.id,
-            title: v.title,
             brand: v.brand,
             model: v.model,
+            version: v.version,
             year: v.year,
             price: v.price,
             mileage: v.mileage,
-            fuel: v.fuel,
+            fuel_type: v.fuel_type,
             transmission: v.transmission,
             color: v.color,
+            photo_url: v.photo_url,
             photos: v.photos?.slice(0, 3),
-            url: v.url,
+            detail_url: v.detail_url,
           })),
         });
       }
