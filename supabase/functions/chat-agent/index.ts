@@ -510,7 +510,11 @@ Deno.serve(async (req) => {
 6. Mostre as fotos naturalmente na conversa, sem mencionar URLs ou campos técnicos.
 7. Seu papel é SDR: apresente TODAS as opções disponíveis, destaque diferenciais, e conduza o cliente para agendar visita ou fechar negócio.`
       : "";
-    const systemPrompt = (agent.system_prompt || "You are a helpful AI assistant.") + photoInstruction;
+    const greetingInstruction = `\n\nCOMPORTAMENTO DE SAUDAÇÃO:
+- Responda saudações ("bom dia", "boa tarde", "boa noite", "oi", "olá") de forma calorosa e profissional, retribuindo a saudação adequada.
+- Após a saudação, apresente-se brevemente e pergunte como pode ajudar o cliente.
+- Seja sempre cordial e humanizado.`;
+    const systemPrompt = (agent.system_prompt || "You are a helpful AI assistant.") + photoInstruction + greetingInstruction;
     const startTime = Date.now();
     console.log(`LLM config: temperature=${temperature}, top_p=${top_p}, top_k=${top_k}, isGemini=${isGemini}`);
     // Helper: build optional LLM params (only include if defined)
