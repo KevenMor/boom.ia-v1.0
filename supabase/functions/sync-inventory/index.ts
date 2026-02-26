@@ -11,6 +11,7 @@ const NEXUS_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE";
 
 const LISTING_URL = "https://pplmotors.com.br/Veiculos";
+const PPL_MOTORS_TENANT_ID = "bc4a1dc9-a205-4b4b-9b6c-47bf677a2728";
 
 // ── Parse helpers ──────────────────────────────────────────
 
@@ -180,38 +181,8 @@ Deno.serve(async (req) => {
       },
     });
 
-    // Optional: tenant_id from body
-    let tenant_id: string | null = null;
-    try {
-      const body = await req.json();
-      tenant_id = body.tenant_id || null;
-    } catch { /* no body is fine */ }
-
-    // Auto-detect tenant_id from LISTING_URL domain if not provided
-    if (!tenant_id) {
-      try {
-        const domain = new URL(LISTING_URL).hostname.replace("www.", "");
-        const { data: tenants } = await supabase
-          .from("tenants")
-          .select("id, settings")
-          .order("created_at", { ascending: true });
-
-        if (tenants) {
-          const match = tenants.find((t: any) => {
-            const syncUrl = t.settings?.sync_url || t.settings?.website_url || "";
-            return syncUrl.includes(domain);
-          });
-          if (match) {
-            tenant_id = match.id;
-            console.log(`Auto-matched tenant ${tenant_id} for domain ${domain}`);
-          } else {
-            console.warn(`No tenant found with sync_url matching "${domain}". Set settings.sync_url on the tenant.`);
-          }
-        }
-      } catch (e) {
-        console.warn("Tenant auto-detect failed:", e);
-      }
-    }
+    // Fixed tenant_id for PPL Motors
+    const tenant_id: string = PPL_MOTORS_TENANT_ID;
 
     console.log("Starting inventory sync from", LISTING_URL, "tenant_id:", tenant_id);
 
