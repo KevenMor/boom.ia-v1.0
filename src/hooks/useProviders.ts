@@ -4,13 +4,13 @@ import { cloudClient } from "@/integrations/supabase/cloud-client";
 import type { Provider } from "@/types/database";
 
 async function invokeProviderKeys(body: Record<string, unknown>) {
-  // Get the auth token from the self-hosted session
+  // Get the auth token from the self-hosted session and pass via custom header
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
 
   const { data, error } = await cloudClient.functions.invoke("provider-keys", {
     body,
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: token ? { "x-nexus-auth": `Bearer ${token}` } : {},
   });
   if (error) throw error;
   return data;
