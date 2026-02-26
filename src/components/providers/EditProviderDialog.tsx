@@ -40,7 +40,7 @@ export function EditProviderDialog({ provider, open, onOpenChange }: Props) {
       reset({
         name: provider.name,
         base_url: provider.base_url ?? "",
-        api_key: provider.api_key_encrypted ?? "",
+        api_key: "",
         model_default: provider.model_default ?? "",
         status: provider.status,
       });
@@ -55,7 +55,7 @@ export function EditProviderDialog({ provider, open, onOpenChange }: Props) {
         id: provider.id,
         name: data.name,
         base_url: data.base_url || null,
-        api_key_encrypted: data.api_key || null,
+        raw_api_key: data.api_key || undefined,
         model_default: data.model_default || null,
         status: data.status,
       });
@@ -85,7 +85,7 @@ export function EditProviderDialog({ provider, open, onOpenChange }: Props) {
               <Input
                 {...register("api_key")}
                 type={showKey ? "text" : "password"}
-                placeholder="sk-..."
+                placeholder={provider?.api_key_encrypted ? "••••• (deixe vazio para manter)" : "sk-..."}
                 className="h-9 bg-background font-mono text-sm pr-10"
                 autoComplete="off"
               />

@@ -1,0 +1,2 @@
+[functions.provider-keys]
+verify_jwt = false
