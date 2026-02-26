@@ -69,14 +69,15 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
     if (!agent) return;
     try {
       const currentConfig = (agent.config || {}) as Record<string, unknown>;
+      const { top_p, top_k, ...rest } = data;
       await update.mutateAsync({
         id: agent.id,
-        ...data,
-        description: data.description || null,
-        provider_id: data.provider_id || null,
-        model: data.model || null,
-        system_prompt: data.system_prompt || null,
-        config: { ...currentConfig, top_p: data.top_p, top_k: data.top_k },
+        ...rest,
+        description: rest.description || null,
+        provider_id: rest.provider_id || null,
+        model: rest.model || null,
+        system_prompt: rest.system_prompt || null,
+        config: { ...currentConfig, top_p, top_k },
       });
       toast.success("Agente atualizado");
       onOpenChange(false);
