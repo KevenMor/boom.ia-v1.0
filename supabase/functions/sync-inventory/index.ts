@@ -208,27 +208,10 @@ Deno.serve(async (req) => {
 
     for (const vehicle of vehicles) {
       try {
-        // Fetch detail page
-        let photos: string[] = [vehicle.photo_url];
-        let features: string[] = [];
-        let optionals: string[] = [];
+        // Skip detail page fetch to avoid timeout — use listing data only
+        const photos: string[] = vehicle.photo_url ? [vehicle.photo_url] : [];
 
-        try {
-          const detailResp = await fetch(vehicle.detail_url, {
-            headers: { "User-Agent": "NexusAI-Bot/1.0" },
-          });
-          if (detailResp.ok) {
-            const detailHtml = await detailResp.text();
-            const detail = parseDetailPage(detailHtml);
-            if (detail.photos.length > 0) photos = detail.photos;
-            features = detail.features;
-            optionals = detail.optionals;
-          }
-        } catch (e) {
-          console.warn(`Failed to fetch details for ${vehicle.external_id}:`, e);
-        }
-
-        // 3. Upsert into inventory
+        // Upsert into inventory
         const record = {
           external_id: vehicle.external_id,
           tenant_id,
@@ -244,9 +227,7 @@ Deno.serve(async (req) => {
           photo_url: vehicle.photo_url,
           photos: JSON.stringify(photos),
           detail_url: vehicle.detail_url,
-          description: [...features, ...optionals].join(", "),
           status: "available",
-          raw_data: JSON.stringify({ features, optionals }),
           last_synced_at: new Date().toISOString(),
         };
 
@@ -260,9 +241,6 @@ Deno.serve(async (req) => {
         } else {
           results.synced++;
         }
-
-        // Small delay to be respectful to the server
-        await new Promise((r) => setTimeout(r, 300));
       } catch (e) {
         console.error(`Error processing vehicle ${vehicle.external_id}:`, e);
         results.errors++;
