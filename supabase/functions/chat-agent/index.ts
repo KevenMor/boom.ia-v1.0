@@ -363,10 +363,12 @@ Deno.serve(async (req) => {
     const startTime = Date.now();
     console.log(`LLM config: temperature=${temperature}, top_p=${top_p}, top_k=${top_k}, isGemini=${isGemini}`);
     // Helper: build optional LLM params (only include if defined)
-    // Note: Gemini's OpenAI-compatible endpoint does NOT support top_k
+    // Note: Gemini's OpenAI-compatible endpoint does NOT support top_k or top_p
     const llmParams: Record<string, any> = { temperature };
-    if (top_p !== undefined) llmParams.top_p = top_p;
-    if (top_k !== undefined && !isGemini) llmParams.top_k = top_k;
+    if (!isGemini) {
+      if (top_p !== undefined && top_p !== null) llmParams.top_p = top_p;
+      if (top_k !== undefined && top_k !== null) llmParams.top_k = top_k;
+    }
 
     const openaiTools = agentTools.length > 0 ? toolsToOpenAI(agentTools) : undefined;
 
