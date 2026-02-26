@@ -1,4 +1,5 @@
-import { Wrench, Plus, Search, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Wrench, Plus, Search, MoreHorizontal, Pencil, Trash2, Database, Globe, Server } from "lucide-react";
+import { Search as SearchIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -12,7 +13,21 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CreateToolDialog } from "@/components/tools/CreateToolDialog";
 import { EditToolDialog } from "@/components/tools/EditToolDialog";
 import { DeleteToolDialog } from "@/components/tools/DeleteToolDialog";
-import type { Tool } from "@/types/database";
+import type { Tool, ToolType } from "@/types/database";
+
+const TOOL_TYPE_ICON: Record<string, any> = {
+  sql_query: Database,
+  web_scraper: Globe,
+  api_rest: Server,
+  rag_search: SearchIcon,
+};
+
+const TOOL_TYPE_LABEL: Record<string, string> = {
+  sql_query: "SQL Query",
+  web_scraper: "Web Scraper",
+  api_rest: "API REST",
+  rag_search: "RAG Search",
+};
 
 export default function Tools() {
   const [search, setSearch] = useState("");
@@ -30,7 +45,7 @@ export default function Tools() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">Catálogo de Tools</h2>
-          <p className="text-sm text-muted-foreground">Ferramentas disponíveis para os agentes</p>
+          <p className="text-sm text-muted-foreground">Ferramentas disponíveis para os agentes (Function Calling)</p>
         </div>
         <Button className="gap-2" onClick={() => setCreateOpen(true)}>
           <Plus className="h-4 w-4" />
@@ -56,41 +71,54 @@ export default function Tools() {
       )}
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {filtered.map((tool, i) => (
-          <Card key={tool.id} className="border-border bg-card p-5 cursor-pointer hover:border-primary/30 transition-colors animate-fade-in" style={{ animationDelay: `${i * 50}ms` }}>
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary">
-                  <Wrench className="h-5 w-5 text-muted-foreground" />
+        {filtered.map((tool, i) => {
+          const toolType = tool.tool_type || "api_rest";
+          const Icon = TOOL_TYPE_ICON[toolType] || Wrench;
+          return (
+            <Card key={tool.id} className="border-border bg-card p-5 cursor-pointer hover:border-primary/30 transition-colors animate-fade-in" style={{ animationDelay: `${i * 50}ms` }}>
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                    <Icon className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold font-mono">{tool.name}</h3>
+                    <p className="text-xs text-muted-foreground line-clamp-1">{tool.description ?? "Sem descrição"}</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-sm font-semibold">{tool.name}</h3>
-                  <p className="text-xs text-muted-foreground">{tool.description ?? "Sem descrição"}</p>
-                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-7 w-7"><MoreHorizontal className="h-4 w-4" /></Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setEditTool(tool)}>
+                      <Pencil className="mr-2 h-3 w-3" />Editar
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem className="text-destructive" onClick={() => setDeleteTool(tool)}>
+                      <Trash2 className="mr-2 h-3 w-3" />Remover
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-7 w-7"><MoreHorizontal className="h-4 w-4" /></Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setEditTool(tool)}>
-                    <Pencil className="mr-2 h-3 w-3" />Editar
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem className="text-destructive" onClick={() => setDeleteTool(tool)}>
-                    <Trash2 className="mr-2 h-3 w-3" />Remover
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-            <div className="mt-4 flex items-center gap-2">
-              <Badge variant="secondary" className="text-[10px]">{tool.type}</Badge>
-              {tool.endpoint && (
-                <Badge className="bg-primary/10 text-primary border-primary/20 hover:bg-primary/20 text-[10px]">API</Badge>
-              )}
-            </div>
-          </Card>
-        ))}
+              <div className="mt-4 flex items-center gap-2 flex-wrap">
+                <Badge variant="secondary" className="text-[10px]">
+                  {TOOL_TYPE_LABEL[toolType] || toolType}
+                </Badge>
+                {tool.tenant_id ? (
+                  <Badge className="bg-accent/10 text-accent-foreground border-accent/20 text-[10px]">Tenant</Badge>
+                ) : (
+                  <Badge variant="outline" className="text-[10px]">🌐 Global</Badge>
+                )}
+                {tool.endpoint && (
+                  <Badge className="bg-primary/10 text-primary border-primary/20 hover:bg-primary/20 text-[10px] font-mono truncate max-w-[140px]">
+                    {tool.endpoint}
+                  </Badge>
+                )}
+              </div>
+            </Card>
+          );
+        })}
       </div>
 
       <CreateToolDialog open={createOpen} onOpenChange={setCreateOpen} />

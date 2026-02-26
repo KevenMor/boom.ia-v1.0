@@ -40,14 +40,20 @@ export interface Agent {
   providers?: Provider;
 }
 
+export type ToolType = 'sql_query' | 'web_scraper' | 'api_rest' | 'rag_search';
+
 export interface Tool {
   id: string;
   name: string;
   description: string | null;
   type: string;
+  tool_type: ToolType;
   schema: Record<string, unknown> | null;
   endpoint: string | null;
   auth_config: Record<string, unknown> | null;
+  tenant_id: string | null;
+  function_def: Record<string, unknown> | null;
+  execution_config: Record<string, unknown> | null;
   created_at: string;
 }
 
