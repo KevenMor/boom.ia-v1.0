@@ -139,8 +139,8 @@ export default function AgentSandbox() {
     setInput("");
     setIsLoading(true);
 
-    let assistantSoFar = "";
     let debugData: DebugEntry[] | null = null;
+    let hasAssistantContent = false;
     const allMessages = [...messages, userMsg];
 
     try {
@@ -206,41 +206,41 @@ export default function AgentSandbox() {
 
             const content = parsed.choices?.[0]?.delta?.content as string | undefined;
             if (content) {
-              // Check for split marker
+              // Check for split marker — start a new bubble
               if (content.includes(MSG_SPLIT)) {
-                // The chunk may contain text + marker + text
                 const segments = content.split(MSG_SPLIT);
                 for (let si = 0; si < segments.length; si++) {
                   if (si > 0) {
-                    // Start a new assistant bubble
-                    assistantSoFar = segments[si];
+                    // Add a NEW empty assistant bubble; subsequent chunks append to it
                     setMessages((prev) => [
                       ...prev,
-                      { role: "assistant", content: assistantSoFar, timestamp: new Date() },
+                      { role: "assistant", content: segments[si] || "", timestamp: new Date() },
                     ]);
-                  } else {
-                    assistantSoFar += segments[si];
+                  } else if (segments[si]) {
+                    // Append leftover text before the split to current bubble
                     setMessages((prev) => {
                       const last = prev[prev.length - 1];
                       if (last?.role === "assistant") {
                         return prev.map((m, idx) =>
-                          idx === prev.length - 1 ? { ...m, content: assistantSoFar } : m
+                          idx === prev.length - 1 ? { ...m, content: m.content + segments[si] } : m
                         );
                       }
-                      return [...prev, { role: "assistant", content: assistantSoFar, timestamp: new Date() }];
+                      return [...prev, { role: "assistant", content: segments[si], timestamp: new Date(), debug: debugData || undefined }];
                     });
                   }
                 }
+                hasAssistantContent = true;
               } else {
-                assistantSoFar += content;
+                // Normal chunk: append to the LAST assistant bubble using functional state
+                hasAssistantContent = true;
                 setMessages((prev) => {
                   const last = prev[prev.length - 1];
                   if (last?.role === "assistant") {
                     return prev.map((m, idx) =>
-                      idx === prev.length - 1 ? { ...m, content: assistantSoFar } : m
+                      idx === prev.length - 1 ? { ...m, content: m.content + content } : m
                     );
                   }
-                  return [...prev, { role: "assistant", content: assistantSoFar, timestamp: new Date(), debug: debugData || undefined }];
+                  return [...prev, { role: "assistant", content: content, timestamp: new Date(), debug: debugData || undefined }];
                 });
               }
             }
@@ -255,7 +255,7 @@ export default function AgentSandbox() {
     } catch (e: any) {
       console.error("Chat error:", e);
       toast.error(e.message || "Erro ao enviar mensagem");
-      if (!assistantSoFar) {
+      if (!hasAssistantContent) {
         setMessages((prev) => prev.slice(0, -1));
       }
     } finally {
