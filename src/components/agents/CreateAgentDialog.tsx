@@ -15,6 +15,7 @@ import { useTenants } from "@/hooks/useTenants";
 import { useProviders } from "@/hooks/useProviders";
 import { toast } from "sonner";
 import { useState } from "react";
+import { getModelsForProvider } from "@/lib/provider-models";
 
 const schema = z.object({
   name: z.string().min(2, "Nome obrigatório"),
@@ -40,7 +41,7 @@ export function CreateAgentDialog({ open, onOpenChange, defaultTenantId }: Props
   const { data: providers } = useProviders();
   const [temp, setTemp] = useState(0.7);
 
-  const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { name: "", description: "", tenant_id: defaultTenantId ?? "", provider_id: "", model: "", system_prompt: "", temperature: 0.7 },
   });
@@ -97,23 +98,53 @@ export function CreateAgentDialog({ open, onOpenChange, defaultTenantId }: Props
             <Input {...register("description")} placeholder="Agente de atendimento ao cliente" className="h-9 bg-background" />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Provider</Label>
-              <Select onValueChange={(v) => setValue("provider_id", v)}>
-                <SelectTrigger className="h-9 bg-background"><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                <SelectContent>
-                  {(providers ?? []).filter((p) => p.status === "active").map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Modelo</Label>
-              <Input {...register("model")} placeholder="gpt-4o" className="h-9 bg-background font-mono text-sm" />
-            </div>
+          <div className="space-y-2">
+            <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Provider</Label>
+            <Select onValueChange={(v) => {
+              setValue("provider_id", v);
+              const prov = (providers ?? []).find((p) => p.id === v);
+              const models = getModelsForProvider(prov?.name);
+              if (models.length > 0) setValue("model", models[0].value);
+            }}>
+              <SelectTrigger className="h-9 bg-background"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+              <SelectContent>
+                {(providers ?? []).filter((p) => p.status === "active").map((p) => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+
+          {(() => {
+            const selectedProvider = (providers ?? []).find((p) => p.id === watch("provider_id"));
+            const models = getModelsForProvider(selectedProvider?.name);
+            if (models.length === 0) {
+              return (
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Modelo</Label>
+                  <Input {...register("model")} placeholder="nome-do-modelo" className="h-9 bg-background font-mono text-sm" />
+                </div>
+              );
+            }
+            return (
+              <div className="space-y-2">
+                <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Modelo</Label>
+                <Select onValueChange={(v) => setValue("model", v)} defaultValue={models[0].value}>
+                  <SelectTrigger className="h-9 bg-background font-mono text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {models.map((m) => (
+                      <SelectItem key={m.value} value={m.value}>
+                        <div className="flex flex-col">
+                          <span className="font-mono text-xs">{m.label}</span>
+                          <span className="text-[10px] text-muted-foreground">{m.description}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            );
+          })()}
 
           <div className="space-y-2">
             <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">System Prompt</Label>
