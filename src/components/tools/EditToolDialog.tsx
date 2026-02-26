@@ -144,6 +144,28 @@ export function EditToolDialog({ tool, open, onOpenChange }: Props) {
             <Input {...register("description")} className="h-9 bg-background" />
           </div>
 
+          {toolType === "web_scraper" && (
+            <div className="space-y-2">
+              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">URL padrão (scraping)</Label>
+              <Input
+                placeholder="https://pplmotors.com.br/Veiculos"
+                defaultValue={(tool?.execution_config as any)?.default_url ?? ""}
+                onChange={(e) => {
+                  try {
+                    const current = JSON.parse(
+                      (document.querySelector('[name="execution_json"]') as HTMLTextAreaElement)?.value || "{}"
+                    );
+                    current.default_url = e.target.value;
+                    setValue("execution_json", JSON.stringify(current, null, 2));
+                  } catch {
+                    setValue("execution_json", JSON.stringify({ default_url: e.target.value }, null, 2));
+                  }
+                }}
+                className="h-9 bg-background font-mono text-sm"
+              />
+            </div>
+          )}
+
           {toolType === "api_rest" && (
             <div className="space-y-2">
               <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Endpoint</Label>
