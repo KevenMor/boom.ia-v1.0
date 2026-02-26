@@ -45,12 +45,20 @@ function parseListingPage(html: string): VehicleCard[] {
   // Split by result-item blocks
   const items = html.split('<div class="result-item">').slice(1);
 
-  for (const item of items) {
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (i === 0) {
+      console.log("First item (500 chars):", item.substring(0, 500));
+    }
     try {
-      // External ID from detail link
-      const detailMatch = item.match(/href="(https:\/\/pplmotors\.com\.br\/Veiculo\/[^"]+\/(\d+)\/detalhes)"/);
-      if (!detailMatch) continue;
-      const detail_url = detailMatch[1];
+      // External ID from detail link — handle both full and relative URLs
+      const detailMatch = item.match(/href="([^"]*(?:Veiculo|veiculo)[^"]*\/(\d+)\/detalhes)"/i);
+      if (!detailMatch) {
+        if (i === 0) console.log("No detail match in first item");
+        continue;
+      }
+      let detail_url = detailMatch[1];
+      if (detail_url.startsWith("/")) detail_url = "https://pplmotors.com.br" + detail_url;
       const external_id = detailMatch[2];
 
       // Photo
