@@ -12,7 +12,9 @@ Deno.serve(async (req) => {
   try {
     const nexusUrl = Deno.env.get("NEXUS_DB_URL");
     const nexusKey = Deno.env.get("NEXUS_DB_ANON_KEY");
-    const encryptionKey = Deno.env.get("ENCRYPTION_KEY");
+
+    console.log("NEXUS_DB_URL:", nexusUrl);
+    console.log("NEXUS_DB_ANON_KEY present:", !!nexusKey);
 
     if (!nexusUrl || !nexusKey) {
       return new Response(JSON.stringify({ error: "Missing server configuration" }), {
@@ -22,6 +24,8 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(nexusUrl, nexusKey);
     const { tool_id, args } = await req.json();
+
+    console.log("tool_id:", tool_id);
 
     if (!tool_id) {
       return new Response(JSON.stringify({ error: "tool_id is required" }), {
@@ -34,10 +38,12 @@ Deno.serve(async (req) => {
       .from("tools")
       .select("*")
       .eq("id", tool_id)
-      .single();
+      .maybeSingle();
+
+    console.log("tool query result:", JSON.stringify({ tool, toolErr }));
 
     if (toolErr || !tool) {
-      return new Response(JSON.stringify({ error: "Tool not found", detail: toolErr?.message }), {
+      return new Response(JSON.stringify({ error: "Tool not found", detail: toolErr?.message, nexusUrl }), {
         status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
