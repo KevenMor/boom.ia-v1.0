@@ -179,8 +179,8 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         if (args.max_price) query = query.lte("price", args.max_price);
         if (args.color) query = query.ilike("color", `%${args.color}%`);
 
-        const limit = args.limit || 10;
-        query = query.order("price", { ascending: true }).limit(limit);
+        // No limit — return all matching vehicles
+        query = query.order("price", { ascending: true });
 
         const { data, error } = await query;
 
