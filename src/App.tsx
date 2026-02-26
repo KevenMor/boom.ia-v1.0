@@ -10,6 +10,7 @@ import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import Tenants from "@/pages/Tenants";
 import Agents from "@/pages/Agents";
+import AgentSandbox from "@/pages/AgentSandbox";
 import Tools from "@/pages/Tools";
 import Providers from "@/pages/Providers";
 import Monitoring from "@/pages/Monitoring";
@@ -39,6 +40,7 @@ const App = () => (
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/tenants" element={<Tenants />} />
               <Route path="/agents" element={<Agents />} />
+              <Route path="/agents/:agentId/sandbox" element={<AgentSandbox />} />
               <Route path="/tools" element={<Tools />} />
               <Route path="/providers" element={<Providers />} />
               <Route path="/monitoring" element={<Monitoring />} />
