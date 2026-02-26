@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Play, CheckCircle2, XCircle } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { nexusDb } from "@/integrations/supabase/nexus-client";
 import type { Tool } from "@/types/database";
 
 interface Props {
@@ -62,16 +63,25 @@ export function TestToolDialog({ tool, open, onOpenChange }: Props) {
         return;
       }
 
+      // Get the Nexus auth token from the current session
+      const { data: { session } } = await nexusDb.auth.getSession();
+      const nexusToken = session?.access_token;
+
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${supabaseKey}`,
+        "apikey": supabaseKey,
+      };
+      if (nexusToken) {
+        headers["x-nexus-auth"] = nexusToken;
+      }
+
       const resp = await fetch(`${supabaseUrl}/functions/v1/test-tool`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${supabaseKey}`,
-          "apikey": supabaseKey,
-        },
+        headers,
         body: JSON.stringify({ tool_id: tool.id, tool_name: tool.name, args: parsedArgs }),
       });
 
