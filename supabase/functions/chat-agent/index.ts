@@ -502,8 +502,8 @@ Deno.serve(async (req) => {
     const top_k = agentConfig.top_k ?? llmConfig.top_k ?? undefined;
     const photoInstruction = agentTools.some(t => t.tool_type === "inventory_query")
       ? `\n\nREGRAS OBRIGATÓRIAS SOBRE FOTOS DE VEÍCULOS (você é um SDR):
-1. LISTAGEM (múltiplos veículos): Mostre TODOS os veículos que atendem ao filtro. Para cada veículo, inclua UMA foto principal usando ![foto](photo_url). Liste TODOS, nunca limite a quantidade.
-2. VEÍCULO ESPECÍFICO: Quando o cliente perguntar sobre um carro específico, ou aceitar ver fotos de um veículo que você ofereceu, inclua TODAS as fotos do array 'photos' daquele veículo, cada uma em linha separada: ![foto](URL).
+1. LISTAGEM (múltiplos veículos): Mostre TODOS os veículos que atendem ao filtro APENAS com texto (marca, modelo, ano, preço, km, cor, câmbio). NÃO inclua fotos na listagem para não poluir a conversa. Ofereça ao cliente enviar fotos de algum que interesse.
+2. VEÍCULO ESPECÍFICO: Quando o cliente perguntar sobre um carro específico, aceitar ver fotos, ou pedir fotos de um veículo, inclua TODAS as fotos do array 'photos' daquele veículo, cada uma em linha separada: ![foto](URL).
 3. Se o array 'photos' estiver vazio, use o campo 'photo_url'.
 4. NUNCA escreva nomes de ferramentas (como ENVIAR_FOTOS_VEICULO) no texto.
 5. Se o cliente pedir MAIS fotos de um veículo, chame a ferramenta consultar_estoque novamente filtrando pelo veículo específico. NUNCA responda só com texto — chame a ferramenta e envie as fotos.
