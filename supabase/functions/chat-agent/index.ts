@@ -202,6 +202,37 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         });
       }
 
+      case "nearest_unit": {
+        // Find nearest unit by CEP using the find-nearest-unit edge function
+        const cep = args.cep || args.CEP || "";
+        if (!cep) return JSON.stringify({ error: "CEP é obrigatório" });
+
+        const { data: agentData } = await supabase
+          .from("agents")
+          .select("tenant_id")
+          .eq("id", agentId)
+          .single();
+
+        const cloudUrl = Deno.env.get("SUPABASE_URL") || "";
+        const cloudKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+
+        const resp = await fetch(`${cloudUrl}/functions/v1/find-nearest-unit`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${cloudKey}`,
+          },
+          body: JSON.stringify({ cep, tenant_id: agentData?.tenant_id }),
+        });
+
+        const result = await resp.text();
+        try {
+          return JSON.stringify(JSON.parse(result));
+        } catch {
+          return result.slice(0, 8000);
+        }
+      }
+
       default:
         return JSON.stringify({ error: `Unknown tool type: ${tool.tool_type}` });
     }

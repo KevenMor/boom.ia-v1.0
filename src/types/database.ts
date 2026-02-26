@@ -40,7 +40,7 @@ export interface Agent {
   providers?: Provider;
 }
 
-export type ToolType = 'sql_query' | 'web_scraper' | 'api_rest' | 'rag_search';
+export type ToolType = 'sql_query' | 'web_scraper' | 'api_rest' | 'rag_search' | 'inventory_query' | 'nearest_unit';
 
 export interface Tool {
   id: string;
