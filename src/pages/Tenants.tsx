@@ -10,29 +10,23 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-const mockTenants = [
-  { id: "1", name: "Clínica Saúde+", slug: "clinica-saude", agents: 3, messages: 12400, status: "active", plan: "Pro" },
-  { id: "2", name: "Auto Peças JM", slug: "auto-pecas-jm", agents: 1, messages: 5200, status: "active", plan: "Starter" },
-  { id: "3", name: "Imobiliária Lar Doce", slug: "imob-lar", agents: 2, messages: 3100, status: "active", plan: "Pro" },
-  { id: "4", name: "Escola Saber", slug: "escola-saber", agents: 1, messages: 890, status: "provisioning", plan: "Starter" },
-  { id: "5", name: "Restaurante Sabor", slug: "rest-sabor", agents: 2, messages: 7800, status: "active", plan: "Pro" },
-];
+import { useTenants } from "@/hooks/useTenants";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Tenants() {
   const [search, setSearch] = useState("");
+  const { data: tenants, isLoading, error } = useTenants();
 
-  const filtered = mockTenants.filter((t) =>
+  const filtered = (tenants ?? []).filter((t) =>
     t.name.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">Empresas</h2>
-          <p className="text-sm text-muted-foreground">{mockTenants.length} tenants registrados</p>
+          <p className="text-sm text-muted-foreground">{tenants?.length ?? 0} tenants registrados</p>
         </div>
         <Button className="gap-2">
           <Plus className="h-4 w-4" />
@@ -40,7 +34,6 @@ export default function Tenants() {
         </Button>
       </div>
 
-      {/* Search */}
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -51,7 +44,10 @@ export default function Tenants() {
         />
       </div>
 
-      {/* Table */}
+      {error && (
+        <p className="text-sm text-destructive">Erro ao carregar tenants: {error.message}</p>
+      )}
+
       <Card className="border-border bg-card p-0 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -59,14 +55,27 @@ export default function Tenants() {
               <tr className="border-b border-border text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 <th className="px-5 py-3 text-left">Empresa</th>
                 <th className="px-5 py-3 text-left">Slug</th>
-                <th className="px-5 py-3 text-center">Agentes</th>
-                <th className="px-5 py-3 text-right">Msgs/mês</th>
                 <th className="px-5 py-3 text-center">Plano</th>
                 <th className="px-5 py-3 text-center">Status</th>
                 <th className="px-5 py-3 text-center w-12"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
+              {isLoading &&
+                Array.from({ length: 3 }).map((_, i) => (
+                  <tr key={i}>
+                    <td className="px-5 py-3" colSpan={5}>
+                      <Skeleton className="h-8 w-full" />
+                    </td>
+                  </tr>
+                ))}
+              {!isLoading && filtered.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-5 py-8 text-center text-sm text-muted-foreground">
+                    Nenhum tenant encontrado
+                  </td>
+                </tr>
+              )}
               {filtered.map((tenant, i) => (
                 <tr
                   key={tenant.id}
@@ -84,12 +93,8 @@ export default function Tenants() {
                   <td className="px-5 py-3">
                     <code className="font-mono text-xs text-muted-foreground">{tenant.slug}</code>
                   </td>
-                  <td className="px-5 py-3 text-center font-mono text-sm">{tenant.agents}</td>
-                  <td className="px-5 py-3 text-right font-mono text-sm tabular-nums">
-                    {tenant.messages.toLocaleString("pt-BR")}
-                  </td>
                   <td className="px-5 py-3 text-center">
-                    <Badge variant="secondary" className="text-xs">{tenant.plan}</Badge>
+                    <Badge variant="secondary" className="text-xs capitalize">{tenant.plan}</Badge>
                   </td>
                   <td className="px-5 py-3 text-center">
                     <Badge
