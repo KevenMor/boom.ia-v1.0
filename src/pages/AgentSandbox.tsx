@@ -25,24 +25,34 @@ const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-agent`;
 function extractImages(content: string): { text: string; images: string[] } {
   const images: string[] = [];
   
-  // Match common image URL patterns
-  const imgRegex = /(?:!\[.*?\]\((https?:\/\/[^\s)]+\.(?:jpg|jpeg|png|gif|webp)[^\s)]*)\)|(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp)[^\s]*))/gi;
+  // Match markdown image syntax ![...](url)
+  const mdImgRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/gi;
   let match;
-  while ((match = imgRegex.exec(content)) !== null) {
-    const url = match[1] || match[2];
-    if (url && !images.includes(url)) images.push(url);
+  while ((match = mdImgRegex.exec(content)) !== null) {
+    if (match[1] && !images.includes(match[1])) images.push(match[1]);
   }
 
-  // Also detect photo_url patterns from tool output that the LLM might reference
+  // Match bare image URLs
+  const bareImgRegex = /(?<!\()(https?:\/\/[^\s"'<>]+\.(?:jpg|jpeg|png|gif|webp)[^\s"'<>]*)/gi;
+  while ((match = bareImgRegex.exec(content)) !== null) {
+    if (!images.includes(match[1] || match[0])) images.push(match[1] || match[0]);
+  }
+
+  // Also detect photo_url patterns from tool output
   const photoUrlRegex = /https?:\/\/[^\s"'<>]+\/fotos\/[^\s"'<>]+/gi;
   while ((match = photoUrlRegex.exec(content)) !== null) {
     if (!images.includes(match[0])) images.push(match[0]);
   }
 
-  // Clean URLs from text display  
+  // Clean text: remove image markdown, bare URLs already captured, and tool artifacts
   let text = content;
+  // Remove markdown images
+  text = text.replace(/!\[.*?\]\(https?:\/\/[^\s)]+\)/gi, '');
+  // Remove tool artifact lines like "ENVIAR_FOTOS_VEICULO: ..."
+  text = text.replace(/^.*?ENVIAR_FOTOS?_VEICULOS?.*$/gmi, '');
+  // Remove orphan image URLs
   images.forEach(url => {
-    text = text.replace(url, '').replace(`![](${url})`, '');
+    text = text.split(url).join('');
   });
   text = text.replace(/\n{3,}/g, '\n\n').trim();
 

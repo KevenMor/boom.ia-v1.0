@@ -203,7 +203,7 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
             transmission: v.transmission,
             color: v.color,
             photo_url: v.photo_url,
-            photos: v.photos?.slice(0, 3),
+            photos: v.photos?.slice(0, 5),
             detail_url: v.detail_url,
           })),
         });
@@ -367,7 +367,7 @@ Deno.serve(async (req) => {
     const top_p = agentConfig.top_p ?? llmConfig.top_p ?? undefined;
     const top_k = agentConfig.top_k ?? llmConfig.top_k ?? undefined;
     const photoInstruction = agentTools.some(t => t.tool_type === "inventory_query")
-      ? "\n\nIMPORTANTE: Quando mostrar veículos ao cliente, SEMPRE inclua a foto usando markdown: ![foto](URL_DA_FOTO). Use o campo photo_url retornado pela consulta. Isso é obrigatório para cada veículo mencionado."
+      ? "\n\nIMPORTANTE: Quando mostrar veículos ao cliente, SEMPRE inclua TODAS as fotos disponíveis usando markdown. Use o campo 'photos' (array) retornado pela consulta. Para CADA foto do array, coloque em uma linha separada: ![foto](URL). Se o array 'photos' estiver vazio, use photo_url. NÃO escreva nomes de ferramentas como ENVIAR_FOTOS_VEICULO no texto. Apenas mostre as fotos naturalmente na conversa."
       : "";
     const systemPrompt = (agent.system_prompt || "You are a helpful AI assistant.") + photoInstruction;
     const startTime = Date.now();
