@@ -350,6 +350,7 @@ Deno.serve(async (req) => {
 
     // 6. Build request — merge tenant LLM config with agent defaults
     const isAnthropic = provider.name === "Anthropic";
+    const isGemini = provider.name === "Google Gemini" || provider.name === "Gemini";
     const model = agent.model || "gpt-4o";
     const agentConfig = agent.config || {};
     const tenantSettings = agent.tenants?.settings || {};
@@ -360,11 +361,12 @@ Deno.serve(async (req) => {
     const top_k = agentConfig.top_k ?? llmConfig.top_k ?? undefined;
     const systemPrompt = agent.system_prompt || "You are a helpful AI assistant.";
     const startTime = Date.now();
-    console.log(`LLM config: temperature=${temperature}, top_p=${top_p}, top_k=${top_k}`);
+    console.log(`LLM config: temperature=${temperature}, top_p=${top_p}, top_k=${top_k}, isGemini=${isGemini}`);
     // Helper: build optional LLM params (only include if defined)
+    // Note: Gemini's OpenAI-compatible endpoint does NOT support top_k
     const llmParams: Record<string, any> = { temperature };
     if (top_p !== undefined) llmParams.top_p = top_p;
-    if (top_k !== undefined) llmParams.top_k = top_k;
+    if (top_k !== undefined && !isGemini) llmParams.top_k = top_k;
 
     const openaiTools = agentTools.length > 0 ? toolsToOpenAI(agentTools) : undefined;
 
