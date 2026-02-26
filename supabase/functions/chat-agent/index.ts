@@ -24,6 +24,7 @@ async function decrypt(encoded: string, secret: string): Promise<string> {
 // ---------- provider base URLs ----------
 const PROVIDER_URLS: Record<string, string> = {
   "Google Gemini": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+  Gemini: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
   OpenAI: "https://api.openai.com/v1/chat/completions",
   Anthropic: "https://api.anthropic.com/v1/messages",
   Groq: "https://api.groq.com/openai/v1/chat/completions",
@@ -81,7 +82,10 @@ Deno.serve(async (req) => {
     const apiKey = await decrypt(provider.api_key_encrypted, encryptionKey);
 
     // 3. Determine endpoint
-    const baseUrl = provider.base_url || PROVIDER_URLS[provider.name] || PROVIDER_URLS.OpenAI;
+    // Only use provider.base_url if it looks like a full chat completions endpoint
+    const baseUrl = (provider.base_url && provider.base_url.includes("/chat/completions"))
+      ? provider.base_url
+      : PROVIDER_URLS[provider.name] || PROVIDER_URLS.OpenAI;
 
     // 4. Build request based on provider type
     const isAnthropic = provider.name === "Anthropic";
