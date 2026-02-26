@@ -572,14 +572,16 @@ IMPORTANTE:
 - Exemplo de veículo: "Temos um Nivus 1.0 Highline 2024, branco, automático, com 39 mil km, por R$ 119.900 👀"
 - NÃO inclua fotos na listagem.
 
-VEÍCULO ESPECÍFICO (quando o cliente escolher um):
-- Inclua TODAS as fotos do array 'photos': ![foto](URL)
-- Se 'photos' estiver vazio, use 'photo_url'.
+REGRA CRÍTICA - FOTOS E DETALHES DE VEÍCULO ESPECÍFICO:
+Quando o cliente pedir fotos, imagens, detalhes ou mais informações sobre um veículo específico, você DEVE OBRIGATORIAMENTE chamar a ferramenta consultar_estoque com filtros específicos (marca, modelo, ano, etc.) para obter os dados completos COM fotos. Você NÃO tem as fotos no contexto da listagem anterior. NUNCA responda sobre fotos sem antes chamar a ferramenta.
+Após receber o resultado da ferramenta, inclua TODAS as fotos do array 'photos' usando: ![foto](URL)
+Se 'photos' estiver vazio, use 'photo_url'.
 
 PROIBIÇÕES:
 - NUNCA escreva nomes de ferramentas no texto.
 - NUNCA repita o mesmo conteúdo.
 - NUNCA use formato de lista (1. 2. 3. ou • ou -).
+- NUNCA responda sobre fotos sem chamar a ferramenta primeiro.
 - Mostre fotos naturalmente, sem mencionar campos técnicos.`
       : "";
     const greetingInstruction = `\n\nCOMPORTAMENTO DE SAUDAÇÃO:
