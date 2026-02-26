@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { useCreateProvider } from "@/hooks/useProviders";
 import { toast } from "sonner";
 import { useState } from "react";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Eye, EyeOff } from "lucide-react";
 
 const presets = [
   { name: "Google Gemini", base_url: "https://generativelanguage.googleapis.com/v1beta", model_default: "gemini-2.0-flash", icon: "✦" },
@@ -22,6 +22,7 @@ const presets = [
 const schema = z.object({
   name: z.string().min(2, "Nome obrigatório"),
   base_url: z.string().url("URL inválida").or(z.literal("")).optional(),
+  api_key: z.string().optional(),
   model_default: z.string().optional(),
 });
 
@@ -35,9 +36,10 @@ interface Props {
 export function CreateProviderDialog({ open, onOpenChange }: Props) {
   const create = useCreateProvider();
   const [selectedPreset, setSelectedPreset] = useState<number | null>(null);
+  const [showKey, setShowKey] = useState(false);
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { name: "", base_url: "", model_default: "" },
+    defaultValues: { name: "", base_url: "", api_key: "", model_default: "" },
   });
 
   const applyPreset = (index: number) => {
@@ -53,11 +55,13 @@ export function CreateProviderDialog({ open, onOpenChange }: Props) {
       await create.mutateAsync({
         name: data.name,
         base_url: data.base_url || null,
+        api_key_encrypted: data.api_key || null,
         model_default: data.model_default || null,
       });
       toast.success(`Provider "${data.name}" criado`);
       reset();
       setSelectedPreset(null);
+      setShowKey(false);
       onOpenChange(false);
     } catch (err: any) {
       toast.error("Erro: " + (err.message ?? "desconhecido"));
@@ -65,7 +69,7 @@ export function CreateProviderDialog({ open, onOpenChange }: Props) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) { reset(); setSelectedPreset(null); } onOpenChange(o); }}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) { reset(); setSelectedPreset(null); setShowKey(false); } onOpenChange(o); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader><DialogTitle>Novo Provider</DialogTitle></DialogHeader>
 
@@ -106,6 +110,27 @@ export function CreateProviderDialog({ open, onOpenChange }: Props) {
             <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Base URL</Label>
             <Input {...register("base_url")} placeholder="https://api.openai.com/v1" className="h-9 bg-background font-mono text-sm" />
             {errors.base_url && <p className="text-xs text-destructive">{errors.base_url.message}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">API Key</Label>
+            <div className="relative">
+              <Input
+                {...register("api_key")}
+                type={showKey ? "text" : "password"}
+                placeholder="sk-..."
+                className="h-9 bg-background font-mono text-sm pr-10"
+                autoComplete="off"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-0 top-0 h-9 w-9"
+                onClick={() => setShowKey(!showKey)}
+              >
+                {showKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              </Button>
+            </div>
           </div>
           <div className="space-y-2">
             <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Modelo Padrão</Label>
