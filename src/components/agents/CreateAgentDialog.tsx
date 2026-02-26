@@ -1,0 +1,157 @@
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
+import { useCreateAgent } from "@/hooks/useAgents";
+import { useTenants } from "@/hooks/useTenants";
+import { useProviders } from "@/hooks/useProviders";
+import { toast } from "sonner";
+import { useState } from "react";
+
+const schema = z.object({
+  name: z.string().min(2, "Nome obrigatório"),
+  description: z.string().optional(),
+  tenant_id: z.string().min(1, "Selecione um tenant"),
+  provider_id: z.string().optional(),
+  model: z.string().optional(),
+  system_prompt: z.string().optional(),
+  temperature: z.number().min(0).max(2).default(0.7),
+});
+
+type FormData = z.infer<typeof schema>;
+
+interface Props {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  defaultTenantId?: string;
+}
+
+export function CreateAgentDialog({ open, onOpenChange, defaultTenantId }: Props) {
+  const create = useCreateAgent();
+  const { data: tenants } = useTenants();
+  const { data: providers } = useProviders();
+  const [temp, setTemp] = useState(0.7);
+
+  const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm<FormData>({
+    resolver: zodResolver(schema),
+    defaultValues: { name: "", description: "", tenant_id: defaultTenantId ?? "", provider_id: "", model: "", system_prompt: "", temperature: 0.7 },
+  });
+
+  const onSubmit = async (data: FormData) => {
+    try {
+      await create.mutateAsync({
+        name: data.name,
+        description: data.description || null,
+        tenant_id: data.tenant_id,
+        provider_id: data.provider_id || null,
+        model: data.model || null,
+        system_prompt: data.system_prompt || null,
+        temperature: data.temperature,
+      });
+      toast.success(`Agente "${data.name}" criado`);
+      reset();
+      setTemp(0.7);
+      onOpenChange(false);
+    } catch (err: any) {
+      toast.error("Erro: " + (err.message ?? "desconhecido"));
+    }
+  };
+
+  const activeTenants = (tenants ?? []).filter((t) => t.status === "active");
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>Novo Agente</DialogTitle></DialogHeader>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Nome</Label>
+              <Input {...register("name")} placeholder="Atendente Virtual" className="h-9 bg-background" />
+              {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Tenant</Label>
+              <Select defaultValue={defaultTenantId} onValueChange={(v) => setValue("tenant_id", v)}>
+                <SelectTrigger className="h-9 bg-background"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                <SelectContent>
+                  {activeTenants.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.tenant_id && <p className="text-xs text-destructive">{errors.tenant_id.message}</p>}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Descrição</Label>
+            <Input {...register("description")} placeholder="Agente de atendimento ao cliente" className="h-9 bg-background" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Provider</Label>
+              <Select onValueChange={(v) => setValue("provider_id", v)}>
+                <SelectTrigger className="h-9 bg-background"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                <SelectContent>
+                  {(providers ?? []).filter((p) => p.status === "active").map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Modelo</Label>
+              <Input {...register("model")} placeholder="gpt-4o" className="h-9 bg-background font-mono text-sm" />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">System Prompt</Label>
+            <Textarea
+              {...register("system_prompt")}
+              placeholder="Você é um assistente virtual da empresa X. Responda de forma clara e objetiva..."
+              rows={4}
+              className="bg-background text-sm resize-none"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Temperature</Label>
+              <span className="font-mono text-xs text-primary">{temp.toFixed(2)}</span>
+            </div>
+            <Slider
+              value={[temp]}
+              onValueChange={([v]) => { setTemp(v); setValue("temperature", v); }}
+              min={0}
+              max={2}
+              step={0.05}
+              className="w-full"
+            />
+            <div className="flex justify-between text-[10px] text-muted-foreground">
+              <span>Preciso</span>
+              <span>Criativo</span>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
+            <Button type="submit" disabled={create.isPending}>
+              {create.isPending ? "Criando..." : "Criar Agente"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
