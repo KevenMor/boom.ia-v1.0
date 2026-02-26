@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
 import type { Tenant } from "@/types/database";
 
 export function useTenants() {

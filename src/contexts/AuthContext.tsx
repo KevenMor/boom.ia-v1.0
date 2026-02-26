@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
+import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
 
 interface AuthContextType {
   session: Session | null;
