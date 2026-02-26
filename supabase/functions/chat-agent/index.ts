@@ -113,10 +113,10 @@ function splitIntoMessages(content: string): string[] {
   if (textOnly) {
     const paragraphs = textOnly.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
 
-    // Group short paragraphs together (under ~300 chars), split long ones
+    // Group short paragraphs together (under ~600 chars to avoid splitting lists), split long ones
     let current = "";
     for (const para of paragraphs) {
-      if (current && (current.length + para.length > 300)) {
+      if (current && (current.length + para.length > 600)) {
         parts.push(current.trim());
         current = para;
       } else {
@@ -131,7 +131,12 @@ function splitIntoMessages(content: string): string[] {
     parts.push(photos.slice(i, i + 3).join("\n"));
   }
 
-  return parts.length ? parts : [content];
+  // Deduplicate identical consecutive parts
+  const deduped = (parts.length ? parts : [content]).filter(
+    (part, idx, arr) => idx === 0 || part !== arr[idx - 1]
+  );
+
+  return deduped.length ? deduped : [content];
 }
 
 // ---------- provider base URLs ----------
@@ -525,14 +530,29 @@ Deno.serve(async (req) => {
     const top_p = agentConfig.top_p ?? llmConfig.top_p ?? undefined;
     const top_k = agentConfig.top_k ?? llmConfig.top_k ?? undefined;
     const photoInstruction = agentTools.some(t => t.tool_type === "inventory_query")
-      ? `\n\nREGRAS OBRIGATÓRIAS SOBRE FOTOS DE VEÍCULOS (você é um SDR):
-1. LISTAGEM (múltiplos veículos): Mostre TODOS os veículos que atendem ao filtro APENAS com texto (marca, modelo, ano, preço, km, cor, câmbio). NÃO inclua fotos na listagem para não poluir a conversa. Ofereça ao cliente enviar fotos de algum que interesse.
-2. VEÍCULO ESPECÍFICO: Quando o cliente perguntar sobre um carro específico, aceitar ver fotos, ou pedir fotos de um veículo, inclua TODAS as fotos do array 'photos' daquele veículo, cada uma em linha separada: ![foto](URL).
-3. Se o array 'photos' estiver vazio, use o campo 'photo_url'.
-4. NUNCA escreva nomes de ferramentas (como ENVIAR_FOTOS_VEICULO) no texto.
-5. Se o cliente pedir MAIS fotos de um veículo, chame a ferramenta consultar_estoque novamente filtrando pelo veículo específico. NUNCA responda só com texto — chame a ferramenta e envie as fotos.
-6. Mostre as fotos naturalmente na conversa, sem mencionar URLs ou campos técnicos.
-7. Seu papel é SDR: apresente TODAS as opções disponíveis, destaque diferenciais, e conduza o cliente para agendar visita ou fechar negócio.`
+      ? `\n\nREGRAS OBRIGATÓRIAS SOBRE VEÍCULOS (você é um SDR profissional):
+
+REGRA PRINCIPAL - LISTAGEM:
+Quando a ferramenta retornar múltiplos veículos, você DEVE listar CADA UM deles individualmente com os dados:
+- Marca/Modelo/Versão
+- Ano
+- Preço (formatado em R$)
+- Quilometragem
+- Cor
+- Câmbio/Combustível
+Use numeração (1., 2., 3...) para facilitar a leitura. Liste TODOS, sem exceção. NÃO resuma, NÃO pule veículos, NÃO agrupe.
+Após a lista completa, pergunte se algum interessa para enviar fotos e mais detalhes.
+NÃO inclua fotos na listagem.
+
+REGRA - VEÍCULO ESPECÍFICO:
+Quando o cliente escolher um veículo específico ou pedir fotos, inclua TODAS as fotos do array 'photos' daquele veículo: ![foto](URL)
+Se 'photos' estiver vazio, use 'photo_url'.
+
+PROIBIÇÕES:
+- NUNCA escreva nomes de ferramentas no texto (ex: ENVIAR_FOTOS_VEICULO).
+- NUNCA repita o mesmo texto em parágrafos diferentes.
+- NUNCA omita veículos da listagem.
+- Mostre fotos naturalmente, sem mencionar campos técnicos.`
       : "";
     const greetingInstruction = `\n\nCOMPORTAMENTO DE SAUDAÇÃO:
 - Responda saudações ("bom dia", "boa tarde", "boa noite", "oi", "olá") de forma calorosa e profissional, retribuindo a saudação adequada.
