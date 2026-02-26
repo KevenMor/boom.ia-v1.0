@@ -30,6 +30,146 @@ const PROVIDER_URLS: Record<string, string> = {
   Groq: "https://api.groq.com/openai/v1/chat/completions",
 };
 
+// ---------- tool execution ----------
+interface ToolDef {
+  id: string;
+  name: string;
+  description: string;
+  tool_type: string;
+  function_def: any;
+  execution_config: any;
+  endpoint: string | null;
+  auth_config: any;
+}
+
+async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: any, agentId: string): Promise<string> {
+  try {
+    switch (tool.tool_type) {
+      case "sql_query": {
+        const config = tool.execution_config || {};
+        const queryTemplate = config.query_template;
+        const paramMapping: string[] = config.param_mapping || [];
+        if (!queryTemplate) return JSON.stringify({ error: "Tool has no query_template configured" });
+
+        // Get tenant schema for this agent
+        const { data: agent } = await supabase
+          .from("agents")
+          .select("tenant_id, tenants(db_name)")
+          .eq("id", agentId)
+          .single();
+
+        const schema = agent?.tenants?.db_name;
+        if (!schema) return JSON.stringify({ error: "Tenant schema not provisioned" });
+
+        // Replace schema placeholder and execute
+        const finalQuery = queryTemplate.replace(/\{schema\}/g, schema);
+        const params = paramMapping.map((p: string) => args[p] ?? null);
+
+        // Execute via RPC that runs parameterized queries
+        const { data, error } = await supabase.rpc("execute_tenant_query", {
+          p_agent_id: agentId,
+          p_query: finalQuery,
+          p_params: JSON.stringify(params),
+        });
+
+        if (error) return JSON.stringify({ error: error.message });
+        return JSON.stringify(data ?? []);
+      }
+
+      case "web_scraper": {
+        const config = tool.execution_config || {};
+        const targetUrl = args.url || config.default_url;
+        if (!targetUrl) return JSON.stringify({ error: "No URL provided" });
+
+        const response = await fetch(targetUrl, {
+          headers: { "User-Agent": "NexusAI-Bot/1.0" },
+        });
+
+        if (!response.ok) return JSON.stringify({ error: `HTTP ${response.status}` });
+
+        const html = await response.text();
+        // Extract text content (basic HTML stripping)
+        const text = html
+          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, config.max_chars || 8000);
+
+        return JSON.stringify({ url: targetUrl, content: text });
+      }
+
+      case "api_rest": {
+        const config = tool.execution_config || {};
+        const url = config.url_template
+          ? config.url_template.replace(/\{(\w+)\}/g, (_: string, key: string) => args[key] ?? "")
+          : tool.endpoint;
+
+        if (!url) return JSON.stringify({ error: "No endpoint configured" });
+
+        const method = (config.method || "GET").toUpperCase();
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+          ...(config.headers || {}),
+        };
+
+        // Add auth if configured
+        if (tool.auth_config?.api_key) {
+          headers["Authorization"] = `Bearer ${tool.auth_config.api_key}`;
+        }
+
+        const fetchOpts: RequestInit = { method, headers };
+        if (method !== "GET" && method !== "HEAD") {
+          fetchOpts.body = JSON.stringify(args);
+        }
+
+        const response = await fetch(url, fetchOpts);
+        const data = await response.text();
+
+        try {
+          return JSON.stringify(JSON.parse(data));
+        } catch {
+          return data.slice(0, config.max_chars || 8000);
+        }
+      }
+
+      case "rag_search": {
+        // Semantic search in tenant's knowledge base
+        const query = args.query || args.search || args.pergunta || "";
+        if (!query) return JSON.stringify({ error: "No search query provided" });
+
+        const { data, error } = await supabase.rpc("search_knowledge", {
+          p_agent_id: agentId,
+          p_query: query,
+          p_limit: args.limit || 5,
+        });
+
+        if (error) return JSON.stringify({ error: error.message });
+        return JSON.stringify(data ?? []);
+      }
+
+      default:
+        return JSON.stringify({ error: `Unknown tool type: ${tool.tool_type}` });
+    }
+  } catch (e: any) {
+    console.error(`Tool execution error (${tool.name}):`, e);
+    return JSON.stringify({ error: e.message || "Tool execution failed" });
+  }
+}
+
+// ---------- convert tools to OpenAI format ----------
+function toolsToOpenAI(tools: ToolDef[]) {
+  return tools.map((t) => ({
+    type: "function" as const,
+    function: {
+      name: t.function_def?.name || t.name,
+      description: t.function_def?.description || t.description || t.name,
+      parameters: t.function_def?.parameters || { type: "object", properties: {} },
+    },
+  }));
+}
+
 // ---------- main ----------
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -81,7 +221,16 @@ Deno.serve(async (req) => {
     // 2. Decrypt API key
     const apiKey = await decrypt(provider.api_key_encrypted, encryptionKey);
 
-    // 3. Memory: create or reuse conversation
+    // 3. Load agent tools
+    let agentTools: ToolDef[] = [];
+    try {
+      const { data, error } = await supabase.rpc("load_agent_tools", { p_agent_id: agent_id });
+      if (!error && data) agentTools = data;
+    } catch (e) {
+      console.warn("Could not load agent tools:", e);
+    }
+
+    // 4. Memory: create or reuse conversation
     let convId = conversation_id;
     if (!convId) {
       try {
@@ -91,7 +240,7 @@ Deno.serve(async (req) => {
         });
         if (!error && data) convId = data;
       } catch (e) {
-        console.warn("Could not create conversation (schema may not be provisioned):", e);
+        console.warn("Could not create conversation:", e);
       }
     }
 
@@ -110,18 +259,20 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 4. Determine endpoint
+    // 5. Determine endpoint
     const baseUrl = (provider.base_url && provider.base_url.includes("/chat/completions"))
       ? provider.base_url
       : PROVIDER_URLS[provider.name] || PROVIDER_URLS.OpenAI;
 
-    // 5. Build request
+    // 6. Build request
     const isAnthropic = provider.name === "Anthropic";
     const model = agent.model || "gpt-4o";
     const temperature = agent.temperature ?? 0.7;
     const systemPrompt = agent.system_prompt || "You are a helpful AI assistant.";
     const startTime = Date.now();
+    const openaiTools = agentTools.length > 0 ? toolsToOpenAI(agentTools) : undefined;
 
+    // ---------- Anthropic path (no function calling for now) ----------
     if (isAnthropic) {
       const anthropicMessages = messages.map((m: any) => ({
         role: m.role === "system" ? "user" : m.role,
@@ -159,7 +310,6 @@ Deno.serve(async (req) => {
         const decoder = new TextDecoder();
         let buf = "";
         try {
-          // Send conversation_id in first event
           if (convId) {
             await writer.write(encoder.encode(`data: ${JSON.stringify({ conversation_id: convId })}\n\n`));
           }
@@ -185,7 +335,6 @@ Deno.serve(async (req) => {
             }
           }
           await writer.write(encoder.encode("data: [DONE]\n\n"));
-          // Save assistant response
           if (convId && fullContent) {
             const latency = Date.now() - startTime;
             await supabase.rpc("save_message", {
@@ -203,8 +352,150 @@ Deno.serve(async (req) => {
       });
     }
 
-    // OpenAI-compatible
+    // ---------- OpenAI-compatible path with Function Calling ----------
     const fullMessages = [{ role: "system", content: systemPrompt }, ...messages];
+
+    // Step 1: First call (non-streaming if tools, to handle tool_calls)
+    if (openaiTools && openaiTools.length > 0) {
+      console.log(`Calling with ${openaiTools.length} tools, model: ${model}`);
+
+      let currentMessages = [...fullMessages];
+      let maxIterations = 5; // Prevent infinite loops
+
+      while (maxIterations-- > 0) {
+        const toolCallResp = await fetch(baseUrl, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model, messages: currentMessages, temperature,
+            tools: openaiTools, tool_choice: "auto",
+            stream: false,
+          }),
+        });
+
+        if (!toolCallResp.ok) {
+          const t = await toolCallResp.text();
+          console.error(`Provider error: ${toolCallResp.status}`, t);
+          return new Response(JSON.stringify({ error: `Provider error: ${toolCallResp.status}`, detail: t }), {
+            status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const result = await toolCallResp.json();
+        const choice = result.choices?.[0];
+
+        if (!choice) {
+          return new Response(JSON.stringify({ error: "No response from provider" }), {
+            status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const assistantMsg = choice.message;
+
+        // If no tool calls, we have the final response
+        if (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0) {
+          const finalContent = assistantMsg.content || "";
+
+          // Save to memory
+          if (convId && finalContent) {
+            const latency = Date.now() - startTime;
+            await supabase.rpc("save_message", {
+              p_agent_id: agent_id, p_conversation_id: convId,
+              p_role: "assistant", p_content: finalContent, p_model: model,
+              p_latency_ms: latency,
+            }).catch((e: any) => console.warn("Could not save assistant msg:", e));
+          }
+
+          // Stream-simulate the final response for the frontend
+          const { readable, writable } = new TransformStream();
+          const writer = writable.getWriter();
+          const encoder = new TextEncoder();
+
+          (async () => {
+            try {
+              if (convId) {
+                await writer.write(encoder.encode(`data: ${JSON.stringify({ conversation_id: convId })}\n\n`));
+              }
+              // Send content in chunks for smooth rendering
+              const chunkSize = 20;
+              for (let i = 0; i < finalContent.length; i += chunkSize) {
+                const chunk = finalContent.slice(i, i + chunkSize);
+                const ev = { choices: [{ delta: { content: chunk } }] };
+                await writer.write(encoder.encode(`data: ${JSON.stringify(ev)}\n\n`));
+              }
+              await writer.write(encoder.encode("data: [DONE]\n\n"));
+            } catch (e) { console.error("stream error:", e); }
+            await writer.close();
+          })();
+
+          // Refresh conversations
+          if (convId) {
+            supabase.rpc("list_agent_conversations", { p_agent_id: agent_id, p_limit: 1 }).catch(() => {});
+          }
+
+          return new Response(readable, {
+            headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+          });
+        }
+
+        // Process tool calls
+        console.log(`Processing ${assistantMsg.tool_calls.length} tool call(s)`);
+        currentMessages.push(assistantMsg);
+
+        // Save tool call message to memory
+        if (convId) {
+          await supabase.rpc("save_message", {
+            p_agent_id: agent_id, p_conversation_id: convId,
+            p_role: "assistant", p_content: assistantMsg.content || "",
+            p_model: model,
+          }).catch(() => {});
+        }
+
+        for (const toolCall of assistantMsg.tool_calls) {
+          const toolName = toolCall.function.name;
+          let toolArgs: Record<string, any> = {};
+          try {
+            toolArgs = JSON.parse(toolCall.function.arguments || "{}");
+          } catch { /* empty args */ }
+
+          // Find the matching tool
+          const matchedTool = agentTools.find(
+            (t) => (t.function_def?.name || t.name) === toolName
+          );
+
+          let toolResult: string;
+          if (matchedTool) {
+            console.log(`Executing tool: ${toolName} (${matchedTool.tool_type})`);
+            toolResult = await executeTool(matchedTool, toolArgs, supabase, agent_id);
+          } else {
+            toolResult = JSON.stringify({ error: `Tool '${toolName}' not found` });
+          }
+
+          currentMessages.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            content: toolResult,
+          });
+
+          // Save tool result to memory
+          if (convId) {
+            await supabase.rpc("save_message", {
+              p_agent_id: agent_id, p_conversation_id: convId,
+              p_role: "tool", p_content: toolResult,
+            }).catch(() => {});
+          }
+        }
+
+        // Loop continues — next iteration will call LLM with tool results
+      }
+
+      // If we exhausted iterations, return error
+      return new Response(JSON.stringify({ error: "Too many tool call iterations" }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ---------- No tools: stream directly ----------
     console.log(`Calling provider: ${provider.name}, model: ${model}, url: ${baseUrl}`);
 
     const resp = await fetch(baseUrl, {
@@ -221,7 +512,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Wrap response to inject conversation_id and capture full content for saving
     const { readable, writable } = new TransformStream();
     const writer = writable.getWriter();
     const encoder = new TextEncoder();
@@ -232,7 +522,6 @@ Deno.serve(async (req) => {
       const decoder = new TextDecoder();
       let buf = "";
       try {
-        // Send conversation_id as first SSE event
         if (convId) {
           await writer.write(encoder.encode(`data: ${JSON.stringify({ conversation_id: convId })}\n\n`));
         }
@@ -260,7 +549,6 @@ Deno.serve(async (req) => {
             }
           }
         }
-        // Save assistant response
         if (convId && fullContent) {
           const latency = Date.now() - startTime;
           await supabase.rpc("save_message", {
@@ -276,7 +564,7 @@ Deno.serve(async (req) => {
     return new Response(readable, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error("chat-agent error:", err);
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
