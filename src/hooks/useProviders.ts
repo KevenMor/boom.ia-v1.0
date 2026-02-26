@@ -1,6 +1,20 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
+import { cloudClient } from "@/integrations/supabase/cloud-client";
 import type { Provider } from "@/types/database";
+
+async function invokeProviderKeys(body: Record<string, unknown>) {
+  // Get the auth token from the self-hosted session
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+
+  const { data, error } = await cloudClient.functions.invoke("provider-keys", {
+    body,
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (error) throw error;
+  return data;
+}
 
 export function useProviders() {
   return useQuery({
@@ -21,7 +35,6 @@ export function useCreateProvider() {
   return useMutation({
     mutationFn: async (provider: Partial<Provider> & { raw_api_key?: string }) => {
       const { raw_api_key, ...rest } = provider;
-      // Create provider first (without api_key)
       const { data, error } = await supabase
         .from("providers")
         .insert({ ...rest, api_key_encrypted: null })
@@ -29,12 +42,8 @@ export function useCreateProvider() {
         .single();
       if (error) throw error;
 
-      // Encrypt and save API key via edge function
       if (raw_api_key) {
-        const { error: fnError } = await supabase.functions.invoke("provider-keys", {
-          body: { action: "encrypt", provider_id: data.id, api_key: raw_api_key },
-        });
-        if (fnError) throw fnError;
+        await invokeProviderKeys({ action: "encrypt", provider_id: data.id, api_key: raw_api_key });
       }
 
       return data as Provider;
@@ -47,7 +56,6 @@ export function useUpdateProvider() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, raw_api_key, ...updates }: Partial<Provider> & { id: string; raw_api_key?: string }) => {
-      // Remove api_key_encrypted from direct updates — it goes through the edge function
       const { api_key_encrypted, ...safeUpdates } = updates as any;
 
       const { data, error } = await supabase
@@ -58,12 +66,8 @@ export function useUpdateProvider() {
         .single();
       if (error) throw error;
 
-      // Encrypt and save API key via edge function
       if (raw_api_key) {
-        const { error: fnError } = await supabase.functions.invoke("provider-keys", {
-          body: { action: "encrypt", provider_id: id, api_key: raw_api_key },
-        });
-        if (fnError) throw fnError;
+        await invokeProviderKeys({ action: "encrypt", provider_id: id, api_key: raw_api_key });
       }
 
       return data as Provider;
@@ -86,11 +90,8 @@ export function useDeleteProvider() {
 export function useDecryptProviderKey() {
   return useMutation({
     mutationFn: async (providerId: string) => {
-      const { data, error } = await supabase.functions.invoke("provider-keys", {
-        body: { action: "decrypt", provider_id: providerId },
-      });
-      if (error) throw error;
-      return data.api_key as string;
+      const result = await invokeProviderKeys({ action: "decrypt", provider_id: providerId });
+      return result.api_key as string;
     },
   });
 }

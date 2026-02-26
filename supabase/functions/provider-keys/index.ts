@@ -6,7 +6,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Simple AES-GCM encrypt/decrypt using Web Crypto API
+// AES-GCM encrypt/decrypt using Web Crypto API
 async function getKey(secret: string): Promise<CryptoKey> {
   const raw = new TextEncoder().encode(secret.padEnd(32, "0").slice(0, 32));
   return crypto.subtle.importKey("raw", raw, "AES-GCM", false, [
@@ -24,7 +24,6 @@ async function encrypt(plaintext: string, secret: string): Promise<string> {
     key,
     encoded
   );
-  // Combine iv + ciphertext, base64 encode
   const combined = new Uint8Array(iv.length + new Uint8Array(ciphertext).length);
   combined.set(iv);
   combined.set(new Uint8Array(ciphertext), iv.length);
@@ -58,15 +57,25 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Validate auth
-    const authHeader = req.headers.get("authorization");
-    const supabaseUrl = Deno.env.get("NEXUS_DB_URL") ?? Deno.env.get("SUPABASE_URL") ?? "";
-    const supabaseKey = Deno.env.get("NEXUS_DB_ANON_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+    // Connect to the self-hosted Supabase using stored credentials
+    const supabaseUrl = Deno.env.get("NEXUS_DB_URL") ?? "";
+    const supabaseKey = Deno.env.get("NEXUS_DB_ANON_KEY") ?? "";
+
+    if (!supabaseUrl || !supabaseKey) {
+      return new Response(
+        JSON.stringify({ error: "NEXUS_DB_URL or NEXUS_DB_ANON_KEY not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Forward the auth header from the self-hosted session
+    const authHeader = req.headers.get("authorization") ?? "";
 
     const supabase = createClient(supabaseUrl, supabaseKey, {
-      global: { headers: { Authorization: authHeader ?? "" } },
+      global: { headers: { Authorization: authHeader } },
     });
 
+    // Verify user is authenticated on the self-hosted instance
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
       return new Response(
@@ -78,7 +87,6 @@ Deno.serve(async (req) => {
     const { action, provider_id, api_key } = await req.json();
 
     if (action === "encrypt") {
-      // Encrypt and save the API key
       if (!provider_id || !api_key) {
         return new Response(
           JSON.stringify({ error: "provider_id and api_key required" }),
@@ -107,7 +115,6 @@ Deno.serve(async (req) => {
     }
 
     if (action === "decrypt") {
-      // Fetch and decrypt the API key for display
       if (!provider_id) {
         return new Response(
           JSON.stringify({ error: "provider_id required" }),

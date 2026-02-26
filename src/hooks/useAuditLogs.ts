@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
 import type { AuditLog } from "@/types/database";
 
 export function useAuditLogs(limit = 50) {
