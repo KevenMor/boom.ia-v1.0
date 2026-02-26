@@ -14,11 +14,37 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
+function generateExample(tool: Tool | null): string {
+  const params = tool?.function_def?.parameters as any;
+  if (!params?.properties) {
+    if (tool?.tool_type === "web_scraper") return JSON.stringify({ url: "https://example.com" }, null, 2);
+    return "{}";
+  }
+  const example: Record<string, any> = {};
+  for (const [key, schema] of Object.entries(params.properties) as [string, any][]) {
+    if (schema.type === "string") example[key] = schema.example || `exemplo_${key}`;
+    else if (schema.type === "number" || schema.type === "integer") example[key] = schema.example || 1;
+    else if (schema.type === "boolean") example[key] = true;
+    else example[key] = null;
+  }
+  return JSON.stringify(example, null, 2);
+}
+
 export function TestToolDialog({ tool, open, onOpenChange }: Props) {
   const [args, setArgs] = useState("{}");
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Auto-fill example when tool changes
+  const handleOpenChange = (o: boolean) => {
+    if (o && tool) {
+      setArgs(generateExample(tool));
+      setResult(null);
+      setError(null);
+    }
+    onOpenChange(o);
+  };
 
   const handleTest = async () => {
     if (!tool) return;
@@ -66,7 +92,7 @@ export function TestToolDialog({ tool, open, onOpenChange }: Props) {
   const properties = params?.properties ? Object.keys(params.properties) : [];
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -123,7 +149,7 @@ export function TestToolDialog({ tool, open, onOpenChange }: Props) {
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
+          <Button variant="outline" onClick={() => handleOpenChange(false)}>Fechar</Button>
           <Button onClick={handleTest} disabled={loading} className="gap-2">
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
             Executar
