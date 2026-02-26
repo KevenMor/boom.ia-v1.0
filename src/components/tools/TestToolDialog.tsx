@@ -141,7 +141,7 @@ export function TestToolDialog({ tool, open, onOpenChange }: Props) {
               <Label className="flex items-center gap-1 text-xs text-green-500">
                 <CheckCircle2 className="h-3 w-3" /> Resultado
               </Label>
-              <ScrollArea className="mt-1 max-h-48 rounded-md border bg-muted p-3">
+              <ScrollArea className="mt-1 max-h-[60vh] rounded-md border bg-muted p-3">
                 <pre className="text-xs font-mono whitespace-pre-wrap break-all">{result}</pre>
               </ScrollArea>
             </div>
