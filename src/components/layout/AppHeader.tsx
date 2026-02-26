@@ -1,5 +1,5 @@
 import { useLocation } from "react-router-dom";
-import { Bell, Search, User, LogOut } from "lucide-react";
+import { Bell, Search, User, LogOut, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -9,6 +9,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSidebar } from "@/contexts/SidebarContext";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const routeTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -31,13 +33,22 @@ function getTitle(pathname: string): string {
 export function AppHeader() {
   const location = useLocation();
   const { user, signOut } = useAuth();
+  const { setMobileOpen } = useSidebar();
+  const isMobile = useIsMobile();
   const title = getTitle(location.pathname);
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-background/80 backdrop-blur-sm px-6">
-      <h1 className="text-base font-semibold tracking-tight">{title}</h1>
+    <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-background/80 backdrop-blur-sm px-4 md:px-6">
+      <div className="flex items-center gap-3">
+        {isMobile && (
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={() => setMobileOpen(true)}>
+            <Menu className="h-5 w-5" />
+          </Button>
+        )}
+        <h1 className="text-base font-semibold tracking-tight">{title}</h1>
+      </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
           <Search className="h-4 w-4" />
         </Button>
