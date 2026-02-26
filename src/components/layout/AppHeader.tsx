@@ -8,6 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/contexts/AuthContext";
 
 const routeTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -29,6 +30,7 @@ function getTitle(pathname: string): string {
 
 export function AppHeader() {
   const location = useLocation();
+  const { user, signOut } = useAuth();
   const title = getTitle(location.pathname);
 
   return (
@@ -52,10 +54,10 @@ export function AppHeader() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuItem className="text-xs text-muted-foreground">
-              admin@nexus.ai
+              {user?.email ?? "—"}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => signOut()}>
               <LogOut className="mr-2 h-3 w-3" />
               Sair
             </DropdownMenuItem>

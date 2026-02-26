@@ -5,20 +5,33 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Eye, EyeOff, ArrowRight } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 export default function Login() {
   const navigate = useNavigate();
+  const { signIn, user } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Redirect if already logged in
+  if (user) {
+    navigate("/dashboard", { replace: true });
+    return null;
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    // Simular login — será integrado com auth real depois
-    setTimeout(() => {
-      setLoading(false);
+    const { error } = await signIn(email, password);
+    setLoading(false);
+    if (error) {
+      toast.error("Falha no login: " + error.message);
+    } else {
       navigate("/dashboard");
-    }, 800);
+    }
   };
 
   return (
@@ -54,6 +67,8 @@ export default function Login() {
               type="email"
               placeholder="admin@empresa.com"
               required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="h-10 bg-background"
             />
           </div>
@@ -68,6 +83,8 @@ export default function Login() {
                 type={showPassword ? "text" : "password"}
                 placeholder="••••••••"
                 required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 className="h-10 bg-background pr-10"
               />
               <button
