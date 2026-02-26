@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CreateProviderDialog } from "@/components/providers/CreateProviderDialog";
 import { EditProviderDialog } from "@/components/providers/EditProviderDialog";
 import { DeleteProviderDialog } from "@/components/providers/DeleteProviderDialog";
+import { getModelsForProvider } from "@/lib/provider-models";
 import type { Provider } from "@/types/database";
 
 const statusIcons: Record<string, React.ReactNode> = {
@@ -82,9 +83,21 @@ export default function Providers() {
               </DropdownMenu>
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-1.5">
-              {p.model_default && <Badge variant="secondary" className="font-mono text-[10px]">{p.model_default}</Badge>}
-              {p.base_url && <Badge variant="secondary" className="font-mono text-[10px] truncate max-w-[200px]">{p.base_url}</Badge>}
+            <div className="mt-4 space-y-2">
+              {p.base_url && <Badge variant="secondary" className="font-mono text-[10px] truncate max-w-[280px]">{p.base_url}</Badge>}
+              <div className="flex flex-wrap gap-1.5">
+                {(() => {
+                  const models = getModelsForProvider(p.name);
+                  if (models.length > 0) {
+                    return models.map((m) => (
+                      <Badge key={m.value} variant={m.value === p.model_default ? "default" : "secondary"} className="font-mono text-[10px]">
+                        {m.label}
+                      </Badge>
+                    ));
+                  }
+                  return p.model_default ? <Badge variant="secondary" className="font-mono text-[10px]">{p.model_default}</Badge> : null;
+                })()}
+              </div>
             </div>
           </Card>
         ))}
