@@ -216,7 +216,7 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
             transmission: v.transmission,
             color: v.color,
             photo_url: v.photo_url,
-            photos: v.photos?.slice(0, 5),
+            photos: v.photos?.slice(0, 10),
             detail_url: v.detail_url,
           })),
         });
@@ -380,7 +380,12 @@ Deno.serve(async (req) => {
     const top_p = agentConfig.top_p ?? llmConfig.top_p ?? undefined;
     const top_k = agentConfig.top_k ?? llmConfig.top_k ?? undefined;
     const photoInstruction = agentTools.some(t => t.tool_type === "inventory_query")
-      ? "\n\nIMPORTANTE: Quando mostrar veículos ao cliente, SEMPRE inclua TODAS as fotos disponíveis usando markdown. Use o campo 'photos' (array) retornado pela consulta. Para CADA foto do array, coloque em uma linha separada: ![foto](URL). Se o array 'photos' estiver vazio, use photo_url. NÃO escreva nomes de ferramentas como ENVIAR_FOTOS_VEICULO no texto. Apenas mostre as fotos naturalmente na conversa."
+      ? `\n\nREGRAS OBRIGATÓRIAS SOBRE FOTOS DE VEÍCULOS:
+1. Quando mostrar veículos, SEMPRE inclua TODAS as fotos do array 'photos' retornado pela consulta, cada uma em linha separada usando: ![foto](URL)
+2. Se o array 'photos' estiver vazio, use o campo 'photo_url'.
+3. NUNCA escreva nomes de ferramentas (como ENVIAR_FOTOS_VEICULO) no texto.
+4. Se o cliente pedir MAIS fotos ou fotos adicionais de um veículo, você DEVE chamar a ferramenta consultar_estoque novamente filtrando pelo veículo específico para obter as fotos atualizadas. NUNCA responda apenas com texto dizendo que vai enviar — chame a ferramenta e envie as fotos de fato.
+5. Mostre as fotos naturalmente na conversa, sem mencionar URLs ou campos técnicos.`
       : "";
     const systemPrompt = (agent.system_prompt || "You are a helpful AI assistant.") + photoInstruction;
     const startTime = Date.now();
