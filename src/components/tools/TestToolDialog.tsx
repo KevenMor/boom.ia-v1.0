@@ -104,7 +104,7 @@ export function TestToolDialog({ tool, open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Play className="h-4 w-4" />
@@ -112,7 +112,7 @@ export function TestToolDialog({ tool, open, onOpenChange }: Props) {
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 overflow-y-auto flex-1 pr-1">
           {properties.length > 0 && (
             <div>
               <Label className="text-xs text-muted-foreground">Parâmetros esperados</Label>
