@@ -27,3 +27,31 @@ export function useCreateTool() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tools"] }),
   });
 }
+
+export function useUpdateTool() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: Partial<Tool> & { id: string }) => {
+      const { data, error } = await supabase
+        .from("tools")
+        .update(updates)
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as Tool;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tools"] }),
+  });
+}
+
+export function useDeleteTool() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("tools").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tools"] }),
+  });
+}

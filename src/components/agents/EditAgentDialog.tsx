@@ -1,0 +1,156 @@
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { useEffect, useState } from "react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
+import { useUpdateAgent } from "@/hooks/useAgents";
+import { useTenants } from "@/hooks/useTenants";
+import { useProviders } from "@/hooks/useProviders";
+import { toast } from "sonner";
+import type { Agent } from "@/types/database";
+
+const schema = z.object({
+  name: z.string().min(2),
+  description: z.string().optional(),
+  tenant_id: z.string().min(1),
+  provider_id: z.string().optional(),
+  model: z.string().optional(),
+  system_prompt: z.string().optional(),
+  temperature: z.number().min(0).max(2),
+  status: z.string(),
+});
+
+type FormData = z.infer<typeof schema>;
+
+interface Props { agent: Agent | null; open: boolean; onOpenChange: (o: boolean) => void; }
+
+export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
+  const update = useUpdateAgent();
+  const { data: tenants } = useTenants();
+  const { data: providers } = useProviders();
+  const [temp, setTemp] = useState(0.7);
+  const { register, handleSubmit, setValue, reset } = useForm<FormData>({ resolver: zodResolver(schema) });
+
+  useEffect(() => {
+    if (agent) {
+      reset({
+        name: agent.name,
+        description: agent.description ?? "",
+        tenant_id: agent.tenant_id,
+        provider_id: agent.provider_id ?? "",
+        model: agent.model ?? "",
+        system_prompt: agent.system_prompt ?? "",
+        temperature: agent.temperature,
+        status: agent.status,
+      });
+      setTemp(agent.temperature);
+    }
+  }, [agent, reset]);
+
+  const onSubmit = async (data: FormData) => {
+    if (!agent) return;
+    try {
+      await update.mutateAsync({
+        id: agent.id,
+        ...data,
+        description: data.description || null,
+        provider_id: data.provider_id || null,
+        model: data.model || null,
+        system_prompt: data.system_prompt || null,
+      });
+      toast.success("Agente atualizado");
+      onOpenChange(false);
+    } catch (err: any) {
+      toast.error("Erro: " + (err.message ?? ""));
+    }
+  };
+
+  const activeTenants = (tenants ?? []).filter((t) => t.status === "active");
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>Editar Agente</DialogTitle></DialogHeader>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Nome</Label>
+              <Input {...register("name")} className="h-9 bg-background" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Tenant</Label>
+              <Select value={agent?.tenant_id} onValueChange={(v) => setValue("tenant_id", v)}>
+                <SelectTrigger className="h-9 bg-background"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {activeTenants.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Descrição</Label>
+            <Input {...register("description")} className="h-9 bg-background" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Provider</Label>
+              <Select defaultValue={agent?.provider_id ?? undefined} onValueChange={(v) => setValue("provider_id", v)}>
+                <SelectTrigger className="h-9 bg-background"><SelectValue placeholder="Nenhum" /></SelectTrigger>
+                <SelectContent>
+                  {(providers ?? []).map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Modelo</Label>
+              <Input {...register("model")} className="h-9 bg-background font-mono text-sm" />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">System Prompt</Label>
+            <Textarea {...register("system_prompt")} rows={4} className="bg-background text-sm resize-none" />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Temperature</Label>
+              <span className="font-mono text-xs text-primary">{temp.toFixed(2)}</span>
+            </div>
+            <Slider value={[temp]} onValueChange={([v]) => { setTemp(v); setValue("temperature", v); }} min={0} max={2} step={0.05} />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Status</Label>
+            <Select defaultValue={agent?.status} onValueChange={(v) => setValue("status", v)}>
+              <SelectTrigger className="h-9 bg-background"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Ativo</SelectItem>
+                <SelectItem value="paused">Pausado</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
+            <Button type="submit" disabled={update.isPending}>Salvar</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}

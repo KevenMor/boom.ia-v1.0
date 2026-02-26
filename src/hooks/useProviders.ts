@@ -27,3 +27,31 @@ export function useCreateProvider() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["providers"] }),
   });
 }
+
+export function useUpdateProvider() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: Partial<Provider> & { id: string }) => {
+      const { data, error } = await supabase
+        .from("providers")
+        .update(updates)
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as Provider;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["providers"] }),
+  });
+}
+
+export function useDeleteProvider() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("providers").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["providers"] }),
+  });
+}
