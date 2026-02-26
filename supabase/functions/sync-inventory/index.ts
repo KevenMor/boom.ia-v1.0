@@ -187,7 +187,33 @@ Deno.serve(async (req) => {
       tenant_id = body.tenant_id || null;
     } catch { /* no body is fine */ }
 
-    console.log("Starting inventory sync from", LISTING_URL);
+    // Auto-detect tenant_id from LISTING_URL domain if not provided
+    if (!tenant_id) {
+      try {
+        const domain = new URL(LISTING_URL).hostname.replace("www.", "");
+        const { data: tenants } = await supabase
+          .from("tenants")
+          .select("id, settings")
+          .order("created_at", { ascending: true });
+
+        if (tenants) {
+          const match = tenants.find((t: any) => {
+            const syncUrl = t.settings?.sync_url || t.settings?.website_url || "";
+            return syncUrl.includes(domain);
+          });
+          if (match) {
+            tenant_id = match.id;
+            console.log(`Auto-matched tenant ${tenant_id} for domain ${domain}`);
+          } else {
+            console.warn(`No tenant found with sync_url matching "${domain}". Set settings.sync_url on the tenant.`);
+          }
+        }
+      } catch (e) {
+        console.warn("Tenant auto-detect failed:", e);
+      }
+    }
+
+    console.log("Starting inventory sync from", LISTING_URL, "tenant_id:", tenant_id);
 
     // 1. Fetch listing page
     const listResp = await fetch(LISTING_URL, {
