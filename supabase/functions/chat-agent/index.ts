@@ -26,12 +26,58 @@ async function decrypt(encoded: string, secret: string): Promise<string> {
 function sanitizeLLMOutput(content: string): string {
   let text = content;
   // Remove lines like "ENVIAR_FOTOS_VEICULO: ...", "ENVIAR_FOTO: ...", etc.
-  text = text.replace(/^.*ENVIAR_FOTOS?_VEICULOS?[:\s].*$/gmi, '');
+  text = text.replace(/^.*ENVIAR_FOTOS?_VEICULOS?[:\s].*$/gmi, "");
   // Remove other common tool artifact patterns
-  text = text.replace(/^.*\b(TOOL_CALL|FUNCTION_CALL|ACTION_OUTPUT)[:\s].*$/gmi, '');
+  text = text.replace(/^.*\b(TOOL_CALL|FUNCTION_CALL|ACTION_OUTPUT)[:\s].*$/gmi, "");
   // Clean up excessive newlines left behind
-  text = text.replace(/\n{3,}/g, '\n\n').trim();
+  text = text.replace(/\n{3,}/g, "\n\n").trim();
   return text;
+}
+
+function normalizeVehiclePhotos(vehicle: any): string[] {
+  let parsedPhotos: string[] = [];
+
+  if (Array.isArray(vehicle?.photos)) {
+    parsedPhotos = vehicle.photos.filter((p: unknown) => typeof p === "string") as string[];
+  } else if (typeof vehicle?.photos === "string" && vehicle.photos.trim()) {
+    try {
+      const decoded = JSON.parse(vehicle.photos);
+      if (Array.isArray(decoded)) {
+        parsedPhotos = decoded.filter((p: unknown) => typeof p === "string") as string[];
+      }
+    } catch {
+      // ignore invalid JSON
+    }
+  }
+
+  return Array.from(new Set([...(vehicle?.photo_url ? [vehicle.photo_url] : []), ...parsedPhotos]));
+}
+
+function appendMissingVehiclePhotos(content: string, vehicles: any[], userContext: string): string {
+  if (!vehicles.length) return content;
+
+  const targetVehicle =
+    vehicles.find((v) => {
+      const hay = `${v?.brand || ""} ${v?.model || ""} ${v?.version || ""}`.toLowerCase();
+      const tokens = hay.split(/\s+/).filter((t) => t.length >= 3);
+      return tokens.some((token) => userContext.includes(token));
+    }) || vehicles[0];
+
+  const allPhotos = normalizeVehiclePhotos(targetVehicle);
+  if (!allPhotos.length) return content;
+
+  const existingUrls = new Set<string>();
+  const imageMdRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/gi;
+  let match: RegExpExecArray | null;
+  while ((match = imageMdRegex.exec(content)) !== null) {
+    if (match[1]) existingUrls.add(match[1]);
+  }
+
+  const missing = allPhotos.filter((url) => !existingUrls.has(url));
+  if (!missing.length) return content;
+
+  const photosBlock = missing.map((url) => `![foto](${url})`).join("\n");
+  return `${content.trim()}\n\n${photosBlock}`.trim();
 }
 
 // ---------- provider base URLs ----------
@@ -512,6 +558,13 @@ Deno.serve(async (req) => {
 
       let currentMessages = [...fullMessages];
       let maxIterations = 5; // Prevent infinite loops
+      const userConversationText = messages
+        .filter((m: any) => m.role === "user")
+        .map((m: any) => String(m.content || ""))
+        .join(" ")
+        .toLowerCase();
+      const userAskedForPhotos = /\bfotos?\b|\bimagens?\b/.test(userConversationText);
+      let lastInventoryVehicles: any[] = [];
 
       while (maxIterations-- > 0) {
         const toolCallResp = await fetch(baseUrl, {
@@ -545,8 +598,11 @@ Deno.serve(async (req) => {
 
         // If no tool calls, we have the final response
         if (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0) {
-          const finalContent = sanitizeLLMOutput(assistantMsg.content || "");
+          let finalContent = sanitizeLLMOutput(assistantMsg.content || "");
 
+          if (userAskedForPhotos && lastInventoryVehicles.length > 0) {
+            finalContent = appendMissingVehiclePhotos(finalContent, lastInventoryVehicles, userConversationText);
+          }
           // Save to memory
           if (convId && finalContent) {
             const latency = Date.now() - startTime;
@@ -622,6 +678,17 @@ Deno.serve(async (req) => {
           if (matchedTool) {
             console.log(`Executing tool: ${toolName} (${matchedTool.tool_type})`);
             toolResult = await executeTool(matchedTool, toolArgs, supabase, agent_id);
+
+            if (matchedTool.tool_type === "inventory_query") {
+              try {
+                const parsedToolResult = JSON.parse(toolResult);
+                if (Array.isArray(parsedToolResult?.vehicles)) {
+                  lastInventoryVehicles = parsedToolResult.vehicles;
+                }
+              } catch {
+                // ignore parse errors
+              }
+            }
           } else {
             toolResult = JSON.stringify({ error: `Tool '${toolName}' not found` });
           }
