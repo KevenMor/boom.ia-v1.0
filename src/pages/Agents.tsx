@@ -1,5 +1,6 @@
-import { Bot, Plus, Search, MoreHorizontal, Play, Pause, Pencil, Trash2 } from "lucide-react";
+import { Bot, Plus, Search, MoreHorizontal, Play, Pause, Pencil, Trash2, MessageSquare } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +16,7 @@ import { DeleteAgentDialog } from "@/components/agents/DeleteAgentDialog";
 import type { Agent } from "@/types/database";
 
 export default function Agents() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const { data: agents, isLoading, error } = useAgents();
   const [createOpen, setCreateOpen] = useState(false);
@@ -79,6 +81,9 @@ export default function Agents() {
                   <Button variant="ghost" size="icon" className="h-7 w-7"><MoreHorizontal className="h-4 w-4" /></Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => navigate(`/agents/${agent.id}/sandbox`)}>
+                    <MessageSquare className="mr-2 h-3 w-3" />Testar
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setEditAgent(agent)}>
                     <Pencil className="mr-2 h-3 w-3" />Editar
                   </DropdownMenuItem>
