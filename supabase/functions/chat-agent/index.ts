@@ -165,9 +165,13 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
           .eq("tenant_id", agentData.tenant_id)
           .eq("status", "available");
 
-        // Apply optional filters from args
-        if (args.brand) query = query.ilike("brand", `%${args.brand}%`);
-        if (args.model) query = query.or(`model.ilike.%${args.model}%,version.ilike.%${args.model}%`);
+        // Apply optional filters — search across ALL text fields for model/brand
+        if (args.brand) query = query.or(`brand.ilike.%${args.brand}%,model.ilike.%${args.brand}%,version.ilike.%${args.brand}%,description.ilike.%${args.brand}%`);
+        if (args.model) query = query.or(`model.ilike.%${args.model}%,version.ilike.%${args.model}%,brand.ilike.%${args.model}%,description.ilike.%${args.model}%`);
+        if (args.search || args.query || args.termo) {
+          const term = args.search || args.query || args.termo;
+          query = query.or(`brand.ilike.%${term}%,model.ilike.%${term}%,version.ilike.%${term}%,description.ilike.%${term}%,color.ilike.%${term}%`);
+        }
         if (args.year) query = query.eq("year", args.year);
         if (args.fuel_type || args.fuel) query = query.ilike("fuel_type", `%${args.fuel_type || args.fuel}%`);
         if (args.transmission) query = query.ilike("transmission", `%${args.transmission}%`);
