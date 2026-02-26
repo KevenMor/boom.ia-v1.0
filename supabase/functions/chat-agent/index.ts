@@ -109,10 +109,18 @@ function splitIntoMessages(content: string): string[] {
 
   const parts: string[] = [];
 
-  // Text goes as ONE single block — no splitting for listings/conversations
-  // Splitting caused duplicated bubbles and broken vehicle lists
   if (textOnly.trim()) {
-    parts.push(textOnly.trim());
+    // Split by double newlines (each paragraph = one bubble)
+    const paragraphs = textOnly.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+    
+    if (paragraphs.length > 1) {
+      // Multiple paragraphs: each becomes its own bubble (humanized flow)
+      for (const para of paragraphs) {
+        parts.push(para);
+      }
+    } else {
+      parts.push(textOnly.trim());
+    }
   }
 
   // Photos in batches of 3 as separate messages
@@ -120,7 +128,12 @@ function splitIntoMessages(content: string): string[] {
     parts.push(photos.slice(i, i + 3).join("\n"));
   }
 
-  return parts.length ? parts : [content];
+  // Deduplicate identical consecutive parts
+  const deduped = (parts.length ? parts : [content]).filter(
+    (part, idx, arr) => idx === 0 || part !== arr[idx - 1]
+  );
+
+  return deduped.length ? deduped : [content];
 }
 
 // ---------- provider base URLs ----------
@@ -514,28 +527,36 @@ Deno.serve(async (req) => {
     const top_p = agentConfig.top_p ?? llmConfig.top_p ?? undefined;
     const top_k = agentConfig.top_k ?? llmConfig.top_k ?? undefined;
     const photoInstruction = agentTools.some(t => t.tool_type === "inventory_query")
-      ? `\n\nREGRAS OBRIGATÓRIAS SOBRE VEÍCULOS (você é um SDR profissional):
+      ? `\n\nREGRAS OBRIGATÓRIAS DE COMUNICAÇÃO (SDR humanizado):
 
-REGRA PRINCIPAL - LISTAGEM:
-Quando a ferramenta retornar múltiplos veículos, você DEVE listar CADA UM deles individualmente com os dados:
-- Marca/Modelo/Versão
-- Ano
-- Preço (formatado em R$)
-- Quilometragem
-- Cor
-- Câmbio/Combustível
-Use numeração (1., 2., 3...) para facilitar a leitura. Liste TODOS, sem exceção. NÃO resuma, NÃO pule veículos, NÃO agrupe.
-Após a lista completa, pergunte se algum interessa para enviar fotos e mais detalhes.
-NÃO inclua fotos na listagem.
+FORMATO DE RESPOSTA PARA LISTAGEM DE VEÍCULOS:
+Sua resposta DEVE ser separada em parágrafos distintos (separados por linha em branco) assim:
 
-REGRA - VEÍCULO ESPECÍFICO:
-Quando o cliente escolher um veículo específico ou pedir fotos, inclua TODAS as fotos do array 'photos' daquele veículo: ![foto](URL)
-Se 'photos' estiver vazio, use 'photo_url'.
+Parágrafo 1: Saudação calorosa + frase curta dizendo que encontrou opções.
+
+Parágrafo 2: Primeiro veículo com detalhes (modelo, ano, preço, km, cor, câmbio) em 1-2 linhas naturais.
+
+Parágrafo 3: Segundo veículo...
+
+(continue um parágrafo por veículo)
+
+Último parágrafo: Pergunta natural tipo "Algum desses te chamou atenção? Posso enviar fotos e mais detalhes!"
+
+IMPORTANTE:
+- Cada veículo em seu PRÓPRIO parágrafo, separado por linha em branco.
+- Apresente TODOS os veículos retornados, sem omitir nenhum.
+- Use linguagem natural e curta, como um vendedor no WhatsApp (não use listas numeradas, bullets ou formatação técnica).
+- Exemplo de veículo: "Temos um Nivus 1.0 Highline 2024, branco, automático, com 39 mil km, por R$ 119.900 👀"
+- NÃO inclua fotos na listagem.
+
+VEÍCULO ESPECÍFICO (quando o cliente escolher um):
+- Inclua TODAS as fotos do array 'photos': ![foto](URL)
+- Se 'photos' estiver vazio, use 'photo_url'.
 
 PROIBIÇÕES:
-- NUNCA escreva nomes de ferramentas no texto (ex: ENVIAR_FOTOS_VEICULO).
-- NUNCA repita o mesmo texto em parágrafos diferentes.
-- NUNCA omita veículos da listagem.
+- NUNCA escreva nomes de ferramentas no texto.
+- NUNCA repita o mesmo conteúdo.
+- NUNCA use formato de lista (1. 2. 3. ou • ou -).
 - Mostre fotos naturalmente, sem mencionar campos técnicos.`
       : "";
     const greetingInstruction = `\n\nCOMPORTAMENTO DE SAUDAÇÃO:
