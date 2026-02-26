@@ -551,11 +551,13 @@ Deno.serve(async (req) => {
 
         // Save tool call message to memory
         if (convId) {
-          await supabase.rpc("save_message", {
-            p_agent_id: agent_id, p_conversation_id: convId,
-            p_role: "assistant", p_content: assistantMsg.content || "",
-            p_model: model,
-          }).catch(() => {});
+          try {
+            await supabase.rpc("save_message", {
+              p_agent_id: agent_id, p_conversation_id: convId,
+              p_role: "assistant", p_content: assistantMsg.content || "",
+              p_model: model,
+            });
+          } catch (e: any) { console.warn("Could not save tool call msg:", e); }
         }
 
         for (const toolCall of assistantMsg.tool_calls) {
