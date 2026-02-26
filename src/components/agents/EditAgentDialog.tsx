@@ -15,6 +15,7 @@ import { useUpdateAgent } from "@/hooks/useAgents";
 import { useTenants } from "@/hooks/useTenants";
 import { useProviders } from "@/hooks/useProviders";
 import { toast } from "sonner";
+import { getModelsForProvider } from "@/lib/provider-models";
 import type { Agent } from "@/types/database";
 
 const schema = z.object({
@@ -37,7 +38,7 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
   const { data: tenants } = useTenants();
   const { data: providers } = useProviders();
   const [temp, setTemp] = useState(0.7);
-  const { register, handleSubmit, setValue, reset } = useForm<FormData>({ resolver: zodResolver(schema) });
+  const { register, handleSubmit, setValue, watch, reset } = useForm<FormData>({ resolver: zodResolver(schema) });
 
   useEffect(() => {
     if (agent) {
@@ -103,23 +104,54 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
             <Input {...register("description")} className="h-9 bg-background" />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Provider</Label>
-              <Select defaultValue={agent?.provider_id ?? undefined} onValueChange={(v) => setValue("provider_id", v)}>
-                <SelectTrigger className="h-9 bg-background"><SelectValue placeholder="Nenhum" /></SelectTrigger>
-                <SelectContent>
-                  {(providers ?? []).map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Modelo</Label>
-              <Input {...register("model")} className="h-9 bg-background font-mono text-sm" />
-            </div>
+          <div className="space-y-2">
+            <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Provider</Label>
+            <Select defaultValue={agent?.provider_id ?? undefined} onValueChange={(v) => {
+              setValue("provider_id", v);
+              const prov = (providers ?? []).find((p) => p.id === v);
+              const models = getModelsForProvider(prov?.name);
+              if (models.length > 0) setValue("model", models[0].value);
+            }}>
+              <SelectTrigger className="h-9 bg-background"><SelectValue placeholder="Nenhum" /></SelectTrigger>
+              <SelectContent>
+                {(providers ?? []).map((p) => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+
+          {(() => {
+            const selectedProviderId = watch("provider_id") || agent?.provider_id;
+            const selectedProvider = (providers ?? []).find((p) => p.id === selectedProviderId);
+            const models = getModelsForProvider(selectedProvider?.name);
+            if (models.length === 0) {
+              return (
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Modelo</Label>
+                  <Input {...register("model")} className="h-9 bg-background font-mono text-sm" />
+                </div>
+              );
+            }
+            return (
+              <div className="space-y-2">
+                <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Modelo</Label>
+                <Select defaultValue={agent?.model ?? models[0].value} onValueChange={(v) => setValue("model", v)}>
+                  <SelectTrigger className="h-9 bg-background font-mono text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {models.map((m) => (
+                      <SelectItem key={m.value} value={m.value}>
+                        <div className="flex flex-col">
+                          <span className="font-mono text-xs">{m.label}</span>
+                          <span className="text-[10px] text-muted-foreground">{m.description}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            );
+          })()}
 
           <div className="space-y-2">
             <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">System Prompt</Label>
