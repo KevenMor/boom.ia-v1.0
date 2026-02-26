@@ -1,7 +1,8 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { ArrowLeft, Send, Loader2, Plus, Clock, MessageSquare, Trash2, Phone, Video, MoreVertical, Smile, Paperclip, Mic, Check, CheckCheck } from "lucide-react";
+import { ArrowLeft, Send, Loader2, Plus, Clock, MessageSquare, Trash2, Phone, Video, MoreVertical, Smile, Paperclip, Mic, Check, CheckCheck, Bug, ChevronDown, ChevronRight } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import { DebugBlock } from "@/components/sandbox/DebugBlock";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -10,7 +11,8 @@ import { nexusDb } from "@/integrations/supabase/nexus-client";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
-type Msg = { role: "user" | "assistant"; content: string; timestamp?: Date };
+type DebugEntry = { type: string; [key: string]: any };
+type Msg = { role: "user" | "assistant"; content: string; timestamp?: Date; debug?: DebugEntry[] };
 type Conversation = {
   id: string;
   channel: string;
@@ -73,6 +75,8 @@ export default function AgentSandbox() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [showDebug, setShowDebug] = useState(true);
+  const [pendingDebug, setPendingDebug] = useState<DebugEntry[] | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -136,6 +140,7 @@ export default function AgentSandbox() {
     setIsLoading(true);
 
     let assistantSoFar = "";
+    let debugData: DebugEntry[] | null = null;
     const allMessages = [...messages, userMsg];
 
     try {
@@ -192,6 +197,13 @@ export default function AgentSandbox() {
               continue;
             }
 
+            // Capture debug trace
+            if (parsed.debug) {
+              debugData = parsed.debug;
+              setPendingDebug(parsed.debug);
+              continue;
+            }
+
             const content = parsed.choices?.[0]?.delta?.content as string | undefined;
             if (content) {
               // Check for split marker
@@ -228,7 +240,7 @@ export default function AgentSandbox() {
                       idx === prev.length - 1 ? { ...m, content: assistantSoFar } : m
                     );
                   }
-                  return [...prev, { role: "assistant", content: assistantSoFar, timestamp: new Date() }];
+                  return [...prev, { role: "assistant", content: assistantSoFar, timestamp: new Date(), debug: debugData || undefined }];
                 });
               }
             }
@@ -336,6 +348,15 @@ export default function AgentSandbox() {
           </div>
 
           <div className="flex items-center gap-1">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className={`h-9 w-9 ${showDebug ? "text-[#00a884]" : "text-[#8696a0]"} hover:text-white`}
+              onClick={() => setShowDebug(!showDebug)}
+              title="Debug mode"
+            >
+              <Bug className="h-5 w-5" />
+            </Button>
             <Button variant="ghost" size="icon" className="h-9 w-9 text-[#8696a0] hover:text-white" onClick={startNewConversation}>
               <Plus className="h-5 w-5" />
             </Button>
@@ -382,18 +403,25 @@ export default function AgentSandbox() {
               const time = msg.timestamp ? format(msg.timestamp, "HH:mm") : "";
 
               return (
-                <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} mb-1`}>
-                  <div
-                    className={`relative max-w-[85%] md:max-w-[65%] rounded-lg px-3 py-1.5 shadow-sm ${
-                      msg.role === "user"
-                        ? "bg-[#005c4b] text-[#e9edef]"
-                        : "bg-[#202c33] text-[#e9edef]"
-                    }`}
-                    style={{
-                      borderTopLeftRadius: msg.role === "assistant" ? 0 : undefined,
-                      borderTopRightRadius: msg.role === "user" ? 0 : undefined,
-                    }}
-                  >
+                <div key={i}>
+                  {/* Debug block before assistant response */}
+                  {msg.role === "assistant" && msg.debug && showDebug && (
+                    <div className="flex justify-start mb-1">
+                      <DebugBlock debug={msg.debug} />
+                    </div>
+                  )}
+                  <div className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} mb-1`}>
+                    <div
+                      className={`relative max-w-[85%] md:max-w-[65%] rounded-lg px-3 py-1.5 shadow-sm ${
+                        msg.role === "user"
+                          ? "bg-[#005c4b] text-[#e9edef]"
+                          : "bg-[#202c33] text-[#e9edef]"
+                      }`}
+                      style={{
+                        borderTopLeftRadius: msg.role === "assistant" ? 0 : undefined,
+                        borderTopRightRadius: msg.role === "user" ? 0 : undefined,
+                      }}
+                    >
                     {/* Images */}
                     {images.length > 0 && (
                       <div className={`${images.length > 1 ? 'grid grid-cols-2 gap-1' : ''} mb-1 -mx-1 -mt-0.5`}>
@@ -430,6 +458,7 @@ export default function AgentSandbox() {
                     </div>
                   </div>
                 </div>
+              </div>
               );
             })}
             
