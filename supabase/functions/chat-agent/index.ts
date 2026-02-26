@@ -263,6 +263,7 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
       }
 
       case "inventory_query": {
+        console.log(`inventory_query args: ${JSON.stringify(args)}`);
         // Query inventory filtered by agent's tenant_id
         const { data: agentData } = await supabase
           .from("agents")
@@ -302,11 +303,32 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         if (error) return JSON.stringify({ error: error.message });
         if (!data?.length) return JSON.stringify({ message: "Nenhum veículo encontrado com esses filtros" });
 
+        const isListing = data.length > 3;
+
         return JSON.stringify({
           total: data.length,
+          _hint: isListing
+            ? "Esta é uma listagem. Mostre TODOS os veículos apenas com texto (sem fotos). Ofereça enviar fotos de algum que interesse o cliente."
+            : "Veículo específico. Inclua TODAS as fotos do array 'photos'.",
           vehicles: data.map((v: any) => {
-            let parsedPhotos: string[] = [];
+            if (isListing) {
+              // Listing mode: compact, no photos to keep context small
+              return {
+                id: v.id,
+                brand: v.brand,
+                model: v.model,
+                version: v.version,
+                year: v.year,
+                price: v.price,
+                mileage: v.mileage,
+                fuel_type: v.fuel_type,
+                transmission: v.transmission,
+                color: v.color,
+              };
+            }
 
+            // Specific vehicle: include all photos
+            let parsedPhotos: string[] = [];
             if (Array.isArray(v.photos)) {
               parsedPhotos = v.photos.filter((p: unknown) => typeof p === "string") as string[];
             } else if (typeof v.photos === "string" && v.photos.trim()) {
@@ -315,9 +337,7 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
                 if (Array.isArray(decoded)) {
                   parsedPhotos = decoded.filter((p: unknown) => typeof p === "string") as string[];
                 }
-              } catch {
-                // keep empty when invalid JSON
-              }
+              } catch {}
             }
 
             const allPhotos = Array.from(
