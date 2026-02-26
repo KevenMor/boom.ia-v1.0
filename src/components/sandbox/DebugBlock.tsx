@@ -16,6 +16,9 @@ export function DebugBlock({ debug }: DebugBlockProps) {
   const toolCalls = debug.filter((d) => d.type === "tool_call");
   const toolResults = debug.filter((d) => d.type === "tool_result");
   const errors = debug.filter((d) => d.type === "tool_error");
+  const llmIterations = debug.filter((d) => d.type === "llm_iteration");
+  const llmPlans = debug.filter((d) => d.type === "llm_tool_plan");
+  const llmTransforms = debug.filter((d) => d.type === "llm_transform");
 
   return (
     <div className="mb-1 max-w-[85%] md:max-w-[65%]">
@@ -25,18 +28,14 @@ export function DebugBlock({ debug }: DebugBlockProps) {
       >
         <Bug className="h-3 w-3" />
         <span>Debug</span>
-        <span className="text-[#00a884]">
-          {toolCalls.length} tool call{toolCalls.length !== 1 ? "s" : ""}
-        </span>
-        {errors.length > 0 && (
-          <span className="text-red-400">{errors.length} error{errors.length !== 1 ? "s" : ""}</span>
-        )}
+        <span className="text-[#00a884]">{toolCalls.length} tool call{toolCalls.length !== 1 ? "s" : ""}</span>
+        <span className="text-[#53bdeb]">{llmIterations.length} LLM step{llmIterations.length !== 1 ? "s" : ""}</span>
+        {errors.length > 0 && <span className="text-red-400">{errors.length} erro{errors.length !== 1 ? "s" : ""}</span>}
         {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
       </button>
 
       {expanded && (
         <div className="mt-1 bg-[#111b21] border border-[#2a3942] rounded-lg p-3 text-[11px] font-mono space-y-2 overflow-x-auto">
-          {/* Config */}
           {config && (
             <div>
               <div className="text-[#00a884] font-semibold mb-1">⚙️ Configuração LLM</div>
@@ -50,7 +49,37 @@ export function DebugBlock({ debug }: DebugBlockProps) {
             </div>
           )}
 
-          {/* Tool Calls */}
+          {llmIterations.length > 0 && (
+            <div className="border-t border-[#2a3942] pt-2">
+              <div className="text-[#53bdeb] font-semibold mb-1">🧠 Ciclo da LLM</div>
+              <div className="space-y-1">
+                {llmIterations.map((step, i) => (
+                  <div key={i} className="text-[#8696a0]">
+                    Etapa {i + 1}: finish_reason=<span className="text-[#e9edef]">{String(step.finish_reason || "-")}</span>,
+                    tool_calls=<span className="text-[#e9edef]">{step.tool_calls_count ?? 0}</span>
+                    {step.content_preview && (
+                      <pre className="mt-1 text-[#e9edef] bg-[#0b141a] rounded p-2 whitespace-pre-wrap text-[10px]">{step.content_preview}</pre>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {llmPlans.map((plan, i) => (
+            <div key={i} className="border-t border-[#2a3942] pt-2">
+              <div className="text-[#53bdeb] font-semibold mb-1">🗺️ Plano da LLM para tools</div>
+              <pre className="text-[#e9edef] bg-[#0b141a] rounded p-2 whitespace-pre-wrap text-[10px]">{JSON.stringify({ tool_names: plan.tool_names, content_preview: plan.content_preview }, null, 2)}</pre>
+            </div>
+          ))}
+
+          {llmTransforms.map((tf, i) => (
+            <div key={i} className="border-t border-[#2a3942] pt-2">
+              <div className="text-[#53bdeb] font-semibold mb-1">🧪 Transformação de resposta</div>
+              <pre className="text-[#e9edef] bg-[#0b141a] rounded p-2 whitespace-pre-wrap text-[10px]">{JSON.stringify({ raw_length: tf.raw_length, sanitized_length: tf.sanitized_length, final_length: tf.final_length, parts_count: tf.parts_count, parts_preview: tf.parts_preview }, null, 2)}</pre>
+            </div>
+          ))}
+
           {toolCalls.map((tc, i) => {
             const result = toolResults[i];
             return (
@@ -74,7 +103,6 @@ export function DebugBlock({ debug }: DebugBlockProps) {
             );
           })}
 
-          {/* Errors */}
           {errors.map((err, i) => (
             <div key={i} className="border-t border-[#2a3942] pt-2">
               <div className="text-red-400 font-semibold">❌ Erro: {err.tool}</div>

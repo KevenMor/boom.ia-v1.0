@@ -34,6 +34,23 @@ function sanitizeLLMOutput(content: string): string {
   return text;
 }
 
+function dedupeRepeatedParagraphs(content: string): string {
+  const parts = content.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length <= 1) return content;
+
+  const seen = new Set<string>();
+  const deduped: string[] = [];
+  for (const p of parts) {
+    const key = p.replace(/\s+/g, " ").trim().toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduped.push(p);
+    }
+  }
+
+  return deduped.join("\n\n").trim();
+}
+
 function normalizeVehiclePhotos(vehicle: any): string[] {
   let parsedPhotos: string[] = [];
 
@@ -714,10 +731,20 @@ PROIBIÇÕES:
         }
 
         const assistantMsg = choice.message;
+        debugTrace.push({
+          type: "llm_iteration",
+          finish_reason: choice.finish_reason,
+          has_tool_calls: !!assistantMsg.tool_calls?.length,
+          tool_calls_count: assistantMsg.tool_calls?.length || 0,
+          content_preview: String(assistantMsg.content || "").slice(0, 240),
+          timestamp: Date.now(),
+        });
 
         // If no tool calls, we have the final response
         if (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0) {
-          let finalContent = sanitizeLLMOutput(assistantMsg.content || "");
+          const rawContent = assistantMsg.content || "";
+          let finalContent = sanitizeLLMOutput(rawContent);
+          finalContent = dedupeRepeatedParagraphs(finalContent);
 
           if (userAskedForPhotos && lastInventoryVehicles.length > 0) {
             finalContent = appendMissingVehiclePhotos(finalContent, lastInventoryVehicles, userConversationText);
@@ -735,6 +762,17 @@ PROIBIÇÕES:
           }
 
           // Stream-simulate the final response for the frontend
+          const messageParts = splitIntoMessages(finalContent);
+          debugTrace.push({
+            type: "llm_transform",
+            raw_length: rawContent.length,
+            sanitized_length: sanitizeLLMOutput(rawContent).length,
+            final_length: finalContent.length,
+            parts_count: messageParts.length,
+            parts_preview: messageParts.slice(0, 3),
+            timestamp: Date.now(),
+          });
+
           const { readable, writable } = new TransformStream();
           const writer = writable.getWriter();
           const encoder = new TextEncoder();
@@ -749,7 +787,6 @@ PROIBIÇÕES:
                 await writer.write(encoder.encode(`data: ${JSON.stringify({ debug: debugTrace })}\n\n`));
               }
               // Split into WhatsApp-style separate messages
-              const messageParts = splitIntoMessages(finalContent);
               for (let partIdx = 0; partIdx < messageParts.length; partIdx++) {
                 const part = messageParts[partIdx];
                 // Send split marker between parts
@@ -781,6 +818,12 @@ PROIBIÇÕES:
         }
 
         // Process tool calls
+        debugTrace.push({
+          type: "llm_tool_plan",
+          tool_names: assistantMsg.tool_calls.map((tc: any) => tc.function?.name),
+          content_preview: String(assistantMsg.content || "").slice(0, 240),
+          timestamp: Date.now(),
+        });
         console.log(`Processing ${assistantMsg.tool_calls.length} tool call(s)`);
         currentMessages.push(assistantMsg);
 
