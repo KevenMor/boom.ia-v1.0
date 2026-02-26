@@ -23,27 +23,44 @@ Deno.serve(async (req) => {
     }
 
     const supabase = createClient(nexusUrl, nexusKey);
-    const { tool_id, args } = await req.json();
+    const { tool_id, tool_name, args } = await req.json();
 
-    console.log("tool_id:", tool_id);
+    console.log("tool_id:", tool_id, "tool_name:", tool_name);
 
-    if (!tool_id) {
-      return new Response(JSON.stringify({ error: "tool_id is required" }), {
+    if (!tool_id && !tool_name) {
+      return new Response(JSON.stringify({ error: "tool_id or tool_name is required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Load tool
-    const { data: tool, error: toolErr } = await supabase
-      .from("tools")
-      .select("*")
-      .eq("id", tool_id)
-      .maybeSingle();
+    // Load tool (robust against duplicate rows)
+    let tool: any = null;
+    let toolErr: any = null;
 
-    console.log("tool query result:", JSON.stringify({ tool, toolErr }));
+    if (tool_id) {
+      const { data, error } = await supabase
+        .from("tools")
+        .select("*")
+        .eq("id", tool_id)
+        .limit(1);
+      tool = data?.[0] ?? null;
+      toolErr = error;
+    }
 
-    if (toolErr || !tool) {
-      return new Response(JSON.stringify({ error: "Tool not found", detail: toolErr?.message, nexusUrl }), {
+    if (!tool && tool_name) {
+      const { data, error } = await supabase
+        .from("tools")
+        .select("*")
+        .eq("name", tool_name)
+        .limit(1);
+      tool = data?.[0] ?? null;
+      if (!toolErr) toolErr = error;
+    }
+
+    console.log("tool query result:", JSON.stringify({ found: !!tool, toolErr }));
+
+    if (!tool) {
+      return new Response(JSON.stringify({ error: "Tool not found", detail: toolErr?.message, nexusUrl, tool_id, tool_name }), {
         status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
