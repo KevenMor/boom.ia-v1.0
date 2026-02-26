@@ -167,6 +167,8 @@ Deno.serve(async (req) => {
       ...messages,
     ];
 
+    console.log(`Calling provider: ${provider.name}, model: ${model}, url: ${baseUrl}`);
+
     const resp = await fetch(baseUrl, {
       method: "POST",
       headers: {
@@ -183,7 +185,7 @@ Deno.serve(async (req) => {
 
     if (!resp.ok) {
       const t = await resp.text();
-      console.error("Provider error:", resp.status, t);
+      console.error(`Provider error: ${resp.status}`, t);
       return new Response(JSON.stringify({ error: `Provider error: ${resp.status}`, detail: t }), {
         status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
