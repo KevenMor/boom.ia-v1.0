@@ -1040,12 +1040,14 @@ COMPORTAMENTO CONSULTIVO OBRIGATÓRIO:
         const dispatcherSystemPrompt = `You are a tool dispatcher. Your ONLY job is to analyze the user's message and conversation context, then decide if any tools should be called.
 
 RULES:
-- If the user's message requires data (inventory, location, etc.), call the appropriate tool.
-- If the user is asking a general/conversational question (greetings, opinions, clarifications about features like "é flex?", "aceita troca?"), DO NOT call any tools.
+- If the user's message requires objective data lookup (inventory, location, etc.), call the appropriate tool.
+- If the user is asking a general/conversational or consultative message (greetings, preferences, vague intent), DO NOT call tools yet.
+- Treat messages like "gosto de modelo mais alto", "prefiro SUV", "quero algo confortável" as consultative discovery unless user explicitly asks to list stock now.
+- When the user explicitly asks to see available vehicles/stock (e.g. "quais SUVs tem", "me mostra os SUVs disponíveis"), call inventory tool.
 - When the user asks for photos/images/details of a specific vehicle, call the inventory tool with specific filters.
 - When the user confirms interest in photos (e.g. "quero sim", "manda", "pode enviar") and there's a vehicle in the conversation context, call the inventory tool for that vehicle.
 - NEVER generate conversational text. Only decide tool calls. If no tools are needed, respond with exactly: "NO_TOOLS_NEEDED"
-- You may call multiple tools if needed.`;
+- You may call multiple tools if needed.
 
         const dispatcherMessages = [
           { role: "system", content: dispatcherSystemPrompt },
@@ -1134,6 +1136,37 @@ RULES:
 
               let toolResult: string;
               if (matchedTool) {
+                const isInventoryTool = matchedTool.tool_type === "inventory_query";
+                if (isInventoryTool) {
+                  const hasTipoVeiculo = !!(toolArgs?.tipo_veiculo || toolArgs?.vehicle_type);
+                  const hasConcreteFilter = !!(
+                    toolArgs?.brand || toolArgs?.marca ||
+                    toolArgs?.model || toolArgs?.modelo ||
+                    toolArgs?.year || toolArgs?.ano ||
+                    toolArgs?.min_price || toolArgs?.max_price || toolArgs?.preco_min || toolArgs?.preco_max ||
+                    toolArgs?.color || toolArgs?.cor ||
+                    toolArgs?.fuel || toolArgs?.fuel_type || toolArgs?.combustivel ||
+                    toolArgs?.transmission || toolArgs?.cambio ||
+                    toolArgs?.search || toolArgs?.query || toolArgs?.termo
+                  );
+
+                  const consultativeOnlyPattern = /(modelo mais alto|carro mais alto|gosto de modelo|quero algo|prefiro|confort[áa]vel)/i;
+                  const isConsultativeOnlyMessage = consultativeOnlyPattern.test(latestUserText || "");
+
+                  if (hasTipoVeiculo && !hasConcreteFilter && isConsultativeOnlyMessage) {
+                    console.log("[Dispatcher] Skipping inventory_query: consultative message with only tipo_veiculo");
+                    debugTrace.push({
+                      type: "dispatcher_tool_skipped",
+                      tool: toolName,
+                      reason: "consultative_message_insufficient_filters",
+                      args: toolArgs,
+                      latest_user_text: String(latestUserText || "").slice(0, 120),
+                      timestamp: Date.now(),
+                    });
+                    continue;
+                  }
+                }
+
                 console.log(`[Dispatcher] Executing: ${toolName} (${matchedTool.tool_type})`);
                 debugTrace.push({ type: "tool_call", tool: toolName, tool_type: matchedTool.tool_type, args: toolArgs, timestamp: Date.now() });
                 toolResult = await executeTool(matchedTool, toolArgs, supabase, agent_id);
