@@ -1,6 +1,6 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Copy, Link } from "lucide-react";
+import { Link } from "lucide-react";
 import { z } from "zod";
 import { useEffect, useState } from "react";
 import {
@@ -17,6 +17,7 @@ import { useTenants } from "@/hooks/useTenants";
 import { useProviders } from "@/hooks/useProviders";
 import { toast } from "sonner";
 import { getModelsForProvider } from "@/lib/provider-models";
+import { ChatwootConfigSection } from "@/components/agents/ChatwootConfigSection";
 import type { Agent } from "@/types/database";
 
 const WEBHOOK_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/webhook-inbound`;
@@ -48,6 +49,9 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
   const [readDelay, setReadDelay] = useState(1500);
   const [typingDelay, setTypingDelay] = useState(800);
   const [blockGap, setBlockGap] = useState(1200);
+  const [chatwootUrl, setChatwootUrl] = useState("");
+  const [chatwootApiToken, setChatwootApiToken] = useState("");
+  const [chatwootAccountId, setChatwootAccountId] = useState("");
   const { register, handleSubmit, setValue, watch, reset } = useForm<FormData>({ resolver: zodResolver(schema) });
 
   useEffect(() => {
@@ -71,6 +75,9 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
       setReadDelay(((cfg as any).read_delay_ms ?? 1500) / 1000);
       setTypingDelay(((cfg as any).typing_delay_ms ?? 800) / 1000);
       setBlockGap(((cfg as any).block_gap_ms ?? 1200) / 1000);
+      setChatwootUrl((cfg as any).chatwoot_url ?? "");
+      setChatwootApiToken((cfg as any).chatwoot_api_token ?? "");
+      setChatwootAccountId((cfg as any).chatwoot_account_id ?? "");
     }
   }, [agent, reset]);
 
@@ -86,7 +93,17 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
         provider_id: rest.provider_id || null,
         model: rest.model || null,
         system_prompt: rest.system_prompt || null,
-        config: { ...currentConfig, top_p, top_k, read_delay_ms: Math.round(readDelay * 1000), typing_delay_ms: Math.round(typingDelay * 1000), block_gap_ms: Math.round(blockGap * 1000) },
+        config: {
+          ...currentConfig,
+          top_p,
+          top_k,
+          read_delay_ms: Math.round(readDelay * 1000),
+          typing_delay_ms: Math.round(typingDelay * 1000),
+          block_gap_ms: Math.round(blockGap * 1000),
+          chatwoot_url: chatwootUrl || undefined,
+          chatwoot_api_token: chatwootApiToken || undefined,
+          chatwoot_account_id: chatwootAccountId || undefined,
+        },
       });
       toast.success("Agente atualizado");
       onOpenChange(false);
@@ -226,34 +243,15 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
             <p className="text-[10px] text-muted-foreground">Variação automática de ±30% aplicada para simular comportamento humano</p>
           </div>
 
-          {agent?.webhook_token && (
-            <div className="space-y-2 rounded-lg border border-border/50 p-3">
-              <div className="flex items-center gap-2">
-                <Link className="h-3.5 w-3.5 text-muted-foreground" />
-                <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Webhook URL</Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <Input
-                  readOnly
-                  value={`${WEBHOOK_BASE}?token=${agent.webhook_token}`}
-                  className="h-8 bg-muted font-mono text-[10px] text-muted-foreground"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0"
-                  onClick={() => {
-                    navigator.clipboard.writeText(`${WEBHOOK_BASE}?token=${agent.webhook_token}`);
-                    toast.success("URL copiada!");
-                  }}
-                >
-                  <Copy className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-              <p className="text-[10px] text-muted-foreground">POST com JSON: {"{"} "message": "...", "external_user_id": "..." {"}"}</p>
-            </div>
-          )}
+          <ChatwootConfigSection
+            chatwootUrl={chatwootUrl}
+            setChatwootUrl={setChatwootUrl}
+            chatwootApiToken={chatwootApiToken}
+            setChatwootApiToken={setChatwootApiToken}
+            chatwootAccountId={chatwootAccountId}
+            setChatwootAccountId={setChatwootAccountId}
+            webhookUrl={agent?.webhook_token ? `${WEBHOOK_BASE}?token=${agent.webhook_token}` : undefined}
+          />
 
           <div className="space-y-2">
             <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Status</Label>
