@@ -55,7 +55,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     const nexusUrl = Deno.env.get("NEXUS_DB_URL");
-    const nexusKey = Deno.env.get("NEXUS_DB_ANON_KEY");
+    const nexusKey = Deno.env.get("NEXUS_SERVICE_ROLE_KEY") || Deno.env.get("NEXUS_DB_ANON_KEY");
     const cloudUrl = Deno.env.get("SUPABASE_URL") || "";
     const cloudKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
 
@@ -89,8 +89,7 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (agentErr || !agent) {
-      console.error("Agent lookup failed:", { agentId, agentErr, nexusUrl: nexusUrl?.substring(0, 30) });
-      return new Response(JSON.stringify({ error: "Invalid agent_id", detail: agentErr?.message }), {
+      return new Response(JSON.stringify({ error: "Invalid agent_id" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
