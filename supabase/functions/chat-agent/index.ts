@@ -871,8 +871,12 @@ Deno.serve(async (req) => {
     const isAnthropic = provider.name === "Anthropic";
     const isGemini = provider.name === "Google Gemini" || provider.name === "Gemini";
     const model = agent.model || "gpt-4o";
-    const agentConfig = agent.config || {};
-    const tenantSettings = agent.tenants?.settings || {};
+    const agentConfig = (agent.config || {}) as Record<string, any>;
+    const tenantSettings = (agent.tenants?.settings || {}) as Record<string, any>;
+    // Delay config (humanization waits)
+    const readDelayMs: number = agentConfig.read_delay_ms ?? 1500;
+    const typingDelayMs: number = agentConfig.typing_delay_ms ?? 800;
+    const blockGapMs: number = agentConfig.block_gap_ms ?? 1200;
     const llmConfig = tenantSettings.llm_config || {};
     // Priority: agent-level > tenant-level > defaults
     const temperature = agent.temperature ?? llmConfig.temperature ?? 0.7;
@@ -1346,11 +1350,35 @@ RULES:
         if (collectedLogs.length > 0) {
           await writer.write(encoder.encode(`data: ${JSON.stringify({ edge_logs: collectedLogs })}\n\n`));
         }
+        // Helper: sleep with ±30% random variation
+        const jitteredSleep = (ms: number) => {
+          if (ms <= 0) return Promise.resolve();
+          const variation = ms * 0.3;
+          const actual = Math.round(ms + (Math.random() * 2 - 1) * variation);
+          return new Promise((r) => setTimeout(r, Math.max(0, actual)));
+        };
+
+        // Initial "reading" delay — simulates the agent reading the message
+        if (readDelayMs > 0) {
+          await jitteredSleep(readDelayMs);
+        }
+
         for (let partIdx = 0; partIdx < messageParts.length; partIdx++) {
           const part = messageParts[partIdx];
+
+          // "Typing" delay before each block
+          if (typingDelayMs > 0) {
+            await jitteredSleep(typingDelayMs);
+          }
+
           if (partIdx > 0) {
             const splitEv = { choices: [{ delta: { content: MSG_SPLIT } }] };
             await writer.write(encoder.encode(`data: ${JSON.stringify(splitEv)}\n\n`));
+
+            // Gap between message blocks
+            if (blockGapMs > 0) {
+              await jitteredSleep(blockGapMs);
+            }
           }
           const chunkSize = 20;
           for (let i = 0; i < part.length; i += chunkSize) {
