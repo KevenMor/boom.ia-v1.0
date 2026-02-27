@@ -682,7 +682,9 @@ function toolsToOpenAI(tools: ToolDef[]) {
     function: {
       name: t.function_def?.name || t.name,
       description: t.function_def?.description || t.description || t.name,
-      parameters: t.function_def?.parameters || { type: "object", properties: {} },
+      parameters: (t.function_def?.parameters && t.function_def.parameters.type === "object")
+        ? t.function_def.parameters
+        : { type: "object", properties: {}, required: [] },
     },
   }));
 }
