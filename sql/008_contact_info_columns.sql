@@ -207,6 +207,9 @@ END;
 $$;
 
 -- 5. Atualizar list_agent_conversations para retornar nome e avatar
+-- Precisa dropar primeiro pois mudou o tipo de retorno (novas colunas OUT)
+DROP FUNCTION IF EXISTS public.list_agent_conversations(UUID, INTEGER);
+
 CREATE OR REPLACE FUNCTION public.list_agent_conversations(
   p_agent_id UUID,
   p_limit INTEGER DEFAULT 50
