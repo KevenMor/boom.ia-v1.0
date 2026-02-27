@@ -78,18 +78,23 @@ function appendMissingVehiclePhotos(content: string, vehicles: any[], userContex
 
   if (!isSpecificRequest) return content; // General listing — let LLM handle with 1 photo per car
 
-  // For listings (many vehicles), don't append — the LLM shows 1 photo each
-  if (vehicles.length > 3) return content;
+  // Rank vehicles by token overlap with user context and pick best match
+  const normalizedContext = userContext
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
 
-  // Find the specific vehicle the user is asking about
-  const targetVehicle =
-    vehicles.length === 1
-      ? vehicles[0]
-      : vehicles.find((v) => {
-          const hay = `${v?.brand || ""} ${v?.model || ""} ${v?.version || ""}`.toLowerCase();
-          const tokens = hay.split(/\s+/).filter((t) => t.length >= 3);
-          return tokens.some((token) => userContext.includes(token));
-        });
+  const scoreVehicle = (v: any) => {
+    const hay = `${v?.brand || ""} ${v?.model || ""} ${v?.version || ""}`
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+    const tokens = hay.split(/\s+/).filter((t) => t.length >= 3);
+    return tokens.reduce((acc, token) => acc + (normalizedContext.includes(token) ? 1 : 0), 0);
+  };
+
+  const ranked = [...vehicles].sort((a, b) => scoreVehicle(b) - scoreVehicle(a));
+  const targetVehicle = ranked[0] || vehicles[0];
 
   if (!targetVehicle) return content;
 
@@ -151,6 +156,10 @@ function buildFallbackInventoryArgs(userText: string): Record<string, any> {
   else args.search = normalized.trim().slice(0, 80);
 
   return args;
+}
+
+function hasMarkdownImages(content: string): boolean {
+  return /!\[.*?\]\(https?:\/\/[^\s)]+\)/i.test(content);
 }
 
 function splitIntoMessages(content: string): string[] {
@@ -859,6 +868,52 @@ PROIBIÇÕES:
 
           if (userRequestedMediaOrDetails && lastInventoryVehicles.length > 0) {
             finalContent = appendMissingVehiclePhotos(finalContent, lastInventoryVehicles, userConversationText);
+          }
+
+          if (userRequestedMediaOrDetails && !hasMarkdownImages(finalContent) && inventoryTool) {
+            const recoveryArgs = buildFallbackInventoryArgs(latestUserText || userConversationText);
+            console.log(`Forced media recovery via inventory_query: ${JSON.stringify(recoveryArgs)}`);
+
+            debugTrace.push({
+              type: "tool_call",
+              tool: inventoryTool.function_def?.name || inventoryTool.name,
+              tool_type: inventoryTool.tool_type,
+              args: recoveryArgs,
+              forced: true,
+              reason: "final_response_without_images",
+              timestamp: Date.now(),
+            });
+
+            const recoveryResult = await executeTool(inventoryTool, recoveryArgs, supabase, agent_id);
+
+            try {
+              const parsedRecovery = JSON.parse(recoveryResult);
+              if (Array.isArray(parsedRecovery?.vehicles)) {
+                lastInventoryVehicles = parsedRecovery.vehicles;
+                finalContent = appendMissingVehiclePhotos(finalContent, lastInventoryVehicles, userConversationText);
+              }
+
+              debugTrace.push({
+                type: "tool_result",
+                tool: inventoryTool.function_def?.name || inventoryTool.name,
+                preview: {
+                  forced: true,
+                  recovery: true,
+                  total: parsedRecovery?.total,
+                  vehicle_count: parsedRecovery?.vehicles?.length,
+                  message: parsedRecovery?.message,
+                  error: parsedRecovery?.error,
+                },
+                timestamp: Date.now(),
+              });
+            } catch {
+              debugTrace.push({
+                type: "tool_result",
+                tool: inventoryTool.function_def?.name || inventoryTool.name,
+                preview: { forced: true, recovery: true, raw_length: recoveryResult.length },
+                timestamp: Date.now(),
+              });
+            }
           }
           // Save to memory
           if (convId && finalContent) {
