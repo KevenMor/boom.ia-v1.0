@@ -432,7 +432,10 @@ export default function AgentSandbox() {
                               alt="Foto do veículo"
                               className="rounded-md w-full max-h-64 object-cover cursor-pointer hover:opacity-90 transition-opacity"
                               onError={(e) => {
-                                (e.target as HTMLImageElement).style.display = 'none';
+                                const el = e.target as HTMLImageElement;
+                                // Hide broken images and their parent link
+                                el.style.display = 'none';
+                                if (el.parentElement) el.parentElement.style.display = 'none';
                               }}
                             />
                           </a>
