@@ -65,9 +65,9 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
       setTemp(agent.temperature);
       setTopP((cfg as any).top_p ?? 0.8);
       setTopK((cfg as any).top_k ?? 40);
-      setReadDelay((cfg as any).read_delay_ms ?? 1500);
-      setTypingDelay((cfg as any).typing_delay_ms ?? 800);
-      setBlockGap((cfg as any).block_gap_ms ?? 1200);
+      setReadDelay(((cfg as any).read_delay_ms ?? 1500) / 1000);
+      setTypingDelay(((cfg as any).typing_delay_ms ?? 800) / 1000);
+      setBlockGap(((cfg as any).block_gap_ms ?? 1200) / 1000);
     }
   }, [agent, reset]);
 
@@ -83,7 +83,7 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
         provider_id: rest.provider_id || null,
         model: rest.model || null,
         system_prompt: rest.system_prompt || null,
-        config: { ...currentConfig, top_p, top_k, read_delay_ms: readDelay, typing_delay_ms: typingDelay, block_gap_ms: blockGap },
+        config: { ...currentConfig, top_p, top_k, read_delay_ms: Math.round(readDelay * 1000), typing_delay_ms: Math.round(typingDelay * 1000), block_gap_ms: Math.round(blockGap * 1000) },
       });
       toast.success("Agente atualizado");
       onOpenChange(false);
@@ -203,20 +203,20 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
           </div>
 
           <div className="space-y-3 rounded-lg border border-border/50 p-3">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">⏱ Delays de Humanização (ms)</p>
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">⏱ Delays de Humanização (s)</p>
 
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1">
                 <Label className="text-[10px] text-muted-foreground">Leitura</Label>
-                <Input type="number" min={0} step={100} value={readDelay} onChange={(e) => setReadDelay(Number(e.target.value))} className="h-8 bg-background font-mono text-xs" />
+                <Input type="number" min={0} step={0.5} value={readDelay} onChange={(e) => setReadDelay(Number(e.target.value))} className="h-8 bg-background font-mono text-xs" />
               </div>
               <div className="space-y-1">
                 <Label className="text-[10px] text-muted-foreground">Digitando</Label>
-                <Input type="number" min={0} step={100} value={typingDelay} onChange={(e) => setTypingDelay(Number(e.target.value))} className="h-8 bg-background font-mono text-xs" />
+                <Input type="number" min={0} step={0.5} value={typingDelay} onChange={(e) => setTypingDelay(Number(e.target.value))} className="h-8 bg-background font-mono text-xs" />
               </div>
               <div className="space-y-1">
                 <Label className="text-[10px] text-muted-foreground">Entre blocos</Label>
-                <Input type="number" min={0} step={100} value={blockGap} onChange={(e) => setBlockGap(Number(e.target.value))} className="h-8 bg-background font-mono text-xs" />
+                <Input type="number" min={0} step={0.5} value={blockGap} onChange={(e) => setBlockGap(Number(e.target.value))} className="h-8 bg-background font-mono text-xs" />
               </div>
             </div>
 
