@@ -747,7 +747,6 @@ PROIBIÇÕES:
       const latestUserText = String(lastUserMsg?.content || "");
       const userRequestedMediaOrDetails = isVehicleMediaOrDetailRequest(userConversationText);
       let lastInventoryVehicles: any[] = [];
-      let lastInventoryVehicles: any[] = [];
       // Debug trace for sandbox
       const debugTrace: any[] = [];
 
