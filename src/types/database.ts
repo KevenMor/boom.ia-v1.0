@@ -33,6 +33,7 @@ export interface Agent {
   temperature: number;
   status: string;
   config: Record<string, unknown>;
+  webhook_token: string | null;
   created_at: string;
   updated_at: string;
   // joined

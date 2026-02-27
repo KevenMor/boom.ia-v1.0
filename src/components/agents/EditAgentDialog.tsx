@@ -1,5 +1,6 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Copy, Link } from "lucide-react";
 import { z } from "zod";
 import { useEffect, useState } from "react";
 import {
@@ -17,6 +18,8 @@ import { useProviders } from "@/hooks/useProviders";
 import { toast } from "sonner";
 import { getModelsForProvider } from "@/lib/provider-models";
 import type { Agent } from "@/types/database";
+
+const WEBHOOK_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/webhook-inbound`;
 
 const schema = z.object({
   name: z.string().min(2),
@@ -222,6 +225,35 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
 
             <p className="text-[10px] text-muted-foreground">Variação automática de ±30% aplicada para simular comportamento humano</p>
           </div>
+
+          {agent?.webhook_token && (
+            <div className="space-y-2 rounded-lg border border-border/50 p-3">
+              <div className="flex items-center gap-2">
+                <Link className="h-3.5 w-3.5 text-muted-foreground" />
+                <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Webhook URL</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Input
+                  readOnly
+                  value={`${WEBHOOK_BASE}?token=${agent.webhook_token}`}
+                  className="h-8 bg-muted font-mono text-[10px] text-muted-foreground"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${WEBHOOK_BASE}?token=${agent.webhook_token}`);
+                    toast.success("URL copiada!");
+                  }}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <p className="text-[10px] text-muted-foreground">POST com JSON: {"{"} "message": "...", "external_user_id": "..." {"}"}</p>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Status</Label>

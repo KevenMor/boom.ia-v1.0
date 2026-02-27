@@ -1,4 +1,4 @@
-import { Bot, Plus, Search, MoreHorizontal, Play, Pause, Pencil, Trash2, MessageSquare } from "lucide-react";
+import { Bot, Plus, Search, MoreHorizontal, Play, Pause, Pencil, Trash2, MessageSquare, Copy, Link } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CreateAgentDialog } from "@/components/agents/CreateAgentDialog";
 import { EditAgentDialog } from "@/components/agents/EditAgentDialog";
 import { DeleteAgentDialog } from "@/components/agents/DeleteAgentDialog";
+import { toast } from "sonner";
 import type { Agent } from "@/types/database";
+
+const WEBHOOK_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/webhook-inbound`;
 
 export default function Agents() {
   const navigate = useNavigate();
@@ -102,6 +105,21 @@ export default function Agents() {
             <div className="mt-4 flex items-center gap-2 flex-wrap">
               {agent.model && <Badge variant="secondary" className="font-mono text-[10px]">{agent.model}</Badge>}
               {(agent.providers as any)?.name && <Badge variant="secondary" className="text-[10px]">{(agent.providers as any).name}</Badge>}
+              {agent.webhook_token && (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] cursor-pointer gap-1 hover:bg-primary/10"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigator.clipboard.writeText(`${WEBHOOK_BASE}?token=${agent.webhook_token}`);
+                    toast.success("URL do webhook copiada!");
+                  }}
+                >
+                  <Link className="h-2.5 w-2.5" />
+                  Webhook
+                  <Copy className="h-2.5 w-2.5" />
+                </Badge>
+              )}
             </div>
 
             <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
