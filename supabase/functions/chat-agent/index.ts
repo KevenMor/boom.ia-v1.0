@@ -1070,6 +1070,11 @@ RULES:
 
             const dispatchResult = await dispatchResp.json();
             const dispatchChoice = dispatchResult.choices?.[0];
+            const dispatchUsage = dispatchResult.usage;
+
+            if (dispatchUsage) {
+              console.log(`[Dispatcher] Tokens: prompt=${dispatchUsage.prompt_tokens}, completion=${dispatchUsage.completion_tokens}, total=${dispatchUsage.total_tokens}`);
+            }
 
             if (!dispatchChoice) {
               console.warn("[Dispatcher] No choice returned");
@@ -1083,6 +1088,7 @@ RULES:
               has_tool_calls: !!dispatchMsg.tool_calls?.length,
               tool_calls_count: dispatchMsg.tool_calls?.length || 0,
               content_preview: String(dispatchMsg.content || "").slice(0, 120),
+              usage: dispatchUsage || null,
               timestamp: Date.now(),
             });
 
@@ -1199,7 +1205,22 @@ RULES:
 
     const convResult = await convResp.json();
     const convChoice = convResult.choices?.[0];
+    const convUsage = convResult.usage;
     const rawContent = convChoice?.message?.content || "";
+
+    if (convUsage) {
+      console.log(`[Conversational] Tokens: prompt=${convUsage.prompt_tokens}, completion=${convUsage.completion_tokens}, total=${convUsage.total_tokens}`);
+      debugTrace.push({
+        type: "token_usage",
+        phase: "conversational",
+        model,
+        provider: provider.name,
+        prompt_tokens: convUsage.prompt_tokens,
+        completion_tokens: convUsage.completion_tokens,
+        total_tokens: convUsage.total_tokens,
+        timestamp: Date.now(),
+      });
+    }
 
     let finalContent = sanitizeLLMOutput(rawContent);
     finalContent = dedupeRepeatedParagraphs(finalContent);

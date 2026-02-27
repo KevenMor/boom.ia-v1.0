@@ -28,6 +28,20 @@ export function DebugBlock({ debug, edgeLogs }: DebugBlockProps) {
   const llmPlans = debug.filter((d) => d.type === "llm_tool_plan");
   const llmTransforms = debug.filter((d) => d.type === "llm_transform");
   const dispatcherSteps = debug.filter((d) => d.type?.startsWith("dispatcher_"));
+  const tokenUsages = debug.filter((d) => d.type === "token_usage");
+  const dispatcherTokens = dispatcherSteps
+    .filter((d) => d.usage)
+    .reduce((acc, d) => ({
+      prompt: acc.prompt + (d.usage?.prompt_tokens || 0),
+      completion: acc.completion + (d.usage?.completion_tokens || 0),
+      total: acc.total + (d.usage?.total_tokens || 0),
+    }), { prompt: 0, completion: 0, total: 0 });
+  const convTokens = tokenUsages.reduce((acc, d) => ({
+    prompt: acc.prompt + (d.prompt_tokens || 0),
+    completion: acc.completion + (d.completion_tokens || 0),
+    total: acc.total + (d.total_tokens || 0),
+  }), { prompt: 0, completion: 0, total: 0 });
+  const totalTokens = dispatcherTokens.total + convTokens.total;
 
   return (
     <div className="mb-1 max-w-[85%] md:max-w-[65%]">
@@ -41,6 +55,7 @@ export function DebugBlock({ debug, edgeLogs }: DebugBlockProps) {
         {dispatcherSteps.length > 0 && <span className="text-purple-400">{dispatcherSteps.length} dispatch</span>}
         <span className="text-[#53bdeb]">{llmIterations.length} LLM step{llmIterations.length !== 1 ? "s" : ""}</span>
         {errors.length > 0 && <span className="text-red-400">{errors.length} erro{errors.length !== 1 ? "s" : ""}</span>}
+        {totalTokens > 0 && <span className="text-emerald-400">{totalTokens.toLocaleString()} tokens</span>}
         {edgeLogs && edgeLogs.length > 0 && <span className="text-orange-400">{edgeLogs.length} log{edgeLogs.length !== 1 ? "s" : ""}</span>}
         {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
       </button>
@@ -56,6 +71,27 @@ export function DebugBlock({ debug, edgeLogs }: DebugBlockProps) {
                 {config.top_p && <div>Top-P: <span className="text-[#e9edef]">{config.top_p}</span></div>}
                 {config.top_k && <div>Top-K: <span className="text-[#e9edef]">{config.top_k}</span></div>}
                 <div>Tools: <span className="text-[#e9edef]">{config.tools_count}</span></div>
+              </div>
+            </div>
+          )}
+
+          {totalTokens > 0 && (
+            <div className="border-t border-[#2a3942] pt-2">
+              <div className="text-emerald-400 font-semibold mb-1">📊 Token Usage</div>
+              <div className="text-[#8696a0] space-y-0.5">
+                {dispatcherTokens.total > 0 && (
+                  <div>
+                    🎯 Dispatcher: <span className="text-[#e9edef]">{dispatcherTokens.prompt.toLocaleString()}</span> prompt + <span className="text-[#e9edef]">{dispatcherTokens.completion.toLocaleString()}</span> completion = <span className="text-emerald-300 font-semibold">{dispatcherTokens.total.toLocaleString()}</span>
+                  </div>
+                )}
+                {convTokens.total > 0 && (
+                  <div>
+                    🧠 Conversacional: <span className="text-[#e9edef]">{convTokens.prompt.toLocaleString()}</span> prompt + <span className="text-[#e9edef]">{convTokens.completion.toLocaleString()}</span> completion = <span className="text-emerald-300 font-semibold">{convTokens.total.toLocaleString()}</span>
+                  </div>
+                )}
+                <div className="border-t border-[#2a3942] pt-1 mt-1">
+                  Total: <span className="text-emerald-300 font-bold">{totalTokens.toLocaleString()} tokens</span>
+                </div>
               </div>
             </div>
           )}
