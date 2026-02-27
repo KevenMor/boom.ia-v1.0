@@ -715,7 +715,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 1. Load agent + provider + tenant settings
+    // 1. Load agent + provider + tenant settings (including dispatcher_provider_id)
     const { data: agent, error: agentErr } = await supabase
       .from("agents")
       .select("*, providers(name, base_url, api_key_encrypted), tenants(settings)")
@@ -936,19 +936,36 @@ PROIBIÇÕES:
     debugTrace.push({ type: "config", model, temperature, top_p, top_k, tools_count: openaiTools?.length || 0, latest_user_text: latestUserText.slice(0, 120) });
 
     // ===== PHASE 1: TOOL DISPATCHER =====
-    // Uses Lovable AI Gateway with a model optimized for tool calling
+    // Uses the tenant's configured dispatcher provider (e.g. GPT-4o-mini with own API key)
     const toolResultsContext: string[] = [];
 
     if (openaiTools && openaiTools.length > 0) {
-      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-      const DISPATCHER_MODEL = "openai/gpt-5-nano"; // Cheap, excellent at structured tool calling
-      const DISPATCHER_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+      const tenantSettings = agent.tenants?.settings || {};
+      const dispatcherProviderId = tenantSettings.dispatcher_provider_id;
 
-      if (!LOVABLE_API_KEY) {
-        console.warn("LOVABLE_API_KEY not set — skipping tool dispatcher, falling back to direct LLM");
+      if (!dispatcherProviderId) {
+        console.warn("[Dispatcher] No dispatcher_provider_id configured for tenant — skipping tool dispatch");
+        debugTrace.push({ type: "dispatcher_skip", reason: "no_dispatcher_provider_configured" });
       } else {
-        console.log(`[Dispatcher] Calling ${DISPATCHER_MODEL} with ${openaiTools.length} tools`);
-        debugTrace.push({ type: "dispatcher_start", model: DISPATCHER_MODEL, tools_count: openaiTools.length, timestamp: Date.now() });
+        // Load the dispatcher provider from DB
+        const { data: dispatcherProvider, error: dpErr } = await supabase
+          .from("providers")
+          .select("name, base_url, api_key_encrypted, model_default")
+          .eq("id", dispatcherProviderId)
+          .single();
+
+        if (dpErr || !dispatcherProvider?.api_key_encrypted) {
+          console.warn("[Dispatcher] Could not load dispatcher provider:", dpErr?.message || "no API key");
+          debugTrace.push({ type: "dispatcher_skip", reason: "provider_load_failed", error: dpErr?.message });
+        } else {
+          const dispatcherApiKey = await decrypt(dispatcherProvider.api_key_encrypted, encryptionKey);
+          const dispatcherModel = dispatcherProvider.model_default || "gpt-4o-mini";
+          const dispatcherBaseUrl = (dispatcherProvider.base_url && dispatcherProvider.base_url.includes("/chat/completions"))
+            ? dispatcherProvider.base_url
+            : PROVIDER_URLS[dispatcherProvider.name] || PROVIDER_URLS.OpenAI;
+
+          console.log(`[Dispatcher] Using provider "${dispatcherProvider.name}", model: ${dispatcherModel}, url: ${dispatcherBaseUrl}`);
+          debugTrace.push({ type: "dispatcher_start", provider: dispatcherProvider.name, model: dispatcherModel, tools_count: openaiTools.length, timestamp: Date.now() });
 
         // Build a focused dispatcher prompt — only job is to decide tool calls
         const dispatcherSystemPrompt = `You are a tool dispatcher. Your ONLY job is to analyze the user's message and conversation context, then decide if any tools should be called.
@@ -972,14 +989,14 @@ RULES:
           let currentDispatchMessages = [...dispatcherMessages];
 
           while (maxDispatchIterations-- > 0) {
-            const dispatchResp = await fetch(DISPATCHER_URL, {
+            const dispatchResp = await fetch(dispatcherBaseUrl, {
               method: "POST",
               headers: {
-                Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                Authorization: `Bearer ${dispatcherApiKey}`,
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({
-                model: DISPATCHER_MODEL,
+                model: dispatcherModel,
                 messages: currentDispatchMessages,
                 tools: openaiTools,
                 tool_choice: "auto",
@@ -1086,8 +1103,9 @@ RULES:
           debugTrace.push({ type: "dispatcher_error", error: e.message, timestamp: Date.now() });
           // Continue — conversational LLM will respond without tool data
         }
-      }
-    }
+        } // close else (provider loaded successfully)
+      } // close else (dispatcherProviderId exists)
+    } // close if (openaiTools)
 
     // ===== PHASE 2: CONVERSATIONAL LLM =====
     // Build final messages WITH tool data injected as system context (no tool calling needed)
