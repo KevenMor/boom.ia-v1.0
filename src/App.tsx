@@ -14,6 +14,7 @@ import AgentSandbox from "@/pages/AgentSandbox";
 import Tools from "@/pages/Tools";
 import Providers from "@/pages/Providers";
 import Monitoring from "@/pages/Monitoring";
+import Conversations from "@/pages/Conversations";
 import Audit from "@/pages/Audit";
 import SettingsPage from "@/pages/SettingsPage";
 import NotFound from "@/pages/NotFound";
@@ -41,6 +42,7 @@ const App = () => (
               <Route path="/tenants" element={<Tenants />} />
               <Route path="/agents" element={<Agents />} />
               <Route path="/agents/:agentId/sandbox" element={<AgentSandbox />} />
+              <Route path="/conversations" element={<Conversations />} />
               <Route path="/tools" element={<Tools />} />
               <Route path="/providers" element={<Providers />} />
               <Route path="/monitoring" element={<Monitoring />} />
