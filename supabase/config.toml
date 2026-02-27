@@ -6,5 +6,5 @@ verify_jwt = false
 [functions.find-nearest-unit]
 verify_jwt = false
 
-[functions.webhook-inbound]
+[functions.webhook-test]
 verify_jwt = false
