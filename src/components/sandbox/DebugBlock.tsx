@@ -19,6 +19,7 @@ export function DebugBlock({ debug }: DebugBlockProps) {
   const llmIterations = debug.filter((d) => d.type === "llm_iteration");
   const llmPlans = debug.filter((d) => d.type === "llm_tool_plan");
   const llmTransforms = debug.filter((d) => d.type === "llm_transform");
+  const dispatcherSteps = debug.filter((d) => d.type?.startsWith("dispatcher_"));
 
   return (
     <div className="mb-1 max-w-[85%] md:max-w-[65%]">
@@ -29,6 +30,7 @@ export function DebugBlock({ debug }: DebugBlockProps) {
         <Bug className="h-3 w-3" />
         <span>Debug</span>
         <span className="text-[#00a884]">{toolCalls.length} tool call{toolCalls.length !== 1 ? "s" : ""}</span>
+        {dispatcherSteps.length > 0 && <span className="text-purple-400">{dispatcherSteps.length} dispatch</span>}
         <span className="text-[#53bdeb]">{llmIterations.length} LLM step{llmIterations.length !== 1 ? "s" : ""}</span>
         {errors.length > 0 && <span className="text-red-400">{errors.length} erro{errors.length !== 1 ? "s" : ""}</span>}
         {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
@@ -45,6 +47,28 @@ export function DebugBlock({ debug }: DebugBlockProps) {
                 {config.top_p && <div>Top-P: <span className="text-[#e9edef]">{config.top_p}</span></div>}
                 {config.top_k && <div>Top-K: <span className="text-[#e9edef]">{config.top_k}</span></div>}
                 <div>Tools: <span className="text-[#e9edef]">{config.tools_count}</span></div>
+              </div>
+            </div>
+          )}
+
+          {dispatcherSteps.length > 0 && (
+            <div className="border-t border-[#2a3942] pt-2">
+              <div className="text-purple-400 font-semibold mb-1">🎯 Tool Dispatcher (GPT-5 Nano)</div>
+              <div className="space-y-1">
+                {dispatcherSteps.map((step, i) => (
+                  <div key={i} className="text-[#8696a0]">
+                    <span className="text-[#e9edef]">{step.type.replace("dispatcher_", "")}</span>
+                    {step.model && <> — modelo: <span className="text-[#e9edef]">{step.model}</span></>}
+                    {step.tools_count !== undefined && <> — {step.tools_count} tools</>}
+                    {step.tool_calls_count !== undefined && <> — {step.tool_calls_count} chamadas</>}
+                    {step.tool_names && <> — <span className="text-yellow-400">{step.tool_names.join(", ")}</span></>}
+                    {step.has_tool_calls === false && <span className="text-[#00a884]"> (sem tools necessárias)</span>}
+                    {step.error && <div className="text-red-300 mt-0.5">{step.error}</div>}
+                    {step.content_preview && (
+                      <pre className="mt-1 text-[#e9edef] bg-[#0b141a] rounded p-2 whitespace-pre-wrap text-[10px]">{step.content_preview}</pre>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           )}
