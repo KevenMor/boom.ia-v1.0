@@ -52,11 +52,13 @@ function parseChatwootPayload(body: Record<string, unknown>) {
       message: (body.content as string) || "",
       externalUserId:
         String(sender.id ?? "") || (sender.phone_number as string) || (sender.email as string) || "chatwoot-user",
+      contactName: (sender.name as string) || null,
+      contactAvatarUrl: (sender.thumbnail as string) || (sender.avatar_url as string) || null,
       chatwootConversationId: (conversation.id as number) ?? null,
       channel: (conversation.channel as string) || "chatwoot",
     };
   }
-  return { isChatwoot: false, message: "", externalUserId: "", chatwootConversationId: null, channel: "" };
+  return { isChatwoot: false, message: "", externalUserId: "", contactName: null as string | null, contactAvatarUrl: null as string | null, chatwootConversationId: null, channel: "" };
 }
 
 // ---------- Debounce: buffer message and check if we're the last ----------
@@ -264,12 +266,16 @@ Deno.serve(async (req: Request) => {
     let externalUserId: string;
     let channel: string;
     let chatwootConversationId: number | null = null;
+    let contactName: string | null = null;
+    let contactAvatarUrl: string | null = null;
 
     if (chatwoot.isChatwoot) {
       userMessage = chatwoot.message;
       externalUserId = chatwoot.externalUserId;
       channel = chatwoot.channel;
       chatwootConversationId = chatwoot.chatwootConversationId;
+      contactName = chatwoot.contactName;
+      contactAvatarUrl = chatwoot.contactAvatarUrl;
     } else {
       userMessage = (body.message || body.text || body.content || "") as string;
       externalUserId = (body.external_user_id || body.from || body.sender || body.phone || "anonymous") as string;
@@ -346,10 +352,26 @@ Deno.serve(async (req: Request) => {
           p_agent_id: agent.id,
           p_channel: channel,
           p_external_user_id: externalUserId,
+          p_contact_name: contactName,
+          p_contact_avatar_url: contactAvatarUrl,
         });
         convId = data;
       } catch (e) {
         console.error("Could not create conversation:", e);
+      }
+    }
+
+    // Update contact info if we have it and conv already existed
+    if (convId && (contactName || contactAvatarUrl)) {
+      try {
+        await supabase.rpc("update_conversation_contact", {
+          p_agent_id: agent.id,
+          p_conversation_id: convId,
+          p_contact_name: contactName,
+          p_contact_avatar_url: contactAvatarUrl,
+        });
+      } catch (e) {
+        console.warn("Could not update contact info:", e);
       }
     }
 

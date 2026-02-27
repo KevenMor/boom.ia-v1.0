@@ -5,6 +5,8 @@ export interface Conversation {
   id: string;
   channel: string;
   external_user_id: string;
+  contact_name: string | null;
+  contact_avatar_url: string | null;
   status: string;
   started_at: string;
   ended_at: string | null;
