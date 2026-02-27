@@ -105,13 +105,12 @@ export default function Agents() {
             <div className="mt-4 flex items-center gap-2 flex-wrap">
               {agent.model && <Badge variant="secondary" className="font-mono text-[10px]">{agent.model}</Badge>}
               {(agent.providers as any)?.name && <Badge variant="secondary" className="text-[10px]">{(agent.providers as any).name}</Badge>}
-              {agent.webhook_token && (
-                <Badge
+              <Badge
                   variant="outline"
                   className="text-[10px] cursor-pointer gap-1 hover:bg-primary/10"
                   onClick={(e) => {
                     e.stopPropagation();
-                    navigator.clipboard.writeText(`${WEBHOOK_BASE}?token=${agent.webhook_token}`);
+                    navigator.clipboard.writeText(`${WEBHOOK_BASE}?agent_id=${agent.id}`);
                     toast.success("URL do webhook copiada!");
                   }}
                 >
@@ -119,7 +118,6 @@ export default function Agents() {
                   Webhook
                   <Copy className="h-2.5 w-2.5" />
                 </Badge>
-              )}
             </div>
 
             <div className="mt-4 flex items-center justify-between border-t border-border pt-3">

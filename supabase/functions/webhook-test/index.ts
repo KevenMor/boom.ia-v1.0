@@ -66,10 +66,13 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    const body = await req.json();
+
+    // Accept agent_id from query param OR body
     const url = new URL(req.url);
-    const token = url.searchParams.get("token");
-    if (!token) {
-      return new Response(JSON.stringify({ error: "Missing 'token' query parameter" }), {
+    const agentId = url.searchParams.get("agent_id") || (body.agent_id as string) || null;
+    if (!agentId) {
+      return new Response(JSON.stringify({ error: "Missing 'agent_id' — pass as query param or in body" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -77,14 +80,17 @@ Deno.serve(async (req: Request) => {
 
     const supabase = createClient(nexusUrl, nexusKey);
 
+    // Use service_role-like behavior: bypass RLS by querying with anon key
+    // If RLS blocks this, the agent won't be found
     const { data: agent, error: agentErr } = await supabase
       .from("agents")
       .select("id, name, status, tenant_id, config")
-      .eq("webhook_token", token)
-      .single();
+      .eq("id", agentId)
+      .maybeSingle();
 
     if (agentErr || !agent) {
-      return new Response(JSON.stringify({ error: "Invalid webhook token" }), {
+      console.error("Agent lookup failed:", { agentId, agentErr, nexusUrl: nexusUrl?.substring(0, 30) });
+      return new Response(JSON.stringify({ error: "Invalid agent_id", detail: agentErr?.message }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -97,7 +103,6 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const body = await req.json();
     const chatwoot = parseChatwootPayload(body);
 
     let userMessage: string;
