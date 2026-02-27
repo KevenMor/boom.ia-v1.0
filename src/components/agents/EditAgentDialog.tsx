@@ -49,6 +49,7 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
   const [readDelay, setReadDelay] = useState(1500);
   const [typingDelay, setTypingDelay] = useState(800);
   const [blockGap, setBlockGap] = useState(1200);
+  const [debounceMs, setDebounceMs] = useState(0);
   const [chatwootUrl, setChatwootUrl] = useState("");
   const [chatwootApiToken, setChatwootApiToken] = useState("");
   const [chatwootAccountId, setChatwootAccountId] = useState("");
@@ -75,6 +76,7 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
       setReadDelay(((cfg as any).read_delay_ms ?? 1500) / 1000);
       setTypingDelay(((cfg as any).typing_delay_ms ?? 800) / 1000);
       setBlockGap(((cfg as any).block_gap_ms ?? 1200) / 1000);
+      setDebounceMs(((cfg as any).message_debounce_ms ?? 0) / 1000);
       setChatwootUrl((cfg as any).chatwoot_url ?? "");
       setChatwootApiToken((cfg as any).chatwoot_api_token ?? "");
       setChatwootAccountId((cfg as any).chatwoot_account_id ?? "");
@@ -100,6 +102,7 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
           read_delay_ms: Math.round(readDelay * 1000),
           typing_delay_ms: Math.round(typingDelay * 1000),
           block_gap_ms: Math.round(blockGap * 1000),
+          message_debounce_ms: Math.round(debounceMs * 1000),
           chatwoot_url: chatwootUrl || undefined,
           chatwoot_api_token: chatwootApiToken || undefined,
           chatwoot_account_id: chatwootAccountId || undefined,
@@ -241,6 +244,31 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
             </div>
 
             <p className="text-[10px] text-muted-foreground">Variação automática de ±30% aplicada para simular comportamento humano</p>
+          </div>
+
+          <div className="space-y-3 rounded-lg border border-border/50 p-3">
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">📨 Debounce de Mensagens</p>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-[10px] text-muted-foreground">Janela de espera (s)</Label>
+                <span className="font-mono text-xs text-primary">{debounceMs}s</span>
+              </div>
+              <Input
+                type="number"
+                min={0}
+                max={30}
+                step={1}
+                value={debounceMs}
+                onChange={(e) => setDebounceMs(Number(e.target.value))}
+                className="h-8 bg-background font-mono text-xs"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                {debounceMs > 0
+                  ? `Aguarda ${debounceMs}s após a última mensagem do cliente para consolidar e responder tudo junto`
+                  : "Desativado — responde cada mensagem individualmente"}
+              </p>
+            </div>
           </div>
 
           <ChatwootConfigSection

@@ -6,6 +6,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+// ---------- Chatwoot reply ----------
 async function replyToChatwoot(
   chatwootUrl: string,
   apiToken: string,
@@ -19,37 +20,29 @@ async function replyToChatwoot(
   const parts = messageParts.length > 0 ? messageParts : [content];
 
   console.log(`[Chatwoot] Sending ${parts.length} message(s) to conv ${conversationId}`);
-  console.log(`[Chatwoot] URL: ${url}`);
 
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i];
     if (!part || !part.trim()) continue;
-
     try {
-      const payload = { content: part.trim(), message_type: "outgoing", private: false };
-      console.log(`[Chatwoot] Part ${i + 1}/${parts.length}: ${part.trim().substring(0, 80)}...`);
-
       const resp = await fetch(url, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          api_access_token: apiToken,
-        },
-        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json", api_access_token: apiToken },
+        body: JSON.stringify({ content: part.trim(), message_type: "outgoing", private: false }),
       });
-
       const respText = await resp.text();
       if (!resp.ok) {
         console.error(`[Chatwoot] Reply error ${resp.status}:`, respText);
       } else {
-        console.log(`[Chatwoot] Part ${i + 1} sent OK (${resp.status})`);
+        console.log(`[Chatwoot] Part ${i + 1}/${parts.length} sent OK`);
       }
     } catch (e) {
-      console.error(`[Chatwoot] Reply fetch error for part ${i + 1}:`, e);
+      console.error(`[Chatwoot] Reply fetch error part ${i + 1}:`, e);
     }
   }
 }
 
+// ---------- Chatwoot payload parser ----------
 function parseChatwootPayload(body: Record<string, unknown>) {
   if (body.event === "message_created" && body.message_type === "incoming") {
     const sender = (body.sender || {}) as Record<string, unknown>;
@@ -66,6 +59,153 @@ function parseChatwootPayload(body: Record<string, unknown>) {
   return { isChatwoot: false, message: "", externalUserId: "", chatwootConversationId: null, channel: "" };
 }
 
+// ---------- Debounce: buffer message and check if we're the last ----------
+async function bufferMessage(
+  supabase: any,
+  agentId: string,
+  externalUserId: string,
+  channel: string,
+  content: string,
+  chatwootConversationId: number | null
+) {
+  const { data, error } = await supabase
+    .from("webhook_message_buffer")
+    .insert({
+      agent_id: agentId,
+      external_user_id: externalUserId,
+      channel,
+      content,
+      chatwoot_conversation_id: chatwootConversationId,
+    })
+    .select("id, created_at")
+    .single();
+
+  if (error) {
+    console.error("[Debounce] Buffer insert failed:", error.message);
+    return null;
+  }
+  return data as { id: string; created_at: string };
+}
+
+async function isLastMessage(
+  supabase: any,
+  agentId: string,
+  externalUserId: string,
+  channel: string,
+  myCreatedAt: string
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("webhook_message_buffer")
+    .select("id")
+    .eq("agent_id", agentId)
+    .eq("external_user_id", externalUserId)
+    .eq("channel", channel)
+    .eq("processed", false)
+    .gt("created_at", myCreatedAt)
+    .limit(1);
+
+  return !data || data.length === 0;
+}
+
+async function consumeBufferedMessages(
+  supabase: any,
+  agentId: string,
+  externalUserId: string,
+  channel: string
+): Promise<string[]> {
+  // Fetch all pending messages in order
+  const { data: pending } = await supabase
+    .from("webhook_message_buffer")
+    .select("id, content, created_at")
+    .eq("agent_id", agentId)
+    .eq("external_user_id", externalUserId)
+    .eq("channel", channel)
+    .eq("processed", false)
+    .order("created_at", { ascending: true });
+
+  if (!pending || pending.length === 0) return [];
+
+  // Mark all as processed
+  const ids = pending.map((m: any) => m.id);
+  await supabase
+    .from("webhook_message_buffer")
+    .update({ processed: true })
+    .in("id", ids);
+
+  return pending.map((m: any) => m.content as string);
+}
+
+// ---------- Process agent response via chat-agent ----------
+async function callChatAgent(
+  cloudUrl: string,
+  cloudKey: string,
+  nexusKey: string,
+  agentId: string,
+  messages: { role: string; content: string }[],
+  convId: string | null
+) {
+  const chatAgentUrl = `${cloudUrl}/functions/v1/chat-agent`;
+  const chatResp = await fetch(chatAgentUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${cloudKey}`,
+      "x-nexus-auth": `Bearer ${nexusKey}`,
+    },
+    body: JSON.stringify({ agent_id: agentId, messages, conversation_id: convId }),
+  });
+
+  if (!chatResp.ok) {
+    const errText = await chatResp.text();
+    console.error("chat-agent error:", chatResp.status, errText);
+    return { error: errText, fullContent: "", responseParts: [], responseConvId: convId };
+  }
+
+  const reader = chatResp.body!.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  let fullContent = "";
+  let responseConvId = convId;
+  const MSG_SPLIT = "<<MSG_SPLIT>>";
+  const responseParts: string[] = [];
+  let currentPart = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+
+    let nl: number;
+    while ((nl = buf.indexOf("\n")) !== -1) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line.startsWith("data: ")) continue;
+      const json = line.slice(6);
+      if (json === "[DONE]") continue;
+      try {
+        const ev = JSON.parse(json);
+        if (ev.conversation_id) { responseConvId = ev.conversation_id; continue; }
+        if (ev.debug || ev.edge_logs) continue;
+        const delta = ev.choices?.[0]?.delta?.content;
+        if (delta) {
+          if (delta === MSG_SPLIT) {
+            if (currentPart.trim()) responseParts.push(currentPart.trim());
+            currentPart = "";
+          } else {
+            currentPart += delta;
+            fullContent += delta;
+          }
+        }
+      } catch { /* skip */ }
+    }
+  }
+
+  if (currentPart.trim()) responseParts.push(currentPart.trim());
+
+  return { error: null, fullContent, responseParts, responseConvId };
+}
+
+// ---------- Main handler ----------
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -79,28 +219,23 @@ Deno.serve(async (req: Request) => {
 
     if (!nexusUrl || !nexusKey) {
       return new Response(JSON.stringify({ error: "Missing server configuration" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const body = await req.json();
 
-    // Accept agent_id from query param OR body
     const url = new URL(req.url);
     const agentId = url.searchParams.get("agent_id") || (body.agent_id as string) || null;
     if (!agentId) {
-      return new Response(JSON.stringify({ error: "Missing 'agent_id' — pass as query param or in body" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      return new Response(JSON.stringify({ error: "Missing 'agent_id'" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const supabase = createClient(nexusUrl, nexusKey);
 
-    console.log(`[Webhook] Looking up agent: ${agentId}`);
-    console.log(`[Webhook] Using key type: ${nexusKey.substring(0, 20)}...`);
-
+    // ---- Lookup agent ----
     const { data: agent, error: agentErr } = await supabase
       .from("agents")
       .select("id, name, status, tenant_id, config")
@@ -108,21 +243,21 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (agentErr || !agent) {
-      console.error("[Webhook] Agent lookup failed:", { agentId, agentErr });
+      console.error("[Webhook] Agent not found:", agentId);
       return new Response(JSON.stringify({ error: "Invalid agent_id" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    console.log(`[Webhook] Agent found: ${agent.name} (status: ${agent.status})`);
 
     if (agent.status !== "active") {
       return new Response(JSON.stringify({ error: "Agent is not active" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    const cfg = (agent.config || {}) as Record<string, any>;
+
+    // ---- Parse input ----
     const chatwoot = parseChatwootPayload(body);
 
     let userMessage: string;
@@ -143,14 +278,55 @@ Deno.serve(async (req: Request) => {
 
     if (!userMessage) {
       return new Response(
-        JSON.stringify({ error: "No message content. Use 'message', 'text', or 'content' field." }),
+        JSON.stringify({ error: "No message content" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const conversationId = (body.conversation_id || null) as string | null;
+    // ---- Debounce logic ----
+    const debounceMs = Number(cfg.message_debounce_ms) || 0; // 0 = disabled
 
+    if (debounceMs > 0) {
+      console.log(`[Debounce] Buffering message, window: ${debounceMs}ms`);
+
+      const buffered = await bufferMessage(
+        supabase, agentId, externalUserId, channel, userMessage, chatwootConversationId
+      );
+
+      if (!buffered) {
+        // Buffer insert failed — fall through to process immediately
+        console.warn("[Debounce] Buffer failed, processing immediately");
+      } else {
+        // Sleep for debounce window
+        await new Promise((r) => setTimeout(r, debounceMs));
+
+        // Check if a newer message arrived during sleep
+        const imLast = await isLastMessage(supabase, agentId, externalUserId, channel, buffered.created_at);
+
+        if (!imLast) {
+          console.log(`[Debounce] Newer message exists, exiting silently`);
+          return new Response(
+            JSON.stringify({ status: "buffered", message: "Waiting for more messages" }),
+            { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // I'm the last message! Consume all buffered messages
+        const allMessages = await consumeBufferedMessages(supabase, agentId, externalUserId, channel);
+        console.log(`[Debounce] Consolidated ${allMessages.length} message(s)`);
+
+        // Replace userMessage with consolidated content
+        if (allMessages.length > 0) {
+          userMessage = allMessages.join("\n");
+          console.log(`[Debounce] Consolidated: "${userMessage.substring(0, 120)}..."`);
+        }
+      }
+    }
+
+    // ---- Conversation management ----
+    const conversationId = (body.conversation_id || null) as string | null;
     let convId = conversationId;
+
     if (!convId) {
       try {
         const { data: existingConv } = await supabase.rpc("find_or_create_webhook_conversation", {
@@ -177,6 +353,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // ---- Load conversation history ----
     let conversationMessages: { role: string; content: string }[] = [];
     if (convId) {
       try {
@@ -195,84 +372,26 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // ---- Call chat-agent ----
     const messages = [...conversationMessages, { role: "user", content: userMessage }];
 
-    const chatAgentUrl = `${cloudUrl}/functions/v1/chat-agent`;
-    const chatResp = await fetch(chatAgentUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${cloudKey}`,
-        "x-nexus-auth": `Bearer ${nexusKey}`,
-      },
-      body: JSON.stringify({ agent_id: agent.id, messages, conversation_id: convId }),
-    });
+    const result = await callChatAgent(cloudUrl, cloudKey, nexusKey, agent.id, messages, convId);
 
-    if (!chatResp.ok) {
-      const errText = await chatResp.text();
-      console.error("chat-agent error:", chatResp.status, errText);
-      return new Response(JSON.stringify({ error: "Agent processing failed", detail: errText }), {
-        status: 502,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    if (result.error) {
+      return new Response(JSON.stringify({ error: "Agent processing failed", detail: result.error }), {
+        status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const reader = chatResp.body!.getReader();
-    const decoder = new TextDecoder();
-    let buf = "";
-    let fullContent = "";
-    let responseConvId = convId;
-    const MSG_SPLIT = "<<MSG_SPLIT>>";
-    const responseParts: string[] = [];
-    let currentPart = "";
+    const { fullContent, responseParts, responseConvId } = result;
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
+    console.log(`[Webhook] Response: ${fullContent.length} chars, ${responseParts.length} parts`);
 
-      let nl: number;
-      while ((nl = buf.indexOf("\n")) !== -1) {
-        const line = buf.slice(0, nl).trim();
-        buf = buf.slice(nl + 1);
-        if (!line.startsWith("data: ")) continue;
-        const json = line.slice(6);
-        if (json === "[DONE]") continue;
-
-        try {
-          const ev = JSON.parse(json);
-          if (ev.conversation_id) {
-            responseConvId = ev.conversation_id;
-            continue;
-          }
-          if (ev.debug || ev.edge_logs) continue;
-          const delta = ev.choices?.[0]?.delta?.content;
-          if (delta) {
-            if (delta === MSG_SPLIT) {
-              if (currentPart.trim()) responseParts.push(currentPart.trim());
-              currentPart = "";
-            } else {
-              currentPart += delta;
-              fullContent += delta;
-            }
-          }
-        } catch {
-          /* skip */
-        }
-      }
-    }
-
-    if (currentPart.trim()) responseParts.push(currentPart.trim());
-
-    console.log(`[Webhook] Full response length: ${fullContent.length}, parts: ${responseParts.length}`);
-    console.log(`[Webhook] isChatwoot: ${chatwoot.isChatwoot}, convId: ${chatwootConversationId}`);
-
-    const cfg = (agent.config || {}) as Record<string, string>;
+    // ---- Reply to Chatwoot ----
     const hasChatwootConfig = !!(cfg.chatwoot_url && cfg.chatwoot_api_token && cfg.chatwoot_account_id);
-    console.log(`[Webhook] Chatwoot config present: ${hasChatwootConfig}`);
 
     if (chatwoot.isChatwoot && chatwootConversationId && hasChatwootConfig) {
-      console.log(`[Webhook] → Sending reply to Chatwoot...`);
+      console.log(`[Webhook] → Replying to Chatwoot conv ${chatwootConversationId}`);
       await replyToChatwoot(
         cfg.chatwoot_url,
         cfg.chatwoot_api_token,
@@ -281,11 +400,6 @@ Deno.serve(async (req: Request) => {
         fullContent.trim(),
         responseParts
       );
-      console.log(`[Webhook] → Chatwoot reply complete`);
-    } else if (!chatwoot.isChatwoot) {
-      console.log(`[Webhook] Not a Chatwoot payload, skipping reply`);
-    } else {
-      console.log(`[Webhook] Missing Chatwoot config or conversationId, skipping reply`);
     }
 
     return new Response(
@@ -303,8 +417,7 @@ Deno.serve(async (req: Request) => {
   } catch (err) {
     console.error("webhook error:", err);
     return new Response(JSON.stringify({ error: (err as Error).message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
