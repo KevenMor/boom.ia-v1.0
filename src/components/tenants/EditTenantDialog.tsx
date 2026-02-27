@@ -20,10 +20,12 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { useUpdateTenant } from "@/hooks/useTenants";
+import { useProviders } from "@/hooks/useProviders";
 import { toast } from "sonner";
 import type { Tenant } from "@/types/database";
 import { useEffect } from "react";
 import { Slider } from "@/components/ui/slider";
+import { Badge } from "@/components/ui/badge";
 
 const schema = z.object({
   name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
@@ -34,6 +36,7 @@ const schema = z.object({
   plan: z.string(),
   status: z.string(),
   sync_url: z.string().optional(),
+  dispatcher_provider_id: z.string().optional(),
   temperature: z.number().min(0).max(2),
   top_p: z.number().min(0).max(1),
   top_k: z.number().min(1).max(100),
@@ -49,6 +52,7 @@ interface EditTenantDialogProps {
 
 export function EditTenantDialog({ tenant, open, onOpenChange }: EditTenantDialogProps) {
   const updateTenant = useUpdateTenant();
+  const { data: providers } = useProviders();
   const {
     register,
     handleSubmit,
@@ -79,6 +83,7 @@ export function EditTenantDialog({ tenant, open, onOpenChange }: EditTenantDialo
         plan: tenant.plan,
         status: tenant.status,
         sync_url: (settings as any).sync_url || "",
+        dispatcher_provider_id: (settings as any).dispatcher_provider_id || "",
         temperature: llm.temperature ?? 0.5,
         top_p: llm.top_p ?? 0.8,
         top_k: llm.top_k ?? 40,
@@ -93,6 +98,7 @@ export function EditTenantDialog({ tenant, open, onOpenChange }: EditTenantDialo
       const newSettings = {
         ...currentSettings,
         sync_url: data.sync_url || undefined,
+        dispatcher_provider_id: data.dispatcher_provider_id || undefined,
         llm_config: {
           temperature: data.temperature,
           top_p: data.top_p,
@@ -167,6 +173,30 @@ export function EditTenantDialog({ tenant, open, onOpenChange }: EditTenantDialo
           <div className="space-y-2">
             <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">URL de Sync (Inventário)</Label>
             <Input {...register("sync_url")} placeholder="https://exemplo.com.br/Veiculos" className="h-9 bg-background text-sm" />
+          </div>
+
+          <Separator />
+
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Tool Dispatcher (Provider)</Label>
+              <Badge variant="secondary" className="text-[10px]">Fase 1</Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">Provider usado para decidir quando acionar ferramentas (ex: GPT-4o-mini)</p>
+            <Select
+              value={watch("dispatcher_provider_id") || ""}
+              onValueChange={(v) => setValue("dispatcher_provider_id", v === "_none" ? "" : v)}
+            >
+              <SelectTrigger className="h-9 bg-background">
+                <SelectValue placeholder="Nenhum (desabilitado)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_none">Nenhum (desabilitado)</SelectItem>
+                {(providers ?? []).map((p) => (
+                  <SelectItem key={p.id} value={p.id}>{p.name} {p.model_default ? `(${p.model_default})` : ''}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <Separator />
