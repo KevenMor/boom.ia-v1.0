@@ -556,6 +556,10 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
           const term = args.search || args.query || args.termo;
           query = query.or(`brand.ilike.%${term}%,model.ilike.%${term}%,version.ilike.%${term}%,description.ilike.%${term}%,color.ilike.%${term}%`);
         }
+        if (args.tipo_veiculo) {
+          const tipo = args.tipo_veiculo;
+          query = query.or(`description.ilike.%${tipo}%,version.ilike.%${tipo}%,model.ilike.%${tipo}%`);
+        }
         if (args.year || args.ano) query = query.eq("year", args.year || args.ano);
         if (args.fuel_type || args.fuel || args.combustivel) query = query.ilike("fuel_type", `%${args.fuel_type || args.fuel || args.combustivel}%`);
         if (args.transmission || args.cambio) query = query.ilike("transmission", `%${args.transmission || args.cambio}%`);
@@ -678,13 +682,14 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
 // ---------- built-in parameter schemas for known tool types ----------
 const BUILTIN_SCHEMAS: Record<string, { description: string; parameters: any }> = {
   inventory_query: {
-    description: "Consulta o estoque de veículos da concessionária. Use os parâmetros para filtrar. Se o cliente mencionar uma marca ou modelo específico, SEMPRE passe no campo correspondente.",
+    description: "Consulta o estoque de veículos da concessionária. ATENÇÃO: 'marca' é SOMENTE para fabricantes (Toyota, BMW, Hyundai, Fiat, Chevrolet, Volkswagen, Haval, etc.). Tipos de carroceria como SUV, Sedan, Hatch, Picape NÃO são marcas — use o campo 'tipo_veiculo' para isso.",
     parameters: {
       type: "object",
       properties: {
-        marca:  { type: "string", description: "Marca do veículo (ex: Haval, Toyota, BMW, Chevrolet, Fiat, Hyundai, Volkswagen)" },
-        modelo: { type: "string", description: "Modelo do veículo (ex: Onix, HB20, Corolla, Fusca)" },
-        search: { type: "string", description: "Termo genérico de busca livre quando não se sabe se é marca ou modelo" },
+        marca:  { type: "string", description: "SOMENTE a marca/fabricante do veículo (ex: Haval, Toyota, BMW, Chevrolet, Fiat, Hyundai, Volkswagen). NUNCA use para tipo de carroceria (SUV, Sedan, etc.)" },
+        modelo: { type: "string", description: "Modelo do veículo (ex: Onix, HB20, Corolla, Fusca, Creta, Tracker)" },
+        tipo_veiculo: { type: "string", description: "Tipo/carroceria do veículo: SUV, Sedan, Hatch, Picape, Minivan, Conversível, Coupé. Use quando o cliente pedir por categoria e não por marca/modelo específico." },
+        search: { type: "string", description: "Termo genérico de busca livre quando não se encaixa nos outros campos" },
         ano:    { type: "integer", description: "Ano do veículo" },
         cor:    { type: "string", description: "Cor do veículo" },
         combustivel:  { type: "string", description: "Tipo de combustível (flex, gasolina, diesel, elétrico)" },
