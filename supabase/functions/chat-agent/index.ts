@@ -423,7 +423,7 @@ interface ToolDef {
   auth_config: any;
 }
 
-async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: any, agentId: string): Promise<string> {
+async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: any, agentId: string, userText?: string): Promise<string> {
   try {
     switch (tool.tool_type) {
       case "sql_query": {
@@ -600,15 +600,19 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         if (error) return JSON.stringify({ error: error.message });
         if (!data?.length) return JSON.stringify({ message: "Nenhum veículo encontrado com esses filtros" });
 
-        const isListing = data.length > 3;
+        // Determine if user explicitly asked for PHOTOS/IMAGES (not just "quero ver" which means "want to see options")
+        const photoRequestPattern = /(foto|imagem|image|photo|manda foto|envia foto|pode enviar|enviar fotos|ver foto|ver imagem|mostra foto|mostra imagem)/i;
+        const isPhotoRequest = photoRequestPattern.test(userText || "");
+        // Only show photos when user explicitly asks for photos AND it's a specific vehicle query (few results)
+        const isSpecificWithPhotos = isPhotoRequest && data.length <= 3;
 
         return JSON.stringify({
           total: data.length,
-          _hint: isListing
-            ? `Apresente cada veículo em um PARÁGRAFO SEPARADO (separado por linha em branco). Use linguagem natural de vendedor WhatsApp. Comece com saudação, depois um veículo por parágrafo, e finalize com pergunta. Apresente TODOS os ${data.length} veículos. NÃO use listas numeradas.`
-            : "Veículo específico. Inclua TODAS as fotos do array 'photos'.",
+          _hint: isSpecificWithPhotos
+            ? "Veículo específico. Inclua TODAS as fotos do array 'photos'."
+            : `Apresente cada veículo em um PARÁGRAFO SEPARADO (separado por linha em branco). Use linguagem natural de vendedor WhatsApp. Comece com saudação, depois um veículo por parágrafo, e finalize com pergunta tipo "Algum desses te chamou atenção? Posso te enviar fotos e mais detalhes!". Apresente TODOS os ${data.length} veículos. NÃO use listas numeradas. NÃO inclua fotos.`,
           vehicles: data.map((v: any) => {
-            if (isListing) {
+            if (!isSpecificWithPhotos) {
               // Listing mode: compact, no photos to keep context small
               return {
                 id: v.id,
@@ -1190,7 +1194,7 @@ RULES:
 
                 console.log(`[Dispatcher] Executing: ${toolName} (${matchedTool.tool_type})`);
                 debugTrace.push({ type: "tool_call", tool: toolName, tool_type: matchedTool.tool_type, args: toolArgs, timestamp: Date.now() });
-                toolResult = await executeTool(matchedTool, toolArgs, supabase, agent_id);
+                toolResult = await executeTool(matchedTool, toolArgs, supabase, agent_id, latestUserText);
 
                 let resultPreview: any = {};
                 try {
