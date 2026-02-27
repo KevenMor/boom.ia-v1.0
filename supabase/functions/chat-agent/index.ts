@@ -609,8 +609,8 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         return JSON.stringify({
           total: data.length,
           _hint: isSpecificWithPhotos
-            ? "Veículo específico. Inclua TODAS as fotos do array 'photos'."
-            : `Apresente cada veículo em um PARÁGRAFO SEPARADO (separado por linha em branco). Use linguagem natural de vendedor WhatsApp. Comece com saudação, depois um veículo por parágrafo, e finalize com pergunta tipo "Algum desses te chamou atenção? Posso te enviar fotos e mais detalhes!". Apresente TODOS os ${data.length} veículos. NÃO use listas numeradas. NÃO inclua fotos.`,
+            ? "Envie TODAS as fotos do array 'photos' usando ![foto](URL). Escreva um comentário curto e natural sobre o carro (sem repetir marca/modelo/ano/preço que já foram ditos antes). Finalize perguntando se quer agendar visita."
+            : `Apresente os ${data.length} veículos de forma NATURAL, como um vendedor experiente no WhatsApp. REGRAS ANTI-REPETIÇÃO: 1) NÃO repita o nome completo do carro se já mencionou antes — use apelidos curtos ("o Nivus", "o Haval", "esse aqui"). 2) Varie a estrutura das frases — cada parágrafo deve soar diferente. 3) NÃO use a mesma abertura para todos os carros. 4) Destaque algo ÚNICO de cada um (um é mais econômico, outro tem mais espaço, etc). 5) Finalize com UMA pergunta natural tipo "Algum te chamou atenção?". NÃO use listas numeradas. NÃO inclua fotos. NÃO repita dados que o cliente já sabe.`,
           vehicles: data.map((v: any) => {
             if (!isSpecificWithPhotos) {
               // Listing mode: compact, no photos to keep context small
@@ -894,6 +894,13 @@ Parágrafo 3: Segundo veículo...
 
 Último parágrafo: Pergunta natural tipo "Algum desses te chamou atenção? Posso enviar fotos e mais detalhes!"
 
+REGRA ANTI-REPETIÇÃO (MUITO IMPORTANTE):
+- NUNCA repita o nome completo do carro (marca + modelo + versão) se já foi mencionado na conversa. Use formas curtas: "o Nivus", "o Haval", "esse aqui", "ele".
+- NUNCA repita preço, ano, km ou cor que o cliente já viu. Se precisar mencionar de novo, seja breve: "aquele de R$ 119 mil".
+- Quando o cliente demonstrar interesse em um carro específico, NÃO reapresente todos os dados. Fale algo novo: um diferencial, uma vantagem, uma comparação.
+- Varie SEMPRE a estrutura das frases. Não comece dois parágrafos da mesma forma.
+- Escreva como uma pessoa real digitando no WhatsApp, não como um catálogo.
+
 IMPORTANTE:
 - Cada veículo em seu PRÓPRIO parágrafo, separado por linha em branco.
 - Apresente TODOS os veículos retornados, sem omitir nenhum.
@@ -905,15 +912,18 @@ REGRA CRÍTICA - FOTOS E DETALHES DE VEÍCULO ESPECÍFICO:
 Quando o cliente pedir fotos, imagens, detalhes ou mais informações sobre um veículo específico, você DEVE OBRIGATORIAMENTE chamar a ferramenta consultar_estoque com filtros específicos (marca, modelo, ano, etc.) para obter os dados completos COM fotos. Você NÃO tem as fotos no contexto da listagem anterior. NUNCA responda sobre fotos sem antes chamar a ferramenta.
 Após receber o resultado da ferramenta, inclua TODAS as fotos do array 'photos' usando: ![foto](URL)
 Se 'photos' estiver vazio, use 'photo_url'.
+Ao enviar fotos, NÃO repita ficha técnica completa. Faça um comentário curto e natural tipo "Olha só que bonito ele é!" ou "Dá uma conferida nessas fotos, ele é impecável 😍".
 
 PROIBIÇÕES:
 - NUNCA escreva nomes de ferramentas no texto.
-- NUNCA repita o mesmo conteúdo.
+- NUNCA repita o mesmo conteúdo que já disse antes na conversa.
 - NUNCA use formato de lista (1. 2. 3. ou • ou -).
 - NUNCA responda sobre fotos sem chamar a ferramenta primeiro.
 - Mostre fotos naturalmente, sem mencionar campos técnicos.
 - NUNCA envie links do site, do estoque ou de páginas externas para o cliente "dar uma olhadinha". Você É a consultora — seu papel é recomendar veículos específicos com base nas necessidades do cliente. Se não tem informação suficiente para filtrar, faça PERGUNTAS para entender o perfil (orçamento, uso, preferência de tamanho, combustível, etc.) em vez de redirecionar para o site.
 - NUNCA diga frases como "acesse nosso site", "confira nosso estoque em", "veja as opções no link". Isso é proibido.
+- NUNCA use "Resumo do Veículo:", fichas técnicas formatadas ou **negrito** em campos. Isso parece IA.
+- NUNCA repita dados (marca, modelo, preço, ano) que já foram apresentados na mesma conversa.
 
 COMPORTAMENTO CONSULTIVO OBRIGATÓRIO:
 - Você é uma CONSULTORA especializada, não um chatbot de autoatendimento.
