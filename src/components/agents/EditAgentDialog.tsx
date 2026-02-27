@@ -20,7 +20,7 @@ import { getModelsForProvider } from "@/lib/provider-models";
 import { ChatwootConfigSection } from "@/components/agents/ChatwootConfigSection";
 import type { Agent } from "@/types/database";
 
-const WEBHOOK_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/webhook-inbound`;
+const WEBHOOK_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/webhook-test`;
 
 const schema = z.object({
   name: z.string().min(2),
@@ -250,7 +250,7 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
             setChatwootApiToken={setChatwootApiToken}
             chatwootAccountId={chatwootAccountId}
             setChatwootAccountId={setChatwootAccountId}
-            webhookUrl={agent?.webhook_token ? `${WEBHOOK_BASE}?token=${agent.webhook_token}` : undefined}
+            webhookUrl={agent ? `${WEBHOOK_BASE}?agent_id=${agent.id}` : undefined}
           />
 
           <div className="space-y-2">
