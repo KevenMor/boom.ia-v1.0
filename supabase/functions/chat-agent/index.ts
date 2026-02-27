@@ -675,18 +675,58 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
   }
 }
 
+// ---------- built-in parameter schemas for known tool types ----------
+const BUILTIN_SCHEMAS: Record<string, { description: string; parameters: any }> = {
+  inventory_query: {
+    description: "Consulta o estoque de veículos da concessionária. Use os parâmetros para filtrar. Se o cliente mencionar uma marca ou modelo específico, SEMPRE passe no campo correspondente.",
+    parameters: {
+      type: "object",
+      properties: {
+        marca:  { type: "string", description: "Marca do veículo (ex: Haval, Toyota, BMW, Chevrolet, Fiat, Hyundai, Volkswagen)" },
+        modelo: { type: "string", description: "Modelo do veículo (ex: Onix, HB20, Corolla, Fusca)" },
+        search: { type: "string", description: "Termo genérico de busca livre quando não se sabe se é marca ou modelo" },
+        ano:    { type: "integer", description: "Ano do veículo" },
+        cor:    { type: "string", description: "Cor do veículo" },
+        combustivel:  { type: "string", description: "Tipo de combustível (flex, gasolina, diesel, elétrico)" },
+        cambio:       { type: "string", description: "Tipo de câmbio (manual, automático)" },
+        preco_min:    { type: "number", description: "Preço mínimo em reais" },
+        preco_max:    { type: "number", description: "Preço máximo em reais" },
+      },
+      required: [],
+    },
+  },
+  nearest_unit: {
+    description: "Encontra a unidade/loja mais próxima do cliente com base na localização informada.",
+    parameters: {
+      type: "object",
+      properties: {
+        endereco: { type: "string", description: "Endereço ou cidade do cliente" },
+        latitude:  { type: "number", description: "Latitude do cliente" },
+        longitude: { type: "number", description: "Longitude do cliente" },
+      },
+      required: [],
+    },
+  },
+};
+
 // ---------- convert tools to OpenAI format ----------
 function toolsToOpenAI(tools: ToolDef[]) {
-  return tools.map((t) => ({
-    type: "function" as const,
-    function: {
-      name: t.function_def?.name || t.name,
-      description: t.function_def?.description || t.description || t.name,
-      parameters: (t.function_def?.parameters && t.function_def.parameters.type === "object")
-        ? t.function_def.parameters
-        : { type: "object", properties: {}, required: [] },
-    },
-  }));
+  return tools.map((t) => {
+    const builtin = BUILTIN_SCHEMAS[t.tool_type];
+    const hasValidParams = t.function_def?.parameters && t.function_def.parameters.type === "object"
+      && t.function_def.parameters.properties && Object.keys(t.function_def.parameters.properties).length > 0;
+
+    return {
+      type: "function" as const,
+      function: {
+        name: t.function_def?.name || t.name,
+        description: (hasValidParams ? t.function_def?.description : null) || builtin?.description || t.description || t.name,
+        parameters: hasValidParams
+          ? t.function_def.parameters
+          : (builtin?.parameters || { type: "object", properties: {}, required: [] }),
+      },
+    };
+  });
 }
 
 // ---------- main ----------
