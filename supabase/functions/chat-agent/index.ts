@@ -51,6 +51,26 @@ function dedupeRepeatedParagraphs(content: string): string {
   return deduped.join("\n\n").trim();
 }
 
+function isValidPhotoUrl(url: string): boolean {
+  if (!url || typeof url !== "string") return false;
+  const trimmed = url.trim().replace(/[)}\]]+$/, ""); // Remove trailing brackets/parens
+  try {
+    const u = new URL(trimmed);
+    if (!["http:", "https:"].includes(u.protocol)) return false;
+    // Must have a path beyond just "/"
+    if (u.pathname.length <= 1) return false;
+    // Must look like an image path
+    if (!/\.(jpg|jpeg|png|gif|webp|avif|svg|bmp)/i.test(u.pathname)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function cleanPhotoUrl(url: string): string {
+  return url.trim().replace(/[)}\]]+$/, "");
+}
+
 function normalizeVehiclePhotos(vehicle: any): string[] {
   let parsedPhotos: string[] = [];
 
@@ -67,7 +87,8 @@ function normalizeVehiclePhotos(vehicle: any): string[] {
     }
   }
 
-  return Array.from(new Set([...(vehicle?.photo_url ? [vehicle.photo_url] : []), ...parsedPhotos]));
+  const all = Array.from(new Set([...(vehicle?.photo_url ? [vehicle.photo_url] : []), ...parsedPhotos]));
+  return all.map(cleanPhotoUrl).filter(isValidPhotoUrl);
 }
 
 function appendMissingVehiclePhotos(content: string, vehicles: any[], userContext: string): string {
@@ -574,7 +595,7 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
 
             const allPhotos = Array.from(
               new Set([...(v.photo_url ? [v.photo_url] : []), ...parsedPhotos])
-            );
+            ).map(cleanPhotoUrl).filter(isValidPhotoUrl);
 
             return {
               id: v.id,
