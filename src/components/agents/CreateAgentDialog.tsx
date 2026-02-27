@@ -44,9 +44,9 @@ export function CreateAgentDialog({ open, onOpenChange, defaultTenantId }: Props
   const [temp, setTemp] = useState(0.7);
   const [topP, setTopP] = useState(0.8);
   const [topK, setTopK] = useState(40);
-  const [readDelay, setReadDelay] = useState(1500);
-  const [typingDelay, setTypingDelay] = useState(800);
-  const [blockGap, setBlockGap] = useState(1200);
+  const [readDelay, setReadDelay] = useState(1.5);
+  const [typingDelay, setTypingDelay] = useState(0.8);
+  const [blockGap, setBlockGap] = useState(1.2);
 
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -63,16 +63,16 @@ export function CreateAgentDialog({ open, onOpenChange, defaultTenantId }: Props
         model: data.model || null,
         system_prompt: data.system_prompt || null,
         temperature: data.temperature,
-        config: { top_p: data.top_p, top_k: data.top_k, read_delay_ms: readDelay, typing_delay_ms: typingDelay, block_gap_ms: blockGap },
+        config: { top_p: data.top_p, top_k: data.top_k, read_delay_ms: Math.round(readDelay * 1000), typing_delay_ms: Math.round(typingDelay * 1000), block_gap_ms: Math.round(blockGap * 1000) },
       });
       toast.success(`Agente "${data.name}" criado`);
       reset();
       setTemp(0.7);
       setTopP(0.8);
       setTopK(40);
-      setReadDelay(1500);
-      setTypingDelay(800);
-      setBlockGap(1200);
+      setReadDelay(1.5);
+      setTypingDelay(0.8);
+      setBlockGap(1.2);
       onOpenChange(false);
     } catch (err: any) {
       toast.error("Erro: " + (err.message ?? "desconhecido"));
@@ -207,20 +207,20 @@ export function CreateAgentDialog({ open, onOpenChange, defaultTenantId }: Props
           </div>
 
           <div className="space-y-3 rounded-lg border border-border/50 p-3">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">⏱ Delays de Humanização (ms)</p>
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">⏱ Delays de Humanização (s)</p>
 
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1">
                 <Label className="text-[10px] text-muted-foreground">Leitura</Label>
-                <Input type="number" min={0} step={100} value={readDelay} onChange={(e) => setReadDelay(Number(e.target.value))} className="h-8 bg-background font-mono text-xs" />
+                <Input type="number" min={0} step={0.5} value={readDelay} onChange={(e) => setReadDelay(Number(e.target.value))} className="h-8 bg-background font-mono text-xs" />
               </div>
               <div className="space-y-1">
                 <Label className="text-[10px] text-muted-foreground">Digitando</Label>
-                <Input type="number" min={0} step={100} value={typingDelay} onChange={(e) => setTypingDelay(Number(e.target.value))} className="h-8 bg-background font-mono text-xs" />
+                <Input type="number" min={0} step={0.5} value={typingDelay} onChange={(e) => setTypingDelay(Number(e.target.value))} className="h-8 bg-background font-mono text-xs" />
               </div>
               <div className="space-y-1">
                 <Label className="text-[10px] text-muted-foreground">Entre blocos</Label>
-                <Input type="number" min={0} step={100} value={blockGap} onChange={(e) => setBlockGap(Number(e.target.value))} className="h-8 bg-background font-mono text-xs" />
+                <Input type="number" min={0} step={0.5} value={blockGap} onChange={(e) => setBlockGap(Number(e.target.value))} className="h-8 bg-background font-mono text-xs" />
               </div>
             </div>
 
