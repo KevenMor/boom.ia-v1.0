@@ -91,13 +91,13 @@ function normalizeVehiclePhotos(vehicle: any): string[] {
   return all.map(cleanPhotoUrl).filter(isValidPhotoUrl);
 }
 
-function appendMissingVehiclePhotos(content: string, vehicles: any[], userContext: string): string {
+function appendMissingVehiclePhotos(content: string, vehicles: any[], userContext: string, forceSpecificRequest = false): string {
   if (!vehicles.length) return content;
 
   // Determine if user is asking about a SPECIFIC vehicle
   const isSpecificRequest = /\bfotos?\b|\bimagens?\b|\bmostrar?\b|\benviar?\b|\bver\b/.test(userContext);
 
-  if (!isSpecificRequest) return content; // General listing — let LLM handle with 1 photo per car
+  if (!forceSpecificRequest && !isSpecificRequest) return content; // General listing — let LLM handle with 1 photo per car
 
   // Rank vehicles by token overlap with user context and pick best match
   const normalizedContext = userContext
@@ -1014,7 +1014,7 @@ PROIBIÇÕES:
           finalContent = dedupeRepeatedParagraphs(finalContent);
 
           if (userRequestedMediaOrDetails && lastInventoryVehicles.length > 0) {
-            finalContent = appendMissingVehiclePhotos(finalContent, lastInventoryVehicles, userConversationText);
+            finalContent = appendMissingVehiclePhotos(finalContent, lastInventoryVehicles, userConversationText, contextualAffirmative);
           }
 
           if (userRequestedMediaOrDetails && !hasMarkdownImages(finalContent) && inventoryTool) {
@@ -1037,7 +1037,7 @@ PROIBIÇÕES:
               const parsedRecovery = JSON.parse(recoveryResult);
               if (Array.isArray(parsedRecovery?.vehicles)) {
                 lastInventoryVehicles = parsedRecovery.vehicles;
-                finalContent = appendMissingVehiclePhotos(finalContent, lastInventoryVehicles, userConversationText);
+                finalContent = appendMissingVehiclePhotos(finalContent, lastInventoryVehicles, userConversationText, contextualAffirmative);
               }
 
               debugTrace.push({
