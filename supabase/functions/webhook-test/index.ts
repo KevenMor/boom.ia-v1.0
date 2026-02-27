@@ -6,6 +6,83 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+// ---------- Image helpers ----------
+function extractImagesFromMarkdown(text: string): { textOnly: string; imageUrls: string[] } {
+  const imageRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/g;
+  const imageUrls: string[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = imageRegex.exec(text)) !== null) {
+    if (match[1]) imageUrls.push(match[1].trim());
+  }
+  const textOnly = text.replace(imageRegex, "").replace(/\n{3,}/g, "\n\n").trim();
+  return { textOnly, imageUrls };
+}
+
+async function sendChatwootTextMessage(
+  url: string,
+  apiToken: string,
+  content: string
+): Promise<boolean> {
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", api_access_token: apiToken },
+      body: JSON.stringify({ content, message_type: "outgoing", private: false }),
+    });
+    if (!resp.ok) {
+      console.error(`[Chatwoot] Text msg error ${resp.status}:`, await resp.text());
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error(`[Chatwoot] Text msg fetch error:`, e);
+    return false;
+  }
+}
+
+async function sendChatwootImageMessage(
+  url: string,
+  apiToken: string,
+  imageUrl: string,
+  caption?: string
+): Promise<boolean> {
+  try {
+    // Download the image first
+    const imgResp = await fetch(imageUrl);
+    if (!imgResp.ok) {
+      console.error(`[Chatwoot] Image download failed ${imgResp.status}: ${imageUrl}`);
+      return false;
+    }
+
+    const imgBlob = await imgResp.blob();
+    // Extract filename from URL
+    const urlPath = new URL(imageUrl).pathname;
+    const filename = urlPath.split("/").pop() || "image.jpg";
+
+    // Build multipart form-data
+    const formData = new FormData();
+    formData.append("content", caption || "");
+    formData.append("message_type", "outgoing");
+    formData.append("private", "false");
+    formData.append("attachments[]", imgBlob, filename);
+
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { api_access_token: apiToken },
+      body: formData,
+    });
+
+    if (!resp.ok) {
+      console.error(`[Chatwoot] Image msg error ${resp.status}:`, await resp.text());
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error(`[Chatwoot] Image msg error:`, e);
+    return false;
+  }
+}
+
 // ---------- Chatwoot reply ----------
 async function replyToChatwoot(
   chatwootUrl: string,
@@ -24,20 +101,25 @@ async function replyToChatwoot(
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i];
     if (!part || !part.trim()) continue;
-    try {
-      const resp = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", api_access_token: apiToken },
-        body: JSON.stringify({ content: part.trim(), message_type: "outgoing", private: false }),
-      });
-      const respText = await resp.text();
-      if (!resp.ok) {
-        console.error(`[Chatwoot] Reply error ${resp.status}:`, respText);
-      } else {
-        console.log(`[Chatwoot] Part ${i + 1}/${parts.length} sent OK`);
-      }
-    } catch (e) {
-      console.error(`[Chatwoot] Reply fetch error part ${i + 1}:`, e);
+
+    const { textOnly, imageUrls } = extractImagesFromMarkdown(part);
+
+    // Send text portion (if any)
+    if (textOnly.trim()) {
+      const ok = await sendChatwootTextMessage(url, apiToken, textOnly.trim());
+      console.log(`[Chatwoot] Part ${i + 1} text: ${ok ? "OK" : "FAIL"}`);
+    }
+
+    // Send each image as attachment
+    for (let j = 0; j < imageUrls.length; j++) {
+      const caption = j === 0 && !textOnly.trim() ? "" : "";
+      const ok = await sendChatwootImageMessage(url, apiToken, imageUrls[j], caption);
+      console.log(`[Chatwoot] Part ${i + 1} image ${j + 1}/${imageUrls.length}: ${ok ? "OK" : "FAIL"}`);
+    }
+
+    // If no text and no images, send as-is
+    if (!textOnly.trim() && imageUrls.length === 0) {
+      await sendChatwootTextMessage(url, apiToken, part.trim());
     }
   }
 }
