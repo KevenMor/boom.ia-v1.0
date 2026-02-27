@@ -14,20 +14,38 @@ async function replyToChatwoot(
   content: string,
   messageParts: string[]
 ) {
-  const url = `${chatwootUrl.replace(/\/+$/, "")}/api/v1/accounts/${accountId}/conversations/${conversationId}/messages`;
+  const baseUrl = chatwootUrl.replace(/\/+$/, "");
+  const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}/messages`;
   const parts = messageParts.length > 0 ? messageParts : [content];
-  for (const part of parts) {
+
+  console.log(`[Chatwoot] Sending ${parts.length} message(s) to conv ${conversationId}`);
+  console.log(`[Chatwoot] URL: ${url}`);
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (!part || !part.trim()) continue;
+
     try {
+      const payload = { content: part.trim(), message_type: "outgoing", private: false };
+      console.log(`[Chatwoot] Part ${i + 1}/${parts.length}: ${part.trim().substring(0, 80)}...`);
+
       const resp = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json", api_access_token: apiToken },
-        body: JSON.stringify({ content: part, message_type: "outgoing", private: false }),
+        headers: {
+          "Content-Type": "application/json",
+          api_access_token: apiToken,
+        },
+        body: JSON.stringify(payload),
       });
+
+      const respText = await resp.text();
       if (!resp.ok) {
-        console.error("Chatwoot reply error:", resp.status, await resp.text());
+        console.error(`[Chatwoot] Reply error ${resp.status}:`, respText);
+      } else {
+        console.log(`[Chatwoot] Part ${i + 1} sent OK (${resp.status})`);
       }
     } catch (e) {
-      console.error("Chatwoot reply fetch error:", e);
+      console.error(`[Chatwoot] Reply fetch error for part ${i + 1}:`, e);
     }
   }
 }
@@ -80,8 +98,9 @@ Deno.serve(async (req: Request) => {
 
     const supabase = createClient(nexusUrl, nexusKey);
 
-    // Use service_role-like behavior: bypass RLS by querying with anon key
-    // If RLS blocks this, the agent won't be found
+    console.log(`[Webhook] Looking up agent: ${agentId}`);
+    console.log(`[Webhook] Using key type: ${nexusKey.substring(0, 20)}...`);
+
     const { data: agent, error: agentErr } = await supabase
       .from("agents")
       .select("id, name, status, tenant_id, config")
@@ -89,11 +108,13 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (agentErr || !agent) {
+      console.error("[Webhook] Agent lookup failed:", { agentId, agentErr });
       return new Response(JSON.stringify({ error: "Invalid agent_id" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    console.log(`[Webhook] Agent found: ${agent.name} (status: ${agent.status})`);
 
     if (agent.status !== "active") {
       return new Response(JSON.stringify({ error: "Agent is not active" }), {
@@ -243,14 +264,15 @@ Deno.serve(async (req: Request) => {
 
     if (currentPart.trim()) responseParts.push(currentPart.trim());
 
+    console.log(`[Webhook] Full response length: ${fullContent.length}, parts: ${responseParts.length}`);
+    console.log(`[Webhook] isChatwoot: ${chatwoot.isChatwoot}, convId: ${chatwootConversationId}`);
+
     const cfg = (agent.config || {}) as Record<string, string>;
-    if (
-      chatwoot.isChatwoot &&
-      chatwootConversationId &&
-      cfg.chatwoot_url &&
-      cfg.chatwoot_api_token &&
-      cfg.chatwoot_account_id
-    ) {
+    const hasChatwootConfig = !!(cfg.chatwoot_url && cfg.chatwoot_api_token && cfg.chatwoot_account_id);
+    console.log(`[Webhook] Chatwoot config present: ${hasChatwootConfig}`);
+
+    if (chatwoot.isChatwoot && chatwootConversationId && hasChatwootConfig) {
+      console.log(`[Webhook] → Sending reply to Chatwoot...`);
       await replyToChatwoot(
         cfg.chatwoot_url,
         cfg.chatwoot_api_token,
@@ -259,6 +281,11 @@ Deno.serve(async (req: Request) => {
         fullContent.trim(),
         responseParts
       );
+      console.log(`[Webhook] → Chatwoot reply complete`);
+    } else if (!chatwoot.isChatwoot) {
+      console.log(`[Webhook] Not a Chatwoot payload, skipping reply`);
+    } else {
+      console.log(`[Webhook] Missing Chatwoot config or conversationId, skipping reply`);
     }
 
     return new Response(
