@@ -115,6 +115,44 @@ function appendMissingVehiclePhotos(content: string, vehicles: any[], userContex
 // Separator used in SSE stream so frontend/webhook can render as separate bubbles
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 
+function isVehicleMediaOrDetailRequest(text: string): boolean {
+  const normalized = text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  return /\bfotos?\b|\bimagens?\b|\bdetalhes?\b|\bmais informacoes?\b|\bver\b|\bmostrar\b|\benviar\b/.test(normalized);
+}
+
+function buildFallbackInventoryArgs(userText: string): Record<string, any> {
+  const normalized = userText
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, " ")
+    .replace(/[^a-z0-9\s]/g, " ");
+
+  const yearMatch = normalized.match(/\b(19|20)\d{2}\b/);
+
+  const stopWords = new Set([
+    "quero", "teria", "tem", "de", "do", "da", "dos", "das", "um", "uma", "uns", "umas",
+    "pra", "para", "com", "sem", "mais", "sobre", "esse", "essa", "isso", "fotos", "foto",
+    "imagem", "imagens", "detalhe", "detalhes", "informacao", "informacoes", "manda", "envia",
+    "enviar", "ver", "me", "dele", "dela", "por", "favor", "boa", "opcao", "e", "o", "a",
+  ]);
+
+  const tokens = normalized
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 3 && !stopWords.has(t) && !/^\d+$/.test(t));
+
+  const args: Record<string, any> = {};
+  if (yearMatch) args.year = Number(yearMatch[0]);
+  if (tokens.length > 0) args.search = tokens.slice(0, 4).join(" ");
+  else args.search = normalized.trim().slice(0, 80);
+
+  return args;
+}
+
 function splitIntoMessages(content: string): string[] {
   // Separate photo blocks from text
   const photoRegex = /!\[.*?\]\(https?:\/\/[^\s)]+\)/g;
@@ -697,7 +735,9 @@ PROIBIÇÕES:
         .map((m: any) => String(m.content || ""))
         .join(" ")
         .toLowerCase();
-      const userAskedForPhotos = /\bfotos?\b|\bimagens?\b/.test(userConversationText);
+      const latestUserText = String(lastUserMsg?.content || "");
+      const userRequestedMediaOrDetails = isVehicleMediaOrDetailRequest(userConversationText);
+      let forcedInventoryLookupAttempted = false;
       let lastInventoryVehicles: any[] = [];
       // Debug trace for sandbox
       const debugTrace: any[] = [];
@@ -742,13 +782,82 @@ PROIBIÇÕES:
           timestamp: Date.now(),
         });
 
-        // If no tool calls, we have the final response
+        // If no tool calls, we either force inventory lookup (photo/details request) or finalize response
         if (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0) {
+          const inventoryTool = agentTools.find((t) => t.tool_type === "inventory_query");
+
+          if (userRequestedMediaOrDetails && inventoryTool && !forcedInventoryLookupAttempted) {
+            forcedInventoryLookupAttempted = true;
+            const fallbackArgs = buildFallbackInventoryArgs(latestUserText || userConversationText);
+
+            debugTrace.push({
+              type: "tool_call",
+              tool: inventoryTool.function_def?.name || inventoryTool.name,
+              tool_type: inventoryTool.tool_type,
+              args: fallbackArgs,
+              forced: true,
+              reason: "media_or_details_requested_without_tool_call",
+              timestamp: Date.now(),
+            });
+
+            const forcedToolResult = await executeTool(inventoryTool, fallbackArgs, supabase, agent_id);
+
+            let resultPreview: any = {};
+            try {
+              const parsed = JSON.parse(forcedToolResult);
+              resultPreview = {
+                forced: true,
+                total: parsed.total,
+                vehicle_count: parsed.vehicles?.length,
+                hint: parsed._hint,
+                error: parsed.error,
+                message: parsed.message,
+              };
+              if (Array.isArray(parsed?.vehicles)) {
+                lastInventoryVehicles = parsed.vehicles;
+              }
+            } catch {
+              resultPreview = { forced: true, raw_length: forcedToolResult.length };
+            }
+
+            debugTrace.push({
+              type: "tool_result",
+              tool: inventoryTool.function_def?.name || inventoryTool.name,
+              preview: resultPreview,
+              forced: true,
+              timestamp: Date.now(),
+            });
+
+            const syntheticToolCallId = `forced_inventory_${Date.now()}`;
+            const inventoryFunctionName = inventoryTool.function_def?.name || inventoryTool.name;
+
+            currentMessages.push({
+              role: "assistant",
+              content: assistantMsg.content || "",
+              tool_calls: [{
+                id: syntheticToolCallId,
+                type: "function",
+                function: {
+                  name: inventoryFunctionName,
+                  arguments: JSON.stringify(fallbackArgs),
+                },
+              }],
+            });
+
+            currentMessages.push({
+              role: "tool",
+              tool_call_id: syntheticToolCallId,
+              content: forcedToolResult,
+            });
+
+            continue;
+          }
+
           const rawContent = assistantMsg.content || "";
           let finalContent = sanitizeLLMOutput(rawContent);
           finalContent = dedupeRepeatedParagraphs(finalContent);
 
-          if (userAskedForPhotos && lastInventoryVehicles.length > 0) {
+          if (userRequestedMediaOrDetails && lastInventoryVehicles.length > 0) {
             finalContent = appendMissingVehiclePhotos(finalContent, lastInventoryVehicles, userConversationText);
           }
           // Save to memory
