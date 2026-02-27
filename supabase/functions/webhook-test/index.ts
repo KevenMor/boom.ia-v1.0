@@ -47,16 +47,26 @@ async function sendChatwootImageMessage(
   caption?: string
 ): Promise<boolean> {
   try {
-    // Download the image first
-    const imgResp = await fetch(imageUrl);
+    // Download the image with browser-like headers to bypass hotlink protection
+    const parsedUrl = new URL(imageUrl);
+    const imgResp = await fetch(imageUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Referer": `${parsedUrl.protocol}//${parsedUrl.host}/`,
+        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+      },
+    });
     if (!imgResp.ok) {
       console.error(`[Chatwoot] Image download failed ${imgResp.status}: ${imageUrl}`);
-      return false;
+      // Fallback: send the URL as a clickable text link
+      const fallbackOk = await sendChatwootTextMessage(url, apiToken, `📷 ${imageUrl}`);
+      console.log(`[Chatwoot] Image fallback link: ${fallbackOk ? "OK" : "FAIL"}`);
+      return fallbackOk;
     }
 
     const imgBlob = await imgResp.blob();
     // Extract filename from URL
-    const urlPath = new URL(imageUrl).pathname;
+    const urlPath = parsedUrl.pathname;
     const filename = urlPath.split("/").pop() || "image.jpg";
 
     // Build multipart form-data
@@ -79,6 +89,10 @@ async function sendChatwootImageMessage(
     return true;
   } catch (e) {
     console.error(`[Chatwoot] Image msg error:`, e);
+    // Fallback: send URL as text
+    try {
+      await sendChatwootTextMessage(url, apiToken, `📷 ${imageUrl}`);
+    } catch (_) { /* ignore */ }
     return false;
   }
 }
@@ -129,6 +143,7 @@ function parseChatwootPayload(body: Record<string, unknown>) {
   if (body.event === "message_created" && body.message_type === "incoming") {
     const sender = (body.sender || {}) as Record<string, unknown>;
     const conversation = (body.conversation || {}) as Record<string, unknown>;
+    const contactMeta = (conversation.contact || sender || {}) as Record<string, unknown>;
     return {
       isChatwoot: true,
       message: (body.content as string) || "",
@@ -137,10 +152,11 @@ function parseChatwootPayload(body: Record<string, unknown>) {
       contactName: (sender.name as string) || null,
       contactAvatarUrl: (sender.thumbnail as string) || (sender.avatar_url as string) || null,
       chatwootConversationId: (conversation.id as number) ?? null,
+      chatwootContactId: Number(contactMeta.id ?? sender.id ?? 0) || null,
       channel: (conversation.channel as string) || "chatwoot",
     };
   }
-  return { isChatwoot: false, message: "", externalUserId: "", contactName: null as string | null, contactAvatarUrl: null as string | null, chatwootConversationId: null, channel: "" };
+  return { isChatwoot: false, message: "", externalUserId: "", contactName: null as string | null, contactAvatarUrl: null as string | null, chatwootConversationId: null, chatwootContactId: null as number | null, channel: "" };
 }
 
 // ---------- Debounce: buffer message and check if we're the last ----------
@@ -348,6 +364,7 @@ Deno.serve(async (req: Request) => {
     let externalUserId: string;
     let channel: string;
     let chatwootConversationId: number | null = null;
+    let chatwootContactId: number | null = null;
     let contactName: string | null = null;
     let contactAvatarUrl: string | null = null;
 
@@ -356,6 +373,7 @@ Deno.serve(async (req: Request) => {
       externalUserId = chatwoot.externalUserId;
       channel = chatwoot.channel;
       chatwootConversationId = chatwoot.chatwootConversationId;
+      chatwootContactId = chatwoot.chatwootContactId;
       contactName = chatwoot.contactName;
       contactAvatarUrl = chatwoot.contactAvatarUrl;
     } else {
@@ -421,6 +439,10 @@ Deno.serve(async (req: Request) => {
           p_agent_id: agent.id,
           p_channel: channel,
           p_external_user_id: externalUserId,
+          p_chatwoot_conversation_id: chatwootConversationId,
+          p_chatwoot_contact_id: chatwootContactId,
+          p_contact_name: contactName,
+          p_contact_avatar_url: contactAvatarUrl,
         });
         convId = existingConv;
       } catch (e) {
