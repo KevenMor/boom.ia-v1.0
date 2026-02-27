@@ -59,7 +59,7 @@ async function sendChatwootImageMessage(
     if (!imgResp.ok) {
       console.error(`[Chatwoot] Image download failed ${imgResp.status}: ${imageUrl}`);
       // Fallback: send the URL as a clickable text link
-      const fallbackOk = await sendChatwootTextMessage(url, apiToken, `📷 ${imageUrl}`);
+      const fallbackOk = await sendChatwootTextMessage(url, apiToken, imageUrl);
       console.log(`[Chatwoot] Image fallback link: ${fallbackOk ? "OK" : "FAIL"}`);
       return fallbackOk;
     }
@@ -91,8 +91,8 @@ async function sendChatwootImageMessage(
     console.error(`[Chatwoot] Image msg error:`, e);
     // Fallback: send URL as text
     try {
-      await sendChatwootTextMessage(url, apiToken, `📷 ${imageUrl}`);
-    } catch (_) { /* ignore */ }
+      await sendChatwootTextMessage(url, apiToken, imageUrl);
+    } catch (e2) { /* ignore fallback error */ }
     return false;
   }
 }
