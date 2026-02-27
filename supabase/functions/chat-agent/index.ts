@@ -151,7 +151,8 @@ function isVehicleMediaOrDetailRequest(text: string): boolean {
 }
 
 // Detect if the assistant's last message offered to send photos/details
-// and the user responded with an affirmative confirmation
+// and the user responded with anything that is NOT a clear negative.
+// Logic: if the assistant offered media and the user's short reply isn't negative → it's a YES.
 function isAffirmativeToPhotoOffer(latestUserText: string, conversationMessages: any[]): boolean {
   // Find the last assistant message before the current user message
   const assistantMessages = conversationMessages.filter((m: any) => m.role === "assistant");
@@ -164,23 +165,27 @@ function isAffirmativeToPhotoOffer(latestUserText: string, conversationMessages:
     .replace(/[\u0300-\u036f]/g, "");
 
   // Check if the assistant offered to send photos/details/images
-  const offeredMedia = /\b(fotos?|imagens?|enviar|mostrar|detalhes|interior|conserva[cç][aã]o|olhad[ai])\b/.test(normalizedAssistant)
+  const offeredMedia = /\b(fotos?|imagens?|enviar|mostrar|detalhes|interior|conserva[cç]|olhad)\b/.test(normalizedAssistant)
     && /\?/.test(normalizedAssistant);
 
   if (!offeredMedia) return false;
 
-  // Check if the user's response is an affirmative/confirmation
+  // Check if the user's response is SHORT (conversational reply, not a new question/topic)
   const normalizedUser = latestUserText
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .trim();
 
-  // Short affirmative responses (under 80 chars to avoid false positives on long messages)
-  if (normalizedUser.length > 80) return false;
+  // Long messages are likely a new topic, not a confirmation
+  if (normalizedUser.length > 120) return false;
 
-  return /\b(sim|por favor|por gentileza|gentileza|pode|manda|quero|claro|com certeza|ok|beleza|bora|vamos|show|isso|positivo|envie|mande|gostaria|adoraria|seria otimo|seria bom|vai la|pode sim|pode ser|yes|please|s[ii]m)\b/.test(normalizedUser)
-    || /^(s|ss|sss|siiim?|pfv|pf|pfvr|porgentileza|porfavor|👍|✅|🙏|pode!|sim!|claro!|bora!|manda!|quero!)$/i.test(normalizedUser.replace(/\s/g, ""));
+  // Explicit negatives — only reject if clearly negative
+  const isNegative = /\b(nao|não|nope|no|nunca|nem|deixa|dispensa|agora nao|nao precisa|sem necessidade|talvez depois|depois)\b/.test(normalizedUser);
+  if (isNegative) return false;
+
+  // If it's a short reply and NOT negative, in context of a photo offer, treat as positive
+  return true;
 }
 
 function buildFallbackInventoryArgs(userText: string, conversationMessages?: any[]): Record<string, any> {
