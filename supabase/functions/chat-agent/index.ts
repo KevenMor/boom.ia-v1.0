@@ -935,18 +935,11 @@ PROIBIÇÕES:
 
       let currentMessages = [...fullMessages];
       let maxIterations = 5; // Prevent infinite loops
-      const userConversationText = messages
-        .filter((m: any) => m.role === "user")
-        .map((m: any) => String(m.content || ""))
-        .join(" ")
-        .toLowerCase();
       const latestUserText = String(lastUserMsg?.content || "");
-      const userRequestedMediaOrDetails = isVehicleMediaOrDetailRequest(latestUserText);
-      let lastInventoryVehicles: any[] = [];
       // Debug trace for sandbox
       const debugTrace: any[] = [];
 
-      debugTrace.push({ type: "config", model, temperature, top_p, top_k, tools_count: openaiTools?.length || 0, latest_user_text: latestUserText.slice(0, 120), media_request_from_latest_user: userRequestedMediaOrDetails });
+      debugTrace.push({ type: "config", model, temperature, top_p, top_k, tools_count: openaiTools?.length || 0, latest_user_text: latestUserText.slice(0, 120) });
 
       while (maxIterations-- > 0) {
         const toolCallResp = await fetch(baseUrl, {
@@ -986,66 +979,16 @@ PROIBIÇÕES:
           timestamp: Date.now(),
         });
 
-        // If no tool calls, finalize response and run media recovery if needed
+        // If no tool calls, finalize response
         if (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0) {
-          const inventoryTool = agentTools.find((t) => t.tool_type === "inventory_query");
 
           const rawContent = assistantMsg.content || "";
           let finalContent = sanitizeLLMOutput(rawContent);
           finalContent = dedupeRepeatedParagraphs(finalContent);
 
-          if (userRequestedMediaOrDetails && lastInventoryVehicles.length > 0) {
-            finalContent = appendMissingVehiclePhotos(finalContent, lastInventoryVehicles, latestUserText);
-          }
-
+          // Importante: não forçamos envio/recuperação de fotos por heurística de backend.
+          // O acionamento da ferramenta deve acontecer via tool calling da LLM.
           finalContent = removeRedundantPhotoOfferWhenPhotosPresent(finalContent);
-
-          if (userRequestedMediaOrDetails && !hasMarkdownImages(finalContent) && inventoryTool) {
-            const recoveryArgs = buildFallbackInventoryArgs(latestUserText || userConversationText, messages);
-            console.log(`Forced media recovery via inventory_query: ${JSON.stringify(recoveryArgs)}`);
-
-            debugTrace.push({
-              type: "tool_call",
-              tool: inventoryTool.function_def?.name || inventoryTool.name,
-              tool_type: inventoryTool.tool_type,
-              args: recoveryArgs,
-              forced: true,
-              reason: "final_response_without_images",
-              timestamp: Date.now(),
-            });
-
-            const recoveryResult = await executeTool(inventoryTool, recoveryArgs, supabase, agent_id);
-
-            try {
-              const parsedRecovery = JSON.parse(recoveryResult);
-              if (Array.isArray(parsedRecovery?.vehicles)) {
-                lastInventoryVehicles = parsedRecovery.vehicles;
-                finalContent = appendMissingVehiclePhotos(finalContent, lastInventoryVehicles, latestUserText);
-                finalContent = removeRedundantPhotoOfferWhenPhotosPresent(finalContent);
-              }
-
-              debugTrace.push({
-                type: "tool_result",
-                tool: inventoryTool.function_def?.name || inventoryTool.name,
-                preview: {
-                  forced: true,
-                  recovery: true,
-                  total: parsedRecovery?.total,
-                  vehicle_count: parsedRecovery?.vehicles?.length,
-                  message: parsedRecovery?.message,
-                  error: parsedRecovery?.error,
-                },
-                timestamp: Date.now(),
-              });
-            } catch {
-              debugTrace.push({
-                type: "tool_result",
-                tool: inventoryTool.function_def?.name || inventoryTool.name,
-                preview: { forced: true, recovery: true, raw_length: recoveryResult.length },
-                timestamp: Date.now(),
-              });
-            }
-          }
           // Save to memory
           if (convId && finalContent) {
             const latency = Date.now() - startTime;
@@ -1163,16 +1106,6 @@ PROIBIÇÕES:
             }
             debugTrace.push({ type: "tool_result", tool: toolName, preview: resultPreview, timestamp: Date.now() });
 
-            if (matchedTool.tool_type === "inventory_query") {
-              try {
-                const parsedToolResult = JSON.parse(toolResult);
-                if (Array.isArray(parsedToolResult?.vehicles)) {
-                  lastInventoryVehicles = parsedToolResult.vehicles;
-                }
-              } catch {
-                // ignore parse errors
-              }
-            }
           } else {
             toolResult = JSON.stringify({ error: `Tool '${toolName}' not found` });
             debugTrace.push({ type: "tool_error", tool: toolName, error: "Tool not found" });
