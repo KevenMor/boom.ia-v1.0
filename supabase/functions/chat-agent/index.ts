@@ -129,7 +129,16 @@ function isVehicleMediaOrDetailRequest(text: string): boolean {
   return /\bfotos?\b|\bimagens?\b|\bdetalhes?\b|\bmais informacoes?\b|\bver\b|\bmostrar\b|\benviar\b/.test(normalized);
 }
 
-function buildFallbackInventoryArgs(userText: string): Record<string, any> {
+function buildFallbackInventoryArgs(userText: string, conversationMessages?: any[]): Record<string, any> {
+  // Try to extract the vehicle model/brand from conversation context first
+  // The user might say "gostei do corola, fotos?" — we need to find "COROLLA" from assistant's previous messages
+  const extractedFromContext = extractVehicleFromContext(userText, conversationMessages || []);
+  if (extractedFromContext) {
+    console.log(`Recovery: extracted vehicle from context: ${JSON.stringify(extractedFromContext)}`);
+    return extractedFromContext;
+  }
+
+  // Fallback: parse user text directly
   const normalized = userText
     .toLowerCase()
     .normalize("NFD")
@@ -143,6 +152,7 @@ function buildFallbackInventoryArgs(userText: string): Record<string, any> {
     "pra", "para", "com", "sem", "mais", "sobre", "esse", "essa", "isso", "fotos", "foto",
     "imagem", "imagens", "detalhe", "detalhes", "informacao", "informacoes", "manda", "envia",
     "enviar", "ver", "me", "dele", "dela", "por", "favor", "boa", "opcao", "e", "o", "a",
+    "gostei", "queria", "interessei", "gosto", "legal", "show", "otimo", "bom",
   ]);
 
   const tokens = normalized
@@ -156,6 +166,121 @@ function buildFallbackInventoryArgs(userText: string): Record<string, any> {
   else args.search = normalized.trim().slice(0, 80);
 
   return args;
+}
+
+// Extract vehicle brand/model from conversation context by matching user's mention against assistant's previous vehicle listings
+function extractVehicleFromContext(userText: string, conversationMessages: any[]): Record<string, any> | null {
+  const normalizedUser = userText
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ");
+
+  // Common vehicle brands for matching
+  const knownBrands = [
+    "toyota", "honda", "hyundai", "chevrolet", "volkswagen", "fiat", "ford", "jeep",
+    "nissan", "renault", "mitsubishi", "kia", "peugeot", "citroen", "bmw", "mercedes",
+    "audi", "volvo", "subaru", "suzuki", "ram", "dodge", "caoa", "chery", "byd",
+    "gwm", "jac", "lifan", "land rover", "porsche", "mini", "lexus",
+  ];
+
+  // Collect all vehicle mentions from assistant messages (look for patterns like "BRAND MODEL" or "**BRAND MODEL**")
+  const vehicleMentions: { brand: string; model: string; full: string }[] = [];
+  const vehiclePattern = /\b([A-Z][A-Z]+)\s+([A-Z][A-Z0-9]+(?:\s+[A-Z0-9.]+)*)/g;
+  const boldPattern = /\*\*([^*]+)\*\*/g;
+
+  for (const msg of conversationMessages) {
+    if (msg.role !== "assistant") continue;
+    const content = String(msg.content || "");
+    
+    // Extract from bold text (common in vehicle listings)
+    let m: RegExpExecArray | null;
+    while ((m = boldPattern.exec(content)) !== null) {
+      const boldText = m[1].trim();
+      // Check if it looks like a vehicle (has a known brand)
+      const lowerBold = boldText.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      for (const brand of knownBrands) {
+        if (lowerBold.includes(brand)) {
+          const parts = boldText.split(/\s+/);
+          vehicleMentions.push({
+            brand: parts[0] || brand,
+            model: parts.slice(1, 3).join(" ") || boldText,
+            full: boldText,
+          });
+          break;
+        }
+      }
+    }
+
+    // Extract UPPERCASE vehicle names (e.g. "TOYOTA COROLLA XEI 2.0")
+    while ((m = vehiclePattern.exec(content)) !== null) {
+      const brand = m[1];
+      const model = m[2];
+      if (knownBrands.includes(brand.toLowerCase())) {
+        vehicleMentions.push({ brand, model, full: `${brand} ${model}` });
+      }
+    }
+  }
+
+  if (!vehicleMentions.length) return null;
+
+  // Now match user's text against these vehicles using fuzzy token matching
+  const userTokens = normalizedUser.split(/\s+/).filter((t) => t.length >= 3);
+
+  let bestMatch: { brand: string; model: string; full: string } | null = null;
+  let bestScore = 0;
+
+  for (const vehicle of vehicleMentions) {
+    const vehicleNorm = vehicle.full
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+    const vehicleTokens = vehicleNorm.split(/\s+/).filter((t) => t.length >= 2);
+
+    let score = 0;
+    for (const ut of userTokens) {
+      for (const vt of vehicleTokens) {
+        // Exact match
+        if (vt === ut) { score += 3; continue; }
+        // Fuzzy: user token is a prefix or substring of vehicle token (e.g. "corola" ~ "corolla")
+        if (vt.startsWith(ut) || ut.startsWith(vt)) { score += 2; continue; }
+        // Levenshtein-like: differ by at most 1-2 chars for similar length
+        if (Math.abs(vt.length - ut.length) <= 2 && fuzzyMatch(ut, vt)) { score += 2; continue; }
+      }
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = vehicle;
+    }
+  }
+
+  if (bestMatch && bestScore >= 2) {
+    // Use the model name (first word after brand) as search term
+    const modelFirstWord = bestMatch.model.split(/\s+/)[0] || bestMatch.model;
+    return { search: modelFirstWord };
+  }
+
+  return null;
+}
+
+// Simple fuzzy match: checks if two strings differ by at most 2 edits
+function fuzzyMatch(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 2) return false;
+  let diffs = 0;
+  const maxLen = Math.max(a.length, b.length);
+  let ai = 0, bi = 0;
+  while (ai < a.length && bi < b.length) {
+    if (a[ai] !== b[bi]) {
+      diffs++;
+      if (diffs > 2) return false;
+      if (a.length > b.length) ai++;
+      else if (b.length > a.length) bi++;
+      else { ai++; bi++; }
+    } else { ai++; bi++; }
+  }
+  return diffs + (a.length - ai) + (b.length - bi) <= 2;
 }
 
 function hasMarkdownImages(content: string): boolean {
@@ -803,7 +928,7 @@ PROIBIÇÕES:
           }
 
           if (userRequestedMediaOrDetails && !hasMarkdownImages(finalContent) && inventoryTool) {
-            const recoveryArgs = buildFallbackInventoryArgs(latestUserText || userConversationText);
+            const recoveryArgs = buildFallbackInventoryArgs(latestUserText || userConversationText, messages);
             console.log(`Forced media recovery via inventory_query: ${JSON.stringify(recoveryArgs)}`);
 
             debugTrace.push({
