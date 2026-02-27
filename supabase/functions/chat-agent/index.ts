@@ -287,6 +287,13 @@ function hasMarkdownImages(content: string): boolean {
   return /!\[.*?\]\(https?:\/\/[^\s)]+\)/i.test(content);
 }
 
+function isClosingQuestion(text: string): boolean {
+  const normalized = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  // Detect typical closing/follow-up questions from an SDR
+  return /(\?|algum|gostou|achou|interesse|agendar|visita|teste|duvida|posso ajudar|chamou atencao|quer saber|o que acha)/.test(normalized)
+    && text.length < 300; // Closing questions are short
+}
+
 function splitIntoMessages(content: string): string[] {
   // Separate photo blocks from text
   const photoRegex = /!\[.*?\]\(https?:\/\/[^\s)]+\)/g;
@@ -296,18 +303,37 @@ function splitIntoMessages(content: string): string[] {
     return "";
   }).replace(/\n{3,}/g, "\n\n").trim();
 
-  const parts: string[] = [];
+  const textParts: string[] = [];
 
   if (textOnly.trim()) {
     const paragraphs = textOnly.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
-    
     if (paragraphs.length > 1) {
       for (const para of paragraphs) {
-        parts.push(para);
+        textParts.push(para);
       }
     } else {
-      parts.push(textOnly.trim());
+      textParts.push(textOnly.trim());
     }
+  }
+
+  // Build final order: text paragraphs → photos → closing question
+  // Detect if the last text paragraph is a closing question and move it after photos
+  const parts: string[] = [];
+  let closingPart: string | null = null;
+
+  if (photos.length > 0 && textParts.length > 1) {
+    const lastText = textParts[textParts.length - 1];
+    if (isClosingQuestion(lastText)) {
+      closingPart = lastText;
+      // Add all text EXCEPT the closing question
+      for (let i = 0; i < textParts.length - 1; i++) {
+        parts.push(textParts[i]);
+      }
+    } else {
+      parts.push(...textParts);
+    }
+  } else {
+    parts.push(...textParts);
   }
 
   // Photos in batches of 3
@@ -315,9 +341,14 @@ function splitIntoMessages(content: string): string[] {
     parts.push(photos.slice(i, i + 3).join("\n"));
   }
 
+  // Closing question AFTER photos
+  if (closingPart) {
+    parts.push(closingPart);
+  }
+
   const allParts = parts.length ? parts : [content];
 
-  // Aggressive dedup: normalize whitespace for comparison, remove ALL duplicates (not just consecutive)
+  // Aggressive dedup
   const seen = new Set<string>();
   const deduped: string[] = [];
   for (const part of allParts) {
