@@ -179,8 +179,8 @@ function isAffirmativeToPhotoOffer(latestUserText: string, conversationMessages:
   // Short affirmative responses (under 80 chars to avoid false positives on long messages)
   if (normalizedUser.length > 80) return false;
 
-  return /\b(sim|por favor|pode|manda|quero|claro|com certeza|ok|beleza|bora|vamos|show|isso|positivo|envie|mande|gostaria|adoraria|seria otimo|seria bom|vai la|pode sim|pode ser|yes|please|s[ii]m)\b/.test(normalizedUser)
-    || /^(s|ss|sss|siiim?|pfv|pf|pfvr|👍|✅|🙏|pode!|sim!|claro!|bora!|manda!|quero!)$/i.test(normalizedUser.replace(/\s/g, ""));
+  return /\b(sim|por favor|por gentileza|gentileza|pode|manda|quero|claro|com certeza|ok|beleza|bora|vamos|show|isso|positivo|envie|mande|gostaria|adoraria|seria otimo|seria bom|vai la|pode sim|pode ser|yes|please|s[ii]m)\b/.test(normalizedUser)
+    || /^(s|ss|sss|siiim?|pfv|pf|pfvr|porgentileza|porfavor|👍|✅|🙏|pode!|sim!|claro!|bora!|manda!|quero!)$/i.test(normalizedUser.replace(/\s/g, ""));
 }
 
 function buildFallbackInventoryArgs(userText: string, conversationMessages?: any[]): Record<string, any> {
@@ -228,9 +228,10 @@ function extractVehicleFromContext(userText: string, conversationMessages: any[]
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9\s]/g, " ");
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
-  // Common vehicle brands for matching
   const knownBrands = [
     "toyota", "honda", "hyundai", "chevrolet", "volkswagen", "fiat", "ford", "jeep",
     "nissan", "renault", "mitsubishi", "kia", "peugeot", "citroen", "bmw", "mercedes",
@@ -238,79 +239,81 @@ function extractVehicleFromContext(userText: string, conversationMessages: any[]
     "gwm", "jac", "lifan", "land rover", "porsche", "mini", "lexus",
   ];
 
-  // Collect all vehicle mentions from assistant messages (look for patterns like "BRAND MODEL" or "**BRAND MODEL**")
-  const vehicleMentions: { brand: string; model: string; full: string }[] = [];
-  const vehiclePattern = /\b([A-Z][A-Z]+)\s+([A-Z][A-Z0-9]+(?:\s+[A-Z0-9.]+)*)/g;
-  const boldPattern = /\*\*([^*]+)\*\*/g;
+  const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const isAffirmativeOnly = /^(sim|claro|ok|pode|pode sim|pode ser|com certeza|por favor|por gentileza|gentileza|manda|mande|envie|quero|show|bora|vamos|yes|please|ss+|sii+m?)$/i.test(
+    normalizedUser
+  );
 
-  for (const msg of conversationMessages) {
+  const stopWords = new Set([
+    "sim", "claro", "ok", "pode", "por", "favor", "gentileza", "com", "certeza", "manda", "mande", "envie",
+    "quero", "show", "bora", "vamos", "yes", "please", "de", "do", "da", "dos", "das", "um", "uma",
+    "esse", "essa", "isso", "foto", "fotos", "imagem", "imagens", "detalhe", "detalhes", "ver", "enviar",
+  ]);
+
+  type VehicleMention = { brand: string; model: string; full: string; sourceIndex: number };
+  const vehicleMentions: VehicleMention[] = [];
+
+  for (let idx = 0; idx < conversationMessages.length; idx++) {
+    const msg = conversationMessages[idx];
     if (msg.role !== "assistant") continue;
-    const content = String(msg.content || "");
-    
-    // Extract from bold text (common in vehicle listings)
-    let m: RegExpExecArray | null;
-    while ((m = boldPattern.exec(content)) !== null) {
-      const boldText = m[1].trim();
-      // Check if it looks like a vehicle (has a known brand)
-      const lowerBold = boldText.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      for (const brand of knownBrands) {
-        if (lowerBold.includes(brand)) {
-          const parts = boldText.split(/\s+/);
-          vehicleMentions.push({
-            brand: parts[0] || brand,
-            model: parts.slice(1, 3).join(" ") || boldText,
-            full: boldText,
-          });
-          break;
-        }
-      }
-    }
 
-    // Extract UPPERCASE vehicle names (e.g. "TOYOTA COROLLA XEI 2.0")
-    while ((m = vehiclePattern.exec(content)) !== null) {
-      const brand = m[1];
-      const model = m[2];
-      if (knownBrands.includes(brand.toLowerCase())) {
-        vehicleMentions.push({ brand, model, full: `${brand} ${model}` });
+    const rawContent = String(msg.content || "");
+    const normalizedContent = rawContent
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9\s./-]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    for (const brand of knownBrands) {
+      const pattern = new RegExp(`\\b${escapeRegExp(brand)}\\b\\s+([a-z0-9][a-z0-9./-]*(?:\\s+[a-z0-9][a-z0-9./-]*){0,4})`, "gi");
+      let m: RegExpExecArray | null;
+      while ((m = pattern.exec(normalizedContent)) !== null) {
+        const model = (m[1] || "").trim();
+        if (!model) continue;
+        const full = `${brand} ${model}`.trim();
+        vehicleMentions.push({ brand, model, full, sourceIndex: idx });
       }
     }
   }
 
   if (!vehicleMentions.length) return null;
 
-  // Now match user's text against these vehicles using fuzzy token matching
-  const userTokens = normalizedUser.split(/\s+/).filter((t) => t.length >= 3);
+  // If user answered only with a polite affirmative, assume latest discussed vehicle
+  if (isAffirmativeOnly) {
+    const latestMention = vehicleMentions[vehicleMentions.length - 1];
+    const modelFirstWord = latestMention.model.split(/\s+/)[0] || latestMention.model;
+    return { search: modelFirstWord };
+  }
 
-  let bestMatch: { brand: string; model: string; full: string } | null = null;
+  const userTokens = normalizedUser
+    .split(/\s+/)
+    .filter((t) => t.length >= 3 && !stopWords.has(t) && !/^\d+$/.test(t));
+
+  let bestMatch: VehicleMention | null = null;
   let bestScore = 0;
 
   for (const vehicle of vehicleMentions) {
-    const vehicleNorm = vehicle.full
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
-    const vehicleTokens = vehicleNorm.split(/\s+/).filter((t) => t.length >= 2);
-
+    const vehicleTokens = vehicle.full.split(/\s+/).filter((t) => t.length >= 2);
     let score = 0;
+
     for (const ut of userTokens) {
       for (const vt of vehicleTokens) {
-        // Exact match
         if (vt === ut) { score += 3; continue; }
-        // Fuzzy: user token is a prefix or substring of vehicle token (e.g. "corola" ~ "corolla")
         if (vt.startsWith(ut) || ut.startsWith(vt)) { score += 2; continue; }
-        // Levenshtein-like: differ by at most 1-2 chars for similar length
         if (Math.abs(vt.length - ut.length) <= 2 && fuzzyMatch(ut, vt)) { score += 2; continue; }
       }
     }
 
-    if (score > bestScore) {
+    // Prefer more recent mentions on tie
+    if (score > bestScore || (score === bestScore && score > 0 && bestMatch && vehicle.sourceIndex > bestMatch.sourceIndex)) {
       bestScore = score;
       bestMatch = vehicle;
     }
   }
 
   if (bestMatch && bestScore >= 2) {
-    // Use the model name (first word after brand) as search term
     const modelFirstWord = bestMatch.model.split(/\s+/)[0] || bestMatch.model;
     return { search: modelFirstWord };
   }
@@ -955,13 +958,14 @@ PROIBIÇÕES:
         .join(" ")
         .toLowerCase();
       const latestUserText = String(lastUserMsg?.content || "");
+      const contextualAffirmative = isAffirmativeToPhotoOffer(latestUserText, messages);
       const userRequestedMediaOrDetails = isVehicleMediaOrDetailRequest(userConversationText)
-        || isAffirmativeToPhotoOffer(latestUserText, messages);
+        || contextualAffirmative;
       let lastInventoryVehicles: any[] = [];
       // Debug trace for sandbox
       const debugTrace: any[] = [];
 
-      debugTrace.push({ type: "config", model, temperature, top_p, top_k, tools_count: openaiTools?.length || 0 });
+      debugTrace.push({ type: "config", model, temperature, top_p, top_k, tools_count: openaiTools?.length || 0, contextual_affirmative: contextualAffirmative, latest_user_text: latestUserText.slice(0, 120) });
 
       while (maxIterations-- > 0) {
         const toolCallResp = await fetch(baseUrl, {
