@@ -203,33 +203,24 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
           </div>
 
           <div className="space-y-3 rounded-lg border border-border/50 p-3">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">⏱ Delays de Humanização</p>
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">⏱ Delays de Humanização (ms)</p>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs text-muted-foreground">Leitura (antes de responder)</Label>
-                <span className="font-mono text-xs text-primary">{(readDelay / 1000).toFixed(1)}s</span>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <Label className="text-[10px] text-muted-foreground">Leitura</Label>
+                <Input type="number" min={0} step={100} value={readDelay} onChange={(e) => setReadDelay(Number(e.target.value))} className="h-8 bg-background font-mono text-xs" />
               </div>
-              <Slider value={[readDelay]} onValueChange={([v]) => setReadDelay(v)} min={0} max={5000} step={100} />
+              <div className="space-y-1">
+                <Label className="text-[10px] text-muted-foreground">Digitando</Label>
+                <Input type="number" min={0} step={100} value={typingDelay} onChange={(e) => setTypingDelay(Number(e.target.value))} className="h-8 bg-background font-mono text-xs" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-muted-foreground">Entre blocos</Label>
+                <Input type="number" min={0} step={100} value={blockGap} onChange={(e) => setBlockGap(Number(e.target.value))} className="h-8 bg-background font-mono text-xs" />
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs text-muted-foreground">Digitando (antes de cada bloco)</Label>
-                <span className="font-mono text-xs text-primary">{(typingDelay / 1000).toFixed(1)}s</span>
-              </div>
-              <Slider value={[typingDelay]} onValueChange={([v]) => setTypingDelay(v)} min={0} max={3000} step={100} />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs text-muted-foreground">Intervalo entre blocos</Label>
-                <span className="font-mono text-xs text-primary">{(blockGap / 1000).toFixed(1)}s</span>
-              </div>
-              <Slider value={[blockGap]} onValueChange={([v]) => setBlockGap(v)} min={0} max={5000} step={100} />
-            </div>
-
-            <p className="text-[10px] text-muted-foreground">Variação automática de ±30% para simular comportamento humano</p>
+            <p className="text-[10px] text-muted-foreground">Variação automática de ±30% aplicada para simular comportamento humano</p>
           </div>
 
           <div className="space-y-2">
