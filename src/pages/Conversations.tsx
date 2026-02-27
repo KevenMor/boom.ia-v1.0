@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { MessageSquare, Bot, User, Clock, Hash, Radio, ArrowLeft } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -106,30 +107,42 @@ export default function Conversations() {
                         : "hover:bg-muted/50"
                     )}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium truncate max-w-[140px]">
-                        {conv.external_user_id || "Anônimo"}
-                      </span>
-                      <Badge
-                        variant={conv.status === "open" ? "default" : "secondary"}
-                        className="text-[9px] h-4"
-                      >
-                        {conv.status === "open" ? "Ativa" : "Fechada"}
-                      </Badge>
-                    </div>
-                    <div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground">
-                      <span className="flex items-center gap-0.5">
-                        <Hash className="h-2.5 w-2.5" />
-                        {conv.channel}
-                      </span>
-                      <span className="flex items-center gap-0.5">
-                        <MessageSquare className="h-2.5 w-2.5" />
-                        {conv.message_count}
-                      </span>
-                      <span className="flex items-center gap-0.5">
-                        <Clock className="h-2.5 w-2.5" />
-                        {formatDistanceToNow(new Date(conv.started_at), { addSuffix: true, locale: ptBR })}
-                      </span>
+                    <div className="flex items-center gap-2">
+                      <Avatar className="h-7 w-7 shrink-0">
+                        {conv.contact_avatar_url && (
+                          <AvatarImage src={conv.contact_avatar_url} alt={conv.contact_name || ""} />
+                        )}
+                        <AvatarFallback className="text-[10px]">
+                          {(conv.contact_name || conv.external_user_id || "?").slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium truncate max-w-[120px]">
+                            {conv.contact_name || conv.external_user_id || "Anônimo"}
+                          </span>
+                          <Badge
+                            variant={conv.status === "open" ? "default" : "secondary"}
+                            className="text-[9px] h-4 ml-1 shrink-0"
+                          >
+                            {conv.status === "open" ? "Ativa" : "Fechada"}
+                          </Badge>
+                        </div>
+                        <div className="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground">
+                          <span className="flex items-center gap-0.5">
+                            <Hash className="h-2.5 w-2.5" />
+                            {conv.channel}
+                          </span>
+                          <span className="flex items-center gap-0.5">
+                            <MessageSquare className="h-2.5 w-2.5" />
+                            {conv.message_count}
+                          </span>
+                          <span className="flex items-center gap-0.5">
+                            <Clock className="h-2.5 w-2.5" />
+                            {formatDistanceToNow(new Date(conv.started_at), { addSuffix: true, locale: ptBR })}
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </button>
                 ))}
@@ -159,8 +172,15 @@ export default function Conversations() {
                     >
                       <ArrowLeft className="h-4 w-4" />
                     </Button>
-                    <User className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm font-medium">{selectedConv?.external_user_id || "Anônimo"}</span>
+                    <Avatar className="h-7 w-7">
+                      {selectedConv?.contact_avatar_url && (
+                        <AvatarImage src={selectedConv.contact_avatar_url} alt={selectedConv.contact_name || ""} />
+                      )}
+                      <AvatarFallback className="text-[10px]">
+                        {(selectedConv?.contact_name || selectedConv?.external_user_id || "?").slice(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm font-medium">{selectedConv?.contact_name || selectedConv?.external_user_id || "Anônimo"}</span>
                     <Badge variant="outline" className="text-[9px]">{selectedConv?.channel}</Badge>
                   </div>
                   <span className="text-[10px] font-mono text-muted-foreground">
