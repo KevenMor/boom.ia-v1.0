@@ -42,6 +42,9 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
   const [temp, setTemp] = useState(0.7);
   const [topP, setTopP] = useState(0.8);
   const [topK, setTopK] = useState(40);
+  const [readDelay, setReadDelay] = useState(1500);
+  const [typingDelay, setTypingDelay] = useState(800);
+  const [blockGap, setBlockGap] = useState(1200);
   const { register, handleSubmit, setValue, watch, reset } = useForm<FormData>({ resolver: zodResolver(schema) });
 
   useEffect(() => {
@@ -62,6 +65,9 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
       setTemp(agent.temperature);
       setTopP((cfg as any).top_p ?? 0.8);
       setTopK((cfg as any).top_k ?? 40);
+      setReadDelay((cfg as any).read_delay_ms ?? 1500);
+      setTypingDelay((cfg as any).typing_delay_ms ?? 800);
+      setBlockGap((cfg as any).block_gap_ms ?? 1200);
     }
   }, [agent, reset]);
 
@@ -77,7 +83,7 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
         provider_id: rest.provider_id || null,
         model: rest.model || null,
         system_prompt: rest.system_prompt || null,
-        config: { ...currentConfig, top_p, top_k },
+        config: { ...currentConfig, top_p, top_k, read_delay_ms: readDelay, typing_delay_ms: typingDelay, block_gap_ms: blockGap },
       });
       toast.success("Agente atualizado");
       onOpenChange(false);
@@ -194,6 +200,36 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
             </div>
             <Slider value={[topK]} onValueChange={([v]) => { setTopK(v); setValue("top_k", v); }} min={1} max={100} step={1} />
             <p className="text-[10px] text-muted-foreground">Vocabulário considerado (40 = rico mas focado)</p>
+          </div>
+
+          <div className="space-y-3 rounded-lg border border-border/50 p-3">
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">⏱ Delays de Humanização</p>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs text-muted-foreground">Leitura (antes de responder)</Label>
+                <span className="font-mono text-xs text-primary">{(readDelay / 1000).toFixed(1)}s</span>
+              </div>
+              <Slider value={[readDelay]} onValueChange={([v]) => setReadDelay(v)} min={0} max={5000} step={100} />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs text-muted-foreground">Digitando (antes de cada bloco)</Label>
+                <span className="font-mono text-xs text-primary">{(typingDelay / 1000).toFixed(1)}s</span>
+              </div>
+              <Slider value={[typingDelay]} onValueChange={([v]) => setTypingDelay(v)} min={0} max={3000} step={100} />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs text-muted-foreground">Intervalo entre blocos</Label>
+                <span className="font-mono text-xs text-primary">{(blockGap / 1000).toFixed(1)}s</span>
+              </div>
+              <Slider value={[blockGap]} onValueChange={([v]) => setBlockGap(v)} min={0} max={5000} step={100} />
+            </div>
+
+            <p className="text-[10px] text-muted-foreground">Variação automática de ±30% para simular comportamento humano</p>
           </div>
 
           <div className="space-y-2">
