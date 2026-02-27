@@ -557,8 +557,29 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
           query = query.or(`brand.ilike.%${term}%,model.ilike.%${term}%,version.ilike.%${term}%,description.ilike.%${term}%,color.ilike.%${term}%`);
         }
         if (args.tipo_veiculo) {
-          const tipo = args.tipo_veiculo;
-          query = query.or(`description.ilike.%${tipo}%,version.ilike.%${tipo}%,model.ilike.%${tipo}%`);
+          const tipo = args.tipo_veiculo.toLowerCase();
+          // Map vehicle body types to known model names since inventory data
+          // typically doesn't contain the word "SUV"/"Sedan" etc. literally
+          const BODY_TYPE_MODELS: Record<string, string[]> = {
+            suv: ["tracker", "creta", "tucson", "sportage", "renegade", "compass", "t-cross", "tcross", "nivus", "kicks", "hr-v", "hrv", "cr-v", "crv", "rav4", "tiggo", "duster", "captur", "ecosport", "territory", "corolla cross", "haval", "jolion", "bronco", "edge", "equinox", "trailblazer", "sw4", "hilux sw4", "ix35"],
+            sedan: ["corolla", "civic", "sentra", "cruze", "jetta", "virtus", "onix plus", "hb20s", "prisma", "cobalt", "voyage", "logan", "versa", "yaris sedan", "city", "a3 sedan", "a4", "serie 3", "c4 lounge", "fluence"],
+            hatch: ["onix", "hb20", "polo", "gol", "argo", "mobi", "kwid", "sandero", "yaris", "fit", "up", "ka", "fiesta"],
+            picape: ["hilux", "s10", "ranger", "amarok", "toro", "strada", "saveiro", "montana", "maverick", "frontier", "l200", "triton", "oroch"],
+          };
+          const modelsList = BODY_TYPE_MODELS[tipo];
+          if (modelsList && modelsList.length > 0) {
+            // Build OR filter matching any known model for this body type
+            const orParts = modelsList.flatMap(m => [
+              `model.ilike.%${m}%`,
+              `version.ilike.%${m}%`,
+              `description.ilike.%${m}%`,
+            ]);
+            // Also include the original tipo in case data does contain "SUV" literally
+            orParts.push(`description.ilike.%${tipo}%`, `version.ilike.%${tipo}%`, `model.ilike.%${tipo}%`);
+            query = query.or(orParts.join(","));
+          } else {
+            query = query.or(`description.ilike.%${tipo}%,version.ilike.%${tipo}%,model.ilike.%${tipo}%`);
+          }
         }
         if (args.year || args.ano) query = query.eq("year", args.year || args.ano);
         if (args.fuel_type || args.fuel || args.combustivel) query = query.ilike("fuel_type", `%${args.fuel_type || args.fuel || args.combustivel}%`);
@@ -1047,7 +1068,7 @@ RULES:
 - When the user asks for photos/images/details of a specific vehicle, call the inventory tool with specific filters.
 - When the user confirms interest in photos (e.g. "quero sim", "manda", "pode enviar") and there's a vehicle in the conversation context, call the inventory tool for that vehicle.
 - NEVER generate conversational text. Only decide tool calls. If no tools are needed, respond with exactly: "NO_TOOLS_NEEDED"
-- You may call multiple tools if needed.
+- You may call multiple tools if needed.`;
 
         const dispatcherMessages = [
           { role: "system", content: dispatcherSystemPrompt },
@@ -1078,7 +1099,7 @@ RULES:
 
             if (!dispatchResp.ok) {
               const errText = await dispatchResp.text();
-              console.error(`[Dispatcher] Error ${dispatchResp.status}:`, errText);
+              console.error("[Dispatcher] Error " + dispatchResp.status + ":", errText);
               debugTrace.push({ type: "dispatcher_error", status: dispatchResp.status, error: errText.slice(0, 200), timestamp: Date.now() });
               break; // Fall through to conversational LLM without tools
             }
