@@ -150,42 +150,20 @@ function isVehicleMediaOrDetailRequest(text: string): boolean {
   return /\bfotos?\b|\bimagens?\b|\bdetalhes?\b|\bmais informacoes?\b|\bver\b|\bmostrar\b|\benviar\b/.test(normalized);
 }
 
-// Detect if the assistant's last message offered to send photos/details
-// and the user responded with anything that is NOT a clear negative.
-// Logic: if the assistant offered media and the user's short reply isn't negative → it's a YES.
-function isAffirmativeToPhotoOffer(latestUserText: string, conversationMessages: any[]): boolean {
-  // Find the last assistant message before the current user message
-  const assistantMessages = conversationMessages.filter((m: any) => m.role === "assistant");
-  if (!assistantMessages.length) return false;
+function removeRedundantPhotoOfferWhenPhotosPresent(content: string): string {
+  if (!hasMarkdownImages(content)) return content;
 
-  const lastAssistant = String(assistantMessages[assistantMessages.length - 1]?.content || "");
-  const normalizedAssistant = lastAssistant
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
+  const paragraphs = content.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  const filtered = paragraphs.filter((p) => {
+    const normalized = p
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
 
-  // Check if the assistant offered to send photos/details/images
-  const offeredMedia = /\b(fotos?|imagens?|enviar|mostrar|detalhes|interior|conserva[cç]|olhad)\b/.test(normalizedAssistant)
-    && /\?/.test(normalizedAssistant);
+    return !/(quer|gostaria|posso|pode).*(enviar|mandar|mostrar).*(fotos?|imagens?)/.test(normalized);
+  });
 
-  if (!offeredMedia) return false;
-
-  // Check if the user's response is SHORT (conversational reply, not a new question/topic)
-  const normalizedUser = latestUserText
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim();
-
-  // Long messages are likely a new topic, not a confirmation
-  if (normalizedUser.length > 120) return false;
-
-  // Explicit negatives — only reject if clearly negative
-  const isNegative = /\b(nao|não|nope|no|nunca|nem|deixa|dispensa|agora nao|nao precisa|sem necessidade|talvez depois|depois)\b/.test(normalizedUser);
-  if (isNegative) return false;
-
-  // If it's a short reply and NOT negative, in context of a photo offer, treat as positive
-  return true;
+  return filtered.join("\n\n").trim() || content;
 }
 
 function buildFallbackInventoryArgs(userText: string, conversationMessages?: any[]): Record<string, any> {
@@ -963,14 +941,12 @@ PROIBIÇÕES:
         .join(" ")
         .toLowerCase();
       const latestUserText = String(lastUserMsg?.content || "");
-      const contextualAffirmative = isAffirmativeToPhotoOffer(latestUserText, messages);
-      const userRequestedMediaOrDetails = isVehicleMediaOrDetailRequest(userConversationText)
-        || contextualAffirmative;
+      const userRequestedMediaOrDetails = isVehicleMediaOrDetailRequest(latestUserText);
       let lastInventoryVehicles: any[] = [];
       // Debug trace for sandbox
       const debugTrace: any[] = [];
 
-      debugTrace.push({ type: "config", model, temperature, top_p, top_k, tools_count: openaiTools?.length || 0, contextual_affirmative: contextualAffirmative, latest_user_text: latestUserText.slice(0, 120) });
+      debugTrace.push({ type: "config", model, temperature, top_p, top_k, tools_count: openaiTools?.length || 0, latest_user_text: latestUserText.slice(0, 120), media_request_from_latest_user: userRequestedMediaOrDetails });
 
       while (maxIterations-- > 0) {
         const toolCallResp = await fetch(baseUrl, {
@@ -1019,8 +995,10 @@ PROIBIÇÕES:
           finalContent = dedupeRepeatedParagraphs(finalContent);
 
           if (userRequestedMediaOrDetails && lastInventoryVehicles.length > 0) {
-            finalContent = appendMissingVehiclePhotos(finalContent, lastInventoryVehicles, userConversationText, contextualAffirmative);
+            finalContent = appendMissingVehiclePhotos(finalContent, lastInventoryVehicles, latestUserText);
           }
+
+          finalContent = removeRedundantPhotoOfferWhenPhotosPresent(finalContent);
 
           if (userRequestedMediaOrDetails && !hasMarkdownImages(finalContent) && inventoryTool) {
             const recoveryArgs = buildFallbackInventoryArgs(latestUserText || userConversationText, messages);
@@ -1042,7 +1020,8 @@ PROIBIÇÕES:
               const parsedRecovery = JSON.parse(recoveryResult);
               if (Array.isArray(parsedRecovery?.vehicles)) {
                 lastInventoryVehicles = parsedRecovery.vehicles;
-                finalContent = appendMissingVehiclePhotos(finalContent, lastInventoryVehicles, userConversationText, contextualAffirmative);
+                finalContent = appendMissingVehiclePhotos(finalContent, lastInventoryVehicles, latestUserText);
+                finalContent = removeRedundantPhotoOfferWhenPhotosPresent(finalContent);
               }
 
               debugTrace.push({
