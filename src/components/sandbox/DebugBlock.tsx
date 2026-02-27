@@ -1,16 +1,24 @@
 import { useState } from "react";
-import { Bug, ChevronDown, ChevronRight } from "lucide-react";
+import { Bug, ChevronDown, ChevronRight, ScrollText } from "lucide-react";
 
 type DebugEntry = { type: string; [key: string]: any };
 
 interface DebugBlockProps {
   debug: DebugEntry[];
+  edgeLogs?: EdgeLog[];
 }
 
-export function DebugBlock({ debug }: DebugBlockProps) {
-  const [expanded, setExpanded] = useState(false);
+export interface EdgeLog {
+  timestamp: string;
+  level: string;
+  message: string;
+}
 
-  if (!debug.length) return null;
+export function DebugBlock({ debug, edgeLogs }: DebugBlockProps) {
+  const [expanded, setExpanded] = useState(false);
+  const [showLogs, setShowLogs] = useState(false);
+
+  if (!debug.length && !edgeLogs?.length) return null;
 
   const config = debug.find((d) => d.type === "config");
   const toolCalls = debug.filter((d) => d.type === "tool_call");
@@ -33,6 +41,7 @@ export function DebugBlock({ debug }: DebugBlockProps) {
         {dispatcherSteps.length > 0 && <span className="text-purple-400">{dispatcherSteps.length} dispatch</span>}
         <span className="text-[#53bdeb]">{llmIterations.length} LLM step{llmIterations.length !== 1 ? "s" : ""}</span>
         {errors.length > 0 && <span className="text-red-400">{errors.length} erro{errors.length !== 1 ? "s" : ""}</span>}
+        {edgeLogs && edgeLogs.length > 0 && <span className="text-orange-400">{edgeLogs.length} log{edgeLogs.length !== 1 ? "s" : ""}</span>}
         {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
       </button>
 
@@ -53,16 +62,18 @@ export function DebugBlock({ debug }: DebugBlockProps) {
 
           {dispatcherSteps.length > 0 && (
             <div className="border-t border-[#2a3942] pt-2">
-              <div className="text-purple-400 font-semibold mb-1">🎯 Tool Dispatcher (GPT-5 Nano)</div>
+              <div className="text-purple-400 font-semibold mb-1">🎯 Tool Dispatcher</div>
               <div className="space-y-1">
                 {dispatcherSteps.map((step, i) => (
                   <div key={i} className="text-[#8696a0]">
                     <span className="text-[#e9edef]">{step.type.replace("dispatcher_", "")}</span>
+                    {step.provider && <> — provider: <span className="text-purple-300">{step.provider}</span></>}
                     {step.model && <> — modelo: <span className="text-[#e9edef]">{step.model}</span></>}
                     {step.tools_count !== undefined && <> — {step.tools_count} tools</>}
                     {step.tool_calls_count !== undefined && <> — {step.tool_calls_count} chamadas</>}
                     {step.tool_names && <> — <span className="text-yellow-400">{step.tool_names.join(", ")}</span></>}
                     {step.has_tool_calls === false && <span className="text-[#00a884]"> (sem tools necessárias)</span>}
+                    {step.reason && <span className="text-orange-300"> ({step.reason})</span>}
                     {step.error && <div className="text-red-300 mt-0.5">{step.error}</div>}
                     {step.content_preview && (
                       <pre className="mt-1 text-[#e9edef] bg-[#0b141a] rounded p-2 whitespace-pre-wrap text-[10px]">{step.content_preview}</pre>
@@ -133,6 +144,36 @@ export function DebugBlock({ debug }: DebugBlockProps) {
               <div className="text-red-300">{err.error}</div>
             </div>
           ))}
+
+          {/* Edge Function Logs */}
+          {edgeLogs && edgeLogs.length > 0 && (
+            <div className="border-t border-[#2a3942] pt-2">
+              <button
+                onClick={() => setShowLogs(!showLogs)}
+                className="flex items-center gap-1.5 text-orange-400 font-semibold mb-1 hover:text-orange-300 transition-colors"
+              >
+                <ScrollText className="h-3 w-3" />
+                📋 Edge Function Logs ({edgeLogs.length})
+                {showLogs ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              </button>
+              {showLogs && (
+                <div className="bg-[#0b141a] rounded p-2 space-y-0.5 max-h-60 overflow-y-auto">
+                  {edgeLogs.map((log, i) => {
+                    const levelColor = log.level === "error" ? "text-red-400" 
+                      : log.level === "warning" || log.level === "warn" ? "text-yellow-400"
+                      : "text-[#8696a0]";
+                    return (
+                      <div key={i} className="flex gap-2 text-[10px]">
+                        <span className="text-[#8696a0] shrink-0">{log.timestamp}</span>
+                        <span className={`shrink-0 uppercase ${levelColor}`}>{log.level}</span>
+                        <span className="text-[#e9edef] whitespace-pre-wrap break-all">{log.message}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

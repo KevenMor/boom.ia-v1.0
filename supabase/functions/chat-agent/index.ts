@@ -691,6 +691,20 @@ function toolsToOpenAI(tools: ToolDef[]) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  // ---------- Log Collector ----------
+  // Captures console.log/warn/error for streaming back to sandbox UI
+  const collectedLogs: { timestamp: string; level: string; message: string }[] = [];
+  const origLog = console.log;
+  const origWarn = console.warn;
+  const origError = console.error;
+  const captureLog = (level: string, ...args: any[]) => {
+    const msg = args.map(a => typeof a === "string" ? a : JSON.stringify(a)).join(" ");
+    collectedLogs.push({ timestamp: new Date().toISOString().slice(11, 23), level, message: msg });
+  };
+  console.log = (...args) => { captureLog("log", ...args); origLog(...args); };
+  console.warn = (...args) => { captureLog("warn", ...args); origWarn(...args); };
+  console.error = (...args) => { captureLog("error", ...args); origError(...args); };
+
   try {
     const encryptionKey = Deno.env.get("ENCRYPTION_KEY");
     const nexusUrl = Deno.env.get("NEXUS_DB_URL");
@@ -1185,6 +1199,9 @@ RULES:
         if (debugTrace.length > 0) {
           await writer.write(encoder.encode(`data: ${JSON.stringify({ debug: debugTrace })}\n\n`));
         }
+        if (collectedLogs.length > 0) {
+          await writer.write(encoder.encode(`data: ${JSON.stringify({ edge_logs: collectedLogs })}\n\n`));
+        }
         for (let partIdx = 0; partIdx < messageParts.length; partIdx++) {
           const part = messageParts[partIdx];
           if (partIdx > 0) {
@@ -1287,5 +1304,10 @@ RULES:
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+  } finally {
+    // Restore original console methods
+    console.log = origLog;
+    console.warn = origWarn;
+    console.error = origError;
   }
 });

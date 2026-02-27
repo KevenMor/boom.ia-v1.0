@@ -2,7 +2,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { ArrowLeft, Send, Loader2, Plus, Clock, MessageSquare, Trash2, Phone, Video, MoreVertical, Smile, Paperclip, Mic, Check, CheckCheck, Bug, ChevronDown, ChevronRight } from "lucide-react";
 import ReactMarkdown from "react-markdown";
-import { DebugBlock } from "@/components/sandbox/DebugBlock";
+import { DebugBlock, type EdgeLog } from "@/components/sandbox/DebugBlock";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 
 type DebugEntry = { type: string; [key: string]: any };
-type Msg = { role: "user" | "assistant"; content: string; timestamp?: Date; debug?: DebugEntry[] };
+type Msg = { role: "user" | "assistant"; content: string; timestamp?: Date; debug?: DebugEntry[]; edgeLogs?: EdgeLog[] };
 type Conversation = {
   id: string;
   channel: string;
@@ -140,6 +140,7 @@ export default function AgentSandbox() {
     setIsLoading(true);
 
     let debugData: DebugEntry[] | null = null;
+    let edgeLogsData: EdgeLog[] | null = null;
     let hasAssistantContent = false;
     const allMessages = [...messages, userMsg];
 
@@ -204,6 +205,12 @@ export default function AgentSandbox() {
               continue;
             }
 
+            // Capture edge function logs
+            if (parsed.edge_logs) {
+              edgeLogsData = parsed.edge_logs;
+              continue;
+            }
+
             const content = parsed.choices?.[0]?.delta?.content as string | undefined;
             if (content) {
               // Check for split marker — start a new bubble
@@ -225,7 +232,7 @@ export default function AgentSandbox() {
                           idx === prev.length - 1 ? { ...m, content: m.content + segments[si] } : m
                         );
                       }
-                      return [...prev, { role: "assistant", content: segments[si], timestamp: new Date(), debug: debugData || undefined }];
+                      return [...prev, { role: "assistant", content: segments[si], timestamp: new Date(), debug: debugData || undefined, edgeLogs: edgeLogsData || undefined }];
                     });
                   }
                 }
@@ -240,7 +247,7 @@ export default function AgentSandbox() {
                       idx === prev.length - 1 ? { ...m, content: m.content + content } : m
                     );
                   }
-                  return [...prev, { role: "assistant", content: content, timestamp: new Date(), debug: debugData || undefined }];
+                  return [...prev, { role: "assistant", content: content, timestamp: new Date(), debug: debugData || undefined, edgeLogs: edgeLogsData || undefined }];
                 });
               }
             }
@@ -405,9 +412,9 @@ export default function AgentSandbox() {
               return (
                 <div key={i}>
                   {/* Debug block before assistant response */}
-                  {msg.role === "assistant" && msg.debug && showDebug && (
+                  {msg.role === "assistant" && (msg.debug || msg.edgeLogs) && showDebug && (
                     <div className="flex justify-start mb-1">
-                      <DebugBlock debug={msg.debug} />
+                      <DebugBlock debug={msg.debug || []} edgeLogs={msg.edgeLogs} />
                     </div>
                   )}
                   <div className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} mb-1`}>
