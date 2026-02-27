@@ -926,216 +926,272 @@ PROIBIÇÕES:
       });
     }
 
-    // ---------- OpenAI-compatible path with Function Calling ----------
+    // ---------- OpenAI-compatible path with Tool Dispatcher Architecture ----------
+    // Phase 1: Tool Dispatcher (cheap LLM good at tool calling) decides which tools to use
+    // Phase 2: Conversational LLM (agent's configured model) generates response with tool data as context
     const fullMessages = [{ role: "system", content: systemPrompt }, ...messages];
+    const latestUserText = String(lastUserMsg?.content || "");
+    const debugTrace: any[] = [];
 
-    // Step 1: First call (non-streaming if tools, to handle tool_calls)
+    debugTrace.push({ type: "config", model, temperature, top_p, top_k, tools_count: openaiTools?.length || 0, latest_user_text: latestUserText.slice(0, 120) });
+
+    // ===== PHASE 1: TOOL DISPATCHER =====
+    // Uses Lovable AI Gateway with a model optimized for tool calling
+    const toolResultsContext: string[] = [];
+
     if (openaiTools && openaiTools.length > 0) {
-      console.log(`Calling with ${openaiTools.length} tools, model: ${model}`);
+      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+      const DISPATCHER_MODEL = "openai/gpt-5-nano"; // Cheap, excellent at structured tool calling
+      const DISPATCHER_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
-      let currentMessages = [...fullMessages];
-      let maxIterations = 5; // Prevent infinite loops
-      const latestUserText = String(lastUserMsg?.content || "");
-      // Debug trace for sandbox
-      const debugTrace: any[] = [];
+      if (!LOVABLE_API_KEY) {
+        console.warn("LOVABLE_API_KEY not set — skipping tool dispatcher, falling back to direct LLM");
+      } else {
+        console.log(`[Dispatcher] Calling ${DISPATCHER_MODEL} with ${openaiTools.length} tools`);
+        debugTrace.push({ type: "dispatcher_start", model: DISPATCHER_MODEL, tools_count: openaiTools.length, timestamp: Date.now() });
 
-      debugTrace.push({ type: "config", model, temperature, top_p, top_k, tools_count: openaiTools?.length || 0, latest_user_text: latestUserText.slice(0, 120) });
+        // Build a focused dispatcher prompt — only job is to decide tool calls
+        const dispatcherSystemPrompt = `You are a tool dispatcher. Your ONLY job is to analyze the user's message and conversation context, then decide if any tools should be called.
 
-      while (maxIterations-- > 0) {
-        const toolCallResp = await fetch(baseUrl, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model, messages: currentMessages, ...llmParams,
-            tools: openaiTools, tool_choice: "auto",
-            stream: false,
-          }),
-        });
+RULES:
+- If the user's message requires data (inventory, location, etc.), call the appropriate tool.
+- If the user is asking a general/conversational question (greetings, opinions, clarifications about features like "é flex?", "aceita troca?"), DO NOT call any tools.
+- When the user asks for photos/images/details of a specific vehicle, call the inventory tool with specific filters.
+- When the user confirms interest in photos (e.g. "quero sim", "manda", "pode enviar") and there's a vehicle in the conversation context, call the inventory tool for that vehicle.
+- NEVER generate conversational text. Only decide tool calls. If no tools are needed, respond with exactly: "NO_TOOLS_NEEDED"
+- You may call multiple tools if needed.`;
 
-        if (!toolCallResp.ok) {
-          const t = await toolCallResp.text();
-          console.error(`Provider error: ${toolCallResp.status}`, t);
-          return new Response(JSON.stringify({ error: `Provider error: ${toolCallResp.status}`, detail: t }), {
-            status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
+        const dispatcherMessages = [
+          { role: "system", content: dispatcherSystemPrompt },
+          ...messages,
+        ];
 
-        const result = await toolCallResp.json();
-        const choice = result.choices?.[0];
+        let maxDispatchIterations = 3;
 
-        if (!choice) {
-          return new Response(JSON.stringify({ error: "No response from provider" }), {
-            status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
+        try {
+          let currentDispatchMessages = [...dispatcherMessages];
 
-        const assistantMsg = choice.message;
-        debugTrace.push({
-          type: "llm_iteration",
-          finish_reason: choice.finish_reason,
-          has_tool_calls: !!assistantMsg.tool_calls?.length,
-          tool_calls_count: assistantMsg.tool_calls?.length || 0,
-          content_preview: String(assistantMsg.content || "").slice(0, 240),
-          timestamp: Date.now(),
-        });
-
-        // If no tool calls, finalize response
-        if (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0) {
-
-          const rawContent = assistantMsg.content || "";
-          let finalContent = sanitizeLLMOutput(rawContent);
-          finalContent = dedupeRepeatedParagraphs(finalContent);
-
-          // Importante: não forçamos envio/recuperação de fotos por heurística de backend.
-          // O acionamento da ferramenta deve acontecer via tool calling da LLM.
-          finalContent = removeRedundantPhotoOfferWhenPhotosPresent(finalContent);
-          // Save to memory
-          if (convId && finalContent) {
-            const latency = Date.now() - startTime;
-            try {
-              await supabase.rpc("save_message", {
-                p_agent_id: agent_id, p_conversation_id: convId,
-                p_role: "assistant", p_content: finalContent, p_model: model,
-                p_latency_ms: latency,
-              });
-            } catch (e: any) { console.warn("Could not save assistant msg:", e); }
-          }
-
-          // Stream-simulate the final response for the frontend
-          const messageParts = splitIntoMessages(finalContent);
-          debugTrace.push({
-            type: "llm_transform",
-            raw_length: rawContent.length,
-            sanitized_length: sanitizeLLMOutput(rawContent).length,
-            final_length: finalContent.length,
-            parts_count: messageParts.length,
-            parts_preview: messageParts.slice(0, 3),
-            timestamp: Date.now(),
-          });
-
-          const { readable, writable } = new TransformStream();
-          const writer = writable.getWriter();
-          const encoder = new TextEncoder();
-
-          (async () => {
-            try {
-              if (convId) {
-                await writer.write(encoder.encode(`data: ${JSON.stringify({ conversation_id: convId })}\n\n`));
-              }
-              // Send debug trace
-              if (debugTrace.length > 0) {
-                await writer.write(encoder.encode(`data: ${JSON.stringify({ debug: debugTrace })}\n\n`));
-              }
-              // Split into WhatsApp-style separate messages
-              for (let partIdx = 0; partIdx < messageParts.length; partIdx++) {
-                const part = messageParts[partIdx];
-                // Send split marker between parts
-                if (partIdx > 0) {
-                  const splitEv = { choices: [{ delta: { content: MSG_SPLIT } }] };
-                  await writer.write(encoder.encode(`data: ${JSON.stringify(splitEv)}\n\n`));
-                }
-                // Send part content in chunks for smooth rendering
-                const chunkSize = 20;
-                for (let i = 0; i < part.length; i += chunkSize) {
-                  const chunk = part.slice(i, i + chunkSize);
-                  const ev = { choices: [{ delta: { content: chunk } }] };
-                  await writer.write(encoder.encode(`data: ${JSON.stringify(ev)}\n\n`));
-                }
-              }
-              await writer.write(encoder.encode("data: [DONE]\n\n"));
-            } catch (e) { console.error("stream error:", e); }
-            await writer.close();
-          })();
-
-          // Refresh conversations
-          if (convId) {
-            try { await supabase.rpc("list_agent_conversations", { p_agent_id: agent_id, p_limit: 1 }); } catch {}
-          }
-
-          return new Response(readable, {
-            headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
-          });
-        }
-
-        // Process tool calls
-        debugTrace.push({
-          type: "llm_tool_plan",
-          tool_names: assistantMsg.tool_calls.map((tc: any) => tc.function?.name),
-          content_preview: String(assistantMsg.content || "").slice(0, 240),
-          timestamp: Date.now(),
-        });
-        console.log(`Processing ${assistantMsg.tool_calls.length} tool call(s)`);
-        currentMessages.push(assistantMsg);
-
-        // Save tool call message to memory
-        if (convId) {
-          try {
-            await supabase.rpc("save_message", {
-              p_agent_id: agent_id, p_conversation_id: convId,
-              p_role: "assistant", p_content: assistantMsg.content || "",
-              p_model: model,
+          while (maxDispatchIterations-- > 0) {
+            const dispatchResp = await fetch(DISPATCHER_URL, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model: DISPATCHER_MODEL,
+                messages: currentDispatchMessages,
+                tools: openaiTools,
+                tool_choice: "auto",
+                temperature: 0.1, // Low temperature for precise tool decisions
+                stream: false,
+              }),
             });
-          } catch (e: any) { console.warn("Could not save tool call msg:", e); }
-        }
 
-        for (const toolCall of assistantMsg.tool_calls) {
-          const toolName = toolCall.function.name;
-          let toolArgs: Record<string, any> = {};
-          try {
-            toolArgs = JSON.parse(toolCall.function.arguments || "{}");
-          } catch { /* empty args */ }
-
-          // Find the matching tool
-          const matchedTool = agentTools.find(
-            (t) => (t.function_def?.name || t.name) === toolName
-          );
-
-          let toolResult: string;
-          if (matchedTool) {
-            console.log(`Executing tool: ${toolName} (${matchedTool.tool_type})`);
-            debugTrace.push({ type: "tool_call", tool: toolName, tool_type: matchedTool.tool_type, args: toolArgs, timestamp: Date.now() });
-            toolResult = await executeTool(matchedTool, toolArgs, supabase, agent_id);
-
-            // Build a short preview of the result for debug
-            let resultPreview: any = {};
-            try {
-              const parsed = JSON.parse(toolResult);
-              resultPreview = { total: parsed.total, vehicle_count: parsed.vehicles?.length, hint: parsed._hint, error: parsed.error, message: parsed.message };
-            } catch {
-              resultPreview = { raw_length: toolResult.length };
+            if (!dispatchResp.ok) {
+              const errText = await dispatchResp.text();
+              console.error(`[Dispatcher] Error ${dispatchResp.status}:`, errText);
+              debugTrace.push({ type: "dispatcher_error", status: dispatchResp.status, error: errText.slice(0, 200), timestamp: Date.now() });
+              break; // Fall through to conversational LLM without tools
             }
-            debugTrace.push({ type: "tool_result", tool: toolName, preview: resultPreview, timestamp: Date.now() });
 
-          } else {
-            toolResult = JSON.stringify({ error: `Tool '${toolName}' not found` });
-            debugTrace.push({ type: "tool_error", tool: toolName, error: "Tool not found" });
-          }
+            const dispatchResult = await dispatchResp.json();
+            const dispatchChoice = dispatchResult.choices?.[0];
 
-          currentMessages.push({
-            role: "tool",
-            tool_call_id: toolCall.id,
-            content: toolResult,
-          });
+            if (!dispatchChoice) {
+              console.warn("[Dispatcher] No choice returned");
+              break;
+            }
 
-          // Save tool result to memory
-          if (convId) {
-            try {
-              await supabase.rpc("save_message", {
-                p_agent_id: agent_id, p_conversation_id: convId,
-                p_role: "tool", p_content: toolResult,
+            const dispatchMsg = dispatchChoice.message;
+            debugTrace.push({
+              type: "dispatcher_iteration",
+              finish_reason: dispatchChoice.finish_reason,
+              has_tool_calls: !!dispatchMsg.tool_calls?.length,
+              tool_calls_count: dispatchMsg.tool_calls?.length || 0,
+              content_preview: String(dispatchMsg.content || "").slice(0, 120),
+              timestamp: Date.now(),
+            });
+
+            // No tool calls — dispatcher decided tools aren't needed
+            if (!dispatchMsg.tool_calls || dispatchMsg.tool_calls.length === 0) {
+              console.log("[Dispatcher] No tools needed");
+              break;
+            }
+
+            // Execute tool calls from dispatcher
+            console.log(`[Dispatcher] Executing ${dispatchMsg.tool_calls.length} tool(s)`);
+            debugTrace.push({
+              type: "dispatcher_tool_plan",
+              tool_names: dispatchMsg.tool_calls.map((tc: any) => tc.function?.name),
+              timestamp: Date.now(),
+            });
+
+            currentDispatchMessages.push(dispatchMsg);
+
+            for (const toolCall of dispatchMsg.tool_calls) {
+              const toolName = toolCall.function.name;
+              let toolArgs: Record<string, any> = {};
+              try {
+                toolArgs = JSON.parse(toolCall.function.arguments || "{}");
+              } catch { /* empty args */ }
+
+              const matchedTool = agentTools.find(
+                (t) => (t.function_def?.name || t.name) === toolName
+              );
+
+              let toolResult: string;
+              if (matchedTool) {
+                console.log(`[Dispatcher] Executing: ${toolName} (${matchedTool.tool_type})`);
+                debugTrace.push({ type: "tool_call", tool: toolName, tool_type: matchedTool.tool_type, args: toolArgs, timestamp: Date.now() });
+                toolResult = await executeTool(matchedTool, toolArgs, supabase, agent_id);
+
+                let resultPreview: any = {};
+                try {
+                  const parsed = JSON.parse(toolResult);
+                  resultPreview = { total: parsed.total, vehicle_count: parsed.vehicles?.length, hint: parsed._hint, error: parsed.error, message: parsed.message };
+                } catch {
+                  resultPreview = { raw_length: toolResult.length };
+                }
+                debugTrace.push({ type: "tool_result", tool: toolName, preview: resultPreview, timestamp: Date.now() });
+
+                // Collect tool results to inject into conversational context
+                toolResultsContext.push(`[Resultado da ferramenta "${toolName}"]: ${toolResult}`);
+              } else {
+                toolResult = JSON.stringify({ error: `Tool '${toolName}' not found` });
+                debugTrace.push({ type: "tool_error", tool: toolName, error: "Tool not found" });
+              }
+
+              currentDispatchMessages.push({
+                role: "tool",
+                tool_call_id: toolCall.id,
+                content: toolResult,
               });
-            } catch {}
+
+              // Save tool result to memory
+              if (convId) {
+                try {
+                  await supabase.rpc("save_message", {
+                    p_agent_id: agent_id, p_conversation_id: convId,
+                    p_role: "tool", p_content: toolResult,
+                  });
+                } catch {}
+              }
+            }
+
+            // Continue loop in case dispatcher wants to call more tools based on results
           }
+        } catch (e: any) {
+          console.error("[Dispatcher] Fatal error:", e);
+          debugTrace.push({ type: "dispatcher_error", error: e.message, timestamp: Date.now() });
+          // Continue — conversational LLM will respond without tool data
         }
-
-        // Loop continues — next iteration will call LLM with tool results
       }
+    }
 
-      // If we exhausted iterations, return error
-      return new Response(JSON.stringify({ error: "Too many tool call iterations" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // ===== PHASE 2: CONVERSATIONAL LLM =====
+    // Build final messages WITH tool data injected as system context (no tool calling needed)
+    const conversationalMessages = [...fullMessages];
+
+    if (toolResultsContext.length > 0) {
+      // Inject tool results as a system message so the conversational LLM has the data
+      const toolContextMsg = `DADOS OBTIDOS DAS FERRAMENTAS (use esses dados para responder ao cliente):\n\n${toolResultsContext.join("\n\n")}`;
+      conversationalMessages.splice(1, 0, { role: "system", content: toolContextMsg });
+      console.log(`[Conversational] Injecting ${toolResultsContext.length} tool result(s) as context`);
+    }
+
+    // Call the agent's configured LLM in STREAMING mode — NO tools passed (dispatcher already handled them)
+    console.log(`[Conversational] Calling ${provider.name}, model: ${model}, url: ${baseUrl}`);
+
+    const convResp = await fetch(baseUrl, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        messages: conversationalMessages,
+        ...llmParams,
+        // NO tools — the conversational LLM just talks
+        stream: false, // We post-process for splitting
+      }),
+    });
+
+    if (!convResp.ok) {
+      const t = await convResp.text();
+      console.error(`[Conversational] Provider error: ${convResp.status}`, t);
+      return new Response(JSON.stringify({ error: `Provider error: ${convResp.status}`, detail: t }), {
+        status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const convResult = await convResp.json();
+    const convChoice = convResult.choices?.[0];
+    const rawContent = convChoice?.message?.content || "";
+
+    let finalContent = sanitizeLLMOutput(rawContent);
+    finalContent = dedupeRepeatedParagraphs(finalContent);
+    finalContent = removeRedundantPhotoOfferWhenPhotosPresent(finalContent);
+
+    // Save to memory
+    if (convId && finalContent) {
+      const latency = Date.now() - startTime;
+      try {
+        await supabase.rpc("save_message", {
+          p_agent_id: agent_id, p_conversation_id: convId,
+          p_role: "assistant", p_content: finalContent, p_model: model,
+          p_latency_ms: latency,
+        });
+      } catch (e: any) { console.warn("Could not save assistant msg:", e); }
+    }
+
+    // Stream-simulate the final response for the frontend
+    const messageParts = splitIntoMessages(finalContent);
+    debugTrace.push({
+      type: "llm_transform",
+      raw_length: rawContent.length,
+      sanitized_length: sanitizeLLMOutput(rawContent).length,
+      final_length: finalContent.length,
+      parts_count: messageParts.length,
+      parts_preview: messageParts.slice(0, 3),
+      timestamp: Date.now(),
+    });
+
+    const { readable, writable } = new TransformStream();
+    const writer = writable.getWriter();
+    const encoder = new TextEncoder();
+
+    (async () => {
+      try {
+        if (convId) {
+          await writer.write(encoder.encode(`data: ${JSON.stringify({ conversation_id: convId })}\n\n`));
+        }
+        if (debugTrace.length > 0) {
+          await writer.write(encoder.encode(`data: ${JSON.stringify({ debug: debugTrace })}\n\n`));
+        }
+        for (let partIdx = 0; partIdx < messageParts.length; partIdx++) {
+          const part = messageParts[partIdx];
+          if (partIdx > 0) {
+            const splitEv = { choices: [{ delta: { content: MSG_SPLIT } }] };
+            await writer.write(encoder.encode(`data: ${JSON.stringify(splitEv)}\n\n`));
+          }
+          const chunkSize = 20;
+          for (let i = 0; i < part.length; i += chunkSize) {
+            const chunk = part.slice(i, i + chunkSize);
+            const ev = { choices: [{ delta: { content: chunk } }] };
+            await writer.write(encoder.encode(`data: ${JSON.stringify(ev)}\n\n`));
+          }
+        }
+        await writer.write(encoder.encode("data: [DONE]\n\n"));
+      } catch (e) { console.error("stream error:", e); }
+      await writer.close();
+    })();
+
+    if (convId) {
+      try { await supabase.rpc("list_agent_conversations", { p_agent_id: agent_id, p_limit: 1 }); } catch {}
+    }
+
+    return new Response(readable, {
+      headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+    });
 
     // ---------- No tools: stream directly ----------
     console.log(`Calling provider: ${provider.name}, model: ${model}, url: ${baseUrl}`);
