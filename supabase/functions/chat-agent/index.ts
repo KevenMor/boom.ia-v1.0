@@ -150,6 +150,39 @@ function isVehicleMediaOrDetailRequest(text: string): boolean {
   return /\bfotos?\b|\bimagens?\b|\bdetalhes?\b|\bmais informacoes?\b|\bver\b|\bmostrar\b|\benviar\b/.test(normalized);
 }
 
+// Detect if the assistant's last message offered to send photos/details
+// and the user responded with an affirmative confirmation
+function isAffirmativeToPhotoOffer(latestUserText: string, conversationMessages: any[]): boolean {
+  // Find the last assistant message before the current user message
+  const assistantMessages = conversationMessages.filter((m: any) => m.role === "assistant");
+  if (!assistantMessages.length) return false;
+
+  const lastAssistant = String(assistantMessages[assistantMessages.length - 1]?.content || "");
+  const normalizedAssistant = lastAssistant
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  // Check if the assistant offered to send photos/details/images
+  const offeredMedia = /\b(fotos?|imagens?|enviar|mostrar|detalhes|interior|conserva[cç][aã]o|olhad[ai])\b/.test(normalizedAssistant)
+    && /\?/.test(normalizedAssistant);
+
+  if (!offeredMedia) return false;
+
+  // Check if the user's response is an affirmative/confirmation
+  const normalizedUser = latestUserText
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+
+  // Short affirmative responses (under 80 chars to avoid false positives on long messages)
+  if (normalizedUser.length > 80) return false;
+
+  return /\b(sim|por favor|pode|manda|quero|claro|com certeza|ok|beleza|bora|vamos|show|isso|positivo|envie|mande|gostaria|adoraria|seria otimo|seria bom|vai la|pode sim|pode ser|yes|please|s[ii]m)\b/.test(normalizedUser)
+    || /^(s|ss|sss|siiim?|pfv|pf|pfvr|👍|✅|🙏|pode!|sim!|claro!|bora!|manda!|quero!)$/i.test(normalizedUser.replace(/\s/g, ""));
+}
+
 function buildFallbackInventoryArgs(userText: string, conversationMessages?: any[]): Record<string, any> {
   // Try to extract the vehicle model/brand from conversation context first
   // The user might say "gostei do corola, fotos?" — we need to find "COROLLA" from assistant's previous messages
@@ -922,7 +955,8 @@ PROIBIÇÕES:
         .join(" ")
         .toLowerCase();
       const latestUserText = String(lastUserMsg?.content || "");
-      const userRequestedMediaOrDetails = isVehicleMediaOrDetailRequest(userConversationText);
+      const userRequestedMediaOrDetails = isVehicleMediaOrDetailRequest(userConversationText)
+        || isAffirmativeToPhotoOffer(latestUserText, messages);
       let lastInventoryVehicles: any[] = [];
       // Debug trace for sandbox
       const debugTrace: any[] = [];
