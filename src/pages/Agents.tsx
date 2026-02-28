@@ -66,13 +66,13 @@ export default function Agents() {
         {filtered.map((agent, i) => (
           <Card
             key={agent.id}
-            className="border-border bg-card p-5 transition-colors hover:border-primary/30 cursor-pointer animate-fade-in"
+            className="border-border bg-card p-5 transition-all hover:shadow-md hover:shadow-primary/5 cursor-pointer animate-fade-in"
             style={{ animationDelay: `${i * 50}ms` }}
           >
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                  <Bot className="h-5 w-5 text-primary" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary">
+                  <Bot className="h-5 w-5 text-muted-foreground" />
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold">{agent.name}</h3>
