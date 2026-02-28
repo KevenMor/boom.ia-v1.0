@@ -84,7 +84,7 @@ export default function EditTenant() {
 
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-4xl space-y-6 py-6">
+      <div className="space-y-6 py-6">
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-[400px] w-full rounded-xl" />
       </div>
@@ -102,7 +102,7 @@ export default function EditTenant() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8 pb-12">
+    <div className="space-y-8 pb-12">
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => navigate("/tenants")}>
