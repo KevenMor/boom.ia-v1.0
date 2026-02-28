@@ -90,6 +90,30 @@ export default function Conversations() {
   const displayName = (conv: any) => conv?.contact_name || conv?.external_user_id || "Anônimo";
   const initials = (conv: any) => (displayName(conv)).slice(0, 2).toUpperCase();
 
+  const normalizePhone = (value: string) => value.replace(/\D/g, "");
+  const isLikelyPhone = (value?: string | null) => {
+    if (!value) return false;
+    const digits = normalizePhone(value);
+    return digits.length >= 10;
+  };
+  const formatPhone = (value?: string | null) => {
+    if (!value) return null;
+    const digits = normalizePhone(value);
+    if (digits.length === 13 && digits.startsWith("55")) {
+      return `+${digits.slice(0, 2)} ${digits.slice(2, 4)} ${digits.slice(4, 9)}-${digits.slice(9)}`;
+    }
+    if (digits.length === 12 && digits.startsWith("55")) {
+      return `+${digits.slice(0, 2)} ${digits.slice(2, 4)} ${digits.slice(4, 8)}-${digits.slice(8)}`;
+    }
+    if (digits.length === 11) {
+      return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+    }
+    if (digits.length === 10) {
+      return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    }
+    return value;
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -269,7 +293,9 @@ export default function Conversations() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold truncate">{displayName(selectedConv)}</p>
                     <p className="text-xs text-muted-foreground">
-                      {selectedConv?.external_user_id || (selectedConv?.status === "open" ? "Online" : "Offline")}
+                      {isLikelyPhone(selectedConv?.external_user_id)
+                        ? formatPhone(selectedConv?.external_user_id)
+                        : "Telefone não informado"}
                     </p>
                   </div>
                   <Badge variant="outline" className="text-[9px] font-mono shrink-0">
