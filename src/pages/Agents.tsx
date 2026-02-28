@@ -70,9 +70,9 @@ export default function Agents() {
             style={{ animationDelay: `${i * 50}ms` }}
           >
             {/* Logo / Icon */}
-            <div className="flex items-center justify-center rounded-lg bg-sidebar-accent p-4">
+            <div className="flex items-center justify-center rounded-lg bg-gradient-to-br from-card to-muted/40 p-5">
               {agent.avatar_url ? (
-                <img src={agent.avatar_url} alt={agent.name} className="max-h-16 w-auto object-contain" />
+                <img src={agent.avatar_url} alt={agent.name} className="max-h-14 w-auto object-contain drop-shadow-sm" />
               ) : (
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
                   <Bot className="h-7 w-7 text-primary" />
@@ -104,28 +104,24 @@ export default function Agents() {
             </div>
 
             {/* Webhook URL */}
-            <div className="mt-4 flex items-center gap-2">
-              <Input
-                readOnly
-                value={`${WEBHOOK_BASE}?agent_id=${agent.id}`}
-                className="h-9 flex-1 truncate bg-sidebar-accent border-border text-xs text-muted-foreground"
-                onClick={(e) => (e.target as HTMLInputElement).select()}
-              />
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-9 w-9 shrink-0"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigator.clipboard.writeText(`${WEBHOOK_BASE}?agent_id=${agent.id}`);
-                  toast.success("URL do webhook copiada!");
-                }}
-              >
-                <Copy className="h-4 w-4" />
-              </Button>
+            <div className="mt-4">
+              <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Webhook</p>
+              <div className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-2.5 py-1.5">
+                <code className="flex-1 truncate text-[11px] text-muted-foreground select-all">
+                  {`${WEBHOOK_BASE}?agent_id=${agent.id}`}
+                </code>
+                <button
+                  className="shrink-0 rounded p-1 text-muted-foreground/50 transition-colors hover:bg-muted hover:text-foreground"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigator.clipboard.writeText(`${WEBHOOK_BASE}?agent_id=${agent.id}`);
+                    toast.success("URL do webhook copiada!");
+                  }}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
-
-            {/* Actions */}
             <div className="mt-4 flex items-center gap-2">
               <Button
                 variant="outline"
