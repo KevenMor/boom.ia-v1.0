@@ -1,6 +1,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link } from "lucide-react";
+import { AgentAvatarUpload } from "@/components/agents/AgentAvatarUpload";
 import { z } from "zod";
 import { useEffect, useState } from "react";
 import {
@@ -43,6 +44,7 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
   const update = useUpdateAgent();
   const { data: tenants } = useTenants();
   const { data: providers } = useProviders();
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [temp, setTemp] = useState(0.7);
   const [topP, setTopP] = useState(0.8);
   const [topK, setTopK] = useState(40);
@@ -58,6 +60,7 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
   useEffect(() => {
     if (agent) {
       const cfg = agent.config || {};
+      setAvatarUrl(agent.avatar_url ?? null);
       reset({
         name: agent.name,
         description: agent.description ?? "",
@@ -91,6 +94,7 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
       await update.mutateAsync({
         id: agent.id,
         ...rest,
+        avatar_url: avatarUrl,
         description: rest.description || null,
         provider_id: rest.provider_id || null,
         model: rest.model || null,
@@ -122,6 +126,13 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
       <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Editar Agente</DialogTitle></DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="flex justify-center">
+            <AgentAvatarUpload
+              agentId={agent?.id}
+              currentUrl={avatarUrl}
+              onUploaded={(url) => setAvatarUrl(url)}
+            />
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Nome</Label>
