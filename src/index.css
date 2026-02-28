@@ -4,26 +4,26 @@
 
 @layer base {
   :root {
-    --background: 0 0% 98%;
-    --foreground: 225 15% 15%;
+    --background: 260 20% 98%;
+    --foreground: 260 15% 12%;
 
     --card: 0 0% 100%;
-    --card-foreground: 225 15% 15%;
+    --card-foreground: 260 15% 12%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 225 15% 15%;
+    --popover-foreground: 260 15% 12%;
 
-    --primary: 217 72% 50%;
+    --primary: 262 72% 55%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 14% 93%;
-    --secondary-foreground: 225 12% 35%;
+    --secondary: 260 14% 93%;
+    --secondary-foreground: 260 12% 35%;
 
-    --muted: 220 14% 95%;
-    --muted-foreground: 220 10% 45%;
+    --muted: 260 14% 95%;
+    --muted-foreground: 260 10% 45%;
 
-    --accent: 220 14% 93%;
-    --accent-foreground: 225 15% 15%;
+    --accent: 262 60% 93%;
+    --accent-foreground: 262 60% 30%;
 
     --destructive: 0 68% 55%;
     --destructive-foreground: 0 0% 100%;
@@ -34,46 +34,46 @@
     --warning: 38 80% 55%;
     --warning-foreground: 0 0% 0%;
 
-    --border: 220 13% 88%;
-    --input: 220 13% 88%;
-    --ring: 217 72% 50%;
+    --border: 260 13% 88%;
+    --input: 260 13% 88%;
+    --ring: 262 72% 55%;
 
     --radius: 0.625rem;
 
-    --sidebar-background: 228 40% 16%;
-    --sidebar-foreground: 220 15% 82%;
-    --sidebar-primary: 217 72% 65%;
+    --sidebar-background: 262 45% 14%;
+    --sidebar-foreground: 260 15% 82%;
+    --sidebar-primary: 262 72% 68%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 228 30% 26%;
+    --sidebar-accent: 262 30% 24%;
     --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 228 30% 22%;
-    --sidebar-ring: 217 72% 65%;
+    --sidebar-border: 262 30% 20%;
+    --sidebar-ring: 262 72% 68%;
 
-    --font-sans: 'Satoshi', system-ui, -apple-system, sans-serif;
+    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
     --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
   }
 
   .dark {
-    --background: 225 18% 7%;
-    --foreground: 220 20% 93%;
+    --background: 262 20% 7%;
+    --foreground: 260 20% 93%;
 
-    --card: 225 16% 10%;
-    --card-foreground: 220 20% 93%;
+    --card: 262 18% 10%;
+    --card-foreground: 260 20% 93%;
 
-    --popover: 225 16% 12%;
-    --popover-foreground: 220 20% 93%;
+    --popover: 262 18% 12%;
+    --popover-foreground: 260 20% 93%;
 
-    --primary: 217 72% 58%;
+    --primary: 262 72% 62%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 225 14% 15%;
-    --secondary-foreground: 220 16% 80%;
+    --secondary: 262 14% 15%;
+    --secondary-foreground: 260 16% 80%;
 
-    --muted: 225 12% 18%;
-    --muted-foreground: 220 10% 48%;
+    --muted: 262 12% 18%;
+    --muted-foreground: 260 10% 48%;
 
-    --accent: 225 14% 15%;
-    --accent-foreground: 220 20% 93%;
+    --accent: 262 14% 15%;
+    --accent-foreground: 260 20% 93%;
 
     --destructive: 0 68% 55%;
     --destructive-foreground: 0 0% 100%;
@@ -84,22 +84,22 @@
     --warning: 38 80% 55%;
     --warning-foreground: 0 0% 0%;
 
-    --border: 225 12% 15%;
-    --input: 225 12% 15%;
-    --ring: 217 72% 58%;
+    --border: 262 12% 15%;
+    --input: 262 12% 15%;
+    --ring: 262 72% 62%;
 
     --radius: 0.625rem;
 
-    --sidebar-background: 225 18% 8%;
-    --sidebar-foreground: 220 10% 55%;
-    --sidebar-primary: 217 72% 58%;
+    --sidebar-background: 262 20% 8%;
+    --sidebar-foreground: 260 10% 55%;
+    --sidebar-primary: 262 72% 62%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 225 14% 12%;
-    --sidebar-accent-foreground: 220 20% 93%;
-    --sidebar-border: 225 12% 13%;
-    --sidebar-ring: 217 72% 58%;
+    --sidebar-accent: 262 14% 12%;
+    --sidebar-accent-foreground: 260 20% 93%;
+    --sidebar-border: 262 12% 13%;
+    --sidebar-ring: 262 72% 62%;
 
-    --font-sans: 'Satoshi', system-ui, -apple-system, sans-serif;
+    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
     --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
   }
 }
