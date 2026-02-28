@@ -47,7 +47,30 @@ export default function Conversations() {
 
   const selectedConv = conversations?.find((c) => c.id === selectedConvId);
 
-  const filteredConversations = conversations?.filter((c) => {
+  // Deduplicate conversations by contact: keep only the most recent per unique contact
+  const deduplicatedConversations = (() => {
+    if (!conversations) return [];
+    const contactMap = new Map<string, typeof conversations[number]>();
+    // Conversations come sorted by started_at DESC, so first seen = most recent
+    for (const conv of conversations) {
+      const contactKey = conv.contact_name || conv.external_user_id || conv.id;
+      // Skip entries that look like raw JSON (malformed external_user_id)
+      if (contactKey.startsWith("{") || contactKey.startsWith("[")) continue;
+      if (!contactMap.has(contactKey)) {
+        contactMap.set(contactKey, conv);
+      } else {
+        // Merge message counts for the same contact
+        const existing = contactMap.get(contactKey)!;
+        contactMap.set(contactKey, {
+          ...existing,
+          message_count: existing.message_count + conv.message_count,
+        });
+      }
+    }
+    return Array.from(contactMap.values());
+  })();
+
+  const filteredConversations = deduplicatedConversations.filter((c) => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
