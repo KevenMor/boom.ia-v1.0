@@ -219,13 +219,27 @@ export default function EditAgent() {
                   <>
                     <Label className="text-sm font-medium text-muted-foreground">Modelo</Label>
                     <Select defaultValue={agent.model ?? models[0].value} onValueChange={(v) => setValue("model", v)}>
-                      <SelectTrigger className="h-11 rounded-lg bg-background border-border font-mono text-sm"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-auto min-h-[44px] rounded-lg bg-background border-border py-2">
+                        <SelectValue>
+                          {(() => {
+                            const currentModel = watch("model") || agent.model;
+                            const found = models.find((m) => m.value === currentModel);
+                            if (!found) return <span className="text-sm">{currentModel}</span>;
+                            return (
+                              <div className="flex flex-col items-start text-left">
+                                <span className="text-sm font-medium">{found.label}</span>
+                                <span className="text-xs text-muted-foreground">{found.description}</span>
+                              </div>
+                            );
+                          })()}
+                        </SelectValue>
+                      </SelectTrigger>
                       <SelectContent>
                         {models.map((m) => (
-                          <SelectItem key={m.value} value={m.value}>
+                          <SelectItem key={m.value} value={m.value} className="py-2.5">
                             <div className="flex flex-col">
-                              <span className="font-mono text-xs">{m.label}</span>
-                              <span className="text-[10px] text-muted-foreground">{m.description}</span>
+                              <span className="text-sm font-medium">{m.label}</span>
+                              <span className="text-xs text-muted-foreground">{m.description}</span>
                             </div>
                           </SelectItem>
                         ))}
