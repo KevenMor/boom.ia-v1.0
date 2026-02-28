@@ -21,34 +21,40 @@ export function StatCard({
   iconColor = "text-primary",
 }: StatCardProps) {
   return (
-    <div className="group rounded-xl border border-border bg-card p-5 transition-all duration-200 hover:border-primary/20 hover:shadow-lg hover:shadow-primary/5 animate-fade-in">
-      <div className="flex items-start gap-4">
-        <div
-          className={cn(
-            "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl transition-transform group-hover:scale-105",
-            iconBg
-          )}
-        >
-          <Icon className={cn("h-5 w-5", iconColor)} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-medium text-muted-foreground">{title}</p>
-          <div className="mt-1 flex items-baseline gap-2">
-            <span className="text-2xl font-bold tracking-tight">{value}</span>
-          </div>
-          {change && (
-            <span
-              className={cn(
-                "mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                changeType === "positive" && "bg-success/10 text-success",
-                changeType === "negative" && "bg-destructive/10 text-destructive",
-                changeType === "neutral" && "text-muted-foreground"
-              )}
-            >
-              {change}
-            </span>
-          )}
-        </div>
+    <div className="rounded-xl border border-border bg-card p-5 transition-shadow hover:shadow-md">
+      {/* Circular icon — Xintra style */}
+      <div
+        className={cn(
+          "mb-4 flex h-12 w-12 items-center justify-center rounded-full",
+          iconBg
+        )}
+      >
+        <Icon className={cn("h-5 w-5", iconColor)} />
+      </div>
+
+      {/* Label */}
+      <p className="text-xs font-medium text-muted-foreground">{title}</p>
+
+      {/* Value + Badge inline */}
+      <div className="mt-1 flex items-center justify-between">
+        <span className="text-2xl font-bold tracking-tight">{value}</span>
+        {change && (
+          <span
+            className={cn(
+              "inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold",
+              changeType === "positive" &&
+                "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+              changeType === "negative" &&
+                "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+              changeType === "neutral" &&
+                "bg-muted text-muted-foreground"
+            )}
+          >
+            {changeType === "positive" && "↑ "}
+            {changeType === "negative" && "↓ "}
+            {change}
+          </span>
+        )}
       </div>
     </div>
   );
