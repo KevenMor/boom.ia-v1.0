@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from "react";
-import { MessageSquare, Bot, User, Clock, Hash, Radio, ArrowLeft, Search, Image as ImageIcon } from "lucide-react";
+import { MessageSquare, Bot, ArrowLeft, Search, Send, Paperclip, Smile, CheckCheck } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
 import { useAgents } from "@/hooks/useAgents";
 import { useConversations, useConversationMessages } from "@/hooks/useConversations";
 import { formatDistanceToNow, format } from "date-fns";
@@ -14,12 +14,6 @@ import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 
-/** Extract a short preview from the last assistant or user message */
-function getLastMessagePreview(messages: any[] | undefined): string {
-  return "";
-}
-
-/** Detect image URLs in message content */
 function extractImages(content: string): { text: string; images: string[] } {
   const imgRegex = /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g;
   const images: string[] = [];
@@ -28,6 +22,12 @@ function extractImages(content: string): { text: string; images: string[] } {
     return "";
   }).trim();
   return { text, images };
+}
+
+function getLastMessagePreview(messages: any[] | undefined): string {
+  if (!messages || messages.length === 0) return "";
+  const last = messages[messages.length - 1];
+  return last?.content?.slice(0, 60) || "";
 }
 
 export default function Conversations() {
@@ -51,174 +51,161 @@ export default function Conversations() {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
-      (c.contact_name?.toLowerCase().includes(term)) ||
-      (c.external_user_id?.toLowerCase().includes(term)) ||
-      (c.channel?.toLowerCase().includes(term))
+      c.contact_name?.toLowerCase().includes(term) ||
+      c.external_user_id?.toLowerCase().includes(term) ||
+      c.channel?.toLowerCase().includes(term)
     );
   });
 
-  // Group messages by date
   const groupedMessages = messages?.reduce((groups, msg) => {
-    const date = format(new Date(msg.created_at), "dd MMM yyyy", { locale: ptBR });
+    const date = format(new Date(msg.created_at), "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
     if (!groups[date]) groups[date] = [];
     groups[date].push(msg);
     return groups;
   }, {} as Record<string, typeof messages>);
 
+  const displayName = (conv: any) => conv?.contact_name || conv?.external_user_id || "Anônimo";
+  const initials = (conv: any) => (displayName(conv)).slice(0, 2).toUpperCase();
+
   return (
-    <div className="h-[calc(100vh-100px)] flex flex-col">
-      {/* Top bar */}
-      <div className="flex items-center justify-between px-1 pb-3">
-        <div className="flex items-center gap-3">
-          <Radio className="h-4 w-4 text-primary animate-pulse" />
-          <h2 className="text-base font-semibold">Conversas</h2>
-          {conversations && (
-            <Badge variant="secondary" className="text-[10px] font-mono">
-              {conversations.length}
-            </Badge>
-          )}
-        </div>
-        <div className="w-52">
-          <Select
-            value={selectedAgentId ?? ""}
-            onValueChange={(v) => {
-              setSelectedAgentId(v);
-              setSelectedConvId(null);
-            }}
-          >
-            <SelectTrigger className="h-8 bg-card text-xs">
-              <SelectValue placeholder="Selecione um agente" />
-            </SelectTrigger>
-            <SelectContent>
-              {agentsLoading && <SelectItem value="_loading" disabled>Carregando...</SelectItem>}
-              {agents?.map((a) => (
-                <SelectItem key={a.id} value={a.id}>
-                  <span className="flex items-center gap-2">
-                    <Bot className="h-3 w-3" />
-                    {a.name}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">Chat ao Vivo</h1>
+            <p className="text-sm text-muted-foreground">Mensagens e conversas dos agentes.</p>
+          </div>
+          <div className="w-56">
+            <Select
+              value={selectedAgentId ?? ""}
+              onValueChange={(v) => {
+                setSelectedAgentId(v);
+                setSelectedConvId(null);
+              }}
+            >
+              <SelectTrigger className="h-9 bg-card text-sm">
+                <SelectValue placeholder="Selecione um agente" />
+              </SelectTrigger>
+              <SelectContent>
+                {agentsLoading && <SelectItem value="_loading" disabled>Carregando...</SelectItem>}
+                {agents?.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    <span className="flex items-center gap-2">
+                      <Bot className="h-3.5 w-3.5" />
+                      {a.name}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
       {!selectedAgentId ? (
-        <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
-          <div className="text-center space-y-2">
-            <MessageSquare className="h-10 w-10 mx-auto text-muted-foreground/30" />
-            <p>Selecione um agente para ver as conversas</p>
+        <div className="flex h-[calc(100vh-14rem)] items-center justify-center rounded-xl border bg-card text-card-foreground shadow-sm">
+          <div className="text-center space-y-3">
+            <div className="h-16 w-16 rounded-2xl bg-muted/50 flex items-center justify-center mx-auto">
+              <MessageSquare className="h-7 w-7 text-muted-foreground/40" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Selecione um agente para ver as conversas</p>
+            </div>
           </div>
         </div>
       ) : (
-        <div className="flex-1 flex rounded-lg border border-border overflow-hidden bg-card">
+        <div className="rounded-xl border bg-card text-card-foreground shadow-sm flex h-[calc(100vh-14rem)] overflow-hidden">
           {/* ─── Left panel: conversation list ─── */}
           <div
             className={cn(
-              "w-full lg:w-80 lg:min-w-[320px] border-r border-border flex flex-col bg-card",
-              selectedConvId ? "hidden lg:flex" : "flex"
+              "w-full flex-col border-r border-border md:w-80 md:shrink-0",
+              selectedConvId ? "hidden md:flex" : "flex"
             )}
           >
-            {/* Search */}
-            <div className="p-2 border-b border-border">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar conversa..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="h-8 pl-8 text-xs bg-background border-border/50"
-                />
-              </div>
-            </div>
-
-            {/* Tabs: status */}
-            <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border/50 text-[10px]">
-              <span className="font-medium text-primary">
-                Abertas {filteredConversations?.filter(c => c.status === "open").length ?? 0}
-              </span>
-              <span className="text-muted-foreground mx-1">·</span>
-              <span className="text-muted-foreground">
-                Todas {filteredConversations?.length ?? 0}
-              </span>
-            </div>
-
-            {/* List */}
-            <ScrollArea className="flex-1">
-              {convsLoading && (
-                <div className="space-y-1 p-2">
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <Skeleton key={i} className="h-16 w-full rounded-md" />
-                  ))}
+            <div className="flex flex-col h-full">
+              {/* Search */}
+              <div className="shrink-0 p-3">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Pesquisar conversas..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="h-9 pl-9 text-sm"
+                  />
                 </div>
-              )}
-              {!convsLoading && filteredConversations?.length === 0 && (
-                <p className="py-12 text-center text-xs text-muted-foreground">Nenhuma conversa</p>
-              )}
-              <div className="p-1">
+              </div>
+
+              <Separator />
+
+              {/* Conversation list */}
+              <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+                {convsLoading && (
+                  <div className="space-y-2 p-2">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div key={i} className="h-16 rounded-lg bg-muted/50 animate-pulse" />
+                    ))}
+                  </div>
+                )}
+                {!convsLoading && filteredConversations?.length === 0 && (
+                  <p className="py-12 text-center text-xs text-muted-foreground">Nenhuma conversa</p>
+                )}
                 {filteredConversations?.map((conv) => (
                   <button
                     key={conv.id}
                     onClick={() => setSelectedConvId(conv.id)}
                     className={cn(
-                      "w-full text-left rounded-md px-3 py-2.5 transition-all group",
-                      selectedConvId === conv.id
-                        ? "bg-primary/10"
-                        : "hover:bg-muted/40"
+                      "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-start transition-colors",
+                      selectedConvId === conv.id ? "bg-accent/20" : "hover:bg-accent/10"
                     )}
                   >
-                    <div className="flex items-start gap-2.5">
-                      <div className="relative shrink-0">
-                        <Avatar className="h-9 w-9">
-                          {conv.contact_avatar_url && (
-                            <AvatarImage src={conv.contact_avatar_url} alt={conv.contact_name || ""} />
-                          )}
-                          <AvatarFallback className="text-[11px] bg-secondary">
-                            {(conv.contact_name || conv.external_user_id || "?").slice(0, 2).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        {conv.status === "open" && (
-                          <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-success border-2 border-card" />
+                    <div className="relative shrink-0">
+                      <Avatar className="h-10 w-10">
+                        {conv.contact_avatar_url && (
+                          <AvatarImage src={conv.contact_avatar_url} alt={conv.contact_name || ""} />
                         )}
+                        <AvatarFallback className="text-xs bg-muted font-medium">
+                          {initials(conv)}
+                        </AvatarFallback>
+                      </Avatar>
+                      {conv.status === "open" && (
+                        <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-card bg-success" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-medium truncate">{displayName(conv)}</p>
+                        <span className="shrink-0 text-[10px] text-muted-foreground">
+                          {formatDistanceToNow(new Date(conv.started_at), { addSuffix: false, locale: ptBR })}
+                        </span>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-medium truncate">
-                            {conv.contact_name || conv.external_user_id || "Anônimo"}
-                          </span>
-                          <span className="text-[9px] text-muted-foreground shrink-0 ml-2">
-                            {formatDistanceToNow(new Date(conv.started_at), { addSuffix: false, locale: ptBR })}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between mt-0.5">
-                          <span className="text-[10px] text-muted-foreground truncate">
-                            {conv.channel === "webhook" ? "WhatsApp" : conv.channel} · {conv.message_count} msgs
-                          </span>
-                          <Badge
-                            variant={conv.status === "open" ? "default" : "secondary"}
-                            className="text-[8px] h-3.5 px-1.5 shrink-0"
-                          >
-                            {conv.status === "open" ? "Aberta" : "Fechada"}
+                      <div className="flex items-center justify-between gap-2 mt-0.5">
+                        <p className="text-xs text-muted-foreground truncate">
+                          {conv.channel === "webhook" ? "WhatsApp" : conv.channel} · {conv.message_count} msgs
+                        </p>
+                        {conv.status === "open" && (
+                          <Badge className="h-4.5 min-w-4.5 shrink-0 rounded-full px-1.5 text-[10px]">
+                            {conv.message_count}
                           </Badge>
-                        </div>
+                        )}
                       </div>
                     </div>
                   </button>
                 ))}
               </div>
-            </ScrollArea>
+            </div>
           </div>
 
           {/* ─── Right panel: chat ─── */}
           <div
             className={cn(
-              "flex-1 flex flex-col min-w-0",
-              !selectedConvId ? "hidden lg:flex" : "flex"
+              "flex-1 flex-col min-w-0",
+              !selectedConvId ? "hidden md:flex" : "flex"
             )}
           >
             {!selectedConvId ? (
-              <div className="flex-1 flex items-center justify-center">
+              <div className="flex flex-1 items-center justify-center">
                 <div className="text-center space-y-3">
                   <div className="h-16 w-16 rounded-2xl bg-muted/50 flex items-center justify-center mx-auto">
                     <MessageSquare className="h-7 w-7 text-muted-foreground/40" />
@@ -233,50 +220,48 @@ export default function Conversations() {
               </div>
             ) : (
               <>
-                {/* ── Chat header ── */}
-                <div className="border-b border-border px-4 py-2.5 flex items-center justify-between bg-card">
-                  <div className="flex items-center gap-3">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 lg:hidden"
-                      onClick={() => setSelectedConvId(null)}
-                    >
-                      <ArrowLeft className="h-4 w-4" />
-                    </Button>
-                    <Avatar className="h-8 w-8">
+                {/* Chat header */}
+                <div className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 md:hidden"
+                    onClick={() => setSelectedConvId(null)}
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                  <div className="relative">
+                    <Avatar className="h-9 w-9">
                       {selectedConv?.contact_avatar_url && (
                         <AvatarImage src={selectedConv.contact_avatar_url} alt={selectedConv.contact_name || ""} />
                       )}
-                      <AvatarFallback className="text-[10px] bg-secondary">
-                        {(selectedConv?.contact_name || selectedConv?.external_user_id || "?").slice(0, 2).toUpperCase()}
+                      <AvatarFallback className="text-xs bg-muted font-medium">
+                        {initials(selectedConv)}
                       </AvatarFallback>
                     </Avatar>
-                    <div>
-                      <p className="text-sm font-medium leading-tight">
-                        {selectedConv?.contact_name || selectedConv?.external_user_id || "Anônimo"}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {selectedConv?.channel === "webhook" ? "WhatsApp" : selectedConv?.channel}
-                        {selectedConv?.status === "open" && (
-                          <span className="text-success ml-1.5">● Online</span>
-                        )}
-                      </p>
-                    </div>
+                    {selectedConv?.status === "open" && (
+                      <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-card bg-success" />
+                    )}
                   </div>
-                  <Badge variant="outline" className="text-[9px] font-mono">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{displayName(selectedConv)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {selectedConv?.status === "open" ? "Online" : "Offline"}
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="text-[9px] font-mono shrink-0">
                     #{selectedConvId.slice(0, 8)}
                   </Badge>
                 </div>
 
-                {/* ── Messages area ── */}
-                <ScrollArea className="flex-1">
-                  <div className="p-4 space-y-1">
+                {/* Messages area */}
+                <div className="flex-1 overflow-y-auto px-4 py-4">
+                  <div className="space-y-6">
                     {msgsLoading && (
                       <div className="space-y-3">
                         {Array.from({ length: 4 }).map((_, i) => (
                           <div key={i} className={cn("flex", i % 2 === 0 ? "justify-start" : "justify-end")}>
-                            <Skeleton className="h-12 w-2/3 rounded-xl" />
+                            <div className="h-12 w-2/3 rounded-2xl bg-muted/50 animate-pulse" />
                           </div>
                         ))}
                       </div>
@@ -285,14 +270,16 @@ export default function Conversations() {
                     {groupedMessages && Object.entries(groupedMessages).map(([date, msgs]) => (
                       <div key={date}>
                         {/* Date separator */}
-                        <div className="flex items-center justify-center py-3">
-                          <span className="text-[9px] bg-muted/60 text-muted-foreground px-3 py-0.5 rounded-full font-medium">
+                        <div className="flex items-center gap-3 mb-4">
+                          <Separator className="flex-1" />
+                          <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                             {date}
                           </span>
+                          <Separator className="flex-1" />
                         </div>
 
-                        {/* Messages for this date */}
-                        <div className="space-y-1.5">
+                        {/* Messages */}
+                        <div className="space-y-3">
                           {msgs?.map((msg) => {
                             const isUser = msg.role === "user";
                             const isSystem = msg.role === "system" || msg.role === "tool";
@@ -301,7 +288,7 @@ export default function Conversations() {
                             if (isSystem) {
                               return (
                                 <div key={msg.id} className="flex justify-center py-1">
-                                  <span className="text-[9px] bg-accent/30 text-muted-foreground px-3 py-1 rounded-full italic max-w-[80%] truncate">
+                                  <span className="text-[9px] bg-muted/60 text-muted-foreground px-3 py-1 rounded-full italic max-w-[80%] truncate">
                                     {msg.content?.slice(0, 100)}
                                   </span>
                                 </div>
@@ -309,69 +296,65 @@ export default function Conversations() {
                             }
 
                             return (
-                              <div
-                                key={msg.id}
-                                className={cn("flex", isUser ? "justify-start" : "justify-end")}
-                              >
-                                <div
-                                  className={cn(
-                                    "max-w-[70%] rounded-2xl px-3.5 py-2 text-[13px] leading-relaxed shadow-sm",
-                                    isUser
-                                      ? "bg-muted/80 text-foreground rounded-bl-sm"
-                                      : "bg-primary text-primary-foreground rounded-br-sm"
-                                  )}
-                                >
-                                  {/* Images */}
-                                  {images.length > 0 && (
-                                    <div className={cn(
-                                      "mb-1.5 grid gap-1",
-                                      images.length === 1 ? "grid-cols-1" : images.length === 2 ? "grid-cols-2" : "grid-cols-2"
-                                    )}>
-                                      {images.map((img, idx) => (
-                                        <a key={idx} href={img} target="_blank" rel="noopener noreferrer" className="block">
-                                          <img
-                                            src={img}
-                                            alt=""
-                                            className="rounded-lg w-full h-auto max-h-48 object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                                            loading="lazy"
-                                          />
-                                        </a>
-                                      ))}
-                                    </div>
-                                  )}
+                              <div key={msg.id} className={cn("flex", isUser ? "justify-start" : "justify-end")}>
+                                <div className="max-w-[75%]">
+                                  <div
+                                    className={cn(
+                                      "rounded-2xl px-3.5 py-2",
+                                      isUser
+                                        ? "rounded-bl-md bg-muted"
+                                        : "rounded-br-md bg-primary text-primary-foreground"
+                                    )}
+                                  >
+                                    {/* Images */}
+                                    {images.length > 0 && (
+                                      <div className="mb-1.5 grid gap-1 grid-cols-1">
+                                        {images.map((img, idx) => (
+                                          <a key={idx} href={img} target="_blank" rel="noopener noreferrer">
+                                            <img
+                                              src={img}
+                                              alt=""
+                                              className="rounded-lg w-full h-auto max-h-48 object-cover hover:opacity-90 transition-opacity"
+                                              loading="lazy"
+                                            />
+                                          </a>
+                                        ))}
+                                      </div>
+                                    )}
 
-                                  {/* Text content */}
-                                  {text && (
-                                    <div className="prose prose-sm prose-invert max-w-none [&_p]:m-0 [&_p]:leading-relaxed">
-                                      <ReactMarkdown
-                                        components={{
-                                          p: ({ children }) => <p className="whitespace-pre-wrap break-words">{children}</p>,
-                                          a: ({ href, children }) => (
-                                            <a href={href} target="_blank" rel="noopener noreferrer" className="underline opacity-80 hover:opacity-100">
-                                              {children}
-                                            </a>
-                                          ),
-                                          strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-                                        }}
-                                      >
-                                        {text}
-                                      </ReactMarkdown>
-                                    </div>
-                                  )}
+                                    {/* Text */}
+                                    {text && (
+                                      <div className="prose prose-sm max-w-none [&_p]:m-0 [&_p]:leading-relaxed">
+                                        <ReactMarkdown
+                                          components={{
+                                            p: ({ children }) => <p className="text-sm whitespace-pre-wrap break-words">{children}</p>,
+                                            a: ({ href, children }) => (
+                                              <a href={href} target="_blank" rel="noopener noreferrer" className="underline opacity-80 hover:opacity-100">
+                                                {children}
+                                              </a>
+                                            ),
+                                            strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                                          }}
+                                        >
+                                          {text}
+                                        </ReactMarkdown>
+                                      </div>
+                                    )}
+                                  </div>
 
                                   {/* Timestamp */}
                                   <div className={cn(
-                                    "mt-1 flex items-center gap-1.5 text-[9px]",
-                                    isUser ? "opacity-40" : "opacity-50"
+                                    "mt-1 flex items-center gap-1 px-1",
+                                    isUser ? "justify-start" : "justify-end"
                                   )}>
-                                    <span>
+                                    <span className="text-[10px] text-muted-foreground">
                                       {format(new Date(msg.created_at), "HH:mm")}
                                     </span>
-                                    {!isUser && msg.model && (
-                                      <span className="font-mono">{msg.model.split("/").pop()}</span>
+                                    {!isUser && (
+                                      <CheckCheck className="h-3 w-3 text-primary" />
                                     )}
-                                    {!isUser && msg.latency_ms && (
-                                      <span>{msg.latency_ms}ms</span>
+                                    {!isUser && msg.model && (
+                                      <span className="text-[9px] text-muted-foreground font-mono">{msg.model.split("/").pop()}</span>
                                     )}
                                   </div>
                                 </div>
@@ -383,14 +366,27 @@ export default function Conversations() {
                     ))}
                     <div ref={messagesEndRef} />
                   </div>
-                </ScrollArea>
+                </div>
 
-                {/* ── Footer bar (read-only indicator) ── */}
-                <div className="border-t border-border px-4 py-2 flex items-center justify-center bg-card/50">
-                  <span className="text-[10px] text-muted-foreground flex items-center gap-1.5">
-                    <Radio className="h-3 w-3 text-success animate-pulse" />
-                    Modo espelhamento — somente leitura
-                  </span>
+                {/* Footer — read-only */}
+                <div className="shrink-0 border-t border-border px-4 py-3">
+                  <div className="flex items-end gap-2">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 mb-0.5" disabled>
+                      <Paperclip className="h-4 w-4" />
+                    </Button>
+                    <Textarea
+                      className="min-h-[40px] max-h-[120px] resize-none text-sm"
+                      placeholder="Modo somente leitura..."
+                      rows={1}
+                      disabled
+                    />
+                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 mb-0.5" disabled>
+                      <Smile className="h-4 w-4" />
+                    </Button>
+                    <Button size="icon" className="h-8 w-8 shrink-0 mb-0.5" disabled>
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </>
             )}
