@@ -37,7 +37,7 @@ export default function Login() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       {/* Background subtle grid */}
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(hsl(var(--primary)/0.08)_1px,transparent_1px)] [background-size:24px_24px]" />
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(hsl(var(--border))_1px,transparent_1px)] [background-size:32px_32px] opacity-30" />
 
       <motion.div
         initial={{ opacity: 0, y: 16 }}
@@ -47,12 +47,12 @@ export default function Login() {
       >
         {/* Logo */}
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary font-mono text-lg font-bold text-primary-foreground glow-primary">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary font-mono text-lg font-bold text-primary-foreground shadow-md">
             N
           </div>
           <h1 className="text-xl font-semibold tracking-tight">Nexus AI</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Plataforma de Agentes Inteligentes
+            Plataforma de Gestão
           </p>
         </div>
 
