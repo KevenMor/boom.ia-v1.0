@@ -130,7 +130,7 @@ export default function Agents() {
               <Button
                 variant="outline"
                 className="flex-1 text-sm"
-                onClick={() => setEditAgent(agent)}
+                onClick={() => navigate(`/agents/${agent.id}/edit`)}
               >
                 <Pencil className="mr-1.5 h-3.5 w-3.5" />
                 Editar
@@ -153,7 +153,7 @@ export default function Agents() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setEditAgent(agent)}>
+                  <DropdownMenuItem onClick={() => navigate(`/agents/${agent.id}/edit`)}>
                     <Pencil className="mr-2 h-3 w-3" />Editar
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
