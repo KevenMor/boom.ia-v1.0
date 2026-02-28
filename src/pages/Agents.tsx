@@ -1,5 +1,4 @@
 import { Bot, Plus, Search, MoreHorizontal, Pencil, Trash2, MessageSquare, Copy } from "lucide-react";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -70,16 +69,15 @@ export default function Agents() {
             className="relative overflow-hidden rounded-xl border-border bg-card p-5 transition-all duration-200 hover:shadow-lg hover:shadow-primary/5 animate-fade-in"
             style={{ animationDelay: `${i * 50}ms` }}
           >
-            {/* Avatar / Icon */}
-            <div className="flex items-center justify-center rounded-lg bg-sidebar-accent p-6">
-              <Avatar className="h-16 w-16 border-2 border-border">
-                {agent.avatar_url ? (
-                  <AvatarImage src={agent.avatar_url} alt={agent.name} className="object-cover" />
-                ) : null}
-                <AvatarFallback className="bg-primary/10 text-primary text-lg font-semibold">
-                  {agent.name.substring(0, 2).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
+            {/* Logo / Icon */}
+            <div className="flex items-center justify-center rounded-lg bg-sidebar-accent p-4">
+              {agent.avatar_url ? (
+                <img src={agent.avatar_url} alt={agent.name} className="max-h-16 w-auto object-contain" />
+              ) : (
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
+                  <Bot className="h-7 w-7 text-primary" />
+                </div>
+              )}
             </div>
 
             {/* Content */}

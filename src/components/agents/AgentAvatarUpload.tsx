@@ -1,8 +1,7 @@
 import { useState, useRef } from "react";
-import { Camera, Loader2 } from "lucide-react";
+import { Camera, Loader2, ImagePlus } from "lucide-react";
 import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
 import { toast } from "sonner";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -31,7 +30,6 @@ export function AgentAvatarUpload({ agentId, currentUrl, onUploaded, className }
       return;
     }
 
-    // Show preview immediately
     const objectUrl = URL.createObjectURL(file);
     setPreview(objectUrl);
 
@@ -47,10 +45,9 @@ export function AgentAvatarUpload({ agentId, currentUrl, onUploaded, className }
       if (uploadError) throw uploadError;
 
       const { data } = supabase.storage.from("agent-avatars").getPublicUrl(path);
-      // Add cache-busting param
       const publicUrl = `${data.publicUrl}?t=${Date.now()}`;
       onUploaded(publicUrl);
-      toast.success("Avatar atualizado!");
+      toast.success("Logo atualizado!");
     } catch (err: any) {
       toast.error("Erro no upload: " + (err.message ?? "desconhecido"));
       setPreview(null);
@@ -64,22 +61,28 @@ export function AgentAvatarUpload({ agentId, currentUrl, onUploaded, className }
   return (
     <div
       className={cn(
-        "group relative cursor-pointer",
+        "group relative w-full cursor-pointer overflow-hidden rounded-lg bg-sidebar-accent transition-all hover:ring-2 hover:ring-primary/30",
         className
       )}
       onClick={() => inputRef.current?.click()}
     >
-      <Avatar className="h-16 w-16 border-2 border-border transition-all group-hover:border-primary/50">
-        {displayUrl ? (
-          <AvatarImage src={displayUrl} alt="Avatar do agente" className="object-cover" />
-        ) : null}
-        <AvatarFallback className="bg-primary/10 text-primary">
-          <Camera className="h-5 w-5" />
-        </AvatarFallback>
-      </Avatar>
+      {displayUrl ? (
+        <div className="flex items-center justify-center p-4">
+          <img
+            src={displayUrl}
+            alt="Logo do agente"
+            className="max-h-20 w-auto object-contain"
+          />
+        </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center gap-1.5 p-6 text-muted-foreground">
+          <ImagePlus className="h-6 w-6" />
+          <span className="text-[11px]">Clique para adicionar logo</span>
+        </div>
+      )}
 
-      {/* Overlay */}
-      <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+      {/* Overlay on hover */}
+      <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
         {uploading ? (
           <Loader2 className="h-5 w-5 animate-spin text-white" />
         ) : (
