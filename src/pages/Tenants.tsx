@@ -109,9 +109,15 @@ export default function Tenants() {
                       {/* Name */}
                       <td className="whitespace-nowrap px-4 py-4 text-sm font-medium text-foreground">
                         <div className="flex items-center gap-x-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                            <Building2 className="h-4 w-4 text-primary" />
-                          </div>
+                          {(tenant.settings as any)?.logo_url ? (
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted/50 overflow-hidden">
+                              <img src={(tenant.settings as any).logo_url} alt={tenant.name} className="h-full w-full object-cover" />
+                            </div>
+                          ) : (
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                              <Building2 className="h-4 w-4 text-primary" />
+                            </div>
+                          )}
                           <div>
                             <h2 className="font-medium text-foreground">{tenant.name}</h2>
                             <p className="text-xs text-muted-foreground">
