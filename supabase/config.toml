@@ -3,6 +3,9 @@ project_id = "qqueviooottrostbxkek"
 [functions.test-tool]
 verify_jwt = false
 
+[functions.fipe-query]
+verify_jwt = false
+
 [functions.find-nearest-unit]
 verify_jwt = false
 
