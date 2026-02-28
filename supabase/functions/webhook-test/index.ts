@@ -144,11 +144,22 @@ function parseChatwootPayload(body: Record<string, unknown>) {
     const sender = (body.sender || {}) as Record<string, unknown>;
     const conversation = (body.conversation || {}) as Record<string, unknown>;
     const contactMeta = (conversation.contact || sender || {}) as Record<string, unknown>;
+    const conversationMeta = (conversation.meta || {}) as Record<string, unknown>;
+    const metaSender = (conversationMeta.sender || {}) as Record<string, unknown>;
+
+    const phoneCandidate =
+      (sender.phone_number as string) ||
+      (contactMeta.phone_number as string) ||
+      (metaSender.phone_number as string) ||
+      (conversation.source_id as string) ||
+      (contactMeta.identifier as string) ||
+      null;
     return {
       isChatwoot: true,
       message: (body.content as string) || "",
+      // Prioritize real customer phone over Chatwoot internal IDs
       externalUserId:
-        String(sender.id ?? "") || (sender.phone_number as string) || (sender.email as string) || "chatwoot-user",
+        phoneCandidate || (sender.email as string) || String(sender.id ?? "chatwoot-user"),
       contactName: (sender.name as string) || null,
       contactAvatarUrl: (sender.thumbnail as string) || (sender.avatar_url as string) || null,
       chatwootConversationId: (conversation.id as number) ?? null,
