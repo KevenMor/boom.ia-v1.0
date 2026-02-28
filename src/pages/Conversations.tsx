@@ -269,7 +269,7 @@ export default function Conversations() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold truncate">{displayName(selectedConv)}</p>
                     <p className="text-xs text-muted-foreground">
-                      {selectedConv?.status === "open" ? "Online" : "Offline"}
+                      {selectedConv?.external_user_id || (selectedConv?.status === "open" ? "Online" : "Offline")}
                     </p>
                   </div>
                   <Badge variant="outline" className="text-[9px] font-mono shrink-0">
