@@ -41,13 +41,13 @@
     --radius: 0.625rem;
 
     --sidebar-background: 228 40% 16%;
-    --sidebar-foreground: 220 20% 70%;
-    --sidebar-primary: 217 72% 60%;
+    --sidebar-foreground: 220 15% 82%;
+    --sidebar-primary: 217 72% 65%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 228 35% 22%;
-    --sidebar-accent-foreground: 220 20% 93%;
+    --sidebar-accent-foreground: 0 0% 100%;
     --sidebar-border: 228 30% 22%;
-    --sidebar-ring: 217 72% 60%;
+    --sidebar-ring: 217 72% 65%;
 
     --font-sans: 'Satoshi', system-ui, -apple-system, sans-serif;
     --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
