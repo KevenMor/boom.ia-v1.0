@@ -130,7 +130,7 @@ export default function Providers() {
                 {p.base_url && (
                   <div className="flex items-center gap-1.5 mb-3 px-2.5 py-1.5 rounded-lg bg-muted/50 w-fit max-w-full">
                     <Globe className="h-3 w-3 text-muted-foreground shrink-0" />
-                    <span className="font-mono text-[10px] text-muted-foreground truncate">{p.base_url}</span>
+                    <span className="text-[11px] text-muted-foreground truncate">{p.base_url}</span>
                   </div>
                 )}
 
@@ -141,7 +141,7 @@ export default function Providers() {
                       <Badge
                         key={m.value}
                         variant={m.value === p.model_default ? "default" : "outline"}
-                        className={`font-mono text-[10px] ${
+                        className={`text-[11px] ${
                           m.value === p.model_default
                             ? ""
                             : "bg-transparent border-border/60 text-muted-foreground hover:bg-accent/50"
@@ -151,7 +151,7 @@ export default function Providers() {
                       </Badge>
                     ))
                   ) : p.model_default ? (
-                    <Badge variant="outline" className="font-mono text-[10px] bg-transparent border-border/60 text-muted-foreground">
+                    <Badge variant="outline" className="text-[11px] bg-transparent border-border/60 text-muted-foreground">
                       {p.model_default}
                     </Badge>
                   ) : null}
