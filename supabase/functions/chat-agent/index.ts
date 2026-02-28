@@ -1086,8 +1086,9 @@ COMPORTAMENTO CONSULTIVO OBRIGATÓRIO:
           console.log(`[Dispatcher] Using provider "${dispatcherProvider.name}", model: ${dispatcherModel}, url: ${dispatcherBaseUrl}`);
           debugTrace.push({ type: "dispatcher_start", provider: dispatcherProvider.name, model: dispatcherModel, tools_count: openaiTools.length, timestamp: Date.now() });
 
-        // Build a focused dispatcher prompt — only job is to decide tool calls
-        const dispatcherSystemPrompt = `You are a tool dispatcher. Your ONLY job is to analyze the user's message and conversation context, then decide if any tools should be called.
+        // Build dispatcher prompt — use agent-level custom prompt if available, else generic fallback
+        const customDispatcherPrompt = agentConfig.dispatcher_prompt;
+        const dispatcherSystemPrompt = customDispatcherPrompt || `You are a tool dispatcher. Your ONLY job is to analyze the user's message and conversation context, then decide if any tools should be called.
 
 RULES:
 - If the user's message requires objective data lookup (inventory, location, etc.), call the appropriate tool.
@@ -1098,6 +1099,7 @@ RULES:
 - When the user confirms interest in photos (e.g. "quero sim", "manda", "pode enviar") and there's a vehicle in the conversation context, call the inventory tool for that vehicle.
 - NEVER generate conversational text. Only decide tool calls. If no tools are needed, respond with exactly: "NO_TOOLS_NEEDED"
 - You may call multiple tools if needed.`;
+        console.log(`[Dispatcher] Using ${customDispatcherPrompt ? "CUSTOM" : "DEFAULT"} dispatcher prompt`);
 
         const dispatcherMessages = [
           { role: "system", content: dispatcherSystemPrompt },
