@@ -1,4 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
+import boomLogo from "@/assets/boom-ia-logo.png";
 import {
   LayoutDashboard,
   Building2,
@@ -152,13 +153,13 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
     <div className="flex h-full flex-col">
       {/* Logo header */}
       <div className="flex h-16 items-center gap-3 border-b border-white/10 px-4">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent">
-          <Sparkles className="h-4 w-4 text-white" />
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl overflow-hidden">
+          <img src={boomLogo} alt="Boom IA" className="h-9 w-9 object-cover" />
         </div>
         {!collapsed && (
           <div className="flex flex-col">
             <span className="text-sm font-bold tracking-tight text-white">
-              Nexus AI
+              Boom IA
             </span>
             <span className="text-[10px] font-medium uppercase tracking-widest text-white/35">
               Painel

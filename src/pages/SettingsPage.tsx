@@ -16,7 +16,7 @@ interface PlatformSettings {
 }
 
 const defaults: PlatformSettings = {
-  platform_name: "Nexus AI",
+  platform_name: "Boom IA",
   max_agents: 5,
   max_msgs_month: 50000,
   retention_months: 12,
@@ -46,7 +46,7 @@ export default function SettingsPage() {
     <div className="max-w-2xl space-y-6">
       <div>
         <h2 className="text-lg font-semibold">Configurações da Plataforma</h2>
-        <p className="text-sm text-muted-foreground">Parâmetros globais do Nexus AI</p>
+        <p className="text-sm text-muted-foreground">Parâmetros globais do Boom IA</p>
       </div>
 
       <Card className="border-border bg-card p-5 space-y-4">
