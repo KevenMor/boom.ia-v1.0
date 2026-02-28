@@ -1,5 +1,6 @@
 import { Cpu, CheckCircle2, AlertTriangle, XCircle, Plus, MoreHorizontal, Pencil, Trash2, Key } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ const statusIcons: Record<string, React.ReactNode> = {
 };
 
 export default function Providers() {
+  const navigate = useNavigate();
   const { data: providers, isLoading, error } = useProviders();
   const [createOpen, setCreateOpen] = useState(false);
   const [editProvider, setEditProvider] = useState<Provider | null>(null);
@@ -77,7 +79,7 @@ export default function Providers() {
                   <Button variant="ghost" size="icon" className="h-7 w-7"><MoreHorizontal className="h-4 w-4" /></Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setEditProvider(p)}>
+                  <DropdownMenuItem onClick={() => navigate(`/providers/${p.id}/edit`)}>
                     <Pencil className="mr-2 h-3 w-3" />Editar
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />

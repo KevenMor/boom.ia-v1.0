@@ -8,6 +8,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useTools } from "@/hooks/useTools";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CreateToolDialog } from "@/components/tools/CreateToolDialog";
@@ -31,6 +32,7 @@ const TOOL_TYPE_LABEL: Record<string, string> = {
 };
 
 export default function Tools() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const { data: tools, isLoading, error } = useTools();
   const [createOpen, setCreateOpen] = useState(false);
@@ -96,7 +98,7 @@ export default function Tools() {
                     <DropdownMenuItem onClick={() => setTestTool(tool)}>
                       <Play className="mr-2 h-3 w-3" />Testar
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setEditTool(tool)}>
+                    <DropdownMenuItem onClick={() => navigate(`/tools/${tool.id}/edit`)}>
                       <Pencil className="mr-2 h-3 w-3" />Editar
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />

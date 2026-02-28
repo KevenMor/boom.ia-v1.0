@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Building2, Plus, Search, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,7 @@ import { DeleteTenantDialog } from "@/components/tenants/DeleteTenantDialog";
 import type { Tenant } from "@/types/database";
 
 export default function Tenants() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const { data: tenants, isLoading, error } = useTenants();
   const [createOpen, setCreateOpen] = useState(false);
@@ -182,7 +184,7 @@ export default function Tenants() {
                             <Trash2 className="h-4 w-4" />
                           </button>
                           <button
-                            onClick={() => setEditTenant(tenant)}
+                            onClick={() => navigate(`/tenants/${tenant.id}/edit`)}
                             className="text-muted-foreground transition-colors duration-200 hover:text-warning"
                           >
                             <Pencil className="h-4 w-4" />
