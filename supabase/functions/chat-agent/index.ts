@@ -695,6 +695,35 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         }
       }
 
+      case "fipe_query": {
+        // Query FIPE table via the fipe-query edge function
+        const cloudUrl = Deno.env.get("SUPABASE_URL") || "";
+        const cloudKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+
+        const fipeArgs: Record<string, any> = {};
+        if (args.marca || args.brand) fipeArgs.marca = args.marca || args.brand;
+        if (args.modelo || args.model) fipeArgs.modelo = args.modelo || args.model;
+        if (args.ano || args.year) fipeArgs.ano = args.ano || args.year;
+        if (args.codigo_fipe) fipeArgs.codigo_fipe = args.codigo_fipe;
+        if (args.tipo) fipeArgs.tipo = args.tipo;
+
+        const resp = await fetch(`${cloudUrl}/functions/v1/fipe-query`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${cloudKey}`,
+          },
+          body: JSON.stringify(fipeArgs),
+        });
+
+        const result = await resp.text();
+        try {
+          return JSON.stringify(JSON.parse(result));
+        } catch {
+          return result.slice(0, 8000);
+        }
+      }
+
       default:
         return JSON.stringify({ error: `Unknown tool type: ${tool.tool_type}` });
     }
@@ -735,6 +764,20 @@ const BUILTIN_SCHEMAS: Record<string, { description: string; parameters: any }> 
         longitude: { type: "number", description: "Longitude do cliente" },
       },
       required: [],
+    },
+  },
+  fipe_query: {
+    description: "Consulta o preço de referência da Tabela FIPE para um veículo. Informe marca, modelo e opcionalmente o ano.",
+    parameters: {
+      type: "object",
+      properties: {
+        marca:  { type: "string", description: "Marca do veículo (ex: Toyota, Honda, Chevrolet, Volkswagen)" },
+        modelo: { type: "string", description: "Modelo do veículo (ex: Corolla, Civic, Onix, Polo)" },
+        ano:    { type: "integer", description: "Ano do veículo (ex: 2023)" },
+        codigo_fipe: { type: "string", description: "Código FIPE direto se disponível (ex: 001004-9)" },
+        tipo:   { type: "integer", description: "Tipo: 1=carros (padrão), 2=motos, 3=caminhões" },
+      },
+      required: ["marca", "modelo"],
     },
   },
 };

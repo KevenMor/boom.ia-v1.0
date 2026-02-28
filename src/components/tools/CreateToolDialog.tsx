@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCreateTool } from "@/hooks/useTools";
 import { useTenants } from "@/hooks/useTenants";
 import { toast } from "sonner";
-import { Database, Globe, Server, Search, Car, MapPin } from "lucide-react";
+import { Database, Globe, Server, Search, Car, MapPin, DollarSign } from "lucide-react";
 import type { ToolType } from "@/types/database";
 
 const TOOL_TYPE_META: Record<ToolType, { label: string; icon: any; description: string }> = {
@@ -24,12 +24,13 @@ const TOOL_TYPE_META: Record<ToolType, { label: string; icon: any; description: 
   rag_search: { label: "Busca RAG", icon: Search, description: "Busca semântica nos documentos" },
   inventory_query: { label: "Estoque", icon: Car, description: "Consulta veículos do inventory" },
   nearest_unit: { label: "Unidade Próxima", icon: MapPin, description: "Encontra unidade mais próxima por CEP" },
+  fipe_query: { label: "Tabela FIPE", icon: DollarSign, description: "Consulta preço FIPE por marca/modelo/ano" },
 };
 
 const schema = z.object({
   name: z.string().min(2, "Nome obrigatório (snake_case)"),
   description: z.string().min(3, "Descrição obrigatória para o LLM"),
-  tool_type: z.enum(["sql_query", "web_scraper", "api_rest", "rag_search", "inventory_query", "nearest_unit"]),
+  tool_type: z.enum(["sql_query", "web_scraper", "api_rest", "rag_search", "inventory_query", "nearest_unit", "fipe_query"]),
   tenant_id: z.string().optional(),
   endpoint: z.string().optional(),
   parameters_json: z.string().optional(),
@@ -101,6 +102,7 @@ export function CreateToolDialog({ open, onOpenChange }: Props) {
       case "rag_search": return '{\n  "limit": 5\n}';
       case "inventory_query": return '{}';
       case "nearest_unit": return '{}';
+      case "fipe_query": return '{}';
     }
   };
 

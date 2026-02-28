@@ -136,6 +136,34 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "fipe_query": {
+        const cloudUrl = Deno.env.get("SUPABASE_URL") || "";
+        const cloudKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+
+        const fipeArgs: Record<string, any> = {};
+        if (args?.marca || args?.brand) fipeArgs.marca = args.marca || args.brand;
+        if (args?.modelo || args?.model) fipeArgs.modelo = args.modelo || args.model;
+        if (args?.ano || args?.year) fipeArgs.ano = args.ano || args.year;
+        if (args?.codigo_fipe) fipeArgs.codigo_fipe = args.codigo_fipe;
+        if (args?.tipo) fipeArgs.tipo = args.tipo;
+
+        const resp = await fetch(`${cloudUrl}/functions/v1/fipe-query`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${cloudKey}`,
+          },
+          body: JSON.stringify(fipeArgs),
+        });
+        const data = await resp.text();
+        try {
+          result = { status: resp.status, data: JSON.parse(data) };
+        } catch {
+          result = { status: resp.status, data: data.slice(0, 4000) };
+        }
+        break;
+      }
+
       default:
         result = { error: `Unknown tool type: ${tool.tool_type}` };
     }
