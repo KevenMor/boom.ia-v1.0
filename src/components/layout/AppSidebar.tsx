@@ -1,5 +1,4 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard,
   Building2,
@@ -9,17 +8,17 @@ import {
   Activity,
   MessageSquare,
   Settings,
-  ChevronLeft,
-  ChevronRight,
   LogOut,
   FileText,
   X,
+  ChevronDown,
+  User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useState } from "react";
 
 const navItems = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
@@ -28,176 +27,148 @@ const navItems = [
   { to: "/conversations", icon: MessageSquare, label: "Conversas" },
   { to: "/tools", icon: Wrench, label: "Tools" },
   { to: "/providers", icon: Cpu, label: "Providers" },
+];
+
+const secondaryItems = [
   { to: "/monitoring", icon: Activity, label: "Monitoramento" },
   { to: "/audit", icon: FileText, label: "Auditoria" },
   { to: "/settings", icon: Settings, label: "Configurações" },
 ];
 
 function SidebarContent() {
-  const { collapsed, toggle } = useSidebar();
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
   const location = useLocation();
   const isMobile = useIsMobile();
   const { setMobileOpen } = useSidebar();
+  const [accountOpen, setAccountOpen] = useState(false);
 
-  const isExpanded = isMobile || !collapsed;
+  const linkClass = (isActive: boolean) =>
+    cn(
+      "flex items-center gap-3 rounded-lg px-4 py-2 text-sm font-medium transition-colors",
+      isActive
+        ? "bg-sidebar-accent text-foreground"
+        : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+    );
 
   return (
-    <div className="flex h-full flex-col">
-      {/* Logo */}
-      <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary font-sans text-sm font-extrabold text-primary-foreground">
-            N
+    <div className="flex h-full flex-col justify-between">
+      <div className="px-4 py-6">
+        {/* Logo */}
+        <div className="flex items-center justify-between">
+          <div className="flex h-10 items-center gap-2.5 rounded-lg bg-sidebar-accent px-3">
+            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-xs font-bold text-primary-foreground">
+              N
+            </div>
+            <span className="text-sm font-semibold text-foreground">Nexus AI</span>
           </div>
-          <AnimatePresence>
-            {isExpanded && (
-              <motion.span
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: "auto" }}
-                exit={{ opacity: 0, width: 0 }}
-                className="overflow-hidden text-sm font-bold tracking-tight text-foreground whitespace-nowrap"
-              >
-                Nexus AI
-              </motion.span>
-            )}
-          </AnimatePresence>
+          {isMobile && (
+            <button onClick={() => setMobileOpen(false)} className="text-muted-foreground hover:text-foreground">
+              <X className="h-5 w-5" />
+            </button>
+          )}
         </div>
-        {isMobile && (
-          <button onClick={() => setMobileOpen(false)} className="text-muted-foreground hover:text-foreground">
-            <X className="h-5 w-5" />
-          </button>
-        )}
+
+        {/* Main nav */}
+        <ul className="mt-6 space-y-1">
+          {navItems.map((item) => {
+            const isActive = location.pathname.startsWith(item.to);
+            return (
+              <li key={item.to}>
+                <NavLink
+                  to={item.to}
+                  onClick={() => isMobile && setMobileOpen(false)}
+                  className={linkClass(isActive)}
+                >
+                  <item.icon className="h-4 w-4 shrink-0" />
+                  {item.label}
+                </NavLink>
+              </li>
+            );
+          })}
+
+          {/* Secondary group - collapsible */}
+          <li>
+            <button
+              onClick={() => setAccountOpen(!accountOpen)}
+              className="flex w-full cursor-pointer items-center justify-between rounded-lg px-4 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            >
+              <span>Administração</span>
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 shrink-0 transition-transform duration-200",
+                  accountOpen && "-rotate-180"
+                )}
+              />
+            </button>
+            {accountOpen && (
+              <ul className="mt-1 space-y-1 px-3">
+                {secondaryItems.map((item) => {
+                  const isActive = location.pathname.startsWith(item.to);
+                  return (
+                    <li key={item.to}>
+                      <NavLink
+                        to={item.to}
+                        onClick={() => isMobile && setMobileOpen(false)}
+                        className={linkClass(isActive)}
+                      >
+                        <item.icon className="h-4 w-4 shrink-0" />
+                        {item.label}
+                      </NavLink>
+                    </li>
+                  );
+                })}
+                <li>
+                  <button
+                    onClick={() => signOut()}
+                    className="flex w-full items-center gap-3 rounded-lg px-4 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <LogOut className="h-4 w-4 shrink-0" />
+                    Sair
+                  </button>
+                </li>
+              </ul>
+            )}
+          </li>
+        </ul>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
-        {navItems.map((item) => {
-          const isActive = location.pathname.startsWith(item.to);
-          const link = (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              onClick={() => isMobile && setMobileOpen(false)}
-              className={cn(
-                "relative flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150",
-                isActive
-                  ? "bg-primary/10 text-primary"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              )}
-            >
-              {isActive && (
-                <motion.div
-                  layoutId="sidebar-indicator"
-                  className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-primary"
-                  transition={{ type: "spring", stiffness: 350, damping: 30 }}
-                />
-              )}
-              <item.icon className="h-[18px] w-[18px] shrink-0" />
-              <AnimatePresence>
-                {isExpanded && (
-                  <motion.span
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="truncate"
-                  >
-                    {item.label}
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </NavLink>
-          );
-
-          if (collapsed && !isMobile) {
-            return (
-              <Tooltip key={item.to} delayDuration={0}>
-                <TooltipTrigger asChild>{link}</TooltipTrigger>
-                <TooltipContent side="right" className="text-xs">
-                  {item.label}
-                </TooltipContent>
-              </Tooltip>
-            );
-          }
-
-          return link;
-        })}
-      </nav>
-
-      {/* Footer */}
-      <div className="space-y-0.5 border-t border-sidebar-border p-2">
-        <button
-          onClick={() => signOut()}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] text-sidebar-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-        >
-          <LogOut className="h-[18px] w-[18px] shrink-0" />
-          <AnimatePresence>
-            {isExpanded && (
-              <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                Sair
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </button>
-        {!isMobile && (
-          <button
-            onClick={toggle}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
-          >
-            {collapsed ? (
-              <ChevronRight className="h-[18px] w-[18px] shrink-0" />
-            ) : (
-              <>
-                <ChevronLeft className="h-[18px] w-[18px] shrink-0" />
-                <span>Recolher</span>
-              </>
-            )}
-          </button>
-        )}
+      {/* User footer */}
+      <div className="border-t border-sidebar-border">
+        <div className="flex items-center gap-3 p-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sidebar-accent">
+            <User className="h-4 w-4 text-sidebar-foreground" />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-foreground">Admin</p>
+            <p className="truncate text-xs text-muted-foreground">{user?.email ?? "—"}</p>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
 export function AppSidebar() {
-  const { collapsed, isMobileOpen, setMobileOpen } = useSidebar();
+  const { isMobileOpen, setMobileOpen } = useSidebar();
   const isMobile = useIsMobile();
 
   if (isMobile) {
-    return (
-      <AnimatePresence>
-        {isMobileOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setMobileOpen(false)}
-              className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
-            />
-            <motion.aside
-              initial={{ x: -280 }}
-              animate={{ x: 0 }}
-              exit={{ x: -280 }}
-              transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              className="fixed left-0 top-0 bottom-0 z-50 w-[280px] bg-sidebar border-r border-sidebar-border"
-            >
-              <SidebarContent />
-            </motion.aside>
-          </>
-        )}
-      </AnimatePresence>
-    );
+    return isMobileOpen ? (
+      <>
+        <div
+          onClick={() => setMobileOpen(false)}
+          className="fixed inset-0 z-50 bg-black/50"
+        />
+        <aside className="fixed left-0 top-0 bottom-0 z-50 w-[280px] bg-sidebar border-r border-sidebar-border animate-slide-in-left">
+          <SidebarContent />
+        </aside>
+      </>
+    ) : null;
   }
 
   return (
-    <motion.aside
-      initial={false}
-      animate={{ width: collapsed ? 64 : 240 }}
-      transition={{ duration: 0.2, ease: "easeInOut" }}
-      className="fixed left-0 top-0 bottom-0 z-40 flex flex-col border-r border-sidebar-border bg-sidebar"
-    >
+    <aside className="fixed left-0 top-0 bottom-0 z-40 w-[260px] border-r border-sidebar-border bg-sidebar">
       <SidebarContent />
-    </motion.aside>
+    </aside>
   );
 }
