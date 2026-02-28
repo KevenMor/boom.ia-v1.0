@@ -1,18 +1,19 @@
 import { Outlet } from "react-router-dom";
-import { AppSidebar } from "./AppSidebar";
+import { AppSidebar, SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH } from "./AppSidebar";
 import { AppHeader } from "./AppHeader";
-import { SidebarProvider } from "@/contexts/SidebarContext";
+import { SidebarProvider, useSidebar } from "@/contexts/SidebarContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 function LayoutInner() {
   const isMobile = useIsMobile();
+  const { collapsed } = useSidebar();
 
   return (
     <div className="flex min-h-screen bg-background">
       <AppSidebar />
       <div
-        className="flex flex-1 flex-col"
-        style={{ paddingLeft: isMobile ? 0 : 260 }}
+        className="flex flex-1 flex-col transition-all duration-300"
+        style={{ paddingLeft: isMobile ? 0 : (collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH) }}
       >
         <AppHeader />
         <main className="flex-1 p-4 md:p-6">
