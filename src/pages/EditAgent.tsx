@@ -56,6 +56,7 @@ export default function EditAgent() {
   const [typingDelay, setTypingDelay] = useState(0.8);
   const [blockGap, setBlockGap] = useState(1.2);
   const [debounceMs, setDebounceMs] = useState(0);
+  const [dispatcherPrompt, setDispatcherPrompt] = useState("");
   const [chatwootUrl, setChatwootUrl] = useState("");
   const [chatwootApiToken, setChatwootApiToken] = useState("");
   const [chatwootAccountId, setChatwootAccountId] = useState("");
@@ -79,6 +80,7 @@ export default function EditAgent() {
       setTypingDelay(((cfg as any).typing_delay_ms ?? 800) / 1000);
       setBlockGap(((cfg as any).block_gap_ms ?? 1200) / 1000);
       setDebounceMs(((cfg as any).message_debounce_ms ?? 0) / 1000);
+      setDispatcherPrompt((cfg as any).dispatcher_prompt ?? "");
       setChatwootUrl((cfg as any).chatwoot_url ?? "");
       setChatwootApiToken((cfg as any).chatwoot_api_token ?? "");
       setChatwootAccountId((cfg as any).chatwoot_account_id ?? "");
@@ -98,6 +100,7 @@ export default function EditAgent() {
           ...currentConfig, top_p, top_k,
           read_delay_ms: Math.round(readDelay * 1000), typing_delay_ms: Math.round(typingDelay * 1000),
           block_gap_ms: Math.round(blockGap * 1000), message_debounce_ms: Math.round(debounceMs * 1000),
+          dispatcher_prompt: dispatcherPrompt || undefined,
           chatwoot_url: chatwootUrl || undefined, chatwoot_api_token: chatwootApiToken || undefined,
           chatwoot_account_id: chatwootAccountId || undefined,
         },
@@ -255,6 +258,21 @@ export default function EditAgent() {
           <div className="space-y-3">
             <Label className="text-sm font-medium text-muted-foreground">System Prompt</Label>
             <Textarea {...register("system_prompt")} rows={8} className="rounded-lg bg-background border-border text-sm resize-y min-h-[120px]" />
+          </div>
+
+          {/* Dispatcher Prompt */}
+          <div className="space-y-3">
+            <Label className="text-sm font-medium text-muted-foreground">Dispatcher Prompt (Phase 1)</Label>
+            <p className="text-xs text-muted-foreground -mt-1">
+              Instrui o modelo despachante sobre quando acionar ferramentas. Deixe vazio para usar o prompt padrão genérico.
+            </p>
+            <Textarea
+              value={dispatcherPrompt}
+              onChange={(e) => setDispatcherPrompt(e.target.value)}
+              rows={6}
+              placeholder="You are a tool dispatcher. Your ONLY job is to analyze the user's message and decide if any tools should be called..."
+              className="rounded-lg bg-background border-border text-sm resize-y min-h-[100px]"
+            />
           </div>
         </div>
 
