@@ -2,20 +2,19 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useEffect } from "react";
-import { ArrowLeft, Building2, Save, Loader2 } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
+import { ArrowLeft, Building2, Save, Loader2, Camera, ImagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useTenants, useUpdateTenant } from "@/hooks/useTenants";
 import { useProviders } from "@/hooks/useProviders";
+import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
 import { toast } from "sonner";
-import type { Tenant } from "@/types/database";
+import { cn } from "@/lib/utils";
 
 const schema = z.object({
   name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
@@ -24,12 +23,65 @@ const schema = z.object({
   status: z.string(),
   sync_url: z.string().optional(),
   dispatcher_provider_id: z.string().optional(),
-  temperature: z.number().min(0).max(2),
-  top_p: z.number().min(0).max(1),
-  top_k: z.number().min(1).max(100),
 });
 
 type FormData = z.infer<typeof schema>;
+
+function TenantLogoUpload({ tenantId, currentUrl, onUploaded }: { tenantId: string; currentUrl: string | null; onUploaded: (url: string) => void }) {
+  const [uploading, setUploading] = useState(false);
+  const [preview, setPreview] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { toast.error("Selecione um arquivo de imagem"); return; }
+    if (file.size > 2 * 1024 * 1024) { toast.error("Imagem deve ter no máximo 2MB"); return; }
+
+    setPreview(URL.createObjectURL(file));
+    setUploading(true);
+    try {
+      const ext = file.name.split(".").pop() ?? "png";
+      const path = `${tenantId}.${ext}`;
+      const { error: uploadError } = await supabase.storage.from("agent-avatars").upload(`tenants/${path}`, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data } = supabase.storage.from("agent-avatars").getPublicUrl(`tenants/${path}`);
+      onUploaded(`${data.publicUrl}?t=${Date.now()}`);
+      toast.success("Logo atualizado!");
+    } catch (err: any) {
+      toast.error("Erro no upload: " + (err.message ?? ""));
+      setPreview(null);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const displayUrl = preview || currentUrl;
+
+  return (
+    <div
+      className={cn(
+        "group relative w-full cursor-pointer overflow-hidden rounded-lg bg-gradient-to-br from-card to-muted/40 border border-border transition-all hover:ring-2 hover:ring-primary/30"
+      )}
+      onClick={() => inputRef.current?.click()}
+    >
+      {displayUrl ? (
+        <div className="flex items-center justify-center p-5">
+          <img src={displayUrl} alt="Logo da empresa" className="max-h-20 w-auto object-contain" />
+        </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center gap-1.5 p-6 text-muted-foreground">
+          <ImagePlus className="h-6 w-6" />
+          <span className="text-[11px]">Clique para adicionar logo da empresa</span>
+        </div>
+      )}
+      <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+        {uploading ? <Loader2 className="h-5 w-5 animate-spin text-white" /> : <Camera className="h-5 w-5 text-white" />}
+      </div>
+      <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+    </div>
+  );
+}
 
 export default function EditTenant() {
   const { tenantId } = useParams<{ tenantId: string }>();
@@ -39,25 +91,20 @@ export default function EditTenant() {
   const { data: providers } = useProviders();
 
   const tenant = tenants?.find((t) => t.id === tenantId) ?? null;
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { temperature: 0.5, top_p: 0.8, top_k: 40 },
   });
-
-  const temperature = watch("temperature");
-  const topP = watch("top_p");
-  const topK = watch("top_k");
 
   useEffect(() => {
     if (tenant) {
       const settings = tenant.settings || {};
-      const llm = (settings as any).llm_config || {};
+      setLogoUrl((settings as any).logo_url || null);
       reset({
         name: tenant.name, slug: tenant.slug, plan: tenant.plan, status: tenant.status,
         sync_url: (settings as any).sync_url || "",
         dispatcher_provider_id: (settings as any).dispatcher_provider_id || "",
-        temperature: llm.temperature ?? 0.5, top_p: llm.top_p ?? 0.8, top_k: llm.top_k ?? 40,
       });
     }
   }, [tenant, reset]);
@@ -70,7 +117,7 @@ export default function EditTenant() {
         ...currentSettings,
         sync_url: data.sync_url || undefined,
         dispatcher_provider_id: data.dispatcher_provider_id || undefined,
-        llm_config: { temperature: data.temperature, top_p: data.top_p, top_k: data.top_k },
+        logo_url: logoUrl || undefined,
       };
       await updateTenant.mutateAsync({
         id: tenant.id, name: data.name, slug: data.slug, plan: data.plan, status: data.status, settings: newSettings,
@@ -118,6 +165,8 @@ export default function EditTenant() {
         {/* Basic Info */}
         <div className="rounded-xl border border-border bg-card p-6 space-y-6">
           <h3 className="text-base font-semibold text-foreground">Informações Básicas</h3>
+
+          <TenantLogoUpload tenantId={tenant.id} currentUrl={logoUrl} onUploaded={setLogoUrl} />
 
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <div className="space-y-3">
@@ -185,41 +234,6 @@ export default function EditTenant() {
               ))}
             </SelectContent>
           </Select>
-        </div>
-
-        {/* LLM Config */}
-        <div className="rounded-xl border border-border bg-card p-6 space-y-6">
-          <h3 className="text-base font-semibold text-foreground">Configuração LLM</h3>
-          <p className="text-sm text-muted-foreground -mt-2">Parâmetros de geração para os agentes deste tenant</p>
-
-          <div className="space-y-6">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium text-muted-foreground">Temperature</Label>
-                <span className="text-sm font-mono text-primary">{temperature}</span>
-              </div>
-              <Slider value={[temperature]} onValueChange={([v]) => setValue("temperature", v)} min={0} max={2} step={0.1} />
-              <p className="text-xs text-muted-foreground">Criatividade das respostas (0 = determinístico, 2 = muito criativo)</p>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium text-muted-foreground">Top P</Label>
-                <span className="text-sm font-mono text-primary">{topP}</span>
-              </div>
-              <Slider value={[topP]} onValueChange={([v]) => setValue("top_p", v)} min={0} max={1} step={0.05} />
-              <p className="text-xs text-muted-foreground">Limita palavras improváveis (0.8 = focado, 1.0 = sem limite)</p>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium text-muted-foreground">Top K</Label>
-                <span className="text-sm font-mono text-primary">{topK}</span>
-              </div>
-              <Slider value={[topK]} onValueChange={([v]) => setValue("top_k", v)} min={1} max={100} step={1} />
-              <p className="text-xs text-muted-foreground">Vocabulário considerado (40 = rico mas focado)</p>
-            </div>
-          </div>
         </div>
 
         {/* Footer */}
