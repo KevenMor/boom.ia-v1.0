@@ -99,7 +99,7 @@ export default function Agents() {
               >
                 {agent.status === "active" ? "Ativo" : "Pausado"}
               </Badge>
-              {agent.model && <Badge variant="secondary" className="font-mono text-[10px]">{agent.model}</Badge>}
+              {agent.model && <Badge variant="secondary" className="text-[10px]">{agent.model}</Badge>}
               {(agent.providers as any)?.name && <Badge variant="secondary" className="text-[10px]">{(agent.providers as any).name}</Badge>}
             </div>
 
