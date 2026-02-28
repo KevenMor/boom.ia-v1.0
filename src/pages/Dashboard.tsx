@@ -52,15 +52,15 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Recent Tenants */}
-        <Card className="col-span-2 border-border bg-card p-0">
-          <div className="flex items-center justify-between border-b border-border px-5 py-3">
-            <h2 className="text-sm font-semibold">Tenants Recentes</h2>
+        <Card className="col-span-2 rounded-xl border-border bg-card p-0">
+          <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
+            <h2 className="text-sm font-bold">Tenants Recentes</h2>
           </div>
           <div className="divide-y divide-border">
             {loadingTenants && (
               <div className="p-5 space-y-3">
                 {Array.from({ length: 3 }).map((_, i) => (
-                  <Skeleton key={i} className="h-8 w-full" />
+                  <Skeleton key={i} className="h-8 w-full rounded-lg" />
                 ))}
               </div>
             )}
@@ -76,11 +76,11 @@ export default function Dashboard() {
                 style={{ animationDelay: `${i * 60}ms` }}
               >
                 <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-secondary">
-                    <Building2 className="h-4 w-4 text-muted-foreground" />
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                    <Building2 className="h-4 w-4 text-primary" />
                   </div>
                   <div>
-                    <p className="text-sm font-medium">{tenant.name}</p>
+                    <p className="text-sm font-semibold">{tenant.name}</p>
                     <p className="text-xs text-muted-foreground">{tenant.slug}</p>
                   </div>
                 </div>
@@ -99,9 +99,9 @@ export default function Dashboard() {
         </Card>
 
         {/* Providers Status */}
-        <Card className="border-border bg-card p-5">
-          <h2 className="text-sm font-semibold">Providers</h2>
-          <div className="mt-4 space-y-3">
+        <Card className="rounded-xl border-border bg-card p-5">
+          <h2 className="text-sm font-bold">Providers</h2>
+          <div className="mt-4 space-y-3.5">
             {loadingProviders && (
               <div className="space-y-3">
                 {Array.from({ length: 3 }).map((_, i) => (

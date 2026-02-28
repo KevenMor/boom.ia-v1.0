@@ -47,7 +47,7 @@ function SidebarContent() {
       {/* Logo */}
       <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary font-mono text-sm font-bold text-primary-foreground shadow-sm">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary font-sans text-sm font-extrabold text-primary-foreground">
             N
           </div>
           <AnimatePresence>
@@ -56,7 +56,7 @@ function SidebarContent() {
                 initial={{ opacity: 0, width: 0 }}
                 animate={{ opacity: 1, width: "auto" }}
                 exit={{ opacity: 0, width: 0 }}
-                className="overflow-hidden text-sm font-semibold tracking-tight text-foreground whitespace-nowrap"
+                className="overflow-hidden text-sm font-bold tracking-tight text-foreground whitespace-nowrap"
               >
                 Nexus AI
               </motion.span>
@@ -80,9 +80,9 @@ function SidebarContent() {
               to={item.to}
               onClick={() => isMobile && setMobileOpen(false)}
               className={cn(
-                "relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                "relative flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150",
                 isActive
-                  ? "bg-sidebar-accent text-sidebar-primary"
+                  ? "bg-primary/10 text-primary"
                   : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               )}
             >
@@ -93,7 +93,7 @@ function SidebarContent() {
                   transition={{ type: "spring", stiffness: 350, damping: 30 }}
                 />
               )}
-              <item.icon className="h-4 w-4 shrink-0" />
+              <item.icon className="h-[18px] w-[18px] shrink-0" />
               <AnimatePresence>
                 {isExpanded && (
                   <motion.span
@@ -128,9 +128,9 @@ function SidebarContent() {
       <div className="space-y-0.5 border-t border-sidebar-border p-2">
         <button
           onClick={() => signOut()}
-          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] text-sidebar-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
         >
-          <LogOut className="h-4 w-4 shrink-0" />
+          <LogOut className="h-[18px] w-[18px] shrink-0" />
           <AnimatePresence>
             {isExpanded && (
               <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -142,13 +142,13 @@ function SidebarContent() {
         {!isMobile && (
           <button
             onClick={toggle}
-            className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
           >
             {collapsed ? (
-              <ChevronRight className="h-4 w-4 shrink-0" />
+              <ChevronRight className="h-[18px] w-[18px] shrink-0" />
             ) : (
               <>
-                <ChevronLeft className="h-4 w-4 shrink-0" />
+                <ChevronLeft className="h-[18px] w-[18px] shrink-0" />
                 <span>Recolher</span>
               </>
             )}
@@ -163,7 +163,6 @@ export function AppSidebar() {
   const { collapsed, isMobileOpen, setMobileOpen } = useSidebar();
   const isMobile = useIsMobile();
 
-  // Mobile: slide-over drawer
   if (isMobile) {
     return (
       <AnimatePresence>
@@ -191,7 +190,6 @@ export function AppSidebar() {
     );
   }
 
-  // Desktop: fixed sidebar
   return (
     <motion.aside
       initial={false}
