@@ -34,6 +34,7 @@ export interface Agent {
   status: string;
   config: Record<string, unknown>;
   webhook_token: string | null;
+  avatar_url: string | null;
   created_at: string;
   updated_at: string;
   // joined

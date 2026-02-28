@@ -16,6 +16,7 @@ import { useProviders } from "@/hooks/useProviders";
 import { toast } from "sonner";
 import { useState } from "react";
 import { getModelsForProvider } from "@/lib/provider-models";
+import { AgentAvatarUpload } from "@/components/agents/AgentAvatarUpload";
 
 const schema = z.object({
   name: z.string().min(2, "Nome obrigatório"),
@@ -41,6 +42,7 @@ export function CreateAgentDialog({ open, onOpenChange, defaultTenantId }: Props
   const create = useCreateAgent();
   const { data: tenants } = useTenants();
   const { data: providers } = useProviders();
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [temp, setTemp] = useState(0.7);
   const [topP, setTopP] = useState(0.8);
   const [topK, setTopK] = useState(40);
@@ -63,6 +65,7 @@ export function CreateAgentDialog({ open, onOpenChange, defaultTenantId }: Props
         model: data.model || null,
         system_prompt: data.system_prompt || null,
         temperature: data.temperature,
+        avatar_url: avatarUrl,
         config: { top_p: data.top_p, top_k: data.top_k, read_delay_ms: Math.round(readDelay * 1000), typing_delay_ms: Math.round(typingDelay * 1000), block_gap_ms: Math.round(blockGap * 1000) },
       });
       toast.success(`Agente "${data.name}" criado`);
@@ -73,6 +76,7 @@ export function CreateAgentDialog({ open, onOpenChange, defaultTenantId }: Props
       setReadDelay(1.5);
       setTypingDelay(0.8);
       setBlockGap(1.2);
+      setAvatarUrl(null);
       onOpenChange(false);
     } catch (err: any) {
       toast.error("Erro: " + (err.message ?? "desconhecido"));
@@ -86,6 +90,12 @@ export function CreateAgentDialog({ open, onOpenChange, defaultTenantId }: Props
       <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Novo Agente</DialogTitle></DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="flex justify-center">
+            <AgentAvatarUpload
+              currentUrl={avatarUrl}
+              onUploaded={(url) => setAvatarUrl(url)}
+            />
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Nome</Label>
