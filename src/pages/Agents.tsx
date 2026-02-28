@@ -1,4 +1,4 @@
-import { Bot, Plus, Search, MoreHorizontal, Play, Pause, Pencil, Trash2, MessageSquare, Copy, Link } from "lucide-react";
+import { Bot, Plus, Search, MoreHorizontal, Pencil, Trash2, MessageSquare, Copy } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -62,31 +62,93 @@ export default function Agents() {
         <p className="py-8 text-center text-sm text-muted-foreground">Nenhum agente encontrado</p>
       )}
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {filtered.map((agent, i) => (
           <Card
             key={agent.id}
-            className="rounded-xl border-border bg-card p-5 transition-all duration-200 hover:border-primary/20 hover:shadow-lg hover:shadow-primary/5 cursor-pointer animate-fade-in"
+            className="relative overflow-hidden rounded-xl border-border bg-card p-5 transition-all duration-200 hover:shadow-lg hover:shadow-primary/5 animate-fade-in"
             style={{ animationDelay: `${i * 50}ms` }}
           >
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-                  <Bot className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold">{agent.name}</h3>
-                  <p className="text-xs text-muted-foreground">{(agent.tenants as any)?.name ?? "—"}</p>
-                </div>
+            {/* Icon / visual header */}
+            <div className="flex items-center justify-center rounded-lg bg-sidebar-accent p-6">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
+                <Bot className="h-7 w-7 text-primary" />
               </div>
+            </div>
+
+            {/* Content */}
+            <div className="mt-4 text-center">
+              <h3 className="text-base font-semibold text-foreground">{agent.name}</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {(agent.tenants as any)?.name ?? "Sem tenant"}
+              </p>
+              {agent.description && (
+                <p className="mt-2 text-sm text-muted-foreground line-clamp-2">{agent.description}</p>
+              )}
+            </div>
+
+            {/* Tags */}
+            <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
+              <Badge
+                variant="outline"
+                className={`text-[10px] ${agent.status === "active" ? "border-success/30 text-success" : "border-muted-foreground/30 text-muted-foreground"}`}
+              >
+                {agent.status === "active" ? "Ativo" : "Pausado"}
+              </Badge>
+              {agent.model && <Badge variant="secondary" className="font-mono text-[10px]">{agent.model}</Badge>}
+              {(agent.providers as any)?.name && <Badge variant="secondary" className="text-[10px]">{(agent.providers as any).name}</Badge>}
+            </div>
+
+            {/* Webhook URL */}
+            <div className="mt-4 flex items-center gap-2">
+              <Input
+                readOnly
+                value={`${WEBHOOK_BASE}?agent_id=${agent.id}`}
+                className="h-9 flex-1 truncate bg-sidebar-accent border-border text-xs text-muted-foreground"
+                onClick={(e) => (e.target as HTMLInputElement).select()}
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9 shrink-0"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigator.clipboard.writeText(`${WEBHOOK_BASE}?agent_id=${agent.id}`);
+                  toast.success("URL do webhook copiada!");
+                }}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Actions */}
+            <div className="mt-4 flex items-center gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 text-sm"
+                onClick={() => setEditAgent(agent)}
+              >
+                <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                Editar
+              </Button>
+              <Button
+                className="flex-1 text-sm"
+                onClick={() => navigate(`/agents/${agent.id}/sandbox`)}
+              >
+                <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+                Testar
+              </Button>
+            </div>
+
+            {/* More menu - top right */}
+            <div className="absolute right-3 top-3">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-7 w-7"><MoreHorizontal className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => navigate(`/agents/${agent.id}/sandbox`)}>
-                    <MessageSquare className="mr-2 h-3 w-3" />Testar
-                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setEditAgent(agent)}>
                     <Pencil className="mr-2 h-3 w-3" />Editar
                   </DropdownMenuItem>
@@ -96,36 +158,6 @@ export default function Agents() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-            </div>
-
-            {agent.description && (
-              <p className="mt-2 text-xs text-muted-foreground line-clamp-2">{agent.description}</p>
-            )}
-
-            <div className="mt-4 flex items-center gap-2 flex-wrap">
-              {agent.model && <Badge variant="secondary" className="font-mono text-[10px]">{agent.model}</Badge>}
-              {(agent.providers as any)?.name && <Badge variant="secondary" className="text-[10px]">{(agent.providers as any).name}</Badge>}
-              <Badge
-                  variant="outline"
-                  className="text-[10px] cursor-pointer gap-1 hover:bg-primary/10"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    navigator.clipboard.writeText(`${WEBHOOK_BASE}?agent_id=${agent.id}`);
-                    toast.success("URL do webhook copiada!");
-                  }}
-                >
-                  <Link className="h-2.5 w-2.5" />
-                  Webhook
-                  <Copy className="h-2.5 w-2.5" />
-                </Badge>
-            </div>
-
-            <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
-              <div className="flex items-center gap-1.5">
-                {agent.status === "active" ? <Play className="h-3 w-3 text-success" /> : <Pause className="h-3 w-3 text-muted-foreground" />}
-                <span className="text-xs capitalize text-muted-foreground">{agent.status === "active" ? "Ativo" : "Pausado"}</span>
-              </div>
-              <span className="font-mono text-xs text-muted-foreground">temp: {agent.temperature}</span>
             </div>
           </Card>
         ))}
