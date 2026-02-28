@@ -40,14 +40,14 @@
 
     --radius: 0.625rem;
 
-    --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 220 10% 40%;
-    --sidebar-primary: 217 72% 50%;
+    --sidebar-background: 228 40% 16%;
+    --sidebar-foreground: 220 20% 70%;
+    --sidebar-primary: 217 72% 60%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 14% 95%;
-    --sidebar-accent-foreground: 225 15% 15%;
-    --sidebar-border: 220 13% 90%;
-    --sidebar-ring: 217 72% 50%;
+    --sidebar-accent: 228 35% 22%;
+    --sidebar-accent-foreground: 220 20% 93%;
+    --sidebar-border: 228 30% 22%;
+    --sidebar-ring: 217 72% 60%;
 
     --font-sans: 'Satoshi', system-ui, -apple-system, sans-serif;
     --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
