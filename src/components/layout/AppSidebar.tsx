@@ -59,8 +59,8 @@ function SidebarContent() {
     cn(
       "flex items-center gap-3 rounded-lg px-4 py-2 text-sm font-medium transition-colors",
       isActive
-        ? "bg-sidebar-accent text-foreground"
-        : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        ? "bg-white/15 text-white"
+        : "text-white/70 hover:bg-white/10 hover:text-white"
     );
 
   return (
@@ -72,10 +72,10 @@ function SidebarContent() {
             <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-xs font-bold text-primary-foreground">
               N
             </div>
-            <span className="text-sm font-semibold text-foreground">Nexus AI</span>
+            <span className="text-sm font-semibold text-white">Nexus AI</span>
           </div>
           {isMobile && (
-            <button onClick={() => setMobileOpen(false)} className="text-muted-foreground hover:text-foreground">
+            <button onClick={() => setMobileOpen(false)} className="text-white/60 hover:text-white">
               <X className="h-5 w-5" />
             </button>
           )}
@@ -103,7 +103,7 @@ function SidebarContent() {
           <li>
             <button
               onClick={() => setAccountOpen(!accountOpen)}
-              className="flex w-full cursor-pointer items-center justify-between rounded-lg px-4 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              className="flex w-full cursor-pointer items-center justify-between rounded-lg px-4 py-2 text-sm font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white"
             >
               <span>Administração</span>
               <ChevronDown
@@ -133,7 +133,7 @@ function SidebarContent() {
                 <li>
                   <button
                     onClick={() => signOut()}
-                    className="flex w-full items-center gap-3 rounded-lg px-4 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                    className="flex w-full items-center gap-3 rounded-lg px-4 py-2 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300"
                   >
                     <LogOut className="h-4 w-4 shrink-0" />
                     Sair
@@ -149,13 +149,13 @@ function SidebarContent() {
       <div className="border-t border-sidebar-border">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex w-full items-center gap-3 p-4 transition-colors hover:bg-sidebar-accent">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sidebar-accent">
-                <User className="h-4 w-4 text-sidebar-foreground" />
+            <button className="flex w-full items-center gap-3 p-4 transition-colors hover:bg-white/10">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/15">
+                <User className="h-4 w-4 text-white/80" />
               </div>
               <div className="min-w-0 text-left">
-                <p className="truncate text-sm font-medium text-foreground">Admin</p>
-                <p className="truncate text-xs text-muted-foreground">{user?.email ?? "—"}</p>
+                <p className="truncate text-sm font-medium text-white">Admin</p>
+                <p className="truncate text-xs text-white/50">{user?.email ?? "—"}</p>
               </div>
             </button>
           </DropdownMenuTrigger>
