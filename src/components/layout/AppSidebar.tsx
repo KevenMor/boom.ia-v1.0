@@ -11,11 +11,12 @@ import {
   LogOut,
   FileText,
   X,
-  ChevronDown,
+  ChevronRight,
   User,
   Sun,
   Moon,
   Monitor,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebar } from "@/contexts/SidebarContext";
@@ -32,131 +33,173 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-const navItems = [
-  { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/tenants", icon: Building2, label: "Tenants" },
-  { to: "/agents", icon: Bot, label: "Agentes" },
-  { to: "/conversations", icon: MessageSquare, label: "Conversas" },
-  { to: "/tools", icon: Wrench, label: "Tools" },
-  { to: "/providers", icon: Cpu, label: "Providers" },
+interface NavGroup {
+  label: string;
+  defaultOpen?: boolean;
+  items: { to: string; icon: React.ElementType; label: string }[];
+}
+
+const navGroups: NavGroup[] = [
+  {
+    label: "Visão geral",
+    defaultOpen: true,
+    items: [
+      { to: "/dashboard", icon: LayoutDashboard, label: "Painel" },
+      { to: "/conversations", icon: MessageSquare, label: "Chat ao Vivo" },
+      { to: "/agents", icon: Bot, label: "Agentes" },
+    ],
+  },
+  {
+    label: "Infraestrutura",
+    defaultOpen: true,
+    items: [
+      { to: "/tenants", icon: Building2, label: "Tenants" },
+      { to: "/tools", icon: Wrench, label: "Ferramentas" },
+      { to: "/providers", icon: Cpu, label: "Provedores" },
+    ],
+  },
+  {
+    label: "Sistema",
+    defaultOpen: false,
+    items: [
+      { to: "/monitoring", icon: Activity, label: "Monitoramento" },
+      { to: "/audit", icon: FileText, label: "Auditoria" },
+      { to: "/settings", icon: Settings, label: "Configurações" },
+    ],
+  },
 ];
 
-const secondaryItems = [
-  { to: "/monitoring", icon: Activity, label: "Monitoramento" },
-  { to: "/audit", icon: FileText, label: "Auditoria" },
-  { to: "/settings", icon: Settings, label: "Configurações" },
-];
+function CollapsibleGroup({
+  group,
+  currentPath,
+  onLinkClick,
+}: {
+  group: NavGroup;
+  currentPath: string;
+  onLinkClick?: () => void;
+}) {
+  const hasActive = group.items.some((i) => currentPath.startsWith(i.to));
+  const [open, setOpen] = useState(group.defaultOpen || hasActive);
+
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-white/25 transition-colors hover:text-white/45"
+      >
+        <span className="flex-1 text-start">{group.label}</span>
+        <ChevronRight
+          className={cn(
+            "size-3 transition-transform duration-200",
+            open && "rotate-90"
+          )}
+        />
+      </button>
+
+      <div
+        className={cn(
+          "grid transition-all duration-200 ease-in-out",
+          open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+        )}
+      >
+        <div className="overflow-hidden">
+          <div className="mt-1 space-y-0.5">
+            {group.items.map((item) => {
+              const isActive = currentPath.startsWith(item.to);
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  onClick={onLinkClick}
+                  className={cn(
+                    "group relative flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-all duration-200",
+                    isActive
+                      ? "bg-white/15 text-white"
+                      : "text-white/60 hover:bg-white/10 hover:text-white"
+                  )}
+                >
+                  <item.icon
+                    className={cn(
+                      "h-[18px] w-[18px] shrink-0 transition-colors",
+                      isActive
+                        ? "text-white"
+                        : "text-white/40 group-hover:text-white/70"
+                    )}
+                  />
+                  <span className="flex-1">{item.label}</span>
+                </NavLink>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function SidebarContent() {
   const { signOut, user } = useAuth();
   const location = useLocation();
   const isMobile = useIsMobile();
   const { setMobileOpen } = useSidebar();
-  const [accountOpen, setAccountOpen] = useState(false);
   const { theme, setTheme } = useTheme();
 
-  const linkClass = (isActive: boolean) =>
-    cn(
-      "flex items-center gap-3 rounded-lg px-4 py-2 text-sm font-medium transition-colors",
-      isActive
-        ? "bg-white/15 text-white"
-        : "text-white/70 hover:bg-white/10 hover:text-white"
-    );
+  const onLinkClick = isMobile ? () => setMobileOpen(false) : undefined;
 
   return (
-    <div className="flex h-full flex-col justify-between">
-      <div className="px-4 py-6">
-        {/* Logo */}
-        <div className="flex items-center justify-between">
-          <div className="flex h-10 items-center gap-2.5 rounded-lg bg-sidebar-accent px-3">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-xs font-bold text-primary-foreground">
-              N
-            </div>
-            <span className="text-sm font-semibold text-white">Nexus AI</span>
-          </div>
-          {isMobile && (
-            <button onClick={() => setMobileOpen(false)} className="text-white/60 hover:text-white">
-              <X className="h-5 w-5" />
-            </button>
-          )}
+    <div className="flex h-full flex-col">
+      {/* Logo header */}
+      <div className="flex h-16 items-center gap-3 border-b border-white/10 px-4">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent">
+          <Sparkles className="h-4 w-4 text-white" />
         </div>
-
-        {/* Main nav */}
-        <ul className="mt-6 space-y-1">
-          {navItems.map((item) => {
-            const isActive = location.pathname.startsWith(item.to);
-            return (
-              <li key={item.to}>
-                <NavLink
-                  to={item.to}
-                  onClick={() => isMobile && setMobileOpen(false)}
-                  className={linkClass(isActive)}
-                >
-                  <item.icon className="h-4 w-4 shrink-0" />
-                  {item.label}
-                </NavLink>
-              </li>
-            );
-          })}
-
-          {/* Secondary group - collapsible */}
-          <li>
-            <button
-              onClick={() => setAccountOpen(!accountOpen)}
-              className="flex w-full cursor-pointer items-center justify-between rounded-lg px-4 py-2 text-sm font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white"
-            >
-              <span>Administração</span>
-              <ChevronDown
-                className={cn(
-                  "h-4 w-4 shrink-0 transition-transform duration-200",
-                  accountOpen && "-rotate-180"
-                )}
-              />
-            </button>
-            {accountOpen && (
-              <ul className="mt-1 space-y-1 px-3">
-                {secondaryItems.map((item) => {
-                  const isActive = location.pathname.startsWith(item.to);
-                  return (
-                    <li key={item.to}>
-                      <NavLink
-                        to={item.to}
-                        onClick={() => isMobile && setMobileOpen(false)}
-                        className={linkClass(isActive)}
-                      >
-                        <item.icon className="h-4 w-4 shrink-0" />
-                        {item.label}
-                      </NavLink>
-                    </li>
-                  );
-                })}
-                <li>
-                  <button
-                    onClick={() => signOut()}
-                    className="flex w-full items-center gap-3 rounded-lg px-4 py-2 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300"
-                  >
-                    <LogOut className="h-4 w-4 shrink-0" />
-                    Sair
-                  </button>
-                </li>
-              </ul>
-            )}
-          </li>
-        </ul>
+        <div className="flex flex-col">
+          <span className="text-sm font-bold tracking-tight text-white">
+            Nexus AI
+          </span>
+          <span className="text-[10px] font-medium uppercase tracking-widest text-white/35">
+            Painel
+          </span>
+        </div>
+        {isMobile && (
+          <button
+            onClick={() => setMobileOpen(false)}
+            className="ml-auto flex h-7 w-7 items-center justify-center rounded-lg text-white/40 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
+      {/* Navigation */}
+      <nav className="flex-1 space-y-3 overflow-y-auto px-3 py-4">
+        {navGroups.map((group) => (
+          <CollapsibleGroup
+            key={group.label}
+            group={group}
+            currentPath={location.pathname}
+            onLinkClick={onLinkClick}
+          />
+        ))}
+      </nav>
+
       {/* User footer */}
-      <div className="border-t border-sidebar-border">
+      <div className="border-t border-white/10 p-3">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex w-full items-center gap-3 p-4 transition-colors hover:bg-white/10">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/15">
-                <User className="h-4 w-4 text-white/80" />
+            <button className="flex w-full items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-white/10">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent text-[11px] font-bold text-white">
+                {user?.email?.slice(0, 2).toUpperCase() ?? "AD"}
               </div>
-              <div className="min-w-0 text-left">
-                <p className="truncate text-sm font-medium text-white">Admin</p>
-                <p className="truncate text-xs text-white/50">{user?.email ?? "—"}</p>
+              <div className="flex flex-1 flex-col min-w-0">
+                <span className="text-sm font-medium text-white truncate">
+                  Admin
+                </span>
+                <span className="text-[11px] text-white/45 truncate">
+                  {user?.email ?? "—"}
+                </span>
               </div>
+              <LogOut className="h-4 w-4 text-white/35 shrink-0" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="start" className="w-56">
@@ -199,7 +242,7 @@ export function AppSidebar() {
           onClick={() => setMobileOpen(false)}
           className="fixed inset-0 z-50 bg-black/50"
         />
-        <aside className="fixed left-0 top-0 bottom-0 z-50 w-[280px] bg-sidebar border-r border-sidebar-border animate-slide-in-left">
+        <aside className="fixed left-0 top-0 bottom-0 z-50 w-[260px] bg-sidebar border-r border-sidebar-border animate-slide-in-left">
           <SidebarContent />
         </aside>
       </>
