@@ -240,7 +240,7 @@ export default function EditAgent() {
           {/* System Prompt */}
           <div className="space-y-3">
             <Label className="text-sm font-medium text-muted-foreground">System Prompt</Label>
-            <Textarea {...register("system_prompt")} rows={8} className="rounded-lg bg-background border-border text-sm resize-none" />
+            <Textarea {...register("system_prompt")} rows={8} className="rounded-lg bg-background border-border text-sm resize-y min-h-[120px]" />
           </div>
         </div>
 
