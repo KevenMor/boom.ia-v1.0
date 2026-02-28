@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Bot, Save, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,6 +58,7 @@ export default function EditAgent() {
   const [blockGap, setBlockGap] = useState(1.2);
   const [debounceMs, setDebounceMs] = useState(0);
   const [dispatcherPrompt, setDispatcherPrompt] = useState("");
+  const [dispatcherProviderId, setDispatcherProviderId] = useState("");
   const [chatwootUrl, setChatwootUrl] = useState("");
   const [chatwootApiToken, setChatwootApiToken] = useState("");
   const [chatwootAccountId, setChatwootAccountId] = useState("");
@@ -81,6 +83,7 @@ export default function EditAgent() {
       setBlockGap(((cfg as any).block_gap_ms ?? 1200) / 1000);
       setDebounceMs(((cfg as any).message_debounce_ms ?? 0) / 1000);
       setDispatcherPrompt((cfg as any).dispatcher_prompt ?? "");
+      setDispatcherProviderId((cfg as any).dispatcher_provider_id ?? "");
       setChatwootUrl((cfg as any).chatwoot_url ?? "");
       setChatwootApiToken((cfg as any).chatwoot_api_token ?? "");
       setChatwootAccountId((cfg as any).chatwoot_account_id ?? "");
@@ -101,6 +104,7 @@ export default function EditAgent() {
           read_delay_ms: Math.round(readDelay * 1000), typing_delay_ms: Math.round(typingDelay * 1000),
           block_gap_ms: Math.round(blockGap * 1000), message_debounce_ms: Math.round(debounceMs * 1000),
           dispatcher_prompt: dispatcherPrompt || undefined,
+          dispatcher_provider_id: dispatcherProviderId || undefined,
           chatwoot_url: chatwootUrl || undefined, chatwoot_api_token: chatwootApiToken || undefined,
           chatwoot_account_id: chatwootAccountId || undefined,
         },
@@ -258,6 +262,31 @@ export default function EditAgent() {
           <div className="space-y-3">
             <Label className="text-sm font-medium text-muted-foreground">System Prompt</Label>
             <Textarea {...register("system_prompt")} rows={8} className="rounded-lg bg-background border-border text-sm resize-y min-h-[120px]" />
+          </div>
+
+          {/* Dispatcher Provider */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <Label className="text-sm font-medium text-muted-foreground">Dispatcher Provider (Phase 1)</Label>
+              <Badge variant="secondary" className="text-[10px]">Tool Calling</Badge>
+            </div>
+            <p className="text-xs text-muted-foreground -mt-1">
+              Provider usado para decidir quando acionar ferramentas. Deixe vazio para desabilitar.
+            </p>
+            <Select
+              value={dispatcherProviderId || "_none"}
+              onValueChange={(v) => setDispatcherProviderId(v === "_none" ? "" : v)}
+            >
+              <SelectTrigger className="h-11 rounded-lg bg-background border-border">
+                <SelectValue placeholder="Nenhum (desabilitado)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_none">Nenhum (desabilitado)</SelectItem>
+                {(providers ?? []).map((p) => (
+                  <SelectItem key={p.id} value={p.id}>{p.name} {p.model_default ? `(${p.model_default})` : ''}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Dispatcher Prompt */}

@@ -9,9 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
 import { useTenants, useUpdateTenant } from "@/hooks/useTenants";
-import { useProviders } from "@/hooks/useProviders";
 import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -22,7 +20,6 @@ const schema = z.object({
   plan: z.string(),
   status: z.string(),
   sync_url: z.string().optional(),
-  dispatcher_provider_id: z.string().optional(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -88,7 +85,7 @@ export default function EditTenant() {
   const navigate = useNavigate();
   const updateTenant = useUpdateTenant();
   const { data: tenants, isLoading } = useTenants();
-  const { data: providers } = useProviders();
+  
 
   const tenant = tenants?.find((t) => t.id === tenantId) ?? null;
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -104,7 +101,6 @@ export default function EditTenant() {
       reset({
         name: tenant.name, slug: tenant.slug, plan: tenant.plan, status: tenant.status,
         sync_url: (settings as any).sync_url || "",
-        dispatcher_provider_id: (settings as any).dispatcher_provider_id || "",
       });
     }
   }, [tenant, reset]);
@@ -116,7 +112,6 @@ export default function EditTenant() {
       const newSettings = {
         ...currentSettings,
         sync_url: data.sync_url || undefined,
-        dispatcher_provider_id: data.dispatcher_provider_id || undefined,
         logo_url: logoUrl || undefined,
       };
       await updateTenant.mutateAsync({
@@ -210,30 +205,6 @@ export default function EditTenant() {
             <Label className="text-sm font-medium text-muted-foreground">URL de Sync (Inventário)</Label>
             <Input {...register("sync_url")} placeholder="https://exemplo.com.br/Veiculos" className="h-11 rounded-lg bg-background border-border text-sm" />
           </div>
-        </div>
-
-        {/* Dispatcher */}
-        <div className="rounded-xl border border-border bg-card p-6 space-y-6">
-          <div className="flex items-center gap-3">
-            <h3 className="text-base font-semibold text-foreground">Tool Dispatcher</h3>
-            <Badge variant="secondary" className="text-[10px]">Fase 1</Badge>
-          </div>
-          <p className="text-sm text-muted-foreground -mt-2">Provider usado para decidir quando acionar ferramentas</p>
-
-          <Select
-            value={watch("dispatcher_provider_id") || ""}
-            onValueChange={(v) => setValue("dispatcher_provider_id", v === "_none" ? "" : v)}
-          >
-            <SelectTrigger className="h-11 rounded-lg bg-background border-border">
-              <SelectValue placeholder="Nenhum (desabilitado)" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="_none">Nenhum (desabilitado)</SelectItem>
-              {(providers ?? []).map((p) => (
-                <SelectItem key={p.id} value={p.id}>{p.name} {p.model_default ? `(${p.model_default})` : ''}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
 
         {/* Footer */}
