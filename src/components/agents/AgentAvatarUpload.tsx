@@ -61,7 +61,7 @@ export function AgentAvatarUpload({ agentId, currentUrl, onUploaded, className }
   return (
     <div
       className={cn(
-        "group relative w-full cursor-pointer overflow-hidden rounded-lg bg-sidebar-accent transition-all hover:ring-2 hover:ring-primary/30",
+        "group relative w-full cursor-pointer overflow-hidden rounded-lg bg-gradient-to-br from-card to-muted/40 border border-border transition-all hover:ring-2 hover:ring-primary/30",
         className
       )}
       onClick={() => inputRef.current?.click()}
