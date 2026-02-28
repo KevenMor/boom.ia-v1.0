@@ -4,21 +4,13 @@ import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, Loader2, Database, ServerCog } from "lucide-react";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useCreateTenant } from "@/hooks/useTenants";
 import { toast } from "sonner";
@@ -26,10 +18,7 @@ import { useState } from "react";
 
 const schema = z.object({
   name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
-  slug: z
-    .string()
-    .min(2, "Slug deve ter pelo menos 2 caracteres")
-    .regex(/^[a-z0-9-]+$/, "Apenas letras minúsculas, números e hífens"),
+  slug: z.string().min(2, "Slug deve ter pelo menos 2 caracteres").regex(/^[a-z0-9-]+$/, "Apenas letras minúsculas, números e hífens"),
   plan: z.string().default("starter"),
 });
 
@@ -52,29 +41,17 @@ export function CreateTenantDialog({ open, onOpenChange }: CreateTenantDialogPro
   const createTenant = useCreateTenant();
   const [step, setStep] = useState<ProvisioningStep>("idle");
 
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    reset,
-    formState: { errors },
-  } = useForm<FormData>({
+  const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { name: "", slug: "", plan: "starter" },
   });
 
   const generateSlug = (name: string) =>
-    name
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "");
+    name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
   const onSubmit = async (data: FormData) => {
     try {
       setStep("creating");
-      // Small delay for visual feedback
       await new Promise((r) => setTimeout(r, 400));
       setStep("provisioning");
       await createTenant.mutateAsync(data);
@@ -94,9 +71,10 @@ export function CreateTenantDialog({ open, onOpenChange }: CreateTenantDialogPro
 
   return (
     <Dialog open={open} onOpenChange={(o) => !isProcessing && onOpenChange(o)}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Novo Tenant</DialogTitle>
+          <DialogTitle className="text-xl font-semibold">Novo Tenant</DialogTitle>
+          <p className="text-sm text-muted-foreground">Crie uma nova empresa e provisione o Data Plane</p>
         </DialogHeader>
 
         <AnimatePresence mode="wait">
@@ -106,23 +84,14 @@ export function CreateTenantDialog({ open, onOpenChange }: CreateTenantDialogPro
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
-              className="py-8 space-y-5"
+              className="py-10 space-y-6"
             >
               {steps.map((s) => {
                 const isActive = s.key === step;
-                const isDone =
-                  s.key === "creating" ? step !== "creating" :
-                  s.key === "provisioning" ? step === "done" :
-                  step === "done";
+                const isDone = s.key === "creating" ? step !== "creating" : s.key === "provisioning" ? step === "done" : step === "done";
                 const Icon = s.icon;
-
                 return (
-                  <div
-                    key={s.key}
-                    className={`flex items-center gap-3 transition-opacity ${
-                      isActive || isDone ? "opacity-100" : "opacity-30"
-                    }`}
-                  >
+                  <div key={s.key} className={`flex items-center gap-4 transition-opacity ${isActive || isDone ? "opacity-100" : "opacity-30"}`}>
                     {isDone && s.key !== step ? (
                       <CheckCircle2 className="h-5 w-5 text-success shrink-0" />
                     ) : isActive ? (
@@ -144,48 +113,43 @@ export function CreateTenantDialog({ open, onOpenChange }: CreateTenantDialogPro
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               onSubmit={handleSubmit(onSubmit)}
-              className="space-y-4"
+              className="space-y-6 pt-2"
             >
-              <div className="space-y-2">
-                <Label htmlFor="name" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              <div className="space-y-3">
+                <Label htmlFor="name" className="text-sm font-medium text-muted-foreground">
                   Nome da empresa
                 </Label>
                 <Input
                   id="name"
                   placeholder="Empresa XYZ"
                   {...register("name", {
-                    onChange: (e) => {
-                      const slug = generateSlug(e.target.value);
-                      setValue("slug", slug);
-                    },
+                    onChange: (e) => setValue("slug", generateSlug(e.target.value)),
                   })}
-                  className="h-9 bg-background"
+                  className="h-11 rounded-lg bg-background border-border"
                 />
                 {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="slug" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              <div className="space-y-3">
+                <Label htmlFor="slug" className="text-sm font-medium text-muted-foreground">
                   Slug (identificador único)
                 </Label>
                 <Input
                   id="slug"
                   placeholder="empresa-xyz"
                   {...register("slug")}
-                  className="h-9 bg-background font-mono text-sm"
+                  className="h-11 rounded-lg bg-background border-border font-mono text-sm"
                 />
                 {errors.slug && <p className="text-xs text-destructive">{errors.slug.message}</p>}
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Schema do Data Plane: <code className="font-mono text-primary">dp_{'<slug>'}</code>
                 </p>
               </div>
 
-              <div className="space-y-2">
-                <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Plano
-                </Label>
+              <div className="space-y-3">
+                <Label className="text-sm font-medium text-muted-foreground">Plano</Label>
                 <Select defaultValue="starter" onValueChange={(v) => setValue("plan", v)}>
-                  <SelectTrigger className="h-9 bg-background">
+                  <SelectTrigger className="h-11 rounded-lg bg-background border-border">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -196,11 +160,11 @@ export function CreateTenantDialog({ open, onOpenChange }: CreateTenantDialogPro
                 </Select>
               </div>
 
-              <DialogFooter>
-                <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+              <DialogFooter className="gap-3 pt-2">
+                <Button type="button" variant="outline" className="h-11 rounded-lg px-6" onClick={() => onOpenChange(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit" className="gap-2">
+                <Button type="submit" className="h-11 rounded-lg px-6">
                   Criar & Provisionar
                 </Button>
               </DialogFooter>
