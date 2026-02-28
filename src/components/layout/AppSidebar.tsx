@@ -13,12 +13,24 @@ import {
   X,
   ChevronDown,
   User,
+  Sun,
+  Moon,
+  Monitor,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useState } from "react";
+import { useTheme } from "next-themes";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const navItems = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
@@ -41,6 +53,7 @@ function SidebarContent() {
   const isMobile = useIsMobile();
   const { setMobileOpen } = useSidebar();
   const [accountOpen, setAccountOpen] = useState(false);
+  const { theme, setTheme } = useTheme();
 
   const linkClass = (isActive: boolean) =>
     cn(
@@ -134,15 +147,42 @@ function SidebarContent() {
 
       {/* User footer */}
       <div className="border-t border-sidebar-border">
-        <div className="flex items-center gap-3 p-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sidebar-accent">
-            <User className="h-4 w-4 text-sidebar-foreground" />
-          </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-foreground">Admin</p>
-            <p className="truncate text-xs text-muted-foreground">{user?.email ?? "—"}</p>
-          </div>
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="flex w-full items-center gap-3 p-4 transition-colors hover:bg-sidebar-accent">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sidebar-accent">
+                <User className="h-4 w-4 text-sidebar-foreground" />
+              </div>
+              <div className="min-w-0 text-left">
+                <p className="truncate text-sm font-medium text-foreground">Admin</p>
+                <p className="truncate text-xs text-muted-foreground">{user?.email ?? "—"}</p>
+              </div>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="start" className="w-56">
+            <DropdownMenuLabel>Tema</DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => setTheme("light")} className="gap-2">
+              <Sun className="h-4 w-4" />
+              Claro
+              {theme === "light" && <span className="ml-auto text-xs text-primary">✓</span>}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTheme("dark")} className="gap-2">
+              <Moon className="h-4 w-4" />
+              Escuro
+              {theme === "dark" && <span className="ml-auto text-xs text-primary">✓</span>}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTheme("system")} className="gap-2">
+              <Monitor className="h-4 w-4" />
+              Sistema
+              {theme === "system" && <span className="ml-auto text-xs text-primary">✓</span>}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => signOut()} className="gap-2 text-destructive focus:text-destructive">
+              <LogOut className="h-4 w-4" />
+              Sair
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   );
