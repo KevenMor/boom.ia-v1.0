@@ -336,6 +336,32 @@ Deno.serve(async (req: Request) => {
 
     const body = await req.json();
 
+    // DEBUG: log raw Chatwoot payload for phone extraction analysis
+    if (body.event === "message_created") {
+      const sender = (body.sender || {}) as Record<string, unknown>;
+      const conversation = (body.conversation || {}) as Record<string, unknown>;
+      const contactInConv = (conversation.contact || {}) as Record<string, unknown>;
+      const meta = (conversation.meta || {}) as Record<string, unknown>;
+      const metaSender = (meta.sender || {}) as Record<string, unknown>;
+      console.log("[DEBUG] Chatwoot sender:", JSON.stringify({
+        phone_number: sender.phone_number,
+        email: sender.email,
+        name: sender.name,
+        id: sender.id,
+      }));
+      console.log("[DEBUG] Chatwoot conversation.contact:", JSON.stringify({
+        phone_number: contactInConv.phone_number,
+        identifier: contactInConv.identifier,
+        id: contactInConv.id,
+      }));
+      console.log("[DEBUG] Chatwoot conversation.meta.sender:", JSON.stringify({
+        phone_number: metaSender.phone_number,
+        id: metaSender.id,
+      }));
+      console.log("[DEBUG] Chatwoot conversation.source_id:", conversation.source_id);
+      console.log("[DEBUG] Chatwoot conversation.channel:", conversation.channel);
+    }
+
     const url = new URL(req.url);
     const agentId = url.searchParams.get("agent_id") || (body.agent_id as string) || null;
     if (!agentId) {
