@@ -3,7 +3,10 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, X, Clock, Bell, BellOff } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, X, Clock, Bell, BellOff, Bot, MessageSquare } from "lucide-react";
+import type { Agent } from "@/types/database";
 
 interface Props {
   enabled: boolean;
@@ -16,6 +19,12 @@ interface Props {
   setQuietStart: (v: string) => void;
   quietEnd: string;
   setQuietEnd: (v: string) => void;
+  followupPrompt: string;
+  setFollowupPrompt: (v: string) => void;
+  followupAgentId: string;
+  setFollowupAgentId: (v: string) => void;
+  agents: Agent[];
+  currentAgentId?: string;
 }
 
 export function FollowUpConfigSection({
@@ -24,6 +33,9 @@ export function FollowUpConfigSection({
   intervals, setIntervals,
   quietStart, setQuietStart,
   quietEnd, setQuietEnd,
+  followupPrompt, setFollowupPrompt,
+  followupAgentId, setFollowupAgentId,
+  agents, currentAgentId,
 }: Props) {
   const addInterval = () => {
     const last = intervals[intervals.length - 1] || 10;
@@ -41,8 +53,8 @@ export function FollowUpConfigSection({
     setIntervals(next);
   };
 
-  // Sync maxAttempts with intervals length
   const effectiveMax = Math.min(maxAttempts, intervals.length);
+  const availableAgents = (agents ?? []).filter((a) => a.status === "active");
 
   return (
     <div className="space-y-4 rounded-xl border border-border p-5">
@@ -56,6 +68,49 @@ export function FollowUpConfigSection({
 
       {enabled && (
         <div className="space-y-4 pt-2">
+          {/* Follow-up Agent */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-1.5">
+              <Bot className="h-3.5 w-3.5 text-muted-foreground" />
+              <Label className="text-xs text-muted-foreground">Agente de Follow-up</Label>
+            </div>
+            <Select value={followupAgentId || ""} onValueChange={setFollowupAgentId}>
+              <SelectTrigger className="h-10 rounded-lg bg-background border-border text-sm">
+                <SelectValue placeholder="Mesmo agente (padrão)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Mesmo agente (padrão)</SelectItem>
+                {availableAgents
+                  .filter((a) => a.id !== currentAgentId)
+                  .map((a) => (
+                    <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground">
+              Escolha um agente diferente para enviar follow-ups (ex: agente especializado em reengajamento)
+            </p>
+          </div>
+
+          {/* Follow-up Prompt */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-1.5">
+              <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+              <Label className="text-xs text-muted-foreground">Prompt de Follow-up</Label>
+            </div>
+            <Textarea
+              value={followupPrompt}
+              onChange={(e) => setFollowupPrompt(e.target.value)}
+              rows={4}
+              placeholder="Deixe vazio para usar o prompt padrão. Use {attempt} e {max_attempts} como variáveis."
+              className="rounded-lg bg-background border-border text-sm resize-none"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Variáveis disponíveis: <code className="text-primary">{"{attempt}"}</code> (tentativa atual), <code className="text-primary">{"{max_attempts}"}</code> (total).
+              O agente receberá todo o histórico da conversa para contextualizar.
+            </p>
+          </div>
+
           {/* Intervals */}
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Intervalos entre follow-ups (minutos)</Label>
@@ -87,7 +142,7 @@ export function FollowUpConfigSection({
             </div>
             <p className="text-[10px] text-muted-foreground">
               Exemplo: [{intervals.join(", ")}] min → follow-ups em{" "}
-              {intervals.map((v, i) => {
+              {intervals.map((_, i) => {
                 const cumulative = intervals.slice(0, i + 1).reduce((a, b) => a + b, 0);
                 return `${cumulative}min`;
               }).join(", ")}

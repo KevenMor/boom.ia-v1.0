@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
-import { useUpdateAgent } from "@/hooks/useAgents";
+import { useUpdateAgent, useAgents } from "@/hooks/useAgents";
 import { useTenants } from "@/hooks/useTenants";
 import { useProviders } from "@/hooks/useProviders";
 import { toast } from "sonner";
@@ -45,6 +45,7 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
   const update = useUpdateAgent();
   const { data: tenants } = useTenants();
   const { data: providers } = useProviders();
+  const { data: allAgents } = useAgents();
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [temp, setTemp] = useState(0.7);
   const [topP, setTopP] = useState(0.8);
@@ -61,6 +62,8 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
   const [followupIntervals, setFollowupIntervals] = useState<number[]>([10, 20, 30]);
   const [followupQuietStart, setFollowupQuietStart] = useState("22:00");
   const [followupQuietEnd, setFollowupQuietEnd] = useState("08:00");
+  const [followupPrompt, setFollowupPrompt] = useState("");
+  const [followupAgentId, setFollowupAgentId] = useState("");
   const { register, handleSubmit, setValue, watch, reset } = useForm<FormData>({ resolver: zodResolver(schema) });
 
   useEffect(() => {
@@ -88,6 +91,8 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
       setFollowupIntervals((cfg as any).followup_intervals ?? [10, 20, 30]);
       setFollowupQuietStart((cfg as any).followup_quiet_start ?? "22:00");
       setFollowupQuietEnd((cfg as any).followup_quiet_end ?? "08:00");
+      setFollowupPrompt((cfg as any).followup_prompt ?? "");
+      setFollowupAgentId((cfg as any).followup_agent_id ?? "");
     }
   }, [agent, reset]);
 
@@ -111,6 +116,8 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
           followup_intervals: followupIntervals,
           followup_quiet_start: followupQuietStart || undefined,
           followup_quiet_end: followupQuietEnd || undefined,
+          followup_prompt: followupPrompt || undefined,
+          followup_agent_id: followupAgentId || undefined,
         },
       });
       toast.success("Agente atualizado");
@@ -296,6 +303,9 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
             intervals={followupIntervals} setIntervals={setFollowupIntervals}
             quietStart={followupQuietStart} setQuietStart={setFollowupQuietStart}
             quietEnd={followupQuietEnd} setQuietEnd={setFollowupQuietEnd}
+            followupPrompt={followupPrompt} setFollowupPrompt={setFollowupPrompt}
+            followupAgentId={followupAgentId} setFollowupAgentId={setFollowupAgentId}
+            agents={allAgents ?? []} currentAgentId={agent?.id}
           />
 
           {/* Status */}

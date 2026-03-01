@@ -36,24 +36,55 @@ async function generateFollowUpMessage(
   cloudKey: string,
   nexusKey: string,
   agentId: string,
+  followupAgentId: string | null,
   conversationId: string,
   attempt: number,
-  maxAttempts: number
+  maxAttempts: number,
+  customPrompt: string | null,
+  supabase: any
 ): Promise<string> {
   const chatAgentUrl = `${cloudUrl}/functions/v1/chat-agent`;
+  const targetAgentId = followupAgentId || agentId;
 
-  // Build a system-level instruction for generating follow-up
-  const followUpInstruction = {
-    role: "user",
-    content: `[SISTEMA INTERNO - FOLLOW-UP AUTOMÁTICO]
-Você está enviando o follow-up #${attempt} de ${maxAttempts} para um cliente que não respondeu.
+  // Load conversation history for context
+  let historyMessages: { role: string; content: string }[] = [];
+  try {
+    const { data: history } = await supabase.rpc("load_conversation_messages", {
+      p_agent_id: agentId, // always from original agent's conversation
+      p_conversation_id: conversationId,
+    });
+    if (history && Array.isArray(history)) {
+      historyMessages = history.slice(-30).map((m: any) => ({
+        role: m.role === "tool" ? "system" : (m.role as string),
+        content: (m.content as string) || "",
+      }));
+    }
+  } catch (e) {
+    console.warn("[FollowUp] Could not load history:", e);
+  }
+
+  // Build the follow-up instruction
+  const defaultPrompt = `Você está enviando o follow-up #${attempt} de ${maxAttempts} para um cliente que não respondeu.
 Gere UMA mensagem curta, natural e amigável de follow-up.
 - Seja breve (1-2 frases)
 - Não repita ofertas anteriores
 - Varie o tom: ${attempt === 1 ? "gentil e interessado" : attempt === 2 ? "prestativo e objetivo" : "última tentativa, respeitoso"}
 - NÃO mencione que é um follow-up automático
-- Use contexto da conversa anterior para personalizar`,
+- Use o contexto da conversa anterior para personalizar a mensagem`;
+
+  const promptText = customPrompt
+    ? customPrompt
+        .replace(/\{attempt\}/g, String(attempt))
+        .replace(/\{max_attempts\}/g, String(maxAttempts))
+    : defaultPrompt;
+
+  const followUpInstruction = {
+    role: "user",
+    content: `[SISTEMA INTERNO - FOLLOW-UP AUTOMÁTICO]\n${promptText}`,
   };
+
+  // Send full history + follow-up instruction to the target agent
+  const messages = [...historyMessages, followUpInstruction];
 
   try {
     const chatResp = await fetch(chatAgentUrl, {
@@ -64,8 +95,8 @@ Gere UMA mensagem curta, natural e amigável de follow-up.
         "x-nexus-auth": `Bearer ${nexusKey}`,
       },
       body: JSON.stringify({
-        agent_id: agentId,
-        messages: [followUpInstruction],
+        agent_id: targetAgentId,
+        messages,
         conversation_id: conversationId,
       }),
     });
@@ -229,7 +260,10 @@ Deno.serve(async (req: Request) => {
       // Generate follow-up message via LLM
       const followUpMsg = await generateFollowUpMessage(
         cloudUrl, cloudKey, nexusKey, agent.id,
-        item.conversation_id, item.attempt, item.max_attempts
+        cfg.followup_agent_id || null,
+        item.conversation_id, item.attempt, item.max_attempts,
+        cfg.followup_prompt || null,
+        supabase
       );
 
       // Send to Chatwoot
