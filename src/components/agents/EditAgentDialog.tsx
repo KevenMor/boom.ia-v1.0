@@ -54,6 +54,7 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
   const [typingDelay, setTypingDelay] = useState(800);
   const [blockGap, setBlockGap] = useState(1200);
   const [debounceMs, setDebounceMs] = useState(0);
+  const [dispatcherProviderId, setDispatcherProviderId] = useState("");
   const [chatwootUrl, setChatwootUrl] = useState("");
   const [chatwootApiToken, setChatwootApiToken] = useState("");
   const [chatwootAccountId, setChatwootAccountId] = useState("");
@@ -83,6 +84,7 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
       setTypingDelay(((cfg as any).typing_delay_ms ?? 800) / 1000);
       setBlockGap(((cfg as any).block_gap_ms ?? 1200) / 1000);
       setDebounceMs(((cfg as any).message_debounce_ms ?? 0) / 1000);
+      setDispatcherProviderId((cfg as any).dispatcher_provider_id ?? "");
       setChatwootUrl((cfg as any).chatwoot_url ?? "");
       setChatwootApiToken((cfg as any).chatwoot_api_token ?? "");
       setChatwootAccountId((cfg as any).chatwoot_account_id ?? "");
@@ -111,6 +113,7 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
           block_gap_ms: Math.round(blockGap * 1000), message_debounce_ms: Math.round(debounceMs * 1000),
           chatwoot_url: chatwootUrl || undefined, chatwoot_api_token: chatwootApiToken || undefined,
           chatwoot_account_id: chatwootAccountId || undefined,
+          dispatcher_provider_id: dispatcherProviderId || undefined,
           followup_enabled: followupEnabled,
           followup_max_attempts: followupMaxAttempts,
           followup_intervals: followupIntervals,
@@ -286,6 +289,19 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
                 {debounceMs > 0 ? `Aguarda ${debounceMs}s após a última mensagem para consolidar` : "Desativado — responde cada mensagem individualmente"}
               </p>
             </div>
+          </div>
+
+          {/* Dispatcher Provider */}
+          <div className="space-y-4 rounded-xl border border-border p-5">
+            <h4 className="text-sm font-semibold text-foreground">🧠 Dispatcher (Phase 1 — Tool Calling)</h4>
+            <p className="text-xs text-muted-foreground">Provedor usado para decidir quais ferramentas chamar. Recomendado: GPT-4o-mini.</p>
+            <Select value={dispatcherProviderId} onValueChange={setDispatcherProviderId}>
+              <SelectTrigger className="h-11 rounded-lg bg-background border-border"><SelectValue placeholder="Nenhum (tools desativadas)" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Nenhum</SelectItem>
+                {(providers ?? []).map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Chatwoot */}
