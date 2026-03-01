@@ -1098,10 +1098,19 @@ COMPORTAMENTO CONSULTIVO OBRIGATÓRIO:
     debugTrace.push({ type: "config", model, temperature, top_p, top_k, tools_count: openaiTools?.length || 0, latest_user_text: latestUserText.slice(0, 120) });
 
     // ===== PHASE 1: TOOL DISPATCHER =====
-    // Uses the tenant's configured dispatcher provider (e.g. GPT-4o-mini with own API key)
     const toolResultsContext: string[] = [];
 
-    if (openaiTools && openaiTools.length > 0) {
+    // Detect closing/thank-you messages that should NOT trigger tool calls
+    const isClosingOrThankYou = /^(obrigad[oa]s?|valeu|vlw|brigad[oa]|thanks?|thank you|ok\s*obrigad[oa]|beleza|show|perfeito|massa|top|legal|fechou|combinado|até\s*(mais|logo|breve|amanhã)|tchau|bye|flw|falou|tmj|tamo junto)[\s!.😊🙏👍]*$/i.test(
+      latestUserText.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    );
+
+    if (isClosingOrThankYou) {
+      console.log(`[Dispatcher] Skipping tool dispatch — closing/thank-you message: "${latestUserText.slice(0, 50)}"`);
+      debugTrace.push({ type: "dispatcher_skip", reason: "closing_or_thank_you_message", text: latestUserText.slice(0, 50) });
+    }
+
+    if (!isClosingOrThankYou && openaiTools && openaiTools.length > 0) {
       // Priority: agent-level config > tenant-level settings (legacy fallback)
       const dispatcherProviderId = agentConfig.dispatcher_provider_id || (agent.tenants?.settings as any)?.dispatcher_provider_id;
 
@@ -1136,6 +1145,8 @@ COMPORTAMENTO CONSULTIVO OBRIGATÓRIO:
 RULES:
 - If the user's message requires objective data lookup (inventory, location, etc.), call the appropriate tool.
 - If the user is asking a general/conversational or consultative message (greetings, preferences, vague intent), DO NOT call tools yet.
+- CRITICAL: Messages like "obrigado", "valeu", "ok", "beleza", "perfeito", "tchau", "até mais", "show", "massa" are CLOSING/THANK-YOU messages. NEVER call any tools for these. Respond with "NO_TOOLS_NEEDED".
+- CRITICAL: If the assistant already sent photos/images of a vehicle in the recent conversation, do NOT call inventory again for the same vehicle unless the user explicitly asks for DIFFERENT photos or a DIFFERENT vehicle.
 - Treat messages like "gosto de modelo mais alto", "prefiro SUV", "quero algo confortável" as consultative discovery unless user explicitly asks to list stock now.
 - When the user explicitly asks to see available vehicles/stock (e.g. "quais SUVs tem", "me mostra os SUVs disponíveis"), call inventory tool.
 - When the user asks for photos/images/details of a specific vehicle, call the inventory tool with specific filters.
