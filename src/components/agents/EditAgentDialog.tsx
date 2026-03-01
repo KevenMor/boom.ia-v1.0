@@ -299,13 +299,10 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
           {/* Follow-up */}
           <FollowUpConfigSection
             enabled={followupEnabled} setEnabled={setFollowupEnabled}
-            maxAttempts={followupMaxAttempts} setMaxAttempts={setFollowupMaxAttempts}
             intervals={followupIntervals} setIntervals={setFollowupIntervals}
             quietStart={followupQuietStart} setQuietStart={setFollowupQuietStart}
             quietEnd={followupQuietEnd} setQuietEnd={setFollowupQuietEnd}
             followupPrompt={followupPrompt} setFollowupPrompt={setFollowupPrompt}
-            followupAgentId={followupAgentId} setFollowupAgentId={setFollowupAgentId}
-            agents={allAgents ?? []} currentAgentId={agent?.id}
           />
 
           {/* Status */}

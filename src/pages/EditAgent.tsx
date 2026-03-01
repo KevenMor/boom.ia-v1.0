@@ -412,13 +412,10 @@ export default function EditAgent() {
         <div className="rounded-xl border border-border bg-card p-6 space-y-4">
           <FollowUpConfigSection
             enabled={followupEnabled} setEnabled={setFollowupEnabled}
-            maxAttempts={followupMaxAttempts} setMaxAttempts={setFollowupMaxAttempts}
             intervals={followupIntervals} setIntervals={setFollowupIntervals}
             quietStart={followupQuietStart} setQuietStart={setFollowupQuietStart}
             quietEnd={followupQuietEnd} setQuietEnd={setFollowupQuietEnd}
             followupPrompt={followupPrompt} setFollowupPrompt={setFollowupPrompt}
-            followupAgentId={followupAgentId} setFollowupAgentId={setFollowupAgentId}
-            agents={agents ?? []} currentAgentId={agent.id}
           />
         </div>
 

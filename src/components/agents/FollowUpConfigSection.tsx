@@ -4,15 +4,11 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, X, Clock, Bell, BellOff, Bot, MessageSquare } from "lucide-react";
-import type { Agent } from "@/types/database";
+import { Plus, X, Clock, Bell, BellOff, MessageSquare } from "lucide-react";
 
 interface Props {
   enabled: boolean;
   setEnabled: (v: boolean) => void;
-  maxAttempts: number;
-  setMaxAttempts: (v: number) => void;
   intervals: number[];
   setIntervals: (v: number[]) => void;
   quietStart: string;
@@ -21,21 +17,14 @@ interface Props {
   setQuietEnd: (v: string) => void;
   followupPrompt: string;
   setFollowupPrompt: (v: string) => void;
-  followupAgentId: string;
-  setFollowupAgentId: (v: string) => void;
-  agents: Agent[];
-  currentAgentId?: string;
 }
 
 export function FollowUpConfigSection({
   enabled, setEnabled,
-  maxAttempts, setMaxAttempts,
   intervals, setIntervals,
   quietStart, setQuietStart,
   quietEnd, setQuietEnd,
   followupPrompt, setFollowupPrompt,
-  followupAgentId, setFollowupAgentId,
-  agents, currentAgentId,
 }: Props) {
   const addInterval = () => {
     const last = intervals[intervals.length - 1] || 10;
@@ -53,9 +42,6 @@ export function FollowUpConfigSection({
     setIntervals(next);
   };
 
-  const effectiveMax = Math.min(maxAttempts, intervals.length);
-  const availableAgents = (agents ?? []).filter((a) => a.status === "active");
-
   return (
     <div className="space-y-4 rounded-xl border border-border p-5">
       <div className="flex items-center justify-between">
@@ -68,30 +54,6 @@ export function FollowUpConfigSection({
 
       {enabled && (
         <div className="space-y-4 pt-2">
-          {/* Follow-up Agent */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-1.5">
-              <Bot className="h-3.5 w-3.5 text-muted-foreground" />
-              <Label className="text-xs text-muted-foreground">Agente de Follow-up</Label>
-            </div>
-            <Select value={followupAgentId || "__same__"} onValueChange={(v) => setFollowupAgentId(v === "__same__" ? "" : v)}>
-              <SelectTrigger className="h-10 rounded-lg bg-background border-border text-sm">
-                <SelectValue placeholder="Mesmo agente (padrão)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__same__">Mesmo agente (padrão)</SelectItem>
-                {availableAgents
-                  .filter((a) => a.id !== currentAgentId)
-                  .map((a) => (
-                    <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-            <p className="text-[10px] text-muted-foreground">
-              Escolha um agente diferente para enviar follow-ups (ex: agente especializado em reengajamento)
-            </p>
-          </div>
-
           {/* Follow-up Prompt */}
           <div className="space-y-2">
             <div className="flex items-center gap-1.5">
@@ -141,28 +103,13 @@ export function FollowUpConfigSection({
               </Button>
             </div>
             <p className="text-[10px] text-muted-foreground">
+              Cada intervalo representa um follow-up. Total de follow-ups: {intervals.length}.
               Exemplo: [{intervals.join(", ")}] min → follow-ups em{" "}
               {intervals.map((_, i) => {
                 const cumulative = intervals.slice(0, i + 1).reduce((a, b) => a + b, 0);
                 return `${cumulative}min`;
               }).join(", ")}
               {" "}após a última resposta do agente
-            </p>
-          </div>
-
-          {/* Max attempts */}
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Máximo de tentativas</Label>
-            <Input
-              type="number"
-              min={1}
-              max={20}
-              value={maxAttempts}
-              onChange={(e) => setMaxAttempts(Number(e.target.value))}
-              className="h-10 w-24 rounded-lg bg-background border-border font-mono text-sm"
-            />
-            <p className="text-[10px] text-muted-foreground">
-              Após {effectiveMax} tentativas sem resposta, para de enviar
             </p>
           </div>
 
