@@ -1102,8 +1102,8 @@ COMPORTAMENTO CONSULTIVO OBRIGATÓRIO:
     const toolResultsContext: string[] = [];
 
     if (openaiTools && openaiTools.length > 0) {
-      const tenantSettings = agent.tenants?.settings || {};
-      const dispatcherProviderId = tenantSettings.dispatcher_provider_id;
+      // Priority: agent-level config > tenant-level settings (legacy fallback)
+      const dispatcherProviderId = agentConfig.dispatcher_provider_id || (agent.tenants?.settings as any)?.dispatcher_provider_id;
 
       if (!dispatcherProviderId) {
         console.warn("[Dispatcher] No dispatcher_provider_id configured for tenant — skipping tool dispatch");
