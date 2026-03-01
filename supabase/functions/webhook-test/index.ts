@@ -336,6 +336,26 @@ Deno.serve(async (req: Request) => {
 
     const body = await req.json();
 
+    // ---- Early filter: only process message_created events from Chatwoot ----
+    // Chatwoot sends conversation_created, conversation_updated, message_created, etc.
+    // We only care about message_created with incoming messages.
+    if (body.event && body.event !== "message_created") {
+      console.log(`[Webhook] Ignoring Chatwoot event: ${body.event}`);
+      return new Response(
+        JSON.stringify({ status: "ignored", reason: `Event '${body.event}' not handled` }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Also ignore outgoing messages (sent by the bot itself or agents)
+    if (body.event === "message_created" && body.message_type !== "incoming") {
+      console.log(`[Webhook] Ignoring non-incoming message_type: ${body.message_type}`);
+      return new Response(
+        JSON.stringify({ status: "ignored", reason: "Not an incoming message" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // DEBUG: log raw Chatwoot payload for phone extraction analysis
     if (body.event === "message_created") {
       const sender = (body.sender || {}) as Record<string, unknown>;
