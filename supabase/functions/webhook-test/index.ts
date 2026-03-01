@@ -400,6 +400,33 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // ---- Cancel pending follow-ups (client replied) ----
+    // We cancel early, before debounce, so follow-ups don't fire while we wait
+    let earlyConvId: string | null = null;
+    try {
+      const { data: existingConvId } = await supabase.rpc("find_or_create_webhook_conversation", {
+        p_agent_id: agentId,
+        p_channel: channel,
+        p_external_user_id: externalUserId,
+        p_chatwoot_conversation_id: chatwootConversationId,
+        p_chatwoot_contact_id: chatwootContactId,
+        p_contact_name: contactName,
+        p_contact_avatar_url: contactAvatarUrl,
+      });
+      earlyConvId = existingConvId;
+      if (earlyConvId) {
+        const { data: cancelledCount } = await supabase.rpc("cancel_pending_followups", {
+          p_agent_id: agentId,
+          p_conversation_id: earlyConvId,
+        });
+        if (cancelledCount && cancelledCount > 0) {
+          console.log(`[FollowUp] Cancelled ${cancelledCount} pending follow-up(s) for conv ${earlyConvId}`);
+        }
+      }
+    } catch (e) {
+      console.warn("[FollowUp] Early cancel failed (non-critical):", e);
+    }
+
     // ---- Debounce logic ----
     const debounceMs = Number(cfg.message_debounce_ms) || 0; // 0 = disabled
 
@@ -537,6 +564,33 @@ Deno.serve(async (req: Request) => {
         fullContent.trim(),
         responseParts
       );
+    }
+
+    // ---- Schedule follow-up if enabled ----
+    const followupEnabled = cfg.followup_enabled === true;
+    const followupConvId = responseConvId || earlyConvId;
+
+    if (followupEnabled && followupConvId && chatwootConversationId) {
+      const intervals: number[] = Array.isArray(cfg.followup_intervals) ? cfg.followup_intervals : [10, 20, 30];
+      const maxAttempts = Number(cfg.followup_max_attempts) || intervals.length;
+      const firstDelay = intervals[0] || 10;
+
+      try {
+        await supabase.rpc("schedule_followup", {
+          p_agent_id: agent.id,
+          p_conversation_id: followupConvId,
+          p_external_user_id: externalUserId,
+          p_channel: channel,
+          p_chatwoot_conversation_id: chatwootConversationId,
+          p_attempt: 1,
+          p_max_attempts: maxAttempts,
+          p_intervals_minutes: JSON.stringify(intervals),
+          p_delay_minutes: firstDelay,
+        });
+        console.log(`[FollowUp] Scheduled first follow-up in ${firstDelay}min for conv ${followupConvId}`);
+      } catch (e) {
+        console.warn("[FollowUp] Schedule failed (non-critical):", e);
+      }
     }
 
     return new Response(
