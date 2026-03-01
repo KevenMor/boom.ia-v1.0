@@ -18,6 +18,7 @@ import { useProviders } from "@/hooks/useProviders";
 import { toast } from "sonner";
 import { getModelsForProvider } from "@/lib/provider-models";
 import { ChatwootConfigSection } from "@/components/agents/ChatwootConfigSection";
+import { FollowUpConfigSection } from "@/components/agents/FollowUpConfigSection";
 import { AgentAvatarUpload } from "@/components/agents/AgentAvatarUpload";
 import type { Agent } from "@/types/database";
 
@@ -55,6 +56,11 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
   const [chatwootUrl, setChatwootUrl] = useState("");
   const [chatwootApiToken, setChatwootApiToken] = useState("");
   const [chatwootAccountId, setChatwootAccountId] = useState("");
+  const [followupEnabled, setFollowupEnabled] = useState(false);
+  const [followupMaxAttempts, setFollowupMaxAttempts] = useState(3);
+  const [followupIntervals, setFollowupIntervals] = useState<number[]>([10, 20, 30]);
+  const [followupQuietStart, setFollowupQuietStart] = useState("22:00");
+  const [followupQuietEnd, setFollowupQuietEnd] = useState("08:00");
   const { register, handleSubmit, setValue, watch, reset } = useForm<FormData>({ resolver: zodResolver(schema) });
 
   useEffect(() => {
@@ -77,6 +83,11 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
       setChatwootUrl((cfg as any).chatwoot_url ?? "");
       setChatwootApiToken((cfg as any).chatwoot_api_token ?? "");
       setChatwootAccountId((cfg as any).chatwoot_account_id ?? "");
+      setFollowupEnabled((cfg as any).followup_enabled ?? false);
+      setFollowupMaxAttempts((cfg as any).followup_max_attempts ?? 3);
+      setFollowupIntervals((cfg as any).followup_intervals ?? [10, 20, 30]);
+      setFollowupQuietStart((cfg as any).followup_quiet_start ?? "22:00");
+      setFollowupQuietEnd((cfg as any).followup_quiet_end ?? "08:00");
     }
   }, [agent, reset]);
 
@@ -95,6 +106,11 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
           block_gap_ms: Math.round(blockGap * 1000), message_debounce_ms: Math.round(debounceMs * 1000),
           chatwoot_url: chatwootUrl || undefined, chatwoot_api_token: chatwootApiToken || undefined,
           chatwoot_account_id: chatwootAccountId || undefined,
+          followup_enabled: followupEnabled,
+          followup_max_attempts: followupMaxAttempts,
+          followup_intervals: followupIntervals,
+          followup_quiet_start: followupQuietStart || undefined,
+          followup_quiet_end: followupQuietEnd || undefined,
         },
       });
       toast.success("Agente atualizado");
@@ -271,6 +287,15 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
             chatwootApiToken={chatwootApiToken} setChatwootApiToken={setChatwootApiToken}
             chatwootAccountId={chatwootAccountId} setChatwootAccountId={setChatwootAccountId}
             webhookUrl={agent ? `${WEBHOOK_BASE}?agent_id=${agent.id}` : undefined}
+          />
+
+          {/* Follow-up */}
+          <FollowUpConfigSection
+            enabled={followupEnabled} setEnabled={setFollowupEnabled}
+            maxAttempts={followupMaxAttempts} setMaxAttempts={setFollowupMaxAttempts}
+            intervals={followupIntervals} setIntervals={setFollowupIntervals}
+            quietStart={followupQuietStart} setQuietStart={setFollowupQuietStart}
+            quietEnd={followupQuietEnd} setQuietEnd={setFollowupQuietEnd}
           />
 
           {/* Status */}
