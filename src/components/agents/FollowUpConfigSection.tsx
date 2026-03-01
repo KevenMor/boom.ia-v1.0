@@ -74,12 +74,12 @@ export function FollowUpConfigSection({
               <Bot className="h-3.5 w-3.5 text-muted-foreground" />
               <Label className="text-xs text-muted-foreground">Agente de Follow-up</Label>
             </div>
-            <Select value={followupAgentId || ""} onValueChange={setFollowupAgentId}>
+            <Select value={followupAgentId || "__same__"} onValueChange={(v) => setFollowupAgentId(v === "__same__" ? "" : v)}>
               <SelectTrigger className="h-10 rounded-lg bg-background border-border text-sm">
                 <SelectValue placeholder="Mesmo agente (padrão)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Mesmo agente (padrão)</SelectItem>
+                <SelectItem value="__same__">Mesmo agente (padrão)</SelectItem>
                 {availableAgents
                   .filter((a) => a.id !== currentAgentId)
                   .map((a) => (
