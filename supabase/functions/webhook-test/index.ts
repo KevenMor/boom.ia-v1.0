@@ -613,8 +613,10 @@ Deno.serve(async (req: Request) => {
     }
 
     // ---- Schedule follow-up if enabled ----
-    const followupEnabled = cfg.followup_enabled === true;
+    const followupEnabled = cfg.followup_enabled === true || cfg.followup_enabled === "true";
     const followupConvId = responseConvId || earlyConvId;
+
+    console.log(`[FollowUp] Check: enabled=${cfg.followup_enabled}(${typeof cfg.followup_enabled}) resolved=${followupEnabled}, convId=${followupConvId}, cwConvId=${chatwootConversationId}`);
 
     if (followupEnabled && followupConvId && chatwootConversationId) {
       const intervals: number[] = Array.isArray(cfg.followup_intervals) ? cfg.followup_intervals : [10, 20, 30];
