@@ -147,13 +147,18 @@ function parseChatwootPayload(body: Record<string, unknown>) {
     const conversationMeta = (conversation.meta || {}) as Record<string, unknown>;
     const metaSender = (conversationMeta.sender || {}) as Record<string, unknown>;
 
-    const phoneCandidate =
-      (sender.phone_number as string) ||
-      (contactMeta.phone_number as string) ||
-      (metaSender.phone_number as string) ||
-      (conversation.source_id as string) ||
-      (contactMeta.identifier as string) ||
-      null;
+    // Extract phone number - try all known locations
+    const phoneCandidates = [
+      sender.phone_number as string,
+      contactMeta.phone_number as string,
+      metaSender.phone_number as string,
+      conversation.source_id as string,
+      contactMeta.identifier as string,
+    ].filter(Boolean);
+
+    // Pick the first value that looks like a phone (has 10+ digits)
+    const isPhoneLike = (v: string) => (v || "").replace(/\D/g, "").length >= 10;
+    const phoneNumber = phoneCandidates.find(isPhoneLike) || null;
 
     const eventMessageId =
       (body.id as string | number | undefined) ??
@@ -161,13 +166,15 @@ function parseChatwootPayload(body: Record<string, unknown>) {
       ((body as any).messages?.[0]?.id as string | number | undefined) ??
       null;
 
+    // ALWAYS use the phone number as externalUserId for WhatsApp
+    // Never use JSON objects, email, or numeric contact IDs
+    const externalUserId = phoneNumber || String(sender.id ?? "chatwoot-user");
+
     return {
       isChatwoot: true,
       message: (body.content as string) || "",
       eventMessageId: eventMessageId ? String(eventMessageId) : null,
-      // Prioritize real customer phone over Chatwoot internal IDs
-      externalUserId:
-        phoneCandidate || (sender.email as string) || String(sender.id ?? "chatwoot-user"),
+      externalUserId,
       contactName: (sender.name as string) || null,
       contactAvatarUrl: (sender.thumbnail as string) || (sender.avatar_url as string) || null,
       chatwootConversationId: (conversation.id as number) ?? null,
