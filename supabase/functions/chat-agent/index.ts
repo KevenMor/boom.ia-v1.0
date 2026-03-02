@@ -1201,6 +1201,9 @@ Deno.serve(async (req) => {
     );
     console.log(`[Prompts] Tenant slug: ${tenantSlug}, hasInventory: ${hasInventoryTool}, prompt length: ${systemPrompt.length}`);
 
+    // Debug trace must exist before media processing
+    const debugTrace: any[] = [];
+
     // ===== MEDIA ATTACHMENT PROCESSING =====
     // Process audio (transcription) and images (multimodal) from Chatwoot attachments
     const mediaAttachments = (attachments || []) as Array<{ file_type: string; data_url: string; file_size?: number }>;
@@ -1472,7 +1475,6 @@ Deno.serve(async (req) => {
 
     const fullMessages = [{ role: "system", content: systemPrompt }, ...sanitizedMessages];
     const latestUserText = String(lastUserMsg?.content || "");
-    const debugTrace: any[] = [];
 
     debugTrace.push({ type: "config", model, temperature, top_p, top_k, tools_count: openaiTools?.length || 0, latest_user_text: latestUserText.slice(0, 120) });
 
