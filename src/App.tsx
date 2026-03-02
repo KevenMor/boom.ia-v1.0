@@ -23,6 +23,7 @@ import Conversations from "@/pages/Conversations";
 import Audit from "@/pages/Audit";
 import SettingsPage from "@/pages/SettingsPage";
 import PromptsPage from "@/pages/PromptsPage";
+import CalendarPage from "@/pages/CalendarPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -52,6 +53,7 @@ const App = () => (
               <Route path="/agents/:agentId/edit" element={<EditAgent />} />
               <Route path="/agents/:agentId/sandbox" element={<AgentSandbox />} />
               <Route path="/conversations" element={<Conversations />} />
+              <Route path="/calendar" element={<CalendarPage />} />
               <Route path="/tools" element={<Tools />} />
               <Route path="/tools/:toolId/edit" element={<EditTool />} />
               <Route path="/providers" element={<Providers />} />
