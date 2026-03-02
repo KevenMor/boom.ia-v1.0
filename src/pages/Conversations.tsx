@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { MessageSquare, Bot, ArrowLeft, Search, Send, Paperclip, Smile, CheckCheck } from "lucide-react";
+import { MessageSquare, Bot, ArrowLeft, Search, Send, Paperclip, Smile, CheckCheck, Bug } from "lucide-react";
+import { DebugBlock } from "@/components/sandbox/DebugBlock";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -35,6 +36,7 @@ export default function Conversations() {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [showDebug, setShowDebug] = useState(false);
 
   const { data: conversations, isLoading: convsLoading } = useConversations(selectedAgentId);
   const { data: messages, isLoading: msgsLoading } = useConversationMessages(selectedAgentId, selectedConvId);
@@ -307,6 +309,15 @@ export default function Conversations() {
                   <Badge variant="outline" className="text-[9px] font-mono shrink-0">
                     #{selectedConvId.slice(0, 8)}
                   </Badge>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn("h-8 w-8 shrink-0", showDebug ? "text-primary" : "text-muted-foreground")}
+                    onClick={() => setShowDebug(!showDebug)}
+                    title="Debug mode"
+                  >
+                    <Bug className="h-4 w-4" />
+                  </Button>
                 </div>
 
                 {/* Messages area */}
@@ -355,8 +366,15 @@ export default function Conversations() {
                             }
 
                             return (
-                              <div key={msg.id} className={cn("flex", isUser ? "justify-start" : "justify-end")}>
-                                <div className="max-w-[75%]">
+                              <div key={msg.id}>
+                                {/* Debug block before assistant messages */}
+                                {!isUser && !isSystem && showDebug && msg.metadata?.debug && (
+                                  <div className="flex justify-end mb-1">
+                                    <DebugBlock debug={msg.metadata.debug} edgeLogs={msg.metadata.edge_logs} />
+                                  </div>
+                                )}
+                              <div className={cn("flex", isUser ? "justify-start" : "justify-end")}>
+                              <div className="max-w-[75%]">
                                   <div
                                     className={cn(
                                       "rounded-2xl px-3.5 py-2",
@@ -417,6 +435,7 @@ export default function Conversations() {
                                     )}
                                   </div>
                                 </div>
+                              </div>
                               </div>
                             );
                           })}

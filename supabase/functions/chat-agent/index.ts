@@ -1437,6 +1437,7 @@ RULES:
           p_agent_id: agent_id, p_conversation_id: convId,
           p_role: "assistant", p_content: finalContent, p_model: model,
           p_latency_ms: latency,
+          p_metadata: { debug: debugTrace, edge_logs: collectedLogs },
         });
       } catch (e: any) { console.warn("Could not save assistant msg:", e); }
     }
