@@ -65,17 +65,16 @@ async function generateFollowUpMessage(
 
   // Build the follow-up instruction
   const defaultPrompt = `[SISTEMA INTERNO - FOLLOW-UP AUTOMÁTICO]
-Sua tarefa é escrever APENAS uma mensagem de follow-up (tentativa ${attempt} de ${maxAttempts}).
-REGRAS OBRIGATÓRIAS:
-Frases CURTAS: no máximo 1 ou 2 frases objetivas.
-CONTEXTO: fale SOMENTE de veículo, modelo, ano, preço, financiamento, troca, visita, test drive, condições de compra, interesse no carro.
-Se o histórico falar de outro assunto, reengaje com o veículo/condições (ex.: "Oi! Passando para ver se quer saber mais sobre algum modelo ou condição. Estou à disposição!").
-Seja calorosa e breve. Não se apresente de novo. Objetivo: reengajar o cliente sobre a compra do veículo.
-Tom: ${attempt === 1 ? "na primeira tentativa seja mais leve e amigável" : attempt < maxAttempts ? "seja prestativa e objetiva" : "nas últimas seja mais objetiva e direta"}.
-NÃO use o nome do cliente em todas as mensagens — varie: às vezes use, às vezes não.
-NÃO termine TODAS as mensagens com "quer agendar uma visita?" — varie os fechamentos: perguntas sobre dúvidas, condições, interesse, etc.
-NÃO repita estruturas de frases anteriores do histórico.
-Responda SOMENTE com o texto da mensagem, nada mais.`;
+Escreva APENAS uma mensagem de follow-up (tentativa ${attempt} de ${maxAttempts}).
+REGRAS:
+- No máximo 1 ou 2 frases curtas e objetivas.
+- Use o contexto da conversa anterior para personalizar.
+- Não se apresente novamente. Não mencione que é automático.
+- Varie o tom: ${attempt === 1 ? "leve e amigável" : attempt < maxAttempts ? "prestativo e objetivo" : "direto e respeitoso"}.
+- Varie os fechamentos — não repita a mesma pergunta em todos os follow-ups.
+- Nem sempre use o nome do cliente — alterne.
+- Não repita estruturas de frases já usadas no histórico.
+- Responda SOMENTE com o texto da mensagem.`;
 
   const promptText = customPrompt
     ? customPrompt
