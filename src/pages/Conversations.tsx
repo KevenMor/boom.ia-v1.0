@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { MessageSquare, Bot, ArrowLeft, Search, Send, Paperclip, Smile, CheckCheck, Bug, Trash2 } from "lucide-react";
+import { MessageSquare, Bot, ArrowLeft, Search, Send, Paperclip, Smile, CheckCheck, Bug, Trash2, Mic } from "lucide-react";
 import { DebugBlock } from "@/components/sandbox/DebugBlock";
 import { cloudClient } from "@/integrations/supabase/cloud-client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -26,6 +26,17 @@ function extractImages(content: string): { text: string; images: string[] } {
     return "";
   }).trim();
   return { text, images };
+}
+
+function parseAudioTranscription(content: string): { isAudio: boolean; transcription: string; remainingText: string } {
+  const audioRegex = /\[Áudio do cliente\s*-?\s*transcrição\]:\s*"([^"]*)"/i;
+  const match = content.match(audioRegex);
+  if (match) {
+    const transcription = match[1] || "";
+    const remainingText = content.replace(audioRegex, "").trim();
+    return { isAudio: true, transcription, remainingText };
+  }
+  return { isAudio: false, transcription: "", remainingText: content };
 }
 
 function getLastMessagePreview(messages: any[] | undefined): string {
@@ -538,7 +549,9 @@ export default function Conversations() {
                           }).map((msg) => {
                             const isUser = msg.role === "user";
                             const isSystem = msg.role === "system" || msg.role === "tool";
-                            const { text, images } = extractImages(msg.content || "");
+                            const audioInfo = isUser ? parseAudioTranscription(msg.content || "") : { isAudio: false, transcription: "", remainingText: msg.content || "" };
+                            const contentForExtraction = isUser ? audioInfo.remainingText : msg.content || "";
+                            const { text, images } = extractImages(contentForExtraction);
 
                             if (isSystem) {
                               return (
@@ -551,7 +564,7 @@ export default function Conversations() {
                             }
 
                             // Split assistant messages into separate bubbles (like WhatsApp)
-                            const bubbles: { text: string; images: string[] }[] = [];
+                            const bubbles: { text: string; images: string[]; isAudio?: boolean; transcription?: string }[] = [];
                             if (!isUser) {
                               // Split by double newlines to create separate bubbles
                               const paragraphs = (msg.content || "").split(/\n\n+/);
@@ -575,7 +588,13 @@ export default function Conversations() {
                               if (currentBubble.text.trim()) bubbles.push(currentBubble);
                               if (bubbles.length === 0 && text) bubbles.push({ text, images });
                             } else {
-                              bubbles.push({ text, images });
+                              // For user messages with audio, create audio bubble first
+                              if (audioInfo.isAudio) {
+                                bubbles.push({ text: "", images: [], isAudio: true, transcription: audioInfo.transcription });
+                              }
+                              if (text.trim() || images.length > 0) {
+                                bubbles.push({ text, images });
+                              }
                             }
 
                             return (
@@ -597,6 +616,23 @@ export default function Conversations() {
                                         : "rounded-br-md bg-primary text-primary-foreground"
                                     )}
                                   >
+                                    {/* Audio transcription bubble */}
+                                    {bubble.isAudio && (
+                                      <div className="flex items-start gap-2.5">
+                                        <div className="flex items-center justify-center h-8 w-8 rounded-full bg-accent/20 shrink-0 mt-0.5">
+                                          <Mic className="h-4 w-4 text-accent-foreground" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-1.5 mb-1">
+                                            <span className="text-[10px] font-medium uppercase tracking-wider opacity-70">Áudio transcrito</span>
+                                          </div>
+                                          <p className="text-sm whitespace-pre-wrap break-words italic">
+                                            "{bubble.transcription}"
+                                          </p>
+                                        </div>
+                                      </div>
+                                    )}
+
                                     {/* Images */}
                                     {bubble.images.length > 0 && (
                                       <div className="mb-1.5 grid gap-1 grid-cols-1">
@@ -614,7 +650,7 @@ export default function Conversations() {
                                     )}
 
                                     {/* Text */}
-                                    {bubble.text && (
+                                    {bubble.text && !bubble.isAudio && (
                                       <div className="prose prose-sm max-w-none [&_p]:m-0 [&_p]:leading-relaxed">
                                         <ReactMarkdown
                                           components={{
