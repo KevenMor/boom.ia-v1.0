@@ -328,7 +328,7 @@ export default function Conversations() {
                       </div>
                       <div className="flex items-center justify-between gap-2 mt-0.5">
                         <p className="text-xs text-muted-foreground truncate">
-                          {conv.channel === "webhook" ? "WhatsApp" : conv.channel} · {conv.message_count} msgs
+                          {getPhoneDisplay(conv) || (conv.channel === "webhook" ? "WhatsApp" : conv.channel)} · {conv.message_count} msgs
                         </p>
                         {conv.status === "open" && (
                           <Badge className="h-4.5 min-w-4.5 shrink-0 rounded-full px-1.5 text-[10px]">
