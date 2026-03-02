@@ -166,6 +166,44 @@ function removeRedundantPhotoOfferWhenPhotosPresent(content: string): string {
   return filtered.join("\n\n").trim() || content;
 }
 
+function extractMarkdownPhotoUrls(content: string): string[] {
+  const urls: string[] = [];
+  const imageMdRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/gi;
+  let match: RegExpExecArray | null;
+  while ((match = imageMdRegex.exec(content)) !== null) {
+    const raw = match[1] || "";
+    const cleaned = cleanPhotoUrl(raw);
+    if (isValidPhotoUrl(cleaned)) urls.push(cleaned);
+  }
+  return Array.from(new Set(urls));
+}
+
+function removePreviouslySentPhotoBlocks(content: string, historyMessages: Array<{ role: string; content: string }>): { content: string; removedCount: number } {
+  if (!hasMarkdownImages(content)) return { content, removedCount: 0 };
+
+  const previouslySent = new Set<string>();
+  for (const msg of historyMessages) {
+    if (msg.role !== "assistant" || !msg.content) continue;
+    const urls = extractMarkdownPhotoUrls(msg.content);
+    for (const url of urls) previouslySent.add(url);
+  }
+
+  if (previouslySent.size === 0) return { content, removedCount: 0 };
+
+  let removedCount = 0;
+  let next = content.replace(/!\[.*?\]\((https?:\/\/[^\s)]+)\)/gi, (full, rawUrl: string) => {
+    const cleaned = cleanPhotoUrl(rawUrl || "");
+    if (previouslySent.has(cleaned)) {
+      removedCount += 1;
+      return "";
+    }
+    return full;
+  });
+
+  next = next.replace(/\n{3,}/g, "\n\n").trim();
+  return { content: next, removedCount };
+}
+
 function buildFallbackInventoryArgs(userText: string, conversationMessages?: any[]): Record<string, any> {
   // Try to extract the vehicle model/brand from conversation context first
   // The user might say "gostei do corola, fotos?" — we need to find "COROLLA" from assistant's previous messages
@@ -1364,6 +1402,22 @@ RULES:
     let finalContent = sanitizeLLMOutput(rawContent);
     finalContent = dedupeRepeatedParagraphs(finalContent);
     finalContent = removeRedundantPhotoOfferWhenPhotosPresent(finalContent);
+
+    // Guard: when dispatcher did NOT fetch fresh tool data, never resend photo URLs
+    // that were already sent earlier in the same conversation context.
+    if (toolResultsContext.length === 0 && finalContent) {
+      const dedupedPhotos = removePreviouslySentPhotoBlocks(finalContent, messages as Array<{ role: string; content: string }>);
+      if (dedupedPhotos.removedCount > 0) {
+        console.log(`[Conversational] Removed ${dedupedPhotos.removedCount} previously sent photo(s) from response`);
+        debugTrace.push({
+          type: "photo_dedup",
+          removed_count: dedupedPhotos.removedCount,
+          reason: "no_new_tool_results",
+          timestamp: Date.now(),
+        });
+      }
+      finalContent = dedupedPhotos.content;
+    }
 
     // Save to memory
     if (convId && finalContent) {
