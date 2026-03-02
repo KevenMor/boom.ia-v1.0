@@ -311,9 +311,17 @@ Deno.serve(async (req: Request) => {
 
         // Schedule next follow-up if not exhausted
         if (item.attempt < item.max_attempts) {
-          const intervals = item.intervals_minutes as number[];
-          const nextIdx = Math.min(item.attempt, intervals.length - 1); // Use last interval if beyond array
-          const nextDelay = intervals[nextIdx] || intervals[intervals.length - 1] || 30;
+          // ALWAYS use agent's CURRENT config for intervals (not stale queue record)
+          const currentIntervals: number[] = Array.isArray(cfg.followup_intervals) ? cfg.followup_intervals : [10, 20, 30];
+          const currentMaxAttempts = Number(cfg.followup_max_attempts) || currentIntervals.length;
+          const effectiveMaxAttempts = Math.min(item.max_attempts, currentMaxAttempts);
+
+          if (item.attempt >= effectiveMaxAttempts) {
+            console.log(`[FollowUp] Agent config reduced max_attempts to ${effectiveMaxAttempts}, stopping`);
+            await supabase.from("follow_up_queue").update({ status: "exhausted", updated_at: new Date().toISOString() }).eq("id", item.id);
+          } else {
+            const nextIdx = Math.min(item.attempt, currentIntervals.length - 1);
+            const nextDelay = currentIntervals[nextIdx] || currentIntervals[currentIntervals.length - 1] || 30;
 
           await supabase.rpc("schedule_followup", {
             p_agent_id: agent.id,
@@ -322,12 +330,13 @@ Deno.serve(async (req: Request) => {
             p_channel: item.channel,
             p_chatwoot_conversation_id: item.chatwoot_conversation_id,
             p_attempt: item.attempt + 1,
-            p_max_attempts: item.max_attempts,
-            p_intervals_minutes: JSON.stringify(intervals),
+            p_max_attempts: effectiveMaxAttempts,
+            p_intervals_minutes: JSON.stringify(currentIntervals),
             p_delay_minutes: nextDelay,
           });
 
-          console.log(`[FollowUp] Scheduled next attempt ${item.attempt + 1} in ${nextDelay}min`);
+          console.log(`[FollowUp] Scheduled next attempt ${item.attempt + 1} in ${nextDelay}min (intervals from agent config: [${currentIntervals.join(",")}])`);
+          }
         } else {
           console.log(`[FollowUp] Exhausted all ${item.max_attempts} attempts for conv ${item.conversation_id}`);
         }
