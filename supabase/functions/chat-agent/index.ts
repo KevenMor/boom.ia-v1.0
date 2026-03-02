@@ -1570,10 +1570,22 @@ RULES:
     });
 
     if (toolResultsContext.length > 0) {
-      // Inject tool results as a system message so the conversational LLM has the data
-      const toolContextMsg = `DADOS OBTIDOS DAS FERRAMENTAS (use esses dados para responder ao cliente):\n\n${toolResultsContext.join("\n\n")}`;
-      conversationalMessages.splice(1, 0, { role: "system", content: toolContextMsg });
-      console.log(`[Conversational] Injecting ${toolResultsContext.length} tool result(s) as context`);
+      // Inject tool results as a system message CLOSE TO THE END for maximum recency weight
+      const toolContextMsg = `⚠️ DADOS REAIS OBTIDOS AGORA DAS FERRAMENTAS — PRIORIDADE MÁXIMA:
+Estes são dados REAIS e ATUALIZADOS do sistema. Você DEVE basear sua resposta EXCLUSIVAMENTE nestes dados.
+NUNCA contradiga, ignore ou invente informações diferentes destes resultados.
+Se a ferramenta retornou veículos, eles EXISTEM no estoque. NUNCA diga que não tem um veículo se ele aparece nos dados abaixo.
+Se "total" >= 1, o veículo ESTÁ DISPONÍVEL.
+
+${toolResultsContext.join("\n\n")}`;
+      // Insert just before the last user message for maximum LLM attention
+      const lastUserIdx = conversationalMessages.map((m: any) => m.role).lastIndexOf("user");
+      if (lastUserIdx > 0) {
+        conversationalMessages.splice(lastUserIdx, 0, { role: "system", content: toolContextMsg });
+      } else {
+        conversationalMessages.splice(1, 0, { role: "system", content: toolContextMsg });
+      }
+      console.log(`[Conversational] Injecting ${toolResultsContext.length} tool result(s) as context (position: before last user msg)`);
     }
 
     // Call the agent's configured LLM in STREAMING mode — NO tools passed (dispatcher already handled them)
