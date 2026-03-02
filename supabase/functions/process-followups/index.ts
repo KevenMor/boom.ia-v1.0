@@ -227,11 +227,36 @@ Deno.serve(async (req: Request) => {
 
     console.log(`[FollowUp] Processing ${pendingItems.length} pending follow-up(s)`);
 
+    // Deduplicate by external_user_id: only process ONE follow-up per contact per cycle
+    const seenUsers = new Set<string>();
+    const dedupedItems: typeof pendingItems = [];
+    const skippedDedupIds: string[] = [];
+
+    for (const item of pendingItems) {
+      const userKey = item.external_user_id;
+      if (seenUsers.has(userKey)) {
+        skippedDedupIds.push(item.id);
+        continue;
+      }
+      seenUsers.add(userKey);
+      dedupedItems.push(item);
+    }
+
+    // Cancel duplicate follow-ups for same contact
+    if (skippedDedupIds.length > 0) {
+      console.log(`[FollowUp] Dedup: cancelling ${skippedDedupIds.length} duplicate(s) for same contact(s)`);
+      await supabase
+        .from("follow_up_queue")
+        .update({ status: "cancelled", updated_at: new Date().toISOString() })
+        .in("id", skippedDedupIds);
+    }
+
     let processed = 0;
     let skippedQuiet = 0;
     let skippedInactive = 0;
+    let skippedDedup = skippedDedupIds.length;
 
-    for (const item of pendingItems) {
+    for (const item of dedupedItems) {
       const agent = item.agents;
       if (!agent || agent.status !== "active") {
         // Agent inactive — cancel
@@ -333,6 +358,7 @@ Deno.serve(async (req: Request) => {
       processed,
       skipped_quiet_hours: skippedQuiet,
       skipped_inactive: skippedInactive,
+      skipped_dedup: skippedDedup,
       total_pending: pendingItems.length,
     }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
