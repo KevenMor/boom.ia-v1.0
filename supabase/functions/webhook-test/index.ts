@@ -306,11 +306,11 @@ async function consumeBufferedMessages(
 
   if (!pending || pending.length === 0) return [];
 
-  // Mark all as processed
+  // Delete consumed messages immediately (no need to keep them)
   const ids = pending.map((m: any) => m.id);
   await supabase
     .from("webhook_message_buffer")
-    .update({ processed: true })
+    .delete()
     .in("id", ids);
 
   return pending.map((m: any) => m.content as string);
