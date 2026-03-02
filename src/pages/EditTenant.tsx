@@ -4,6 +4,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useEffect, useState, useRef } from "react";
 import { ArrowLeft, Building2, Save, Loader2, Camera, ImagePlus } from "lucide-react";
+import { useTokensByProvider } from "@/hooks/useTokensByProvider";
+import { ProviderTokensCard } from "@/components/dashboard/ProviderTokensCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -85,7 +87,8 @@ export default function EditTenant() {
   const navigate = useNavigate();
   const updateTenant = useUpdateTenant();
   const { data: tenants, isLoading } = useTenants();
-  
+  const { data: providerTokens, isLoading: loadingTokens } = useTokensByProvider(tenantId);
+
 
   const tenant = tenants?.find((t) => t.id === tenantId) ?? null;
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -218,6 +221,14 @@ export default function EditTenant() {
           </Button>
         </div>
       </form>
+
+      {/* Token Usage by Provider */}
+      <ProviderTokensCard
+        data={providerTokens ?? []}
+        loading={loadingTokens}
+        title="Consumo de Tokens"
+        subtitle={`por provedor — ${tenant.name}`}
+      />
     </div>
   );
 }
