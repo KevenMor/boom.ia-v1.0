@@ -131,6 +131,22 @@ async function replyToChatwoot(
       console.log(`[Chatwoot] Part ${i + 1} image ${j + 1}/${imageUrls.length}: ${ok ? "OK" : "FAIL"}`);
     }
 
+    // After sending images, wait before sending the next text segment
+    // This ensures WhatsApp delivers photos before the follow-up text message
+    if (imageUrls.length > 0) {
+      const nextPartIndex = i + 1;
+      const hasMoreTextAfter = parts.slice(nextPartIndex).some(p => {
+        if (!p || !p.trim()) return false;
+        const { textOnly: nextText } = extractImagesFromMarkdown(p);
+        return !!nextText.trim();
+      });
+      if (hasMoreTextAfter) {
+        const photoDelay = Math.max(15000, imageUrls.length * 5000); // 5s per photo, min 15s
+        console.log(`[Chatwoot] Waiting ${photoDelay}ms after ${imageUrls.length} photo(s) before next text`);
+        await new Promise(resolve => setTimeout(resolve, photoDelay));
+      }
+    }
+
     // If no text and no images, send as-is
     if (!textOnly.trim() && imageUrls.length === 0) {
       await sendChatwootTextMessage(url, apiToken, part.trim());
