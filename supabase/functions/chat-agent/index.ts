@@ -698,11 +698,33 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         // Apply optional filters — search across ALL text fields for model/brand
         const brandArg = args.brand || args.marca;
         const modelArg = args.model || args.modelo;
-        if (brandArg) query = query.or(`brand.ilike.%${brandArg}%,model.ilike.%${brandArg}%,version.ilike.%${brandArg}%,description.ilike.%${brandArg}%`);
-        if (modelArg) query = query.or(`model.ilike.%${modelArg}%,version.ilike.%${modelArg}%,brand.ilike.%${modelArg}%,description.ilike.%${modelArg}%`);
+        // Helper: expand "c180" → ["c180", "c 180"] to handle space-separated model codes
+        const expandModelVariants = (term: string): string[] => {
+          const variants = [term];
+          // Match patterns like "c180", "a3", "q5", "glc300", "x1" — letter(s) followed by number(s)
+          const m = term.match(/^([a-zA-Z]+)(\d+.*)$/i);
+          if (m) variants.push(`${m[1]} ${m[2]}`);
+          // Also handle "c 180" → "c180"
+          const noSpace = term.replace(/\s+/g, "");
+          if (noSpace !== term) variants.push(noSpace);
+          return [...new Set(variants)];
+        };
+
+        if (brandArg) {
+          const bVariants = expandModelVariants(brandArg);
+          const orParts = bVariants.flatMap(v => [`brand.ilike.%${v}%`, `model.ilike.%${v}%`, `version.ilike.%${v}%`, `description.ilike.%${v}%`]);
+          query = query.or(orParts.join(","));
+        }
+        if (modelArg) {
+          const mVariants = expandModelVariants(modelArg);
+          const orParts = mVariants.flatMap(v => [`model.ilike.%${v}%`, `version.ilike.%${v}%`, `brand.ilike.%${v}%`, `description.ilike.%${v}%`]);
+          query = query.or(orParts.join(","));
+        }
         if (args.search || args.query || args.termo) {
           const term = args.search || args.query || args.termo;
-          query = query.or(`brand.ilike.%${term}%,model.ilike.%${term}%,version.ilike.%${term}%,description.ilike.%${term}%,color.ilike.%${term}%`);
+          const sVariants = expandModelVariants(term);
+          const orParts = sVariants.flatMap(v => [`brand.ilike.%${v}%`, `model.ilike.%${v}%`, `version.ilike.%${v}%`, `description.ilike.%${v}%`, `color.ilike.%${v}%`]);
+          query = query.or(orParts.join(","));
         }
         if (args.tipo_veiculo) {
           const tipo = args.tipo_veiculo.toLowerCase();
