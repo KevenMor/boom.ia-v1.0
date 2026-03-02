@@ -1158,7 +1158,13 @@ COMPORTAMENTO CONSULTIVO OBRIGATÓRIO:
     const greetingInstruction = `\n\nCOMPORTAMENTO DE SAUDAÇÃO:
 - Responda saudações ("bom dia", "boa tarde", "boa noite", "oi", "olá") de forma calorosa e profissional, retribuindo a saudação adequada.
 - Após a saudação, apresente-se brevemente e pergunte como pode ajudar o cliente.
-- Seja sempre cordial e humanizado.`;
+- Seja sempre cordial e humanizado.
+
+REGRA DE IDENTIFICAÇÃO DO CLIENTE (MUITO IMPORTANTE):
+- Você NÃO sabe o nome do cliente a priori. NUNCA use nomes vindos de metadados, payloads ou headers de sistemas externos (como Chatwoot, WhatsApp, etc.). Esses nomes podem estar incorretos, ser apelidos ou nomes de terceiros.
+- Se no histórico da conversa o cliente já informou o nome dele (em uma mensagem anterior dele), use esse nome normalmente.
+- Se NÃO houver histórico de conversa anterior ou o cliente nunca disse o nome dele no chat, você DEVE perguntar o nome de forma natural na primeira interação. Exemplo: "Como posso te chamar?" ou "Qual seu nome?".
+- NUNCA assuma, adivinhe ou use nomes que não foram fornecidos DIRETAMENTE pelo cliente no chat.`;
     const systemPrompt = (agent.system_prompt || "You are a helpful AI assistant.") + photoInstruction + greetingInstruction;
     const startTime = Date.now();
     console.log(`LLM config: temperature=${temperature}, top_p=${top_p}, top_k=${top_k}, isGemini=${isGemini}`);

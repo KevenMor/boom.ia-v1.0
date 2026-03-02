@@ -682,8 +682,16 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // ---- Strip Chatwoot contact name prefix from message ----
+    // Chatwoot embeds "*Contact Name:*\n" at the start of messages.
+    // We strip this so the LLM doesn't learn the client's name from payload metadata
+    // — the agent should discover the name organically during conversation.
+    let cleanedUserMessage = userMessage;
+    // Pattern: "*Name:*\n" or "**Name:**\n" at the start (with optional whitespace)
+    cleanedUserMessage = cleanedUserMessage.replace(/^\*{1,2}[^*\n]+:\*{1,2}\s*\n?/gm, "").trim();
+
     // ---- Call chat-agent ----
-    const messages = [...conversationMessages, { role: "user", content: userMessage }];
+    const messages = [...conversationMessages, { role: "user", content: cleanedUserMessage }];
 
     const result = await callChatAgent(cloudUrl, cloudKey, nexusKey, agent.id, messages, convId);
 
