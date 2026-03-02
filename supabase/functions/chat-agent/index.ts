@@ -937,6 +937,11 @@ Deno.serve(async (req) => {
           p_conversation_id: convId,
           p_role: "user",
           p_content: lastUserMsg.content,
+          p_model: null,
+          p_tokens_input: 0,
+          p_tokens_output: 0,
+          p_latency_ms: null,
+          p_metadata: null,
         });
         if (saveUserErr) {
           console.error("[SaveUser] FAILED:", saveUserErr.message, saveUserErr.details, saveUserErr.hint);
@@ -1118,9 +1123,15 @@ COMPORTAMENTO CONSULTIVO OBRIGATÓRIO:
             const latency = Date.now() - startTime;
             try {
               await supabase.rpc("save_message", {
-                p_agent_id: agent_id, p_conversation_id: convId,
-                p_role: "assistant", p_content: fullContent, p_model: model,
+                p_agent_id: agent_id,
+                p_conversation_id: convId,
+                p_role: "assistant",
+                p_content: fullContent,
+                p_model: model,
+                p_tokens_input: 0,
+                p_tokens_output: 0,
                 p_latency_ms: latency,
+                p_metadata: null,
               });
             } catch (e: any) { console.warn("Could not save assistant msg:", e); }
           }
@@ -1345,8 +1356,15 @@ RULES:
               if (convId) {
                 try {
                   await supabase.rpc("save_message", {
-                    p_agent_id: agent_id, p_conversation_id: convId,
-                    p_role: "tool", p_content: toolResult,
+                    p_agent_id: agent_id,
+                    p_conversation_id: convId,
+                    p_role: "tool",
+                    p_content: toolResult,
+                    p_model: null,
+                    p_tokens_input: 0,
+                    p_tokens_output: 0,
+                    p_latency_ms: null,
+                    p_metadata: null,
                   });
                 } catch {}
               }
