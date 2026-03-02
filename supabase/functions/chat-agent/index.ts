@@ -77,13 +77,24 @@ function normalizeVehiclePhotos(vehicle: any): string[] {
   if (Array.isArray(vehicle?.photos)) {
     parsedPhotos = vehicle.photos.filter((p: unknown) => typeof p === "string") as string[];
   } else if (typeof vehicle?.photos === "string" && vehicle.photos.trim()) {
-    try {
-      const decoded = JSON.parse(vehicle.photos);
-      if (Array.isArray(decoded)) {
-        parsedPhotos = decoded.filter((p: unknown) => typeof p === "string") as string[];
+    // Handle double-escaped JSON: "\"[\\\"url1\\\",\\\"url2\\\"]\"" 
+    let raw = vehicle.photos.trim();
+    // Unwrap outer quotes if present (double-stringified)
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const decoded = JSON.parse(raw);
+        if (Array.isArray(decoded)) {
+          parsedPhotos = decoded.filter((p: unknown) => typeof p === "string") as string[];
+          break;
+        } else if (typeof decoded === "string") {
+          // Still a string — try parsing again (double/triple encoded)
+          raw = decoded;
+        } else {
+          break;
+        }
+      } catch {
+        break;
       }
-    } catch {
-      // ignore invalid JSON
     }
   }
 
@@ -705,17 +716,23 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
               };
             }
 
-            // Specific vehicle: include all photos
+            // Specific vehicle: include all photos (handle double-escaped JSON)
             let parsedPhotos: string[] = [];
             if (Array.isArray(v.photos)) {
               parsedPhotos = v.photos.filter((p: unknown) => typeof p === "string") as string[];
             } else if (typeof v.photos === "string" && v.photos.trim()) {
-              try {
-                const decoded = JSON.parse(v.photos);
-                if (Array.isArray(decoded)) {
-                  parsedPhotos = decoded.filter((p: unknown) => typeof p === "string") as string[];
-                }
-              } catch {}
+              let raw = v.photos.trim();
+              for (let attempt = 0; attempt < 3; attempt++) {
+                try {
+                  const decoded = JSON.parse(raw);
+                  if (Array.isArray(decoded)) {
+                    parsedPhotos = decoded.filter((p: unknown) => typeof p === "string") as string[];
+                    break;
+                  } else if (typeof decoded === "string") {
+                    raw = decoded;
+                  } else { break; }
+                } catch { break; }
+              }
             }
 
             const allPhotos = Array.from(
