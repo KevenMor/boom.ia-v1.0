@@ -373,12 +373,14 @@ function isClosingQuestion(text: string): boolean {
 }
 
 function splitIntoMessages(content: string): string[] {
-  // Split by double-newline into natural paragraphs, preserving photo position
+  // Split by double-newline into natural paragraphs
   const rawParagraphs = content.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
 
   const imgRegex = /!\[.*?\]\(https?:\/\/[^\s)]+\)/g;
-  const parts: string[] = [];
-  let pendingText = "";
+
+  // Classify each paragraph
+  type Block = { type: "text" | "images"; content: string; images?: string[] };
+  const blocks: Block[] = [];
 
   for (const para of rawParagraphs) {
     const images: string[] = [];
@@ -389,36 +391,77 @@ function splitIntoMessages(content: string): string[] {
     const textOnly = para.replace(imgRegex, "").replace(/\n{2,}/g, "\n").trim();
 
     if (images.length > 0) {
-      // Flush pending text before images
+      // If there's caption text with images, keep it as a separate text block before images
+      if (textOnly && !isClosingQuestion(textOnly) && textOnly.length < 200) {
+        blocks.push({ type: "text", content: textOnly });
+      }
+      blocks.push({ type: "images", content: images.join("\n"), images });
+      // If the text is a closing/descriptive paragraph, push it AFTER images
+      if (textOnly && (isClosingQuestion(textOnly) || textOnly.length >= 200)) {
+        blocks.push({ type: "text", content: textOnly });
+      }
+    } else if (textOnly) {
+      blocks.push({ type: "text", content: textOnly });
+    }
+  }
+
+  // Now check: if there are image blocks, ensure closing/descriptive text comes AFTER them
+  const hasImages = blocks.some((b) => b.type === "images");
+  if (hasImages) {
+    // Find the last image block index
+    let lastImageIdx = -1;
+    for (let i = blocks.length - 1; i >= 0; i--) {
+      if (blocks[i].type === "images") { lastImageIdx = i; break; }
+    }
+
+    // Move any closing-question text blocks that are BEFORE the last image to AFTER it
+    const toMove: Block[] = [];
+    const remaining: Block[] = [];
+    for (let i = 0; i < blocks.length; i++) {
+      const b = blocks[i];
+      if (i < lastImageIdx && b.type === "text" && isClosingQuestion(b.content)) {
+        toMove.push(b);
+      } else {
+        remaining.push(b);
+      }
+    }
+    // Re-insert moved blocks after the last image
+    if (toMove.length > 0) {
+      const newLastImageIdx = remaining.findIndex((b, idx) => b.type === "images" && !remaining.slice(idx + 1).some((r) => r.type === "images"));
+      const insertAt = newLastImageIdx >= 0 ? newLastImageIdx + 1 : remaining.length;
+      remaining.splice(insertAt, 0, ...toMove);
+      blocks.length = 0;
+      blocks.push(...remaining);
+    }
+  }
+
+  // Build final parts: group adjacent text blocks (up to 400 chars), batch images by 3
+  const parts: string[] = [];
+  let pendingText = "";
+
+  for (const block of blocks) {
+    if (block.type === "images") {
+      // Flush text before images
       if (pendingText.trim()) {
         parts.push(pendingText.trim());
         pendingText = "";
       }
-      // Caption + first batch together; remaining batches alone
-      for (let i = 0; i < images.length; i += 3) {
-        const batch = images.slice(i, i + 3).join("\n");
-        if (i === 0 && textOnly) {
-          parts.push(`${textOnly}\n\n${batch}`);
-        } else {
-          parts.push(batch);
-        }
+      // Batch images by 3
+      const imgs = block.images || block.content.split("\n");
+      for (let i = 0; i < imgs.length; i += 3) {
+        parts.push(imgs.slice(i, i + 3).join("\n"));
       }
-    } else if (textOnly) {
-      // Group short adjacent text paragraphs; flush when > 400 chars
-      if (pendingText && (pendingText.length + textOnly.length > 400)) {
+    } else {
+      // Group short text; flush when > 400 chars
+      if (pendingText && (pendingText.length + block.content.length > 400)) {
         parts.push(pendingText.trim());
-        pendingText = textOnly;
+        pendingText = block.content;
       } else {
-        pendingText += (pendingText ? "\n\n" : "") + textOnly;
+        pendingText += (pendingText ? "\n\n" : "") + block.content;
       }
     }
   }
-
-  // Flush remaining text
   if (pendingText.trim()) parts.push(pendingText.trim());
-
-  // If the last text part is a closing question, ensure it stays after any image parts
-  // (the natural order above already guarantees this in most cases)
 
   const allParts = parts.length ? parts : [content];
 
