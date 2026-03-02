@@ -324,12 +324,26 @@ function extractVehicleFromContext(userText: string, conversationMessages: any[]
       .replace(/\s+/g, " ")
       .trim();
 
+    // Common Portuguese words that appear after brand names but are NOT model names
+    const notModelWords = new Set([
+      "vale", "tem", "esta", "esse", "essa", "isso", "que", "com", "por", "para", "mas",
+      "nao", "sim", "muito", "mais", "menos", "bem", "mal", "bom", "boa", "legal",
+      "otimo", "otima", "pode", "vou", "vai", "era", "seria", "foi", "sao", "era",
+      "novo", "nova", "usado", "usada", "caro", "cara", "barato", "barata",
+      "aqui", "ali", "la", "onde", "quando", "como", "porque", "pois",
+      "olha", "veja", "acho", "gosto", "quero", "prefiro", "preciso",
+      "realmente", "certamente", "excelente", "perfeito", "perfeita",
+    ]);
+
     for (const brand of knownBrands) {
       const pattern = new RegExp(`\\b${escapeRegExp(brand)}\\b\\s+([a-z0-9][a-z0-9./-]*(?:\\s+[a-z0-9][a-z0-9./-]*){0,4})`, "gi");
       let m: RegExpExecArray | null;
       while ((m = pattern.exec(normalizedContent)) !== null) {
         const model = (m[1] || "").trim();
         if (!model) continue;
+        // Skip if the first word of the "model" is a common Portuguese word
+        const firstWord = model.split(/\s+/)[0].toLowerCase();
+        if (notModelWords.has(firstWord)) continue;
         const full = `${brand} ${model}`.trim();
         vehicleMentions.push({ brand, model, full, sourceIndex: idx });
       }
@@ -341,9 +355,11 @@ function extractVehicleFromContext(userText: string, conversationMessages: any[]
   // If user answered only with a polite affirmative, assume latest discussed vehicle
   if (isAffirmativeOnly || isGenericPhotoRequest) {
     const latestMention = vehicleMentions[vehicleMentions.length - 1];
-    const modelFirstWord = latestMention.model.split(/\s+/)[0] || latestMention.model;
-    console.log(`[extractVehicleFromContext] ${isGenericPhotoRequest ? "Generic photo request" : "Affirmative"} → using latest vehicle: ${latestMention.full} → search: ${modelFirstWord}`);
-    return { search: modelFirstWord };
+    // Use up to 2 meaningful model tokens (e.g. "C 180" not just "C")
+    const modelTokens = latestMention.model.split(/\s+/).filter(t => t.length >= 1).slice(0, 3).join(" ");
+    const searchTerm = modelTokens || latestMention.model;
+    console.log(`[extractVehicleFromContext] ${isGenericPhotoRequest ? "Generic photo request" : "Affirmative"} → using latest vehicle: ${latestMention.full} → search: ${searchTerm}`);
+    return { marca: latestMention.brand, search: searchTerm };
   }
 
   const userTokens = normalizedUser
@@ -354,9 +370,10 @@ function extractVehicleFromContext(userText: string, conversationMessages: any[]
   // fall back to the most recently discussed vehicle
   if (userTokens.length === 0) {
     const latestMention = vehicleMentions[vehicleMentions.length - 1];
-    const modelFirstWord = latestMention.model.split(/\s+/)[0] || latestMention.model;
-    console.log(`[extractVehicleFromContext] No useful tokens in user text → using latest vehicle: ${latestMention.full} → search: ${modelFirstWord}`);
-    return { search: modelFirstWord };
+    const modelTokens = latestMention.model.split(/\s+/).filter(t => t.length >= 1).slice(0, 3).join(" ");
+    const searchTerm = modelTokens || latestMention.model;
+    console.log(`[extractVehicleFromContext] No useful tokens → using latest vehicle: ${latestMention.full} → search: ${searchTerm}`);
+    return { marca: latestMention.brand, search: searchTerm };
   }
 
   let bestMatch: VehicleMention | null = null;
@@ -382,8 +399,8 @@ function extractVehicleFromContext(userText: string, conversationMessages: any[]
   }
 
   if (bestMatch && bestScore >= 2) {
-    const modelFirstWord = bestMatch.model.split(/\s+/)[0] || bestMatch.model;
-    return { search: modelFirstWord };
+    const modelTokens = bestMatch.model.split(/\s+/).filter(t => t.length >= 1).slice(0, 3).join(" ");
+    return { marca: bestMatch.brand, search: modelTokens || bestMatch.model };
   }
 
   // Final fallback: if user tokens didn't match any vehicle well, 
@@ -391,9 +408,10 @@ function extractVehicleFromContext(userText: string, conversationMessages: any[]
   const hasPhotoKeyword = /(foto|imagem|image|detalhe|ver|mostrar|enviar)/i.test(normalizedUser);
   if (hasPhotoKeyword && vehicleMentions.length > 0) {
     const latestMention = vehicleMentions[vehicleMentions.length - 1];
-    const modelFirstWord = latestMention.model.split(/\s+/)[0] || latestMention.model;
-    console.log(`[extractVehicleFromContext] Photo keyword fallback → using latest vehicle: ${latestMention.full} → search: ${modelFirstWord}`);
-    return { search: modelFirstWord };
+    const modelTokens = latestMention.model.split(/\s+/).filter(t => t.length >= 1).slice(0, 3).join(" ");
+    const searchTerm = modelTokens || latestMention.model;
+    console.log(`[extractVehicleFromContext] Photo keyword fallback → using latest vehicle: ${latestMention.full} → search: ${searchTerm}`);
+    return { marca: latestMention.brand, search: searchTerm };
   }
 
   return null;
@@ -1557,7 +1575,7 @@ Deno.serve(async (req) => {
         const brandPatterns = /(chevrolet|toyota|honda|hyundai|volkswagen|fiat|ford|bmw|mercedes|audi|nissan|renault|jeep|haval|gwm|peugeot|citroen|mitsubishi|kia|subaru|volvo|porsche|land rover|jaguar)/i;
         const brandMatch = recentContext.match(brandPatterns);
         // Try to find model — look for capitalized words near price/year mentions
-        const modelPatterns = /(onix|hb20|corolla|civic|creta|tracker|t-cross|tcross|nivus|kicks|polo|virtus|compass|renegade|hilux|s10|ranger|amarok|toro|strada|saveiro|cruze|cobalt|prisma|argo|mobi|kwid|gol|up|fit|city|sentra|jetta|tucson|sportage|hr-v|hrv|cr-v|crv|rav4|duster|captur|ecosport|bronco|equinox|trailblazer|jolion|territory)/i;
+        const modelPatterns = /(onix|hb20|corolla|civic|creta|tracker|t-cross|tcross|nivus|kicks|polo|virtus|compass|renegade|hilux|s10|ranger|amarok|toro|strada|saveiro|cruze|cobalt|prisma|argo|mobi|kwid|gol|fit|city|sentra|jetta|tucson|sportage|hr-v|hrv|cr-v|crv|rav4|duster|captur|ecosport|bronco|equinox|trailblazer|jolion|territory|c\s?180|c\s?200|c\s?250|c\s?300|e\s?200|e\s?300|e\s?350|gla\s?\d*|glb\s?\d*|glc\s?\d*|gle\s?\d*|gls\s?\d*|cla\s?\d*|cls\s?\d*|classe\s?[a-e]|amg|sprinter|a\s?\d{1,3}\b|q\s?\d{1,2}\b|x\s?\d{1,2}\b|serie\s?\d|320i|330i|520i|530i|cayenne|macan|panamera|defender|discovery|evoque)/i;
         const modelMatch = recentContext.match(modelPatterns);
 
         // Also check if transmission was mentioned
