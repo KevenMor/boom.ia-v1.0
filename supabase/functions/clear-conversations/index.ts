@@ -20,7 +20,13 @@ Deno.serve(async (req) => {
     }
 
     const supabase = createClient(nexusUrl, nexusServiceKey);
-    const { conversation_ids } = await req.json();
+    const { conversation_ids, agent_id } = await req.json();
+
+    if (!agent_id) {
+      return new Response(JSON.stringify({ error: "agent_id required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (!conversation_ids || !Array.isArray(conversation_ids) || conversation_ids.length === 0) {
       return new Response(JSON.stringify({ error: "conversation_ids array required" }), {
@@ -28,53 +34,119 @@ Deno.serve(async (req) => {
       });
     }
 
-    console.log(`[ClearConv] Deleting ${conversation_ids.length} conversation(s)`);
+    // Find the tenant schema for this agent
+    const { data: agentRow, error: agentErr } = await supabase
+      .from("agents")
+      .select("tenant_id")
+      .eq("id", agent_id)
+      .single();
 
+    if (agentErr || !agentRow) {
+      return new Response(JSON.stringify({ error: "Agent not found" }), {
+        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { data: tenantRow, error: tenantErr } = await supabase
+      .from("tenants")
+      .select("db_name")
+      .eq("id", agentRow.tenant_id)
+      .single();
+
+    if (tenantErr || !tenantRow?.db_name) {
+      return new Response(JSON.stringify({ error: "Tenant schema not found" }), {
+        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const schema = tenantRow.db_name;
+    console.log(`[ClearConv] Schema: ${schema}, Deleting ${conversation_ids.length} conversation(s)`);
+
+    // Use raw SQL via rpc to delete from tenant schema
     // Delete messages first (FK constraint)
-    const { error: msgErr, count: msgCount } = await supabase
-      .from("conversation_messages")
-      .delete({ count: "exact" })
-      .in("conversation_id", conversation_ids);
+    const idsLiteral = conversation_ids.map((id: string) => `'${id}'`).join(",");
+
+    const { data: msgResult, error: msgErr } = await supabase.rpc("exec_sql", {
+      query: `DELETE FROM ${schema}.messages WHERE conversation_id IN (${idsLiteral}) RETURNING id`,
+    });
 
     if (msgErr) {
-      console.error("[ClearConv] Error deleting messages:", msgErr.message);
-      return new Response(JSON.stringify({ error: msgErr.message }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      // Fallback: try using schema-qualified client
+      console.log("[ClearConv] exec_sql not available, trying direct schema query");
+      
+      // Use postgrest schema header approach
+      const schemaClient = createClient(nexusUrl, nexusServiceKey, {
+        db: { schema },
+      });
+
+      const { error: msgErr2, count: msgCount } = await schemaClient
+        .from("messages")
+        .delete({ count: "exact" })
+        .in("conversation_id", conversation_ids);
+
+      if (msgErr2) {
+        console.error("[ClearConv] Error deleting messages:", msgErr2.message);
+        return new Response(JSON.stringify({ error: msgErr2.message }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { error: convErr2, count: convCount } = await schemaClient
+        .from("conversations")
+        .delete({ count: "exact" })
+        .in("id", conversation_ids);
+
+      if (convErr2) {
+        console.error("[ClearConv] Error deleting conversations:", convErr2.message);
+        return new Response(JSON.stringify({ error: convErr2.message }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Cancel pending follow-ups
+      await supabase
+        .from("follow_up_queue")
+        .update({ status: "cancelled", updated_at: new Date().toISOString() })
+        .in("conversation_id", conversation_ids)
+        .eq("status", "pending");
+
+      console.log(`[ClearConv] Done: ${msgCount} messages, ${convCount} conversations deleted`);
+
+      return new Response(JSON.stringify({
+        success: true,
+        deleted_messages: msgCount,
+        deleted_conversations: convCount,
+      }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Delete conversations
-    const { error: convErr, count: convCount } = await supabase
-      .from("conversations")
-      .delete({ count: "exact" })
-      .in("id", conversation_ids);
+    // If exec_sql worked
+    const msgCount = Array.isArray(msgResult) ? msgResult.length : 0;
 
-    if (convErr) {
-      console.error("[ClearConv] Error deleting conversations:", convErr.message);
-      return new Response(JSON.stringify({ error: convErr.message }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    await supabase.rpc("exec_sql", {
+      query: `DELETE FROM ${schema}.conversations WHERE id IN (${idsLiteral})`,
+    });
 
-    // Also cancel any pending follow-ups for these conversations
+    // Cancel pending follow-ups
     await supabase
       .from("follow_up_queue")
       .update({ status: "cancelled", updated_at: new Date().toISOString() })
       .in("conversation_id", conversation_ids)
       .eq("status", "pending");
 
-    console.log(`[ClearConv] Done: ${msgCount} messages, ${convCount} conversations deleted`);
+    console.log(`[ClearConv] Done: ${msgCount} messages deleted`);
 
     return new Response(JSON.stringify({
       success: true,
       deleted_messages: msgCount,
-      deleted_conversations: convCount,
+      deleted_conversations: conversation_ids.length,
     }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (err: any) {
-    console.error("[ClearConv] Error:", err.message);
-    return new Response(JSON.stringify({ error: err.message }), {
+  } catch (error) {
+    console.error("[ClearConv] Error:", error.message);
+    return new Response(JSON.stringify({ error: error.message }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }

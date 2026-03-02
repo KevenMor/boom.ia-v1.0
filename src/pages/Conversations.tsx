@@ -162,7 +162,7 @@ export default function Conversations() {
     setClearing(true);
     try {
       const { data, error } = await cloudClient.functions.invoke("clear-conversations", {
-        body: { conversation_ids: selectedConvIds },
+        body: { conversation_ids: selectedConvIds, agent_id: selectedAgentId },
       });
       if (error) throw error;
       toast.success(`Histórico limpo: ${data.deleted_messages} mensagens removidas`);
