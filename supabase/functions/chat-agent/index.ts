@@ -272,8 +272,12 @@ function extractVehicleFromContext(userText: string, conversationMessages: any[]
   ];
 
   const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // Detect if user message is just an affirmative or a photo/detail request without specifying a vehicle
   const isAffirmativeOnly = /^(sim|claro|ok|pode|pode sim|pode ser|com certeza|por favor|por gentileza|gentileza|manda|mande|envie|quero|show|bora|vamos|yes|please|ss+|sii+m?)$/i.test(
     normalizedUser
+  );
+  const isGenericPhotoRequest = /^(tem fotos?|manda fotos?|envia fotos?|pode enviar fotos?|quero ver fotos?|fotos?|ver fotos?|mostra fotos?|imagens?|tem imagens?)[\s?!.]*$/i.test(
+    normalizedUser.replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim()
   );
 
   const stopWords = new Set([
@@ -313,15 +317,25 @@ function extractVehicleFromContext(userText: string, conversationMessages: any[]
   if (!vehicleMentions.length) return null;
 
   // If user answered only with a polite affirmative, assume latest discussed vehicle
-  if (isAffirmativeOnly) {
+  if (isAffirmativeOnly || isGenericPhotoRequest) {
     const latestMention = vehicleMentions[vehicleMentions.length - 1];
     const modelFirstWord = latestMention.model.split(/\s+/)[0] || latestMention.model;
+    console.log(`[extractVehicleFromContext] ${isGenericPhotoRequest ? "Generic photo request" : "Affirmative"} → using latest vehicle: ${latestMention.full} → search: ${modelFirstWord}`);
     return { search: modelFirstWord };
   }
 
   const userTokens = normalizedUser
     .split(/\s+/)
     .filter((t) => t.length >= 3 && !stopWords.has(t) && !/^\d+$/.test(t));
+
+  // If no useful tokens remain (user asked something generic like "tem fotos desse?"),
+  // fall back to the most recently discussed vehicle
+  if (userTokens.length === 0) {
+    const latestMention = vehicleMentions[vehicleMentions.length - 1];
+    const modelFirstWord = latestMention.model.split(/\s+/)[0] || latestMention.model;
+    console.log(`[extractVehicleFromContext] No useful tokens in user text → using latest vehicle: ${latestMention.full} → search: ${modelFirstWord}`);
+    return { search: modelFirstWord };
+  }
 
   let bestMatch: VehicleMention | null = null;
   let bestScore = 0;
@@ -347,6 +361,16 @@ function extractVehicleFromContext(userText: string, conversationMessages: any[]
 
   if (bestMatch && bestScore >= 2) {
     const modelFirstWord = bestMatch.model.split(/\s+/)[0] || bestMatch.model;
+    return { search: modelFirstWord };
+  }
+
+  // Final fallback: if user tokens didn't match any vehicle well, 
+  // and the message contains photo/detail keywords, use the most recent vehicle
+  const hasPhotoKeyword = /(foto|imagem|image|detalhe|ver|mostrar|enviar)/i.test(normalizedUser);
+  if (hasPhotoKeyword && vehicleMentions.length > 0) {
+    const latestMention = vehicleMentions[vehicleMentions.length - 1];
+    const modelFirstWord = latestMention.model.split(/\s+/)[0] || latestMention.model;
+    console.log(`[extractVehicleFromContext] Photo keyword fallback → using latest vehicle: ${latestMention.full} → search: ${modelFirstWord}`);
     return { search: modelFirstWord };
   }
 
@@ -1338,7 +1362,14 @@ RULES:
 - Before calling any tool, check if the assistant already provided the same information earlier in the conversation. Avoid redundant calls.
 - NEVER generate conversational text. Only decide tool calls.
 - If no tools are needed, respond with exactly: "NO_TOOLS_NEEDED"
-- You may call multiple tools if needed.`;
+- You may call multiple tools if needed.
+
+REGRA CRÍTICA DE CONTEXTO DE VEÍCULO:
+- Quando o cliente pedir fotos, detalhes ou mais informações SEM especificar explicitamente qual veículo, você DEVE identificar o veículo que estava sendo discutido IMEDIATAMENTE ANTES da mensagem do cliente.
+- Analise as últimas mensagens do assistente: qual veículo estava sendo apresentado/discutido? Use ESSE veículo nos filtros da ferramenta.
+- NUNCA escolha um veículo diferente do que estava sendo discutido. Se o assistente falava da S10, busque S10. Se falava do Corolla, busque Corolla.
+- Se o cliente diz "tem fotos?", "manda fotos", "quero ver" etc, ele se refere ao ÚLTIMO veículo mencionado pelo assistente na conversa.
+- PRESTE ATENÇÃO: o veículo mais recente mencionado pelo assistente é o contexto correto, NÃO qualquer outro veículo da conversa.`;
         console.log(`[Dispatcher] Using ${customDispatcherPrompt ? "CUSTOM" : "DEFAULT"} dispatcher prompt`);
 
         const dispatcherMessages = [
@@ -1442,6 +1473,34 @@ RULES:
               if (matchedTool) {
                 const isInventoryTool = matchedTool.tool_type === "inventory_query";
                 if (isInventoryTool) {
+                  // === CONTEXT VALIDATION: Ensure dispatcher queried the RIGHT vehicle ===
+                  // If user asked for photos/details implicitly (no explicit vehicle name),
+                  // validate that dispatcher's args match the vehicle being discussed
+                  const userMentionsExplicitVehicle = /(chevrolet|toyota|honda|hyundai|volkswagen|fiat|ford|bmw|mercedes|audi|nissan|renault|jeep|haval|gwm|peugeot|citroen|mitsubishi|kia|subaru|volvo|porsche|onix|hb20|corolla|civic|creta|tracker|nivus|kicks|polo|virtus|compass|renegade|hilux|s10|ranger|amarok|toro|strada|saveiro|cruze|cobalt|prisma|argo|mobi|kwid|gol|fit|city|sentra|jetta|tucson|sportage|duster|captur|ecosport|bronco|equinox|trailblazer|jolion|territory|haval)/i.test(latestUserText || "");
+                  
+                  if (!userMentionsExplicitVehicle) {
+                    // User didn't name a specific vehicle — they're referring to the one being discussed
+                    // Use extractVehicleFromContext to determine the CORRECT vehicle from conversation
+                    const contextVehicle = extractVehicleFromContext(latestUserText, messages);
+                    if (contextVehicle) {
+                      const dispatcherSearch = (toolArgs.modelo || toolArgs.model || toolArgs.marca || toolArgs.brand || toolArgs.search || "").toLowerCase();
+                      const contextSearch = (contextVehicle.search || contextVehicle.modelo || contextVehicle.model || "").toLowerCase();
+                      
+                      if (dispatcherSearch && contextSearch && !dispatcherSearch.includes(contextSearch) && !contextSearch.includes(dispatcherSearch)) {
+                        console.warn(`[Dispatcher] CONTEXT MISMATCH! Dispatcher wants "${dispatcherSearch}" but conversation context is about "${contextSearch}". Overriding.`);
+                        debugTrace.push({
+                          type: "dispatcher_context_override",
+                          original_args: { ...toolArgs },
+                          corrected_search: contextSearch,
+                          reason: "dispatcher_queried_wrong_vehicle",
+                          timestamp: Date.now(),
+                        });
+                        // Override dispatcher args with context-correct vehicle
+                        toolArgs = { search: contextSearch };
+                      }
+                    }
+                  }
+
                   const hasTipoVeiculo = !!(toolArgs?.tipo_veiculo || toolArgs?.vehicle_type);
                   const hasConcreteFilter = !!(
                     toolArgs?.brand || toolArgs?.marca ||
