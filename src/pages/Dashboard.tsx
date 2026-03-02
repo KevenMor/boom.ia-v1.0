@@ -2,6 +2,7 @@ import { useTenants } from "@/hooks/useTenants";
 import { useAgents } from "@/hooks/useAgents";
 import { useProviders } from "@/hooks/useProviders";
 import { useUsageDailySummary, useRecentUsageEvents } from "@/hooks/useUsageMetrics";
+import { useTokensByProvider } from "@/hooks/useTokensByProvider";
 import { RevenueChart } from "@/components/dashboard/RevenueChart";
 import { SprintProgress } from "@/components/dashboard/SprintProgress";
 import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
@@ -11,6 +12,7 @@ import { UsageStatsRow } from "@/components/dashboard/UsageStatsRow";
 import { TokenUsageChart } from "@/components/dashboard/TokenUsageChart";
 import { LatencyChart } from "@/components/dashboard/LatencyChart";
 import { ModelBreakdown } from "@/components/dashboard/ModelBreakdown";
+import { ProviderTokensCard } from "@/components/dashboard/ProviderTokensCard";
 
 export default function Dashboard() {
   const { data: tenants, isLoading: loadingTenants } = useTenants();
@@ -18,6 +20,7 @@ export default function Dashboard() {
   const { data: providers, isLoading: loadingProviders } = useProviders();
   const { data: dailySummary, isLoading: loadingDaily } = useUsageDailySummary();
   const { data: recentEvents, isLoading: loadingEvents } = useRecentUsageEvents(200);
+  const { data: providerTokens, isLoading: loadingProviderTokens } = useTokensByProvider();
 
   const activeTenants = tenants?.filter((t) => t.status === "active").length ?? 0;
   const activeAgents = agents?.filter((a: any) => a.status === "active").length ?? 0;
@@ -35,12 +38,15 @@ export default function Dashboard() {
       {/* Row 0: Usage Stats (tokens, latency, tool calls, requests) */}
       <UsageStatsRow events={recentEvents ?? []} loading={loadingEvents} />
 
-      {/* Row 1: Token Usage Chart + Model Breakdown */}
+      {/* Row 1: Token Usage Chart + Provider Tokens + Model Breakdown */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <div className="lg:col-span-8">
+        <div className="lg:col-span-5">
           <TokenUsageChart data={dailySummary ?? []} loading={loadingDaily} />
         </div>
         <div className="lg:col-span-4">
+          <ProviderTokensCard data={providerTokens ?? []} loading={loadingProviderTokens} />
+        </div>
+        <div className="lg:col-span-3">
           <ModelBreakdown data={dailySummary ?? []} loading={loadingDaily} />
         </div>
       </div>
