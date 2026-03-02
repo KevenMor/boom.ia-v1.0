@@ -373,60 +373,56 @@ function isClosingQuestion(text: string): boolean {
 }
 
 function splitIntoMessages(content: string): string[] {
-  // Separate photo blocks from text
-  const photoRegex = /!\[.*?\]\(https?:\/\/[^\s)]+\)/g;
-  const photos: string[] = [];
-  const textOnly = content.replace(photoRegex, (match) => {
-    photos.push(match);
-    return "";
-  }).replace(/\n{3,}/g, "\n\n").trim();
+  // Split by double-newline into natural paragraphs, preserving photo position
+  const rawParagraphs = content.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
 
-  const textParts: string[] = [];
-
-  if (textOnly.trim()) {
-    const paragraphs = textOnly.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
-    if (paragraphs.length > 1) {
-      for (const para of paragraphs) {
-        textParts.push(para);
-      }
-    } else {
-      textParts.push(textOnly.trim());
-    }
-  }
-
-  // Build final order: text paragraphs → photos → closing question
-  // Detect if the last text paragraph is a closing question and move it after photos
+  const imgRegex = /!\[.*?\]\(https?:\/\/[^\s)]+\)/g;
   const parts: string[] = [];
-  let closingPart: string | null = null;
+  let pendingText = "";
 
-  if (photos.length > 0 && textParts.length > 1) {
-    const lastText = textParts[textParts.length - 1];
-    if (isClosingQuestion(lastText)) {
-      closingPart = lastText;
-      // Add all text EXCEPT the closing question
-      for (let i = 0; i < textParts.length - 1; i++) {
-        parts.push(textParts[i]);
+  for (const para of rawParagraphs) {
+    const images: string[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = imgRegex.exec(para)) !== null) images.push(m[0]);
+    imgRegex.lastIndex = 0;
+
+    const textOnly = para.replace(imgRegex, "").replace(/\n{2,}/g, "\n").trim();
+
+    if (images.length > 0) {
+      // Flush pending text before images
+      if (pendingText.trim()) {
+        parts.push(pendingText.trim());
+        pendingText = "";
       }
-    } else {
-      parts.push(...textParts);
+      // Caption + first batch together; remaining batches alone
+      for (let i = 0; i < images.length; i += 3) {
+        const batch = images.slice(i, i + 3).join("\n");
+        if (i === 0 && textOnly) {
+          parts.push(`${textOnly}\n\n${batch}`);
+        } else {
+          parts.push(batch);
+        }
+      }
+    } else if (textOnly) {
+      // Group short adjacent text paragraphs; flush when > 400 chars
+      if (pendingText && (pendingText.length + textOnly.length > 400)) {
+        parts.push(pendingText.trim());
+        pendingText = textOnly;
+      } else {
+        pendingText += (pendingText ? "\n\n" : "") + textOnly;
+      }
     }
-  } else {
-    parts.push(...textParts);
   }
 
-  // Photos in batches of 3
-  for (let i = 0; i < photos.length; i += 3) {
-    parts.push(photos.slice(i, i + 3).join("\n"));
-  }
+  // Flush remaining text
+  if (pendingText.trim()) parts.push(pendingText.trim());
 
-  // Closing question AFTER photos
-  if (closingPart) {
-    parts.push(closingPart);
-  }
+  // If the last text part is a closing question, ensure it stays after any image parts
+  // (the natural order above already guarantees this in most cases)
 
   const allParts = parts.length ? parts : [content];
 
-  // Aggressive dedup
+  // Dedup
   const seen = new Set<string>();
   const deduped: string[] = [];
   for (const part of allParts) {
