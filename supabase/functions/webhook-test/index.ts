@@ -670,127 +670,105 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // ---- Debounce logic ----
-    const debounceMs = Number(cfg.message_debounce_ms) || 0; // 0 = disabled
+    // ---- ASYNC PATH: Chatwoot messages go through queue ----
+    if (chatwoot.isChatwoot) {
+      const debounceMs = Number(cfg.message_debounce_ms) || 0;
+      let bufferCreatedAt: string | null = null;
+
+      if (debounceMs > 0) {
+        console.log(`[Webhook] Buffering message, debounce: ${debounceMs}ms`);
+        const buffered = await bufferMessage(
+          supabase, agentId, externalUserId, channel, userMessage, chatwootConversationId
+        );
+        bufferCreatedAt = buffered?.created_at || null;
+      }
+
+      // Fire process-queue (fire-and-forget with short timeout)
+      const processQueueUrl = `${cloudUrl}/functions/v1/process-queue`;
+      const payload = {
+        agent_id: agentId,
+        conversation_id: earlyConvId,
+        external_user_id: externalUserId,
+        channel,
+        chatwoot_conversation_id: chatwootConversationId,
+        chatwoot_contact_id: chatwootContactId,
+        contact_name: contactName,
+        contact_avatar_url: contactAvatarUrl,
+        user_message: debounceMs > 0 ? null : userMessage,
+        debounce_ms: debounceMs,
+        buffer_created_at: bufferCreatedAt,
+      };
+
+      try {
+        const controller = new AbortController();
+        setTimeout(() => controller.abort(), 1500);
+        const resp = await fetch(processQueueUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${cloudKey}` },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+        console.log(`[Webhook] Fired process-queue: ${resp.status}`);
+        await resp.text().catch(() => {});
+      } catch (e: any) {
+        if (e.name === "AbortError") {
+          console.log("[Webhook] Fired process-queue (still processing)");
+        } else {
+          console.error("[Webhook] Fire process-queue error:", e.message);
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ status: "queued", agent_id: agentId, conversation_id: earlyConvId }),
+        { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ---- SYNC PATH: Non-Chatwoot webhooks (API calls, sandbox fallback) ----
+    const debounceMs = Number(cfg.message_debounce_ms) || 0;
 
     if (debounceMs > 0) {
       console.log(`[Debounce] Buffering message, window: ${debounceMs}ms`);
-
-      const buffered = await bufferMessage(
-        supabase, agentId, externalUserId, channel, userMessage, chatwootConversationId
-      );
-
-      if (!buffered) {
-        // Buffer insert failed — fall through to process immediately
-        console.warn("[Debounce] Buffer failed, processing immediately");
-      } else {
-        // Sleep for debounce window
+      const buffered = await bufferMessage(supabase, agentId, externalUserId, channel, userMessage, chatwootConversationId);
+      if (buffered) {
         await new Promise((r) => setTimeout(r, debounceMs));
-
-        // Check if a newer message arrived during sleep
         const imLast = await isLastMessage(supabase, agentId, externalUserId, channel, buffered.created_at);
-
         if (!imLast) {
-          console.log(`[Debounce] Newer message exists, exiting silently`);
-          return new Response(
-            JSON.stringify({ status: "buffered", message: "Waiting for more messages" }),
-            { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          return new Response(JSON.stringify({ status: "buffered" }), { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
-
-        // I'm the last message! Consume all buffered messages
         const allMessages = await consumeBufferedMessages(supabase, agentId, externalUserId, channel);
-        console.log(`[Debounce] Consolidated ${allMessages.length} message(s)`);
-
-        // Replace userMessage with consolidated content
-        if (allMessages.length > 0) {
-          userMessage = allMessages.join("\n");
-          console.log(`[Debounce] Consolidated: "${userMessage.substring(0, 120)}..."`);
-        }
+        if (allMessages.length > 0) userMessage = allMessages.join("\n");
       }
     }
 
-    // ---- Conversation management ----
     const conversationId = (body.conversation_id || null) as string | null;
-    let convId = conversationId;
-
-    if (!convId) {
-      try {
-        const { data: existingConv } = await supabase.rpc("find_or_create_webhook_conversation", {
-          p_agent_id: agent.id,
-          p_channel: channel,
-          p_external_user_id: externalUserId,
-          p_chatwoot_conversation_id: chatwootConversationId,
-          p_chatwoot_contact_id: chatwootContactId,
-          p_contact_name: contactName,
-          p_contact_avatar_url: contactAvatarUrl,
-        });
-        convId = existingConv;
-      } catch (e) {
-        console.warn("find_or_create_webhook_conversation failed:", e);
-      }
-    }
+    let convId = conversationId || earlyConvId;
 
     if (!convId) {
       try {
         const { data } = await supabase.rpc("create_conversation", {
-          p_agent_id: agent.id,
-          p_channel: channel,
-          p_external_user_id: externalUserId,
-          p_contact_name: contactName,
-          p_contact_avatar_url: contactAvatarUrl,
+          p_agent_id: agentId, p_channel: channel, p_external_user_id: externalUserId,
+          p_contact_name: contactName, p_contact_avatar_url: contactAvatarUrl,
         });
         convId = data;
-      } catch (e) {
-        console.error("Could not create conversation:", e);
-      }
+      } catch (e) { console.error("Could not create conversation:", e); }
     }
 
-    // Update contact info if we have it and conv already existed
-    if (convId && (contactName || contactAvatarUrl)) {
-      try {
-        await supabase.rpc("update_conversation_contact", {
-          p_agent_id: agent.id,
-          p_conversation_id: convId,
-          p_contact_name: contactName,
-          p_contact_avatar_url: contactAvatarUrl,
-        });
-      } catch (e) {
-        console.warn("Could not update contact info:", e);
-      }
-    }
-
-    // ---- Load conversation history ----
     let conversationMessages: { role: string; content: string }[] = [];
     if (convId) {
       try {
-        const { data: history } = await supabase.rpc("load_conversation_messages", {
-          p_agent_id: agent.id,
-          p_conversation_id: convId,
-        });
+        const { data: history } = await supabase.rpc("load_conversation_messages", { p_agent_id: agentId, p_conversation_id: convId });
         if (history && Array.isArray(history)) {
           conversationMessages = history.slice(-20).map((m: Record<string, unknown>) => ({
-            role: m.role === "tool" ? "system" : (m.role as string),
-            content: (m.content as string) || "",
+            role: m.role === "tool" ? "system" : (m.role as string), content: (m.content as string) || "",
           }));
         }
-      } catch (e) {
-        console.warn("Could not load conversation history:", e);
-      }
+      } catch (e) { console.warn("Could not load history:", e); }
     }
 
-    // ---- Strip Chatwoot contact name prefix from message ----
-    // Chatwoot embeds "*Contact Name:*\n" at the start of messages.
-    // We strip this so the LLM doesn't learn the client's name from payload metadata
-    // — the agent should discover the name organically during conversation.
-    let cleanedUserMessage = userMessage;
-    // Pattern: "*Name:*\n" or "**Name:**\n" at the start (with optional whitespace)
-    cleanedUserMessage = cleanedUserMessage.replace(/^\*{1,2}[^*\n]+:\*{1,2}\s*\n?/gm, "").trim();
-
-    // ---- Call chat-agent ----
+    let cleanedUserMessage = userMessage.replace(/^\*{1,2}[^*\n]+:\*{1,2}\s*\n?/gm, "").trim();
     const messages = [...conversationMessages, { role: "user", content: cleanedUserMessage }];
-
-    const result = await callChatAgent(cloudUrl, cloudKey, nexusKey, agent.id, messages, convId);
+    const result = await callChatAgent(cloudUrl, cloudKey, nexusKey, agentId, messages, convId);
 
     if (result.error) {
       return new Response(JSON.stringify({ error: "Agent processing failed", detail: result.error }), {
@@ -798,65 +776,11 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const { fullContent, responseParts, responseConvId } = result;
-
-    console.log(`[Webhook] Response: ${fullContent.length} chars, ${responseParts.length} parts`);
-
-    // ---- Reply to Chatwoot ----
-    const hasChatwootConfig = !!(cfg.chatwoot_url && cfg.chatwoot_api_token && cfg.chatwoot_account_id);
-
-    if (chatwoot.isChatwoot && chatwootConversationId && hasChatwootConfig) {
-      const humanization = getHumanizationConfig(cfg);
-      console.log(`[Webhook] → Replying to Chatwoot conv ${chatwootConversationId} (humanization: ${JSON.stringify(humanization)})`);
-      await replyToChatwoot(
-        cfg.chatwoot_url,
-        cfg.chatwoot_api_token,
-        cfg.chatwoot_account_id,
-        chatwootConversationId,
-        fullContent.trim(),
-        responseParts,
-        humanization
-      );
-    }
-
-    // ---- Schedule follow-up if enabled ----
-    const followupEnabled = cfg.followup_enabled === true || cfg.followup_enabled === "true";
-    const followupConvId = responseConvId || earlyConvId;
-
-    console.log(`[FollowUp] Check: enabled=${cfg.followup_enabled}(${typeof cfg.followup_enabled}) resolved=${followupEnabled}, convId=${followupConvId}, cwConvId=${chatwootConversationId}`);
-
-    if (followupEnabled && followupConvId && chatwootConversationId) {
-      const intervals: number[] = Array.isArray(cfg.followup_intervals) ? cfg.followup_intervals : [10, 20, 30];
-      const maxAttempts = Number(cfg.followup_max_attempts) || intervals.length;
-      const firstDelay = intervals[0] || 10;
-
-      try {
-        await supabase.rpc("schedule_followup", {
-          p_agent_id: agent.id,
-          p_conversation_id: followupConvId,
-          p_external_user_id: externalUserId,
-          p_channel: channel,
-          p_chatwoot_conversation_id: chatwootConversationId,
-          p_attempt: 1,
-          p_max_attempts: maxAttempts,
-          p_intervals_minutes: JSON.stringify(intervals),
-          p_delay_minutes: firstDelay,
-        });
-        console.log(`[FollowUp] Scheduled first follow-up in ${firstDelay}min for conv ${followupConvId}`);
-      } catch (e) {
-        console.warn("[FollowUp] Schedule failed (non-critical):", e);
-      }
-    }
-
     return new Response(
       JSON.stringify({
-        agent_id: agent.id,
-        agent_name: agent.name,
-        conversation_id: responseConvId,
-        external_user_id: externalUserId,
-        channel,
-        response: fullContent.trim(),
-        message_parts: responseParts.length > 0 ? responseParts : [fullContent.trim()],
+        agent_id: agentId, agent_name: agent.name, conversation_id: result.responseConvId,
+        external_user_id: externalUserId, channel, response: result.fullContent.trim(),
+        message_parts: result.responseParts.length > 0 ? result.responseParts : [result.fullContent.trim()],
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
