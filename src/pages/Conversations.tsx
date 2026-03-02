@@ -89,23 +89,58 @@ export default function Conversations() {
     return groups;
   }, {} as Record<string, typeof messages>);
 
+  const hasDebugData = (messages ?? []).some(
+    (msg) => !!msg.metadata?.debug?.length || !!msg.metadata?.edge_logs?.length
+  );
+
   const displayName = (conv: any) => conv?.contact_name || conv?.external_user_id || "Anônimo";
   const initials = (conv: any) => (displayName(conv)).slice(0, 2).toUpperCase();
 
-  const getPhoneDisplay = (conv: any) => {
-    // Try external_user_id first (often contains phone from Chatwoot)
-    if (isLikelyPhone(conv?.external_user_id)) return formatPhone(conv.external_user_id);
-    // Try contact_name if it looks like a phone
-    if (isLikelyPhone(conv?.contact_name)) return formatPhone(conv.contact_name);
+  const normalizePhone = (value: string) => value.replace(/\D/g, "");
+
+  const extractPhoneDigits = (value: unknown): string | null => {
+    if (value == null) return null;
+
+    if (typeof value === "number") {
+      const digits = normalizePhone(String(value));
+      return digits.length >= 10 ? digits : null;
+    }
+
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      const digits = normalizePhone(trimmed);
+      if (digits.length >= 10) return digits;
+
+      if ((trimmed.startsWith("{") || trimmed.startsWith("[")) && trimmed.length > 2) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          return extractPhoneDigits(parsed);
+        } catch {
+          return null;
+        }
+      }
+
+      return null;
+    }
+
+    if (typeof value === "object") {
+      const record = value as Record<string, unknown>;
+      const priorityKeys = ["phone", "phone_number", "identifier", "source_id", "external_user_id", "whatsapp"];
+
+      for (const key of priorityKeys) {
+        const found = extractPhoneDigits(record[key]);
+        if (found) return found;
+      }
+
+      for (const nested of Object.values(record)) {
+        const found = extractPhoneDigits(nested);
+        if (found) return found;
+      }
+    }
+
     return null;
   };
 
-  const normalizePhone = (value: string) => value.replace(/\D/g, "");
-  const isLikelyPhone = (value?: string | null) => {
-    if (!value) return false;
-    const digits = normalizePhone(value);
-    return digits.length >= 10;
-  };
   const formatPhone = (value?: string | null) => {
     if (!value) return null;
     const digits = normalizePhone(value);
@@ -122,6 +157,15 @@ export default function Conversations() {
       return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
     }
     return value;
+  };
+
+  const getPhoneDisplay = (conv: any) => {
+    const candidates = [conv?.external_user_id, conv?.contact_name, conv?.chatwoot_contact_id];
+    for (const candidate of candidates) {
+      const digits = extractPhoneDigits(candidate);
+      if (digits) return formatPhone(digits);
+    }
+    return null;
   };
 
   return (
@@ -314,11 +358,18 @@ export default function Conversations() {
                     size="icon"
                     className={cn("h-8 w-8 shrink-0", showDebug ? "text-primary" : "text-muted-foreground")}
                     onClick={() => setShowDebug(!showDebug)}
-                    title="Debug mode"
+                    title={showDebug ? "Ocultar debug" : "Mostrar debug"}
+                    aria-pressed={showDebug}
                   >
                     <Bug className="h-4 w-4" />
                   </Button>
                 </div>
+
+                {showDebug && !hasDebugData && (
+                  <div className="shrink-0 border-b border-border bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
+                    Debug ativado, mas esta conversa ainda não possui rastros de debug.
+                  </div>
+                )}
 
                 {/* Messages area */}
                 <div className="flex-1 overflow-y-auto px-4 py-4">
@@ -368,9 +419,9 @@ export default function Conversations() {
                             return (
                               <div key={msg.id}>
                                 {/* Debug block before assistant messages */}
-                                {!isUser && !isSystem && showDebug && msg.metadata?.debug && (
+                                {!isUser && !isSystem && showDebug && (msg.metadata?.debug?.length || msg.metadata?.edge_logs?.length) && (
                                   <div className="flex justify-end mb-1">
-                                    <DebugBlock debug={msg.metadata.debug} edgeLogs={msg.metadata.edge_logs} />
+                                    <DebugBlock debug={msg.metadata?.debug ?? []} edgeLogs={msg.metadata?.edge_logs} />
                                   </div>
                                 )}
                               <div className={cn("flex", isUser ? "justify-start" : "justify-end")}>
