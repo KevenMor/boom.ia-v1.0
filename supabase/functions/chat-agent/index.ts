@@ -1616,13 +1616,24 @@ Deno.serve(async (req) => {
 
     // ===== PHASE 2: CONVERSATIONAL LLM =====
     // Build final messages WITH tool data injected as system context (no tool calling needed)
-    // Strip photo URLs from history to prevent LLM from regurgitating old photos
-    const conversationalMessages = fullMessages.map((msg: any) => {
-      if (msg.role === "assistant" && msg.content && hasMarkdownImages(msg.content)) {
-        return { ...msg, content: msg.content.replace(/!\[.*?\]\((https?:\/\/[^\s)]+)\)/gi, "[foto já enviada]") };
-      }
-      return msg;
-    });
+    // Strip photo URLs from history AND remove historical tool/system messages that contain
+    // inventory data from PREVIOUS turns — they pollute context and cause repetition
+    const conversationalMessages = fullMessages
+      .filter((msg: any) => {
+        // Remove historical "system" messages that are actually old tool results
+        // (they contain JSON with "total", "_hint", "vehicles" etc.)
+        if (msg.role === "system" && msg.content && /\[Resultado da ferramenta/.test(msg.content)) return false;
+        if (msg.role === "system" && msg.content && /"_hint"/.test(msg.content) && /"vehicles"/.test(msg.content)) return false;
+        // Also filter system messages containing raw inventory JSON from previous turns
+        if (msg.role === "system" && msg.content && /"total"\s*:\s*\d/.test(msg.content) && /"vehicles"\s*:/.test(msg.content)) return false;
+        return true;
+      })
+      .map((msg: any) => {
+        if (msg.role === "assistant" && msg.content && hasMarkdownImages(msg.content)) {
+          return { ...msg, content: msg.content.replace(/!\[.*?\]\((https?:\/\/[^\s)]+)\)/gi, "[foto já enviada]") };
+        }
+        return msg;
+      });
 
     if (toolResultsContext.length > 0) {
       // Inject tool results as a system message CLOSE TO THE END for maximum recency weight
@@ -1670,6 +1681,17 @@ ${toolResultsContext.join("\n\n")}`;
     const convChoice = convResult.choices?.[0];
     const convUsage = convResult.usage;
     const rawContent = convChoice?.message?.content || "";
+
+    // Add Gemini raw response to debug trace so it's visible in sandbox
+    debugTrace.push({
+      type: "gemini_response",
+      phase: "conversational",
+      model,
+      raw_content: rawContent.slice(0, 500),
+      full_length: rawContent.length,
+      timestamp: Date.now(),
+    });
+    console.log(`[Conversational] Gemini raw response (${rawContent.length} chars): ${rawContent.slice(0, 200)}`);
 
     if (convUsage) {
       console.log(`[Conversational] Tokens: prompt=${convUsage.prompt_tokens}, completion=${convUsage.completion_tokens}, total=${convUsage.total_tokens}`);
