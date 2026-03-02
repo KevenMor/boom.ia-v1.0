@@ -60,3 +60,38 @@ export function useConversationMessages(agentId: string | null, conversationId: 
     refetchInterval: 1000,
   });
 }
+
+/** Load and merge messages from multiple conversation IDs (unified contact view) */
+export function useMultiConversationMessages(agentId: string | null, conversationIds: string[]) {
+  return useQuery({
+    queryKey: ["multi-conversation-messages", agentId, ...conversationIds],
+    queryFn: async () => {
+      if (!agentId || conversationIds.length === 0) return [];
+      const results = await Promise.all(
+        conversationIds.map(async (cid) => {
+          const { data, error } = await nexusDb.rpc("load_conversation_messages", {
+            p_agent_id: agentId,
+            p_conversation_id: cid,
+          });
+          if (error) throw error;
+          return (data ?? []) as Message[];
+        })
+      );
+      // Merge all messages and sort by created_at, deduplicate by id
+      const seen = new Set<string>();
+      const merged: Message[] = [];
+      for (const msgs of results) {
+        for (const msg of msgs) {
+          if (!seen.has(msg.id)) {
+            seen.add(msg.id);
+            merged.push(msg);
+          }
+        }
+      }
+      merged.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      return merged;
+    },
+    enabled: !!agentId && conversationIds.length > 0,
+    refetchInterval: 1000,
+  });
+}

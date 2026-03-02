@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { useAgents } from "@/hooks/useAgents";
-import { useConversations, useConversationMessages } from "@/hooks/useConversations";
+import { useConversations, useMultiConversationMessages } from "@/hooks/useConversations";
 import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -34,41 +34,39 @@ function getLastMessagePreview(messages: any[] | undefined): string {
 export default function Conversations() {
   const { data: agents, isLoading: agentsLoading } = useAgents();
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-  const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
+  const [selectedContactKey, setSelectedContactKey] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [showDebug, setShowDebug] = useState(false);
 
   const { data: conversations, isLoading: convsLoading } = useConversations(selectedAgentId);
-  const { data: messages, isLoading: msgsLoading } = useConversationMessages(selectedAgentId, selectedConvId);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Build contact-key → conversation IDs map AND deduplicated list
+  const { deduplicatedConversations, contactConvIds } = (() => {
+    if (!conversations) return { deduplicatedConversations: [] as typeof conversations, contactConvIds: new Map<string, string[]>() };
+    const contactMap = new Map<string, (typeof conversations)[number]>();
+    const idsMap = new Map<string, string[]>();
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  const selectedConv = conversations?.find((c) => c.id === selectedConvId);
-
-  // Deduplicate conversations by contact: keep only the most recent per unique contact
-  const deduplicatedConversations = (() => {
-    if (!conversations) return [];
-    const contactMap = new Map<string, typeof conversations[number]>();
-    // Conversations come sorted by started_at DESC, so first seen = most recent
-    for (const conv of conversations) {
-      let contactKey = conv.contact_name || conv.external_user_id || conv.id;
-      // Try to extract name from JSON external_user_id instead of skipping
-      if (contactKey.startsWith("{") || contactKey.startsWith("[")) {
+    const resolveContactKey = (conv: (typeof conversations)[number]) => {
+      let key = conv.contact_name || conv.external_user_id || conv.id;
+      if (key.startsWith("{") || key.startsWith("[")) {
         try {
-          const parsed = JSON.parse(contactKey);
-          contactKey = parsed?.name || parsed?.phone || parsed?.email || conv.id;
+          const parsed = JSON.parse(key);
+          key = parsed?.name || parsed?.phone || parsed?.email || conv.id;
         } catch {
-          contactKey = conv.id;
+          key = conv.id;
         }
       }
+      return key;
+    };
+
+    for (const conv of conversations) {
+      const contactKey = resolveContactKey(conv);
+      if (!idsMap.has(contactKey)) idsMap.set(contactKey, []);
+      idsMap.get(contactKey)!.push(conv.id);
+
       if (!contactMap.has(contactKey)) {
         contactMap.set(contactKey, conv);
       } else {
-        // Merge message counts for the same contact
         const existing = contactMap.get(contactKey)!;
         contactMap.set(contactKey, {
           ...existing,
@@ -76,8 +74,31 @@ export default function Conversations() {
         });
       }
     }
-    return Array.from(contactMap.values());
+    return { deduplicatedConversations: Array.from(contactMap.values()), contactConvIds: idsMap };
   })();
+
+  // Get all conversation IDs for the selected contact
+  const selectedConvIds = selectedContactKey ? (contactConvIds.get(selectedContactKey) ?? []) : [];
+  const selectedConv = deduplicatedConversations.find((c) => {
+    const key = c.contact_name || c.external_user_id || c.id;
+    // Match by resolved contact key
+    return selectedContactKey && (contactConvIds.get(selectedContactKey) ?? []).includes(c.id);
+  }) ?? (selectedContactKey ? deduplicatedConversations.find((c) => {
+    // fallback: find by contactKey matching
+    let k = c.contact_name || c.external_user_id || c.id;
+    if (k.startsWith("{") || k.startsWith("[")) {
+      try { const p = JSON.parse(k); k = p?.name || p?.phone || p?.email || c.id; } catch { k = c.id; }
+    }
+    return k === selectedContactKey;
+  }) : undefined);
+
+  const { data: messages, isLoading: msgsLoading } = useMultiConversationMessages(selectedAgentId, selectedConvIds);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   const filteredConversations = deduplicatedConversations.filter((c) => {
     if (!searchTerm) return true;
@@ -89,7 +110,7 @@ export default function Conversations() {
     );
   });
 
-  const groupedMessages = messages?.reduce((groups, msg) => {
+  const groupedMessages = messages?.reduce((groups: Record<string, typeof messages>, msg) => {
     const date = format(new Date(msg.created_at), "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
     if (!groups[date]) groups[date] = [];
     groups[date].push(msg);
@@ -112,6 +133,13 @@ export default function Conversations() {
     return ext || "Anônimo";
   };
   const initials = (conv: any) => (displayName(conv)).slice(0, 2).toUpperCase();
+  const getContactKey = (conv: any) => {
+    let key = conv?.contact_name || conv?.external_user_id || conv?.id;
+    if (key && (key.startsWith("{") || key.startsWith("["))) {
+      try { const p = JSON.parse(key); key = p?.name || p?.phone || p?.email || conv?.id; } catch { key = conv?.id; }
+    }
+    return key;
+  };
 
   const normalizePhone = (value: string) => value.replace(/\D/g, "");
 
@@ -199,7 +227,7 @@ export default function Conversations() {
               value={selectedAgentId ?? ""}
               onValueChange={(v) => {
                 setSelectedAgentId(v);
-                setSelectedConvId(null);
+                setSelectedContactKey(null);
               }}
             >
               <SelectTrigger className="h-9 bg-card text-sm">
@@ -238,7 +266,7 @@ export default function Conversations() {
           <div
             className={cn(
               "w-full flex-col border-r border-border md:w-80 md:shrink-0",
-              selectedConvId ? "hidden md:flex" : "flex"
+              selectedContactKey ? "hidden md:flex" : "flex"
             )}
           >
             <div className="flex flex-col h-full">
@@ -272,10 +300,10 @@ export default function Conversations() {
                 {filteredConversations?.map((conv) => (
                   <button
                     key={conv.id}
-                    onClick={() => setSelectedConvId(conv.id)}
+                    onClick={() => setSelectedContactKey(getContactKey(conv))}
                     className={cn(
                       "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-start transition-colors",
-                      selectedConvId === conv.id ? "bg-accent/20" : "hover:bg-accent/10"
+                      selectedContactKey === getContactKey(conv) ? "bg-accent/20" : "hover:bg-accent/10"
                     )}
                   >
                     <div className="relative shrink-0">
@@ -319,10 +347,10 @@ export default function Conversations() {
           <div
             className={cn(
               "flex-1 flex-col min-w-0",
-              !selectedConvId ? "hidden md:flex" : "flex"
+              !selectedContactKey ? "hidden md:flex" : "flex"
             )}
           >
-            {!selectedConvId ? (
+            {!selectedContactKey ? (
               <div className="flex flex-1 items-center justify-center">
                 <div className="text-center space-y-3">
                   <div className="h-16 w-16 rounded-2xl bg-muted/50 flex items-center justify-center mx-auto">
@@ -344,7 +372,7 @@ export default function Conversations() {
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 md:hidden"
-                    onClick={() => setSelectedConvId(null)}
+                    onClick={() => setSelectedContactKey(null)}
                   >
                     <ArrowLeft className="h-4 w-4" />
                   </Button>
@@ -368,7 +396,7 @@ export default function Conversations() {
                     </p>
                   </div>
                   <Badge variant="outline" className="text-[9px] font-mono shrink-0">
-                    #{selectedConvId.slice(0, 8)}
+                    {selectedConvIds.length > 1 ? `${selectedConvIds.length} conversas` : `#${(selectedConvIds[0] ?? "").slice(0, 8)}`}
                   </Badge>
                   <Button
                     variant="ghost"
