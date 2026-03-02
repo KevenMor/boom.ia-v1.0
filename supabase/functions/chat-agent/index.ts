@@ -1029,6 +1029,13 @@ PROIBIÇÕES:
 - NUNCA use "Resumo do Veículo:", fichas técnicas formatadas ou **negrito** em campos. Isso parece IA.
 - NUNCA repita dados (marca, modelo, preço, ano) que já foram apresentados na mesma conversa.
 
+REGRA CRÍTICA — TROCA DE VEÍCULO (PRIORIDADE MÁXIMA):
+- Quando o cliente pedir informações ou fotos de um veículo DIFERENTE do que estava sendo discutido, você DEVE focar 100% no novo veículo solicitado.
+- NUNCA mencione, reenvie fotos ou fale sobre o veículo anterior quando o cliente está perguntando sobre outro. Isso é extremamente robótico e irritante.
+- NUNCA diga "enquanto isso veja os detalhes desse aqui", "veja o que já conversamos", "aquele que já mostrei" ou qualquer referência ao veículo anterior. O cliente já SABE sobre ele e não quer mais.
+- Se os dados do novo veículo ainda não estão disponíveis, diga apenas que vai buscar — sem preencher o vazio com dados do veículo anterior.
+- Trate cada solicitação de veículo como um assunto novo e independente. Um vendedor humano NUNCA reenviaria fotos do carro anterior quando o cliente pede sobre outro.
+
 COMPORTAMENTO CONSULTIVO OBRIGATÓRIO:
 - Você é uma CONSULTORA especializada, não um chatbot de autoatendimento.
 - Sempre que o cliente não especificar o que quer, faça perguntas inteligentes e CURTAS para entender o perfil: "Pra quantas pessoas?", "Cidade ou estrada?", "SUV ou sedan?", "Qual faixa de valor?".
@@ -1433,6 +1440,36 @@ RULES:
     let finalContent = sanitizeLLMOutput(rawContent);
     finalContent = dedupeRepeatedParagraphs(finalContent);
     finalContent = removeRedundantPhotoOfferWhenPhotosPresent(finalContent);
+
+    // Guard: when dispatcher DID fetch tool data, only allow photo URLs that appear in the tool results.
+    // This prevents the LLM from re-sending photos of previously discussed vehicles.
+    if (toolResultsContext.length > 0 && hasMarkdownImages(finalContent)) {
+      const allowedUrls = new Set<string>();
+      for (const ctx of toolResultsContext) {
+        // Extract all URLs from tool result JSON
+        const urlMatches = ctx.matchAll(/https?:\/\/[^\s"',\]})]+\.(jpg|jpeg|png|gif|webp|avif|svg|bmp)[^\s"',\]})']*/gi);
+        for (const m of urlMatches) {
+          allowedUrls.add(cleanPhotoUrl(m[0]));
+        }
+      }
+
+      if (allowedUrls.size > 0) {
+        let strippedCount = 0;
+        finalContent = finalContent.replace(/!\[.*?\]\((https?:\/\/[^\s)]+)\)/gi, (full, rawUrl: string) => {
+          const cleaned = cleanPhotoUrl(rawUrl || "");
+          if (!allowedUrls.has(cleaned)) {
+            strippedCount++;
+            return "";
+          }
+          return full;
+        });
+        if (strippedCount > 0) {
+          console.log(`[Conversational] Stripped ${strippedCount} photo(s) not in current tool results (anti-crossover)`);
+          debugTrace.push({ type: "photo_crossover_strip", removed_count: strippedCount, allowed_count: allowedUrls.size, timestamp: Date.now() });
+          finalContent = finalContent.replace(/\n{3,}/g, "\n\n").trim();
+        }
+      }
+    }
 
     // Guard: when dispatcher did NOT fetch fresh tool data, never resend photo URLs
     // that were already sent earlier in the same conversation context.
