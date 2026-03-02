@@ -530,10 +530,8 @@ function splitIntoMessages(content: string): string[] {
 
     // Rebuild: intro → images → after
     allBlocks.length = 0;
-    // Only keep the LAST intro text (most relevant) to avoid too many pre-image messages
-    if (introTexts.length > 0) {
-      allBlocks.push(introTexts[introTexts.length - 1]);
-    }
+    // Keep ALL intro text blocks so no content is lost
+    allBlocks.push(...introTexts);
     allBlocks.push(...imageBlocks);
     allBlocks.push(...afterTexts);
   }
