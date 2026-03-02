@@ -28,6 +28,7 @@ export function DebugBlock({ debug, edgeLogs }: DebugBlockProps) {
   const llmPlans = debug.filter((d) => d.type === "llm_tool_plan");
   const llmTransforms = debug.filter((d) => d.type === "llm_transform");
   const geminiResponses = debug.filter((d) => d.type === "gemini_response");
+  const mediaAttachments = debug.filter((d) => d.type === "media_attachments" || d.type === "audio_transcription" || d.type === "image_attachment");
   const dispatcherSteps = debug.filter((d) => d.type?.startsWith("dispatcher_"));
   const tokenUsages = debug.filter((d) => d.type === "token_usage");
   const dispatcherTokens = dispatcherSteps
@@ -57,6 +58,7 @@ export function DebugBlock({ debug, edgeLogs }: DebugBlockProps) {
         <span className="text-[#53bdeb]">{llmIterations.length} LLM step{llmIterations.length !== 1 ? "s" : ""}</span>
         {errors.length > 0 && <span className="text-red-400">{errors.length} erro{errors.length !== 1 ? "s" : ""}</span>}
         {totalTokens > 0 && <span className="text-emerald-400">{totalTokens.toLocaleString()} tokens</span>}
+        {mediaAttachments.length > 0 && <span className="text-pink-400">🎙️ mídia</span>}
         {edgeLogs && edgeLogs.length > 0 && <span className="text-orange-400">{edgeLogs.length} log{edgeLogs.length !== 1 ? "s" : ""}</span>}
         {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
       </button>
@@ -72,6 +74,30 @@ export function DebugBlock({ debug, edgeLogs }: DebugBlockProps) {
                 {config.top_p && <div>Top-P: <span className="text-[#e9edef]">{config.top_p}</span></div>}
                 {config.top_k && <div>Top-K: <span className="text-[#e9edef]">{config.top_k}</span></div>}
                 <div>Tools: <span className="text-[#e9edef]">{config.tools_count}</span></div>
+              </div>
+            </div>
+          )}
+
+          {mediaAttachments.length > 0 && (
+            <div className="border-t border-[#2a3942] pt-2">
+              <div className="text-pink-400 font-semibold mb-1">🎙️ Mídia Recebida</div>
+              <div className="text-[#8696a0] space-y-1">
+                {mediaAttachments.map((m, i) => (
+                  <div key={i}>
+                    {m.type === "media_attachments" && (
+                      <div>📎 <span className="text-[#e9edef]">{m.audio_count} áudio(s), {m.image_count} imagem(ns), {m.file_count} arquivo(s)</span></div>
+                    )}
+                    {m.type === "audio_transcription" && (
+                      <div>
+                        <div>🎤 Transcrição ({m.transcript_length} chars):</div>
+                        <pre className="mt-1 text-[#e9edef] bg-[#0b141a] rounded p-2 whitespace-pre-wrap text-[10px]">{m.transcript_preview}</pre>
+                      </div>
+                    )}
+                    {m.type === "image_attachment" && (
+                      <div>🖼️ Imagem: <span className="text-[#e9edef]">{m.mime_type} ({Math.round((m.size || 0) / 1024)}KB)</span></div>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           )}

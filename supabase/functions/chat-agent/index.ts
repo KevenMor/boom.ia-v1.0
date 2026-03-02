@@ -1091,9 +1091,9 @@ Deno.serve(async (req) => {
       ? createClient(nexusUrl, nexusServiceKey)
       : supabase;
 
-    const { agent_id, messages, conversation_id } = await req.json();
+    const { agent_id, messages, conversation_id, attachments } = await req.json();
 
-    if (!agent_id || !messages?.length) {
+    if (!agent_id || (!messages?.length && !(attachments?.length))) {
       return new Response(JSON.stringify({ error: "agent_id and messages required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -1200,6 +1200,163 @@ Deno.serve(async (req) => {
       hasInventoryTool,
     );
     console.log(`[Prompts] Tenant slug: ${tenantSlug}, hasInventory: ${hasInventoryTool}, prompt length: ${systemPrompt.length}`);
+
+    // ===== MEDIA ATTACHMENT PROCESSING =====
+    // Process audio (transcription) and images (multimodal) from Chatwoot attachments
+    const mediaAttachments = (attachments || []) as Array<{ file_type: string; data_url: string; file_size?: number }>;
+    const audioAttachments = mediaAttachments.filter(a => a.file_type === "audio");
+    const imageAttachments = mediaAttachments.filter(a => a.file_type === "image");
+    const fileAttachments = mediaAttachments.filter(a => a.file_type === "file");
+    const imageBase64Parts: Array<{ mime_type: string; base64: string }> = [];
+
+    if (mediaAttachments.length > 0) {
+      console.log(`[Media] Processing ${audioAttachments.length} audio, ${imageAttachments.length} image, ${fileAttachments.length} file attachment(s)`);
+      debugTrace.push({
+        type: "media_attachments",
+        audio_count: audioAttachments.length,
+        image_count: imageAttachments.length,
+        file_count: fileAttachments.length,
+        timestamp: Date.now(),
+      });
+    }
+
+    // --- Audio transcription via Gemini ---
+    for (const audio of audioAttachments) {
+      try {
+        console.log(`[Media] Downloading audio: ${audio.data_url.slice(0, 80)}...`);
+        const audioResp = await fetch(audio.data_url);
+        if (!audioResp.ok) {
+          console.error(`[Media] Audio download failed: ${audioResp.status}`);
+          continue;
+        }
+        const audioBuffer = await audioResp.arrayBuffer();
+        const audioBytes = new Uint8Array(audioBuffer);
+        const audioBase64 = btoa(String.fromCharCode(...audioBytes));
+
+        // Detect MIME type from URL or default to audio/ogg (WhatsApp default)
+        const urlLower = audio.data_url.toLowerCase();
+        let audioMime = "audio/ogg";
+        if (urlLower.includes(".mp3") || urlLower.includes("audio/mpeg")) audioMime = "audio/mp3";
+        else if (urlLower.includes(".wav")) audioMime = "audio/wav";
+        else if (urlLower.includes(".aac")) audioMime = "audio/aac";
+        else if (urlLower.includes(".flac")) audioMime = "audio/flac";
+        else if (urlLower.includes(".m4a")) audioMime = "audio/mp4";
+
+        console.log(`[Media] Transcribing audio (${audioBytes.length} bytes, ${audioMime}) via ${provider.name}`);
+
+        // Use the agent's configured Gemini provider for transcription
+        const transcriptionResp = await fetch(baseUrl, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model,
+            messages: [
+              {
+                role: "user",
+                content: [
+                  {
+                    type: "text",
+                    text: "Transcreva o áudio a seguir com precisão. Retorne APENAS a transcrição literal do que foi dito, sem explicações ou comentários adicionais. Se o áudio estiver em português, mantenha em português.",
+                  },
+                  {
+                    type: "image_url",
+                    image_url: {
+                      url: `data:${audioMime};base64,${audioBase64}`,
+                    },
+                  },
+                ],
+              },
+            ],
+            temperature: 0.1,
+            max_tokens: 2000,
+          }),
+        });
+
+        if (transcriptionResp.ok) {
+          const transcriptionResult = await transcriptionResp.json();
+          const transcript = transcriptionResult.choices?.[0]?.message?.content?.trim() || "";
+          if (transcript) {
+            console.log(`[Media] Audio transcribed (${transcript.length} chars): "${transcript.slice(0, 100)}..."`);
+            // Prepend transcript to the last user message
+            const lastMsg = messages[messages.length - 1];
+            if (lastMsg?.role === "user") {
+              const originalText = lastMsg.content || "";
+              lastMsg.content = originalText
+                ? `[Áudio do cliente - transcrição]: "${transcript}"\n\n${originalText}`
+                : `[Áudio do cliente - transcrição]: "${transcript}"`;
+            } else {
+              messages.push({ role: "user", content: `[Áudio do cliente - transcrição]: "${transcript}"` });
+            }
+            debugTrace.push({
+              type: "audio_transcription",
+              transcript_length: transcript.length,
+              transcript_preview: transcript.slice(0, 200),
+              mime_type: audioMime,
+              audio_size: audioBytes.length,
+              timestamp: Date.now(),
+            });
+          } else {
+            console.warn("[Media] Transcription returned empty content");
+          }
+        } else {
+          const errText = await transcriptionResp.text();
+          console.error(`[Media] Transcription API error: ${transcriptionResp.status}`, errText);
+          debugTrace.push({ type: "audio_transcription_error", status: transcriptionResp.status, error: errText.slice(0, 200), timestamp: Date.now() });
+        }
+      } catch (e: any) {
+        console.error("[Media] Audio processing error:", e.message);
+        debugTrace.push({ type: "audio_transcription_error", error: e.message, timestamp: Date.now() });
+      }
+    }
+
+    // --- Image processing: download and convert to base64 for multimodal ---
+    for (const img of imageAttachments) {
+      try {
+        console.log(`[Media] Downloading image: ${img.data_url.slice(0, 80)}...`);
+        const imgResp = await fetch(img.data_url);
+        if (!imgResp.ok) {
+          console.error(`[Media] Image download failed: ${imgResp.status}`);
+          continue;
+        }
+        const imgBuffer = await imgResp.arrayBuffer();
+        const imgBytes = new Uint8Array(imgBuffer);
+        // Limit: skip images > 4MB to avoid payload issues
+        if (imgBytes.length > 4 * 1024 * 1024) {
+          console.warn(`[Media] Image too large (${imgBytes.length} bytes), skipping`);
+          continue;
+        }
+        const imgBase64 = btoa(String.fromCharCode(...imgBytes));
+
+        const urlLower = img.data_url.toLowerCase();
+        let imgMime = "image/jpeg";
+        if (urlLower.includes(".png")) imgMime = "image/png";
+        else if (urlLower.includes(".webp")) imgMime = "image/webp";
+        else if (urlLower.includes(".gif")) imgMime = "image/gif";
+
+        imageBase64Parts.push({ mime_type: imgMime, base64: imgBase64 });
+        console.log(`[Media] Image prepared (${imgBytes.length} bytes, ${imgMime})`);
+        debugTrace.push({
+          type: "image_attachment",
+          mime_type: imgMime,
+          size: imgBytes.length,
+          timestamp: Date.now(),
+        });
+      } catch (e: any) {
+        console.error("[Media] Image processing error:", e.message);
+      }
+    }
+
+    // --- File attachments: note in user message ---
+    for (const file of fileAttachments) {
+      const lastMsg = messages[messages.length - 1];
+      const fileNote = `[Cliente enviou um arquivo: ${file.data_url.split("/").pop() || "arquivo"}]`;
+      if (lastMsg?.role === "user") {
+        lastMsg.content = (lastMsg.content || "") + "\n\n" + fileNote;
+      } else {
+        messages.push({ role: "user", content: fileNote });
+      }
+    }
+
     const startTime = Date.now();
     console.log(`LLM config: temperature=${temperature}, top_p=${top_p}, top_k=${top_k}, isGemini=${isGemini}`);
     // Helper: build optional LLM params (only include if defined)
@@ -1656,6 +1813,26 @@ ${toolResultsContext.join("\n\n")}`;
         conversationalMessages.splice(1, 0, { role: "system", content: toolContextMsg });
       }
       console.log(`[Conversational] Injecting ${toolResultsContext.length} tool result(s) as context (position: before last user msg)`);
+    }
+
+    // Inject image attachments as multimodal content in the last user message
+    if (imageBase64Parts.length > 0) {
+      const lastUserIdx = conversationalMessages.map((m: any) => m.role).lastIndexOf("user");
+      if (lastUserIdx >= 0) {
+        const lastUserMsg = conversationalMessages[lastUserIdx];
+        const textContent = lastUserMsg.content || "";
+        const contentParts: any[] = [
+          { type: "text", text: textContent || "[Cliente enviou imagem(ns)]" },
+        ];
+        for (const img of imageBase64Parts) {
+          contentParts.push({
+            type: "image_url",
+            image_url: { url: `data:${img.mime_type};base64,${img.base64}` },
+          });
+        }
+        conversationalMessages[lastUserIdx] = { role: "user", content: contentParts };
+        console.log(`[Conversational] Injected ${imageBase64Parts.length} image(s) as multimodal content`);
+      }
     }
 
     // Call the agent's configured LLM in STREAMING mode — NO tools passed (dispatcher already handled them)
