@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useCallback } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -13,47 +13,33 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Clock } from "lucide-react";
+import { Plus, Trash2, Clock, CalendarDays } from "lucide-react";
+import { useTenants } from "@/hooks/useTenants";
+import { useCalendars, useCreateCalendar } from "@/hooks/useCalendars";
+import { useCalendarEvents, useCreateCalendarEvent, useUpdateCalendarEvent, useDeleteCalendarEvent } from "@/hooks/useCalendarEvents";
+import { toast } from "sonner";
+import type { Calendar } from "@/types/calendar";
 
 const EVENT_COLORS: Record<string, { bg: string; border: string; label: string }> = {
-  primary: { bg: "hsl(var(--primary))", border: "hsl(var(--primary))", label: "Padrão" },
-  success: { bg: "hsl(var(--success))", border: "hsl(var(--success))", label: "Sucesso" },
-  warning: { bg: "hsl(var(--warning))", border: "hsl(var(--warning))", label: "Aviso" },
-  destructive: { bg: "hsl(var(--destructive))", border: "hsl(var(--destructive))", label: "Urgente" },
-  accent: { bg: "hsl(var(--accent-foreground))", border: "hsl(var(--accent-foreground))", label: "Destaque" },
+  primary: { bg: "hsl(262 72% 62%)", border: "hsl(262 72% 62%)", label: "Padrão" },
+  success: { bg: "hsl(158 60% 44%)", border: "hsl(158 60% 44%)", label: "Sucesso" },
+  warning: { bg: "hsl(38 80% 55%)", border: "hsl(38 80% 55%)", label: "Aviso" },
+  destructive: { bg: "hsl(0 68% 55%)", border: "hsl(0 68% 55%)", label: "Urgente" },
+  accent: { bg: "hsl(210 60% 50%)", border: "hsl(210 60% 50%)", label: "Destaque" },
 };
-
-const INITIAL_EVENTS: EventInput[] = [
-  { id: "1", title: "Reunião de Sprint", start: new Date().toISOString().split("T")[0] + "T09:00:00", end: new Date().toISOString().split("T")[0] + "T10:00:00", backgroundColor: "hsl(262 72% 62%)", borderColor: "hsl(262 72% 62%)", extendedProps: { color: "primary" } },
-  { id: "2", title: "Deploy Produção", start: new Date(Date.now() + 2 * 86400000).toISOString().split("T")[0] + "T14:00:00", end: new Date(Date.now() + 2 * 86400000).toISOString().split("T")[0] + "T15:30:00", backgroundColor: "hsl(158 60% 44%)", borderColor: "hsl(158 60% 44%)", extendedProps: { color: "success" } },
-  { id: "3", title: "Review de Código", start: new Date(Date.now() + 5 * 86400000).toISOString().split("T")[0] + "T11:00:00", end: new Date(Date.now() + 5 * 86400000).toISOString().split("T")[0] + "T12:00:00", backgroundColor: "hsl(38 80% 55%)", borderColor: "hsl(38 80% 55%)", extendedProps: { color: "warning" } },
-  { id: "4", title: "Deadline Entrega", start: new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0] + "T08:00:00", end: new Date(Date.now() + 9 * 86400000).toISOString().split("T")[0] + "T18:00:00", backgroundColor: "hsl(0 68% 55%)", borderColor: "hsl(0 68% 55%)", extendedProps: { color: "destructive" } },
-];
-
-const CATEGORY_LIST = [
-  { key: "calendar", label: "Eventos do Calendário", color: "primary" },
-  { key: "meeting", label: "Reuniões", color: "accent" },
-  { key: "deadline", label: "Deadlines", color: "destructive" },
-  { key: "deploy", label: "Deploys", color: "success" },
-  { key: "reminder", label: "Lembretes", color: "warning" },
-];
 
 function formatDateTimeBR(dateStr: string | undefined): string {
   if (!dateStr) return "";
   const d = new Date(dateStr);
   return d.toLocaleString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
     timeZone: "America/Sao_Paulo",
   });
 }
 
 function extractTime(dateStr: string): string {
   if (!dateStr) return "08:00";
-  // Handle ISO strings and plain date strings
   if (dateStr.includes("T")) {
     const timePart = dateStr.split("T")[1];
     return timePart ? timePart.substring(0, 5) : "08:00";
@@ -68,112 +54,209 @@ function extractDate(dateStr: string): string {
 
 export default function CalendarPage() {
   const calendarRef = useRef<FullCalendar>(null);
-  const [events, setEvents] = useState<EventInput[]>(INITIAL_EVENTS);
+
+  // Tenant & calendar selection
+  const { data: tenants } = useTenants();
+  const [selectedTenantId, setSelectedTenantId] = useState<string>("");
+  const { data: calendars, isLoading: calendarsLoading } = useCalendars(selectedTenantId || undefined);
+  const [selectedCalendarId, setSelectedCalendarId] = useState<string>("all");
+
+  const activeCalendarIds = useMemo(() => {
+    if (!calendars) return [];
+    if (selectedCalendarId === "all") return calendars.filter(c => c.is_active).map(c => c.id);
+    return [selectedCalendarId];
+  }, [calendars, selectedCalendarId]);
+
+  const { data: dbEvents, isLoading: eventsLoading } = useCalendarEvents(selectedTenantId || undefined, activeCalendarIds);
+  const createEvent = useCreateCalendarEvent();
+  const updateEvent = useUpdateCalendarEvent();
+  const deleteEvent = useDeleteCalendarEvent();
+  const createCalendar = useCreateCalendar();
+
+  // Map DB events to FullCalendar format
+  const events: EventInput[] = useMemo(() => {
+    if (!dbEvents) return [];
+    return dbEvents.map((ev) => {
+      const colorDef = EVENT_COLORS[ev.color] || EVENT_COLORS.primary;
+      return {
+        id: ev.id,
+        title: ev.title,
+        start: ev.start_at,
+        end: ev.end_at || undefined,
+        allDay: ev.all_day,
+        backgroundColor: colorDef.bg,
+        borderColor: colorDef.border,
+        extendedProps: { color: ev.color, calendarId: ev.calendar_id, dbEvent: ev },
+      };
+    });
+  }, [dbEvents]);
+
+  // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedEvent, setSelectedEvent] = useState<EventClickArg | null>(null);
+  const [selectedEventClick, setSelectedEventClick] = useState<EventClickArg | null>(null);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
   const [newColor, setNewColor] = useState("primary");
-  const [selectInfo, setSelectInfo] = useState<DateSelectArg | null>(null);
+  const [eventCalendarId, setEventCalendarId] = useState("");
   const [startDate, setStartDate] = useState("");
   const [startTime, setStartTime] = useState("08:00");
   const [endDate, setEndDate] = useState("");
   const [endTime, setEndTime] = useState("09:00");
   const [allDay, setAllDay] = useState(false);
 
-  const handleDateSelect = (info: DateSelectArg) => {
-    setSelectInfo(info);
+  // New calendar dialog
+  const [newCalDialogOpen, setNewCalDialogOpen] = useState(false);
+  const [newCalName, setNewCalName] = useState("");
+  const [newCalColor, setNewCalColor] = useState("primary");
+
+  const handleDateSelect = useCallback((info: DateSelectArg) => {
+    if (!selectedTenantId || !calendars?.length) {
+      toast.error("Selecione um tenant e crie uma agenda primeiro.");
+      return;
+    }
+    setSelectedEventClick(null);
+    setEditingEventId(null);
     setNewTitle("");
     setNewColor("primary");
-    setSelectedEvent(null);
+    setEventCalendarId(selectedCalendarId === "all" ? calendars[0].id : selectedCalendarId);
     setAllDay(info.allDay);
     setStartDate(extractDate(info.startStr));
     setStartTime(info.allDay ? "08:00" : extractTime(info.startStr));
     setEndDate(extractDate(info.endStr));
     setEndTime(info.allDay ? "09:00" : extractTime(info.endStr));
     setDialogOpen(true);
-  };
+  }, [selectedTenantId, calendars, selectedCalendarId]);
 
-  const handleEventClick = (info: EventClickArg) => {
-    setSelectedEvent(info);
+  const handleEventClick = useCallback((info: EventClickArg) => {
+    const ep = info.event.extendedProps;
+    setSelectedEventClick(info);
+    setEditingEventId(info.event.id);
     setNewTitle(info.event.title);
-    setNewColor(info.event.extendedProps?.color || "primary");
-    setSelectInfo(null);
-
-    const evStart = info.event.startStr;
-    const evEnd = info.event.endStr || evStart;
+    setNewColor(ep.color || "primary");
+    setEventCalendarId(ep.calendarId || "");
     setAllDay(info.event.allDay);
-    setStartDate(extractDate(evStart));
-    setStartTime(info.event.allDay ? "08:00" : extractTime(evStart));
-    setEndDate(extractDate(evEnd));
-    setEndTime(info.event.allDay ? "09:00" : extractTime(evEnd));
+    setStartDate(extractDate(info.event.startStr));
+    setStartTime(info.event.allDay ? "08:00" : extractTime(info.event.startStr));
+    setEndDate(extractDate(info.event.endStr || info.event.startStr));
+    setEndTime(info.event.allDay ? "09:00" : extractTime(info.event.endStr || info.event.startStr));
     setDialogOpen(true);
-  };
+  }, []);
 
-  const handleSave = () => {
-    const colorDef = EVENT_COLORS[newColor];
-    const finalStart = allDay ? startDate : `${startDate}T${startTime}:00`;
-    const finalEnd = allDay ? endDate : `${endDate}T${endTime}:00`;
+  const handleSave = async () => {
+    if (!newTitle.trim() || !selectedTenantId || !eventCalendarId) return;
+    const finalStart = allDay ? `${startDate}T00:00:00` : `${startDate}T${startTime}:00`;
+    const finalEnd = allDay ? `${endDate}T23:59:59` : `${endDate}T${endTime}:00`;
 
-    if (selectedEvent) {
-      selectedEvent.event.setProp("title", newTitle);
-      selectedEvent.event.setProp("backgroundColor", colorDef.bg);
-      selectedEvent.event.setProp("borderColor", colorDef.border);
-      selectedEvent.event.setExtendedProp("color", newColor);
-      selectedEvent.event.setDates(finalStart, finalEnd, { allDay });
-      setEvents((prev) =>
-        prev.map((e) =>
-          e.id === selectedEvent.event.id
-            ? { ...e, title: newTitle, start: finalStart, end: finalEnd, allDay, backgroundColor: colorDef.bg, borderColor: colorDef.border, extendedProps: { color: newColor } }
-            : e
-        )
-      );
-    } else if (newTitle.trim()) {
-      const id = String(Date.now());
-      const newEvent: EventInput = {
-        id,
-        title: newTitle,
-        start: finalStart,
-        end: finalEnd,
-        allDay,
-        backgroundColor: colorDef.bg,
-        borderColor: colorDef.border,
-        extendedProps: { color: newColor },
-      };
-      setEvents((prev) => [...prev, newEvent]);
+    try {
+      if (editingEventId) {
+        await updateEvent.mutateAsync({
+          id: editingEventId,
+          title: newTitle,
+          start_at: finalStart,
+          end_at: finalEnd,
+          all_day: allDay,
+          color: newColor,
+          calendar_id: eventCalendarId,
+          tenant_id: selectedTenantId,
+        });
+        toast.success("Evento atualizado!");
+      } else {
+        await createEvent.mutateAsync({
+          title: newTitle,
+          start_at: finalStart,
+          end_at: finalEnd,
+          all_day: allDay,
+          color: newColor,
+          calendar_id: eventCalendarId,
+          tenant_id: selectedTenantId,
+        });
+        toast.success("Evento criado!");
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Erro ao salvar evento.");
     }
     setDialogOpen(false);
   };
 
-  const handleDelete = () => {
-    if (selectedEvent) {
-      selectedEvent.event.remove();
-      setEvents((prev) => prev.filter((e) => e.id !== selectedEvent.event.id));
+  const handleDelete = async () => {
+    if (!editingEventId || !selectedTenantId) return;
+    try {
+      await deleteEvent.mutateAsync({ id: editingEventId, tenantId: selectedTenantId });
+      toast.success("Evento excluído!");
+    } catch (e: any) {
+      toast.error(e.message || "Erro ao excluir.");
     }
     setDialogOpen(false);
+  };
+
+  const handleCreateCalendar = async () => {
+    if (!newCalName.trim() || !selectedTenantId) return;
+    try {
+      await createCalendar.mutateAsync({
+        tenant_id: selectedTenantId,
+        name: newCalName,
+        color: newCalColor,
+      });
+      toast.success("Agenda criada!");
+      setNewCalDialogOpen(false);
+      setNewCalName("");
+    } catch (e: any) {
+      toast.error(e.message || "Erro ao criar agenda.");
+    }
   };
 
   const dialogDateLabel = useMemo(() => {
-    if (selectedEvent) {
-      const s = selectedEvent.event.startStr;
-      const e = selectedEvent.event.endStr;
-      if (selectedEvent.event.allDay) {
-        return new Date(s).toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric", timeZone: "America/Sao_Paulo" });
-      }
-      return `${formatDateTimeBR(s)}${e ? ` — ${formatDateTimeBR(e)}` : ""}`;
+    const s = `${startDate}T${startTime}`;
+    const e = `${endDate}T${endTime}`;
+    if (allDay) {
+      return new Date(startDate).toLocaleDateString("pt-BR", {
+        weekday: "long", day: "2-digit", month: "long", year: "numeric", timeZone: "America/Sao_Paulo",
+      });
     }
-    if (selectInfo) {
-      if (selectInfo.allDay) {
-        return new Date(selectInfo.startStr).toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric", timeZone: "America/Sao_Paulo" });
-      }
-      return `${formatDateTimeBR(selectInfo.startStr)} — ${formatDateTimeBR(selectInfo.endStr)}`;
-    }
-    return "";
-  }, [selectedEvent, selectInfo]);
+    return `${formatDateTimeBR(s)} — ${formatDateTimeBR(e)}`;
+  }, [startDate, startTime, endDate, endTime, allDay]);
 
   return (
     <div className="grid grid-cols-12 gap-6">
       {/* Calendar */}
-      <div className="xl:col-span-9 col-span-12">
+      <div className="xl:col-span-9 col-span-12 space-y-4">
+        {/* Tenant & Calendar filters */}
+        <Card>
+          <CardContent className="flex flex-wrap items-end gap-4 py-4">
+            <div className="space-y-1 min-w-[200px]">
+              <Label className="text-xs">Tenant</Label>
+              <Select value={selectedTenantId} onValueChange={(v) => { setSelectedTenantId(v); setSelectedCalendarId("all"); }}>
+                <SelectTrigger><SelectValue placeholder="Selecione o tenant" /></SelectTrigger>
+                <SelectContent>
+                  {tenants?.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1 min-w-[200px]">
+              <Label className="text-xs">Agenda</Label>
+              <Select value={selectedCalendarId} onValueChange={setSelectedCalendarId} disabled={!selectedTenantId}>
+                <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as agendas</SelectItem>
+                  {calendars?.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      <span className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: EVENT_COLORS[c.color]?.bg || EVENT_COLORS.primary.bg }} />
+                        {c.name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button size="sm" variant="outline" disabled={!selectedTenantId} onClick={() => setNewCalDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-1" /> Nova Agenda
+            </Button>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Agenda</CardTitle>
@@ -190,7 +273,7 @@ export default function CalendarPage() {
               }}
               locale={ptBrLocale}
               timeZone="America/Sao_Paulo"
-              selectable
+              selectable={!!selectedTenantId}
               selectMirror
               editable
               dayMaxEvents
@@ -201,25 +284,11 @@ export default function CalendarPage() {
               slotMinTime="06:00:00"
               slotMaxTime="23:00:00"
               slotDuration="00:30:00"
-              slotLabelFormat={{
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: false,
-              }}
-              eventTimeFormat={{
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: false,
-              }}
+              slotLabelFormat={{ hour: "2-digit", minute: "2-digit", hour12: false }}
+              eventTimeFormat={{ hour: "2-digit", minute: "2-digit", hour12: false }}
               nowIndicator
               allDayText="Dia todo"
-              buttonText={{
-                today: "Hoje",
-                month: "Mês",
-                week: "Semana",
-                day: "Dia",
-                list: "Lista",
-              }}
+              buttonText={{ today: "Hoje", month: "Mês", week: "Semana", day: "Dia", list: "Lista" }}
             />
           </CardContent>
         </Card>
@@ -229,25 +298,24 @@ export default function CalendarPage() {
       <div className="xl:col-span-3 col-span-12 space-y-6">
         <Card>
           <CardHeader className="flex-row items-center justify-between pb-2">
-            <CardTitle className="text-base">Categorias</CardTitle>
-            <Button size="sm" onClick={() => {
-              const today = new Date().toISOString().split("T")[0];
-              setSelectInfo({ startStr: today, endStr: today, allDay: true } as DateSelectArg);
-              setNewTitle(""); setNewColor("primary"); setSelectedEvent(null);
-              setStartDate(today); setEndDate(today);
-              setStartTime("08:00"); setEndTime("09:00"); setAllDay(false);
-              setDialogOpen(true);
-            }}>
-              <Plus className="h-4 w-4 mr-1" /> Novo
-            </Button>
+            <CardTitle className="text-base">Agendas</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1.5">
-            {CATEGORY_LIST.map((cat) => {
-              const c = EVENT_COLORS[cat.color];
+            {!selectedTenantId && (
+              <p className="text-xs text-muted-foreground">Selecione um tenant para ver as agendas.</p>
+            )}
+            {calendarsLoading && <p className="text-xs text-muted-foreground">Carregando...</p>}
+            {calendars?.map((cal) => {
+              const c = EVENT_COLORS[cal.color] || EVENT_COLORS.primary;
               return (
-                <div key={cat.key} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-muted/50 transition-colors">
+                <div
+                  key={cal.id}
+                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm cursor-pointer transition-colors ${selectedCalendarId === cal.id ? "bg-muted" : "hover:bg-muted/50"}`}
+                  onClick={() => setSelectedCalendarId(cal.id === selectedCalendarId ? "all" : cal.id)}
+                >
                   <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: c.bg }} />
-                  <span className="text-foreground">{cat.label}</span>
+                  <span className="text-foreground flex-1">{cal.name}</span>
+                  <CalendarDays className="h-3 w-3 text-muted-foreground" />
                 </div>
               );
             })}
@@ -255,11 +323,11 @@ export default function CalendarPage() {
         </Card>
 
         <Card>
-          <CardHeader className="flex-row items-center justify-between pb-2">
-            <CardTitle className="text-base">Atividade</CardTitle>
-            <Button variant="outline" size="sm">Ver todos</Button>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Próximos Eventos</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 max-h-[400px] overflow-y-auto">
+            {eventsLoading && <p className="text-xs text-muted-foreground">Carregando...</p>}
             {events.slice(0, 5).map((ev) => (
               <div key={String(ev.id)} className="space-y-1">
                 <div className="flex items-center justify-between">
@@ -268,18 +336,23 @@ export default function CalendarPage() {
                     {typeof ev.start === "string" ? formatDateTimeBR(ev.start) : ""}
                   </Badge>
                 </div>
-                <p className="text-xs text-muted-foreground">Evento agendado</p>
+                <p className="text-xs text-muted-foreground">
+                  {calendars?.find(c => c.id === ev.extendedProps?.calendarId)?.name || "Agenda"}
+                </p>
               </div>
             ))}
+            {!eventsLoading && events.length === 0 && (
+              <p className="text-xs text-muted-foreground">Nenhum evento encontrado.</p>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Create/Edit Dialog */}
+      {/* Event Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{selectedEvent ? "Editar Evento" : "Novo Evento"}</DialogTitle>
+            <DialogTitle>{editingEventId ? "Editar Evento" : "Novo Evento"}</DialogTitle>
             {dialogDateLabel && (
               <p className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
                 <Clock className="h-3 w-3" />
@@ -293,7 +366,18 @@ export default function CalendarPage() {
               <Input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Nome do evento" autoFocus />
             </div>
 
-            {/* Date & Time fields */}
+            <div className="space-y-2">
+              <Label>Agenda</Label>
+              <Select value={eventCalendarId} onValueChange={setEventCalendarId}>
+                <SelectTrigger><SelectValue placeholder="Selecione a agenda" /></SelectTrigger>
+                <SelectContent>
+                  {calendars?.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Data início</Label>
@@ -344,12 +428,50 @@ export default function CalendarPage() {
             </div>
           </div>
           <DialogFooter className="gap-2">
-            {selectedEvent && (
-              <Button variant="destructive" size="sm" onClick={handleDelete}>
+            {editingEventId && (
+              <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleteEvent.isPending}>
                 <Trash2 className="h-4 w-4 mr-1" /> Excluir
               </Button>
             )}
-            <Button onClick={handleSave} disabled={!newTitle.trim()}>Salvar</Button>
+            <Button onClick={handleSave} disabled={!newTitle.trim() || createEvent.isPending || updateEvent.isPending}>
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Calendar Dialog */}
+      <Dialog open={newCalDialogOpen} onOpenChange={setNewCalDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Nova Agenda</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Nome da Agenda</Label>
+              <Input value={newCalName} onChange={(e) => setNewCalName(e.target.value)} placeholder="Ex: Dr. João Silva" autoFocus />
+            </div>
+            <div className="space-y-2">
+              <Label>Cor</Label>
+              <Select value={newCalColor} onValueChange={setNewCalColor}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(EVENT_COLORS).map(([key, val]) => (
+                    <SelectItem key={key} value={key}>
+                      <span className="flex items-center gap-2">
+                        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: val.bg }} />
+                        {val.label}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleCreateCalendar} disabled={!newCalName.trim() || createCalendar.isPending}>
+              Criar Agenda
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
