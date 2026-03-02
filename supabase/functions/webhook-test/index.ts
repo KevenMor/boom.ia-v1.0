@@ -141,7 +141,7 @@ async function replyToChatwoot(
         return !!nextText.trim();
       });
       if (hasMoreTextAfter) {
-        const photoDelay = Math.max(15000, imageUrls.length * 5000); // 5s per photo, min 15s
+        const photoDelay = Math.min(25000, Math.max(10000, imageUrls.length * 3000)); // 3s per photo, min 10s, max 25s
         console.log(`[Chatwoot] Waiting ${photoDelay}ms after ${imageUrls.length} photo(s) before next text`);
         await new Promise(resolve => setTimeout(resolve, photoDelay));
       }
