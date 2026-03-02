@@ -15,8 +15,8 @@ interface Props {
   setQuietStart: (v: string) => void;
   quietEnd: string;
   setQuietEnd: (v: string) => void;
-  followupPrompt: string;
-  setFollowupPrompt: (v: string) => void;
+  followupPrompt?: string;
+  setFollowupPrompt?: (v: string) => void;
 }
 
 export function FollowUpConfigSection({
@@ -54,22 +54,11 @@ export function FollowUpConfigSection({
 
       {enabled && (
         <div className="space-y-4 pt-2">
-          {/* Follow-up Prompt */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-1.5">
-              <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
-              <Label className="text-xs text-muted-foreground">Prompt de Follow-up</Label>
-            </div>
-            <Textarea
-              value={followupPrompt}
-              onChange={(e) => setFollowupPrompt(e.target.value)}
-              rows={4}
-              placeholder="Deixe vazio para usar o prompt padrão. Use {attempt} e {max_attempts} como variáveis."
-              className="rounded-lg bg-background border-border text-sm resize-none"
-            />
+          {/* Follow-up Prompt — managed in code */}
+          <div className="rounded-lg border border-dashed border-border/50 p-3">
             <p className="text-[10px] text-muted-foreground">
-              Variáveis disponíveis: <code className="text-primary">{"{attempt}"}</code> (tentativa atual), <code className="text-primary">{"{max_attempts}"}</code> (total).
-              O agente receberá todo o histórico da conversa para contextualizar.
+              <strong>Prompt de Follow-up</strong> é gerenciado no código por tenant.
+              Acesse <a href="/prompts" className="text-primary underline">Prompts</a> para visualizar.
             </p>
           </div>
 

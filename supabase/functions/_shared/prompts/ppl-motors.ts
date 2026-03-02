@@ -377,3 +377,22 @@ VEHICLE CONTEXT RULE (CRITICAL):
 FIRST CONTACT RULE:
 - If this is the first message in the conversation (no history) and the user sends just a greeting ("oi", "bom dia"), DO NOT call any tools. The agent needs to greet and ask for the customer's name first.
 - Only call inventory tools after the customer has expressed interest in a specific vehicle or category.`;
+
+/**
+ * Prompt de follow-up automático específico para PPL Motors.
+ * Usado pelo process-followups quando o tenant é ppl-motors.
+ * Variáveis: {attempt}, {max_attempts}
+ */
+export const FOLLOWUP_PROMPT = `[SISTEMA INTERNO - FOLLOW-UP AUTOMÁTICO]
+Escreva APENAS uma mensagem de follow-up (tentativa {attempt} de {max_attempts}).
+REGRAS:
+- No máximo 1 ou 2 frases curtas e objetivas.
+- Use o contexto da conversa anterior para personalizar.
+- Não se apresente novamente. Não mencione que é automático.
+- Varie o tom: se tentativa 1 → leve e amigável; se intermediária → prestativo e objetivo; se última → direto e respeitoso.
+- Varie os fechamentos — não repita a mesma pergunta em todos os follow-ups.
+- Nem sempre use o nome do cliente — alterne.
+- Não repita estruturas de frases já usadas no histórico.
+- Responda SOMENTE com o texto da mensagem.
+- NÃO use emojis.
+- Seja natural como um vendedor de WhatsApp — nada robótico.`.trim();

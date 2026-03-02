@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { getFollowupPrompt } from "../_shared/prompts/registry.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -41,6 +42,7 @@ async function generateFollowUpMessage(
   attempt: number,
   maxAttempts: number,
   customPrompt: string | null,
+  tenantSlugParam: string | null,
   supabase: any
 ): Promise<string> {
   const chatAgentUrl = `${cloudUrl}/functions/v1/chat-agent`;
@@ -63,7 +65,10 @@ async function generateFollowUpMessage(
     console.warn("[FollowUp] Could not load history:", e);
   }
 
-  // Build the follow-up instruction
+  // Build the follow-up instruction — use tenant prompt from registry if available
+  const tenantSlug = (typeof tenantSlugParam === "string") ? tenantSlugParam : null;
+  const registryPrompt = getFollowupPrompt(tenantSlug);
+
   const defaultPrompt = `[SISTEMA INTERNO - FOLLOW-UP AUTOMÁTICO]
 Escreva APENAS uma mensagem de follow-up (tentativa ${attempt} de ${maxAttempts}).
 REGRAS:
@@ -76,11 +81,11 @@ REGRAS:
 - Não repita estruturas de frases já usadas no histórico.
 - Responda SOMENTE com o texto da mensagem.`;
 
-  const promptText = customPrompt
-    ? customPrompt
-        .replace(/\{attempt\}/g, String(attempt))
-        .replace(/\{max_attempts\}/g, String(maxAttempts))
-    : defaultPrompt;
+  // Priority: registry prompt > custom config prompt > default
+  const rawPrompt = registryPrompt || customPrompt || defaultPrompt;
+  const promptText = rawPrompt
+    .replace(/\{attempt\}/g, String(attempt))
+    .replace(/\{max_attempts\}/g, String(maxAttempts));
 
   const followUpInstruction = {
     role: "user",
@@ -206,7 +211,7 @@ Deno.serve(async (req: Request) => {
     // Fetch pending follow-ups that are due
     const { data: pendingItems, error: fetchErr } = await supabase
       .from("follow_up_queue")
-      .select("*, agents(id, name, config, status)")
+      .select("*, agents(id, name, config, status, tenants(slug))")
       .eq("status", "pending")
       .lte("scheduled_at", new Date().toISOString())
       .order("scheduled_at", { ascending: true })
@@ -287,11 +292,13 @@ Deno.serve(async (req: Request) => {
       }
 
       // Generate follow-up message via LLM
+      const tenantSlug = agent.tenants?.slug || null;
       const followUpMsg = await generateFollowUpMessage(
         cloudUrl, cloudKey, nexusKey, agent.id,
         cfg.followup_agent_id || null,
         item.conversation_id, item.attempt, item.max_attempts,
         cfg.followup_prompt || null,
+        tenantSlug,
         supabase
       );
 
