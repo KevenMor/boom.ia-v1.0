@@ -671,7 +671,13 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         }
         if (args.year || args.ano) query = query.eq("year", args.year || args.ano);
         if (args.fuel_type || args.fuel || args.combustivel) query = query.ilike("fuel_type", `%${args.fuel_type || args.fuel || args.combustivel}%`);
-        if (args.transmission || args.cambio) query = query.ilike("transmission", `%${args.transmission || args.cambio}%`);
+        if (args.transmission || args.cambio) {
+          const txVal = (args.transmission || args.cambio || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          // Use short prefix to handle HTML-entity encoded values (e.g. Autom&#225;tico)
+          const txShort = txVal.slice(0, 5); // "autom" or "manua"
+          // Search transmission column AND model/version (which often contain "AUTOMÁTICO" properly)
+          query = query.or(`transmission.ilike.%${txShort}%,model.ilike.%${txVal}%,version.ilike.%${txVal}%`);
+        }
         const minPrice = args.min_price || args.preco_min || args.preco_minimo || args.valor_min;
         const maxPrice = args.max_price || args.preco_max || args.preco_maximo || args.valor_max;
         if (minPrice) query = query.gte("price", minPrice);
