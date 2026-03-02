@@ -154,9 +154,17 @@ function parseChatwootPayload(body: Record<string, unknown>) {
       (conversation.source_id as string) ||
       (contactMeta.identifier as string) ||
       null;
+
+    const eventMessageId =
+      (body.id as string | number | undefined) ??
+      ((body as any).message?.id as string | number | undefined) ??
+      ((body as any).messages?.[0]?.id as string | number | undefined) ??
+      null;
+
     return {
       isChatwoot: true,
       message: (body.content as string) || "",
+      eventMessageId: eventMessageId ? String(eventMessageId) : null,
       // Prioritize real customer phone over Chatwoot internal IDs
       externalUserId:
         phoneCandidate || (sender.email as string) || String(sender.id ?? "chatwoot-user"),
@@ -167,7 +175,62 @@ function parseChatwootPayload(body: Record<string, unknown>) {
       channel: (conversation.channel as string) || "chatwoot",
     };
   }
-  return { isChatwoot: false, message: "", externalUserId: "", contactName: null as string | null, contactAvatarUrl: null as string | null, chatwootConversationId: null, chatwootContactId: null as number | null, channel: "" };
+  return { isChatwoot: false, message: "", eventMessageId: null as string | null, externalUserId: "", contactName: null as string | null, contactAvatarUrl: null as string | null, chatwootConversationId: null, chatwootContactId: null as number | null, channel: "" };
+}
+
+// ---------- Webhook idempotency (anti-duplicate retries) ----------
+const WEBHOOK_EVENT_TTL_MS = 10 * 60 * 1000;
+const runtimeProcessedEvents: Map<string, number> = (globalThis as any).__runtimeProcessedEvents || new Map<string, number>();
+(globalThis as any).__runtimeProcessedEvents = runtimeProcessedEvents;
+
+function markOrCheckProcessedEvent(eventKey: string): boolean {
+  const now = Date.now();
+
+  // cleanup old keys
+  for (const [k, ts] of runtimeProcessedEvents.entries()) {
+    if (now - ts > WEBHOOK_EVENT_TTL_MS) runtimeProcessedEvents.delete(k);
+  }
+
+  if (runtimeProcessedEvents.has(eventKey)) return true;
+  runtimeProcessedEvents.set(eventKey, now);
+  return false;
+}
+
+function normalizeContent(value: string): string {
+  return (value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+async function hasRecentDuplicateIncoming(
+  supabase: any,
+  agentId: string,
+  convId: string,
+  incomingText: string,
+  windowSeconds = 45
+): Promise<boolean> {
+  try {
+    const { data: history } = await supabase.rpc("load_conversation_messages", {
+      p_agent_id: agentId,
+      p_conversation_id: convId,
+    });
+
+    if (!history || !Array.isArray(history) || history.length === 0) return false;
+
+    const now = Date.now();
+    const normalizedIncoming = normalizeContent(incomingText);
+    if (!normalizedIncoming) return false;
+
+    const recent = history.slice(-20).some((m: any) => {
+      if (m.role !== "user") return false;
+      const createdAt = m.created_at ? new Date(m.created_at).getTime() : 0;
+      if (!createdAt || now - createdAt > windowSeconds * 1000) return false;
+      return normalizeContent(String(m.content || "")) === normalizedIncoming;
+    });
+
+    return recent;
+  } catch (e) {
+    console.warn("[Webhook] Could not verify duplicate incoming message:", e);
+    return false;
+  }
 }
 
 // ---------- Debounce: buffer message and check if we're the last ----------
@@ -439,6 +502,18 @@ Deno.serve(async (req: Request) => {
       channel = (body.channel || "webhook") as string;
     }
 
+    // ---- Fast idempotency by Chatwoot event message id ----
+    if (chatwoot.isChatwoot && chatwoot.eventMessageId) {
+      const eventKey = `${agentId}:${chatwoot.eventMessageId}`;
+      if (markOrCheckProcessedEvent(eventKey)) {
+        console.log(`[Webhook] Duplicate event ignored by idempotency key: ${eventKey}`);
+        return new Response(
+          JSON.stringify({ status: "ignored_duplicate", reason: "Duplicate webhook event (same message id)" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     if (!userMessage) {
       return new Response(
         JSON.stringify({ error: "No message content" }),
@@ -471,6 +546,24 @@ Deno.serve(async (req: Request) => {
       }
     } catch (e) {
       console.warn("[FollowUp] Early cancel failed (non-critical):", e);
+    }
+
+    // ---- Extra idempotency guard (covers retries across cold starts) ----
+    if (earlyConvId) {
+      const duplicated = await hasRecentDuplicateIncoming(
+        supabase,
+        agentId,
+        earlyConvId,
+        userMessage,
+        45
+      );
+      if (duplicated) {
+        console.log(`[Webhook] Duplicate incoming ignored by recent-history guard (conv=${earlyConvId})`);
+        return new Response(
+          JSON.stringify({ status: "ignored_duplicate", reason: "Recent identical incoming already processed" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // ---- Debounce logic ----
