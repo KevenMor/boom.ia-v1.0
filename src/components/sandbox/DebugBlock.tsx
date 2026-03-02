@@ -27,6 +27,7 @@ export function DebugBlock({ debug, edgeLogs }: DebugBlockProps) {
   const llmIterations = debug.filter((d) => d.type === "llm_iteration");
   const llmPlans = debug.filter((d) => d.type === "llm_tool_plan");
   const llmTransforms = debug.filter((d) => d.type === "llm_transform");
+  const geminiResponses = debug.filter((d) => d.type === "gemini_response");
   const dispatcherSteps = debug.filter((d) => d.type?.startsWith("dispatcher_"));
   const tokenUsages = debug.filter((d) => d.type === "token_usage");
   const dispatcherTokens = dispatcherSteps
@@ -148,6 +149,17 @@ export function DebugBlock({ debug, edgeLogs }: DebugBlockProps) {
             <div key={i} className="border-t border-[#2a3942] pt-2">
               <div className="text-[#53bdeb] font-semibold mb-1">🧪 Transformação de resposta</div>
               <pre className="text-[#e9edef] bg-[#0b141a] rounded p-2 whitespace-pre-wrap text-[10px]">{JSON.stringify({ raw_length: tf.raw_length, sanitized_length: tf.sanitized_length, final_length: tf.final_length, parts_count: tf.parts_count, parts_preview: tf.parts_preview }, null, 2)}</pre>
+            </div>
+          ))}
+
+          {geminiResponses.map((gr, i) => (
+            <div key={i} className="border-t border-[#2a3942] pt-2">
+              <div className="text-cyan-400 font-semibold mb-1">💬 Resposta Gemini (Phase 2)</div>
+              <div className="text-[#8696a0] space-y-0.5 mb-1">
+                <div>Modelo: <span className="text-[#e9edef]">{gr.model}</span></div>
+                <div>Tamanho: <span className="text-[#e9edef]">{gr.full_length} chars</span></div>
+              </div>
+              <pre className="text-[#e9edef] bg-[#0b141a] rounded p-2 whitespace-pre-wrap text-[10px]">{gr.raw_content}</pre>
             </div>
           ))}
 
