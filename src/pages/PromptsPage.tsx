@@ -14,6 +14,7 @@ interface TenantSummary {
   systemPromptLength: number;
   communicationRulesLength: number;
   dispatcherPromptLength: number;
+  followupPromptLength: number;
 }
 
 interface TenantDetail {
@@ -23,6 +24,7 @@ interface TenantDetail {
   systemPrompt: string;
   communicationRules: string;
   dispatcherPrompt: string;
+  followupPrompt: string;
   fullComposedPrompt: string;
   fullPromptLength: number;
 }
@@ -171,10 +173,11 @@ export default function PromptsPage() {
                   <Badge variant="outline" className="shrink-0 text-[10px]">{t.version}</Badge>
                 </div>
                 <Separator className="my-3" />
-                <div className="flex gap-4 text-xs text-muted-foreground">
+                <div className="flex gap-4 text-xs text-muted-foreground flex-wrap">
                   <span>System: {t.systemPromptLength.toLocaleString()}</span>
                   <span>Rules: {t.communicationRulesLength.toLocaleString()}</span>
                   <span>Dispatcher: {t.dispatcherPromptLength.toLocaleString()}</span>
+                  <span>Follow-up: {t.followupPromptLength.toLocaleString()}</span>
                 </div>
               </button>
             ))}
@@ -216,6 +219,13 @@ export default function PromptsPage() {
                 icon={Sparkles}
                 content={selectedDetail.dispatcherPrompt}
                 badge="Phase 1 — Tool Calling"
+              />
+
+              <PromptBlock
+                title="Follow-up Prompt"
+                icon={MessageSquare}
+                content={selectedDetail.followupPrompt}
+                badge="Reengajamento automático"
               />
 
               <PromptBlock

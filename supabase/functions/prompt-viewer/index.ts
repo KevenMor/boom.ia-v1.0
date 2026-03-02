@@ -1,5 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getAllPromptConfigs, getPromptConfig, buildSystemPrompt, getDispatcherPrompt } from "../_shared/prompts/registry.ts";
+import { getAllPromptConfigs, getPromptConfig, buildSystemPrompt, getDispatcherPrompt, getFollowupPrompt } from "../_shared/prompts/registry.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -15,7 +14,6 @@ Deno.serve(async (req) => {
     const slug = url.searchParams.get("slug");
 
     if (slug) {
-      // Return specific tenant prompt config
       const config = getPromptConfig(slug);
       if (!config) {
         return new Response(JSON.stringify({ error: "Tenant not found in prompt registry" }), {
@@ -24,9 +22,9 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Build the full system prompt as it would be used
       const fullSystemPrompt = buildSystemPrompt("", slug, true);
       const dispatcherPrompt = getDispatcherPrompt(slug);
+      const followupPrompt = getFollowupPrompt(slug);
 
       return new Response(JSON.stringify({
         slug: config.slug,
@@ -35,6 +33,7 @@ Deno.serve(async (req) => {
         systemPrompt: config.systemPrompt || "(uses agent's database prompt)",
         communicationRules: config.communicationRules || "(none)",
         dispatcherPrompt,
+        followupPrompt: followupPrompt || "(usa prompt padrão do sistema)",
         fullComposedPrompt: fullSystemPrompt,
         fullPromptLength: fullSystemPrompt.length,
       }), {
@@ -42,7 +41,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Return all tenant prompt configs (summary)
+    // Summary
     const allConfigs = getAllPromptConfigs();
     const summary = Object.entries(allConfigs).map(([key, config]) => ({
       slug: config.slug,
@@ -51,6 +50,7 @@ Deno.serve(async (req) => {
       systemPromptLength: (config.systemPrompt || "").length,
       communicationRulesLength: (config.communicationRules || "").length,
       dispatcherPromptLength: config.dispatcherPrompt.length,
+      followupPromptLength: (config.followupPrompt || "").length,
     }));
 
     return new Response(JSON.stringify({ tenants: summary }), {

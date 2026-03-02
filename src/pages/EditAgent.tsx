@@ -280,10 +280,12 @@ export default function EditAgent() {
             </div>
           </div>
 
-          {/* System Prompt */}
-          <div className="space-y-3">
-            <Label className="text-sm font-medium text-muted-foreground">System Prompt</Label>
-            <Textarea {...register("system_prompt")} rows={8} className="rounded-lg bg-background border-border text-sm resize-y min-h-[120px]" />
+          {/* System Prompt — managed in code */}
+          <div className="rounded-lg border border-dashed border-border/50 p-4">
+            <p className="text-xs text-muted-foreground">
+              <strong>System Prompt</strong> é gerenciado no código por tenant.
+              Acesse <a href="/prompts" className="text-primary underline">Prompts</a> para visualizar o prompt atual.
+            </p>
           </div>
 
           {/* Dispatcher Provider */}
@@ -314,8 +316,8 @@ export default function EditAgent() {
           {/* Dispatcher Prompt — managed in code per tenant */}
           <div className="rounded-lg border border-dashed border-border/50 p-4">
             <p className="text-xs text-muted-foreground">
-              <strong>Dispatcher Prompt</strong> e <strong>System Prompt de tenant</strong> são gerenciados no código.
-              Acesse <a href="/prompts" className="text-primary underline">Prompts</a> para visualizar.
+              <strong>Dispatcher Prompt</strong> também é gerenciado no código por tenant.
+              Acesse <a href="/prompts" className="text-primary underline">Prompts</a> para visualizar todos os prompts.
             </p>
           </div>
         </div>

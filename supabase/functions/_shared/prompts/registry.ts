@@ -9,6 +9,7 @@ import {
   SYSTEM_PROMPT as PPL_SYSTEM,
   COMMUNICATION_RULES as PPL_COMM_RULES,
   DISPATCHER_PROMPT as PPL_DISPATCHER,
+  FOLLOWUP_PROMPT as PPL_FOLLOWUP,
 } from "./ppl-motors.ts";
 
 /**
@@ -21,6 +22,8 @@ interface TenantPromptConfig {
   communicationRules?: string;
   /** Dispatcher prompt (Phase 1) */
   dispatcherPrompt: string;
+  /** Follow-up prompt (variáveis: {attempt}, {max_attempts}) */
+  followupPrompt?: string;
   /** Versão do prompt para referência */
   version: string;
   /** Descrição para exibição no painel */
@@ -35,6 +38,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     systemPrompt: PPL_SYSTEM,
     communicationRules: PPL_COMM_RULES,
     dispatcherPrompt: PPL_DISPATCHER,
+    followupPrompt: PPL_FOLLOWUP,
     version: "v1.8.0",
     description: "Juliana — SDR PPL Motors (Concessionária Sorocaba/SP)",
   },
@@ -42,6 +46,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     systemPrompt: PPL_SYSTEM,
     communicationRules: PPL_COMM_RULES,
     dispatcherPrompt: PPL_DISPATCHER,
+    followupPrompt: PPL_FOLLOWUP,
     version: "v1.8.0",
     description: "Juliana — SDR PPL Motors (Concessionária Sorocaba/SP)",
   },
@@ -59,21 +64,14 @@ export function buildSystemPrompt(
   hasInventoryTool: boolean,
 ): string {
   const config = tenantSlug ? TENANT_PROMPTS[tenantSlug] : undefined;
-
-  // Use tenant system prompt if available, otherwise agent's
   const base = config?.systemPrompt || agentSystemPrompt || "You are a helpful AI assistant.";
-
-  // Communication rules only if agent has inventory tool
   const commRules = (hasInventoryTool && config?.communicationRules) ? "\n\n" + config.communicationRules : "";
-
   const greeting = "\n\n" + BASE_GREETING;
-
   return base + commRules + greeting;
 }
 
 /**
  * Retorna o dispatcher prompt para um tenant.
- * Se não houver configuração específica, retorna o padrão.
  */
 export function getDispatcherPrompt(tenantSlug: string | null): string {
   const config = tenantSlug ? TENANT_PROMPTS[tenantSlug] : undefined;
@@ -81,11 +79,19 @@ export function getDispatcherPrompt(tenantSlug: string | null): string {
 }
 
 /**
+ * Retorna o follow-up prompt para um tenant.
+ * Se não houver configuração específica, retorna null (usa o default do process-followups).
+ */
+export function getFollowupPrompt(tenantSlug: string | null): string | null {
+  const config = tenantSlug ? TENANT_PROMPTS[tenantSlug] : undefined;
+  return config?.followupPrompt || null;
+}
+
+/**
  * Retorna todas as configurações de prompts para exibição no frontend.
  */
 export function getAllPromptConfigs(): Record<string, TenantPromptConfig & { slug: string }> {
   const result: Record<string, TenantPromptConfig & { slug: string }> = {};
-  // Deduplicate by description (ppl-mortors and ppl-motors are the same)
   const seen = new Set<string>();
   for (const [slug, config] of Object.entries(TENANT_PROMPTS)) {
     if (seen.has(config.description)) continue;
