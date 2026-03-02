@@ -1130,28 +1130,15 @@ COMPORTAMENTO CONSULTIVO OBRIGATÓRIO:
 
         // Build dispatcher prompt — use agent-level custom prompt if available, else generic fallback
         const customDispatcherPrompt = agentConfig.dispatcher_prompt;
-        const dispatcherSystemPrompt = customDispatcherPrompt || `You are a tool dispatcher. Your ONLY job is to analyze the user's message AND the full conversation context to decide if any tools should be called.
+        const dispatcherSystemPrompt = customDispatcherPrompt || `You are a tool dispatcher. Your ONLY job is to analyze the user's message and the conversation context, then decide if any tools should be called.
 
 RULES:
-- ALWAYS analyze the FULL conversation history before deciding. Context matters more than the individual message.
-- If the user's message requires NEW objective data lookup (inventory, location, etc.) that hasn't been fetched yet, call the appropriate tool.
-- If the user is asking a general/conversational or consultative message (greetings, preferences, vague intent), DO NOT call tools.
-
-ANTI-REPETITION (CRITICAL):
-- Before calling any tool, check if the assistant ALREADY provided the requested information (photos, vehicle details, etc.) in the conversation history.
-- If photos/images (markdown like ![foto](...)) were already sent for a vehicle, do NOT call inventory again for the same vehicle.
-- Only call inventory again if the user asks about a DIFFERENT vehicle or explicitly requests ADDITIONAL/NEW information not yet provided.
-- Example: User says "obrigado" after receiving photos → NO_TOOLS_NEEDED (it's a thank-you, photos already sent)
-- Example: Assistant says "vou enviar as fotos" and user says "obrigado" → CALL inventory (user is thanking for the promise, photos haven't been sent yet)
-- Example: User already received photos and says "tem em outra cor?" → CALL inventory (new query)
-
-CONTEXT ANALYSIS:
-- Treat messages like "gosto de modelo mais alto", "prefiro SUV", "quero algo confortável" as consultative discovery unless user explicitly asks to list stock now.
-- When the user explicitly asks to see available vehicles/stock (e.g. "quais SUVs tem", "me mostra os SUVs disponíveis"), call inventory tool.
-- When the user asks for photos/images/details of a specific vehicle, call the inventory tool with specific filters.
-- When the user confirms interest in photos (e.g. "quero sim", "manda", "pode enviar") and there's a vehicle in the conversation context AND photos haven't been sent yet, call the inventory tool.
-
-- NEVER generate conversational text. Only decide tool calls. If no tools are needed, respond with exactly: "NO_TOOLS_NEEDED"
+- Analyze the full conversation history before deciding.
+- If the user's message requires an objective data lookup that hasn't been fetched yet, call the appropriate tool.
+- If the message is conversational, a greeting, or does not require external data, DO NOT call tools.
+- Before calling any tool, check if the assistant already provided the same information earlier in the conversation. Avoid redundant calls.
+- NEVER generate conversational text. Only decide tool calls.
+- If no tools are needed, respond with exactly: "NO_TOOLS_NEEDED"
 - You may call multiple tools if needed.`;
         console.log(`[Dispatcher] Using ${customDispatcherPrompt ? "CUSTOM" : "DEFAULT"} dispatcher prompt`);
 
