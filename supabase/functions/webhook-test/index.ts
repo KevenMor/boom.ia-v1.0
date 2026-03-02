@@ -131,18 +131,15 @@ async function replyToChatwoot(
       console.log(`[Chatwoot] Part ${i + 1} image ${j + 1}/${imageUrls.length}: ${ok ? "OK" : "FAIL"}`);
     }
 
-    // After sending images, wait before sending the next text segment
-    // This ensures WhatsApp delivers photos before the follow-up text message
+    // After sending images, add a short delay so WhatsApp delivers photos before follow-up text
+    // Keep delays SHORT to stay within Edge Function 30s timeout
     if (imageUrls.length > 0) {
       const nextPartIndex = i + 1;
-      const hasMoreTextAfter = parts.slice(nextPartIndex).some(p => {
-        if (!p || !p.trim()) return false;
-        const { textOnly: nextText } = extractImagesFromMarkdown(p);
-        return !!nextText.trim();
-      });
-      if (hasMoreTextAfter) {
-        const photoDelay = Math.min(25000, Math.max(10000, imageUrls.length * 3000)); // 3s per photo, min 10s, max 25s
-        console.log(`[Chatwoot] Waiting ${photoDelay}ms after ${imageUrls.length} photo(s) before next text`);
+      const hasMoreAfter = nextPartIndex < parts.length && parts.slice(nextPartIndex).some(p => p?.trim());
+      if (hasMoreAfter) {
+        // 1.5s per photo, min 2s, max 5s — must fit within 30s total execution
+        const photoDelay = Math.min(5000, Math.max(2000, imageUrls.length * 1500));
+        console.log(`[Chatwoot] Waiting ${photoDelay}ms after ${imageUrls.length} photo(s) before next part`);
         await new Promise(resolve => setTimeout(resolve, photoDelay));
       }
     }
