@@ -57,7 +57,8 @@ async function callChatAgent(
   nexusKey: string,
   agentId: string,
   messages: { role: string; content: string }[],
-  convId: string | null
+  convId: string | null,
+  attachments?: any[]
 ) {
   const chatAgentUrl = `${cloudUrl}/functions/v1/chat-agent`;
   const chatResp = await fetch(chatAgentUrl, {
@@ -67,7 +68,7 @@ async function callChatAgent(
       Authorization: `Bearer ${cloudKey}`,
       "x-nexus-auth": `Bearer ${nexusKey}`,
     },
-    body: JSON.stringify({ agent_id: agentId, messages, conversation_id: convId }),
+    body: JSON.stringify({ agent_id: agentId, messages, conversation_id: convId, attachments }),
   });
 
   if (!chatResp.ok) {
@@ -164,6 +165,7 @@ Deno.serve(async (req: Request) => {
       user_message,
       debounce_ms,
       buffer_created_at,
+      attachments,
     } = await req.json();
 
     const nexusUrl = Deno.env.get("NEXUS_DB_URL");
@@ -288,9 +290,9 @@ Deno.serve(async (req: Request) => {
 
     // ---------- Call chat-agent ----------
     const messages = [...conversationMessages, { role: "user", content: finalMessage }];
-    console.log(`[ProcessQueue] Calling chat-agent with ${messages.length} messages`);
+    console.log(`[ProcessQueue] Calling chat-agent with ${messages.length} messages, ${(attachments || []).length} attachment(s)`);
 
-    const result = await callChatAgent(cloudUrl, cloudKey, nexusKey, agent_id, messages, convId);
+    const result = await callChatAgent(cloudUrl, cloudKey, nexusKey, agent_id, messages, convId, attachments);
 
     if (result.error) {
       return new Response(

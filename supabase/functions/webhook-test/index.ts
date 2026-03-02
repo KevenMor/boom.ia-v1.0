@@ -236,6 +236,15 @@ async function replyToChatwoot(
 }
 
 // ---------- Chatwoot payload parser ----------
+interface ChatwootAttachment {
+  id: number;
+  file_type: string; // "audio" | "image" | "file" | "video"
+  data_url: string;
+  file_size?: number;
+  account_id?: number;
+  extension?: string | null;
+}
+
 function parseChatwootPayload(body: Record<string, unknown>) {
   if (body.event === "message_created" && body.message_type === "incoming") {
     const sender = (body.sender || {}) as Record<string, unknown>;
@@ -264,8 +273,19 @@ function parseChatwootPayload(body: Record<string, unknown>) {
       null;
 
     // ALWAYS use the phone number as externalUserId for WhatsApp
-    // Never use JSON objects, email, or numeric contact IDs
     const externalUserId = phoneNumber || String(sender.id ?? "chatwoot-user");
+
+    // Extract attachments (audio, images, files, videos)
+    const rawAttachments = (body.attachments || []) as ChatwootAttachment[];
+    const attachments: ChatwootAttachment[] = rawAttachments
+      .filter((a) => a.data_url && a.file_type)
+      .map((a) => ({
+        id: a.id,
+        file_type: a.file_type,
+        data_url: a.data_url,
+        file_size: a.file_size,
+        extension: a.extension ?? null,
+      }));
 
     return {
       isChatwoot: true,
@@ -277,9 +297,10 @@ function parseChatwootPayload(body: Record<string, unknown>) {
       chatwootConversationId: (conversation.id as number) ?? null,
       chatwootContactId: Number(contactMeta.id ?? sender.id ?? 0) || null,
       channel: (conversation.channel as string) || "chatwoot",
+      attachments,
     };
   }
-  return { isChatwoot: false, message: "", eventMessageId: null as string | null, externalUserId: "", contactName: null as string | null, contactAvatarUrl: null as string | null, chatwootConversationId: null, chatwootContactId: null as number | null, channel: "" };
+  return { isChatwoot: false, message: "", eventMessageId: null as string | null, externalUserId: "", contactName: null as string | null, contactAvatarUrl: null as string | null, chatwootConversationId: null, chatwootContactId: null as number | null, channel: "", attachments: [] as ChatwootAttachment[] };
 }
 
 // ---------- Webhook idempotency (anti-duplicate retries) ----------
@@ -618,11 +639,17 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    if (!userMessage) {
+    // Allow empty text if attachments exist (e.g., audio-only messages)
+    if (!userMessage && (!chatwoot.isChatwoot || chatwoot.attachments.length === 0)) {
       return new Response(
         JSON.stringify({ error: "No message content" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Log attachments if present
+    if (chatwoot.attachments.length > 0) {
+      console.log(`[Webhook] ${chatwoot.attachments.length} attachment(s): ${chatwoot.attachments.map(a => `${a.file_type}(${a.data_url?.slice(0, 60)}...)`).join(", ")}`);
     }
 
     // ---- Cancel pending follow-ups (client replied) ----
@@ -697,6 +724,7 @@ Deno.serve(async (req: Request) => {
         user_message: debounceMs > 0 ? null : userMessage,
         debounce_ms: debounceMs,
         buffer_created_at: bufferCreatedAt,
+        attachments: chatwoot.attachments,
       };
 
       try {
