@@ -329,7 +329,11 @@ export default function Conversations() {
 
                         {/* Messages */}
                         <div className="space-y-3">
-                          {msgs?.map((msg) => {
+                          {msgs?.filter((msg) => {
+                            // Hide internal system prompts (follow-up instructions, etc.)
+                            if (msg.role === "user" && msg.content?.startsWith("[SISTEMA INTERNO")) return false;
+                            return true;
+                          }).map((msg) => {
                             const isUser = msg.role === "user";
                             const isSystem = msg.role === "system" || msg.role === "tool";
                             const { text, images } = extractImages(msg.content || "");
