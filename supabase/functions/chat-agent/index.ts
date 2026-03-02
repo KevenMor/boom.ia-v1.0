@@ -1147,7 +1147,10 @@ Deno.serve(async (req) => {
 
     // Save user message
     const lastUserMsg = messages[messages.length - 1];
-    if (convId && lastUserMsg?.role === "user") {
+    const hasIncomingAttachments = Array.isArray(attachments) && attachments.length > 0;
+
+    // For media messages, we defer persistence until after transcription/image notes are appended
+    if (convId && lastUserMsg?.role === "user" && !hasIncomingAttachments) {
       try {
         const { data: savedUserMsg, error: saveUserErr } = await supabase.rpc("save_message", {
           p_agent_id: agent_id,
@@ -1168,6 +1171,8 @@ Deno.serve(async (req) => {
       } catch (e: any) {
         console.error("[SaveUser] EXCEPTION:", e?.message || e);
       }
+    } else if (convId && lastUserMsg?.role === "user" && hasIncomingAttachments) {
+      console.log("[SaveUser] Deferred for media attachments");
     } else {
       console.warn("[SaveUser] SKIPPED: convId=", convId, "lastRole=", lastUserMsg?.role);
     }
@@ -1357,6 +1362,40 @@ Deno.serve(async (req) => {
         lastMsg.content = (lastMsg.content || "") + "\n\n" + fileNote;
       } else {
         messages.push({ role: "user", content: fileNote });
+      }
+    }
+
+    // Persist user message after media processing so Chat ao Vivo can show transcription/notes
+    if (convId && lastUserMsg?.role === "user" && hasIncomingAttachments) {
+      if (!lastUserMsg.content?.trim()) {
+        if (audioAttachments.length > 0) {
+          lastUserMsg.content = "[Áudio do cliente - transcrição]: \"(áudio recebido, transcrição indisponível)\"";
+        } else if (imageAttachments.length > 0) {
+          lastUserMsg.content = "[Cliente enviou imagem]";
+        } else if (fileAttachments.length > 0) {
+          lastUserMsg.content = "[Cliente enviou arquivo]";
+        }
+      }
+
+      try {
+        const { data: savedUserMsg, error: saveUserErr } = await supabase.rpc("save_message", {
+          p_agent_id: agent_id,
+          p_conversation_id: convId,
+          p_role: "user",
+          p_content: lastUserMsg.content || "",
+          p_model: null,
+          p_tokens_input: 0,
+          p_tokens_output: 0,
+          p_latency_ms: null,
+          p_metadata: null,
+        });
+        if (saveUserErr) {
+          console.error("[SaveUser][Media] FAILED:", saveUserErr.message, saveUserErr.details, saveUserErr.hint);
+        } else {
+          console.log("[SaveUser][Media] OK, msg_id:", savedUserMsg, "conv:", convId, "content_len:", (lastUserMsg.content || "").length);
+        }
+      } catch (e: any) {
+        console.error("[SaveUser][Media] EXCEPTION:", e?.message || e);
       }
     }
 
