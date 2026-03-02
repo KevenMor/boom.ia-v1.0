@@ -447,6 +447,15 @@ function isClosingQuestion(text: string): boolean {
     && text.length < 300; // Closing questions are short
 }
 
+function protectNumericDots(text: string): string {
+  // Protect thousand separators and decimal dots so sentence split does not break prices like "R$ 115.900"
+  return text.replace(/(\d)\.(?=\d{3}(\D|$))/g, "$1__NUM_DOT__");
+}
+
+function restoreNumericDots(text: string): string {
+  return text.replace(/__NUM_DOT__/g, ".");
+}
+
 function splitIntoMessages(content: string): string[] {
   // Split by double-newline into natural paragraphs
   const rawParagraphs = content.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
@@ -471,18 +480,19 @@ function splitIntoMessages(content: string): string[] {
     } else if (textOnly) {
       // Split long text paragraphs into sentence-level blocks for shorter WhatsApp bubbles
       if (textOnly.length > 250) {
-        // Split by sentence boundaries (. ! ?)
-        const sentences = textOnly.match(/[^.!?]+[.!?]+\s*/g) || [textOnly];
+        const protectedText = protectNumericDots(textOnly);
+        // Split by sentence boundaries (. ! ?) but preserve protected numeric separators
+        const sentences = protectedText.match(/[^.!?]+(?:[.!?]+(?=\s|$)|$)/g) || [protectedText];
         let chunk = "";
         for (const s of sentences) {
           if (chunk && (chunk.length + s.length > 250)) {
-            allBlocks.push({ type: "text", content: chunk.trim() });
+            allBlocks.push({ type: "text", content: restoreNumericDots(chunk.trim()) });
             chunk = s;
           } else {
             chunk += s;
           }
         }
-        if (chunk.trim()) allBlocks.push({ type: "text", content: chunk.trim() });
+        if (chunk.trim()) allBlocks.push({ type: "text", content: restoreNumericDots(chunk.trim()) });
       } else {
         allBlocks.push({ type: "text", content: textOnly });
       }
@@ -803,7 +813,7 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         return JSON.stringify({
           total: data.length,
           _hint: isSpecificWithPhotos
-            ? "Envie TODAS as fotos do array 'photos' usando ![foto](URL). Escreva um comentário curto e natural de NO MÁXIMO 1 frase sobre o carro (sem repetir marca/modelo/ano/preço que já foram ditos antes). NÃO faça pergunta de fechamento nesta mensagem — deixe o cliente reagir às fotos primeiro. Seja paciente."
+            ? "Envie TODAS as fotos do array 'photos' usando ![foto](URL). Se precisar de texto, use SOMENTE uma frase neutra e factual (ex.: 'Aqui estão as fotos desse veículo.'). PROIBIDO inventar atributos, acabamento, materiais ou equipamentos que não estejam explicitamente nos campos do veículo. NÃO faça pergunta de fechamento nesta mensagem — deixe o cliente reagir às fotos primeiro."
             : `Apresente os ${data.length} veículos de forma NATURAL, como um vendedor experiente no WhatsApp. REGRAS ANTI-REPETIÇÃO: 1) NÃO repita o nome completo do carro se já mencionou antes — use apelidos curtos ("o Nivus", "o Haval", "esse aqui"). 2) Varie a estrutura das frases — cada parágrafo deve soar diferente. 3) NÃO use a mesma abertura para todos os carros. 4) Destaque algo ÚNICO de cada um (um é mais econômico, outro tem mais espaço, etc). 5) Finalize com UMA pergunta natural tipo "Algum te chamou atenção?". NÃO use listas numeradas. NÃO inclua fotos. NÃO repita dados que o cliente já sabe.`,
           vehicles: data.map((v: any) => {
             if (!isSpecificWithPhotos) {
