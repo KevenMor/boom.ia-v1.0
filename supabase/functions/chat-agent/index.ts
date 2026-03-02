@@ -1561,21 +1561,24 @@ RULES:
       finalContent = dedupedPhotos.content;
     }
 
-    // Save to memory
+    // Save to memory — split into separate messages to match WhatsApp delivery
+    const messageParts = splitIntoMessages(finalContent);
     if (convId && finalContent) {
       const latency = Date.now() - startTime;
       try {
-        await supabase.rpc("save_message", {
-          p_agent_id: agent_id, p_conversation_id: convId,
-          p_role: "assistant", p_content: finalContent, p_model: model,
-          p_latency_ms: latency,
-          p_metadata: { debug: debugTrace, edge_logs: collectedLogs },
-        });
+        for (let i = 0; i < messageParts.length; i++) {
+          await supabase.rpc("save_message", {
+            p_agent_id: agent_id, p_conversation_id: convId,
+            p_role: "assistant", p_content: messageParts[i], p_model: model,
+            p_latency_ms: i === 0 ? latency : null,
+            p_metadata: i === 0 ? { debug: debugTrace, edge_logs: collectedLogs } : null,
+          });
+        }
       } catch (e: any) { console.warn("Could not save assistant msg:", e); }
     }
 
     // Stream-simulate the final response for the frontend
-    const messageParts = splitIntoMessages(finalContent);
+    // messageParts already computed above for save_message
     debugTrace.push({
       type: "llm_transform",
       raw_length: rawContent.length,
