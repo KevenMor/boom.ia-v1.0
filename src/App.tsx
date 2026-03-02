@@ -22,6 +22,7 @@ import Monitoring from "@/pages/Monitoring";
 import Conversations from "@/pages/Conversations";
 import Audit from "@/pages/Audit";
 import SettingsPage from "@/pages/SettingsPage";
+import PromptsPage from "@/pages/PromptsPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -58,6 +59,7 @@ const App = () => (
               <Route path="/monitoring" element={<Monitoring />} />
               <Route path="/audit" element={<Audit />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/prompts" element={<PromptsPage />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

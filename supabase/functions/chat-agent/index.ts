@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { buildSystemPrompt } from "../_shared/prompts/registry.ts";
+import { buildSystemPrompt, getDispatcherPrompt } from "../_shared/prompts/registry.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1275,26 +1275,10 @@ Deno.serve(async (req) => {
           console.log(`[Dispatcher] Using provider "${dispatcherProvider.name}", model: ${dispatcherModel}, url: ${dispatcherBaseUrl}`);
           debugTrace.push({ type: "dispatcher_start", provider: dispatcherProvider.name, model: dispatcherModel, tools_count: openaiTools.length, timestamp: Date.now() });
 
-        // Build dispatcher prompt — use agent-level custom prompt if available, else generic fallback
-        const customDispatcherPrompt = agentConfig.dispatcher_prompt;
-        const dispatcherSystemPrompt = customDispatcherPrompt || `You are a tool dispatcher. Your ONLY job is to analyze the user's message and the conversation context, then decide if any tools should be called.
-
-RULES:
-- Analyze the full conversation history before deciding.
-- If the user's message requires an objective data lookup that hasn't been fetched yet, call the appropriate tool.
-- If the message is conversational, a greeting, or does not require external data, DO NOT call tools.
-- Before calling any tool, check if the assistant already provided the same information earlier in the conversation. Avoid redundant calls.
-- NEVER generate conversational text. Only decide tool calls.
-- If no tools are needed, respond with exactly: "NO_TOOLS_NEEDED"
-- You may call multiple tools if needed.
-
-REGRA CRÍTICA DE CONTEXTO DE VEÍCULO:
-- Quando o cliente pedir fotos, detalhes ou mais informações SEM especificar explicitamente qual veículo, você DEVE identificar o veículo que estava sendo discutido IMEDIATAMENTE ANTES da mensagem do cliente.
-- Analise as últimas mensagens do assistente: qual veículo estava sendo apresentado/discutido? Use ESSE veículo nos filtros da ferramenta.
-- NUNCA escolha um veículo diferente do que estava sendo discutido. Se o assistente falava da S10, busque S10. Se falava do Corolla, busque Corolla.
-- Se o cliente diz "tem fotos?", "manda fotos", "quero ver" etc, ele se refere ao ÚLTIMO veículo mencionado pelo assistente na conversa.
-- PRESTE ATENÇÃO: o veículo mais recente mencionado pelo assistente é o contexto correto, NÃO qualquer outro veículo da conversa.`;
-        console.log(`[Dispatcher] Using ${customDispatcherPrompt ? "CUSTOM" : "DEFAULT"} dispatcher prompt`);
+        // Build dispatcher prompt from registry (per-tenant, managed in code)
+        const tenantSlug = (agent.tenants as any)?.slug || null;
+        const dispatcherSystemPrompt = getDispatcherPrompt(tenantSlug);
+        console.log(`[Dispatcher] Using registry prompt for tenant: ${tenantSlug || "default"}`);
 
         const dispatcherMessages = [
           { role: "system", content: dispatcherSystemPrompt },

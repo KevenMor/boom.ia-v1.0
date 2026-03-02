@@ -311,19 +311,12 @@ export default function EditAgent() {
             </Select>
           </div>
 
-          {/* Dispatcher Prompt */}
-          <div className="space-y-3">
-            <Label className="text-sm font-medium text-muted-foreground">Dispatcher Prompt (Phase 1)</Label>
-            <p className="text-xs text-muted-foreground -mt-1">
-              Instrui o modelo despachante sobre quando acionar ferramentas. Deixe vazio para usar o prompt padrão genérico.
+          {/* Dispatcher Prompt — managed in code per tenant */}
+          <div className="rounded-lg border border-dashed border-border/50 p-4">
+            <p className="text-xs text-muted-foreground">
+              <strong>Dispatcher Prompt</strong> e <strong>System Prompt de tenant</strong> são gerenciados no código.
+              Acesse <a href="/prompts" className="text-primary underline">Prompts</a> para visualizar.
             </p>
-            <Textarea
-              value={dispatcherPrompt}
-              onChange={(e) => setDispatcherPrompt(e.target.value)}
-              rows={6}
-              placeholder="You are a tool dispatcher. Your ONLY job is to analyze the user's message and decide if any tools should be called..."
-              className="rounded-lg bg-background border-border text-sm resize-y min-h-[100px]"
-            />
           </div>
         </div>
 
