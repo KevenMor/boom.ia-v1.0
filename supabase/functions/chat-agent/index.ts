@@ -1586,6 +1586,40 @@ RULES:
     finalContent = dedupeRepeatedParagraphs(finalContent);
     finalContent = removeRedundantPhotoOfferWhenPhotosPresent(finalContent);
 
+    // Inject missing photos: if tool results contain vehicles with photos, ensure they appear in content
+    if (toolResultsContext.length > 0) {
+      try {
+        for (const ctx of toolResultsContext) {
+          const parsed = JSON.parse(ctx.replace(/^\[Resultado da ferramenta "[^"]+"\]: /, ""));
+          if (parsed?.vehicles && Array.isArray(parsed.vehicles)) {
+            finalContent = appendMissingVehiclePhotos(finalContent, parsed.vehicles, latestUserText, true);
+            console.log(`[PostProcess] appendMissingVehiclePhotos applied, vehicles=${parsed.vehicles.length}`);
+          }
+        }
+      } catch (e: any) {
+        console.warn("[PostProcess] Could not extract vehicles for photo injection:", e?.message);
+      }
+    }
+
+    // Guard: strip premature closing questions (scheduling, simulation, visit) when photos are being sent
+    if (hasMarkdownImages(finalContent)) {
+      const paragraphs = finalContent.split(/\n{2,}/).map((p: string) => p.trim()).filter(Boolean);
+      const filtered = paragraphs.filter((p: string) => {
+        const norm = p.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        // Remove paragraphs that are closing/scheduling questions when photos are present
+        const isSchedulingClose = /(agendar|visita|test.?drive|simula[çc][aã]o|financiamento|quer (saber|conhecer|vir|ver presencial)|vamos marcar|bora marca|que tal)/.test(norm)
+          && /\?/.test(norm)
+          && p.length < 250;
+        return !isSchedulingClose;
+      });
+      if (filtered.length < paragraphs.length) {
+        const removed = paragraphs.length - filtered.length;
+        console.log(`[PostProcess] Stripped ${removed} premature closing question(s) — photos present`);
+        debugTrace.push({ type: "closing_question_stripped", removed_count: removed, reason: "photos_present", timestamp: Date.now() });
+        finalContent = filtered.join("\n\n").trim();
+      }
+    }
+
     // Guard: when dispatcher DID fetch tool data, only allow photo URLs that appear in the tool results.
     // This prevents the LLM from re-sending photos of previously discussed vehicles.
     if (toolResultsContext.length > 0 && hasMarkdownImages(finalContent)) {
