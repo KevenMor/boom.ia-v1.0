@@ -1507,6 +1507,56 @@ RULES:
         }
         } // close else (provider loaded successfully)
       } // close else (dispatcherProviderId exists)
+
+      // ===== PHOTO REQUEST FALLBACK =====
+      // If user asked for photos but dispatcher didn't call inventory, force a query
+      // so the conversational LLM gets photo URLs instead of inventing them
+      const photoFallbackPattern = /(foto|imagem|image|photo|manda foto|envia foto|pode enviar|enviar fotos|ver foto|ver imagem|mostra foto|mostra imagem|fotos)/i;
+      const userAskedForPhotos = photoFallbackPattern.test(latestUserText || "");
+      const hasInventoryTool = agentTools.some(t => t.tool_type === "inventory_query");
+      const dispatcherAlreadyQueriedInventory = toolResultsContext.some(r => r.includes('"total"'));
+
+      if (userAskedForPhotos && hasInventoryTool && !dispatcherAlreadyQueriedInventory) {
+        console.log("[PhotoFallback] User asked for photos but dispatcher didn't query inventory — forcing query");
+        debugTrace.push({ type: "photo_fallback_triggered", user_text: (latestUserText || "").slice(0, 120), timestamp: Date.now() });
+
+        // Extract vehicle context from recent conversation to build filters
+        const inventoryTool = agentTools.find(t => t.tool_type === "inventory_query")!;
+        // Look at the last few assistant messages for vehicle names/context
+        const recentMessages = fullMessages.slice(-8);
+        const recentContext = recentMessages.map((m: any) => m.content || "").join(" ");
+
+        // Try to extract brand/model from recent conversation using common patterns
+        const brandPatterns = /(chevrolet|toyota|honda|hyundai|volkswagen|fiat|ford|bmw|mercedes|audi|nissan|renault|jeep|haval|gwm|peugeot|citroen|mitsubishi|kia|subaru|volvo|porsche|land rover|jaguar)/i;
+        const brandMatch = recentContext.match(brandPatterns);
+        // Try to find model — look for capitalized words near price/year mentions
+        const modelPatterns = /(onix|hb20|corolla|civic|creta|tracker|t-cross|tcross|nivus|kicks|polo|virtus|compass|renegade|hilux|s10|ranger|amarok|toro|strada|saveiro|cruze|cobalt|prisma|argo|mobi|kwid|gol|up|fit|city|sentra|jetta|tucson|sportage|hr-v|hrv|cr-v|crv|rav4|duster|captur|ecosport|bronco|equinox|trailblazer|jolion|territory)/i;
+        const modelMatch = recentContext.match(modelPatterns);
+
+        // Also check if transmission was mentioned
+        const transmissionMatch = recentContext.match(/(autom[aá]tic|manual)/i);
+
+        const fallbackArgs: Record<string, string> = {};
+        if (brandMatch) fallbackArgs.marca = brandMatch[1];
+        if (modelMatch) fallbackArgs.modelo = modelMatch[1];
+        if (transmissionMatch) {
+          fallbackArgs.cambio = transmissionMatch[1].toLowerCase().startsWith("autom") ? "automático" : "manual";
+        }
+
+        console.log(`[PhotoFallback] Extracted filters: ${JSON.stringify(fallbackArgs)}`);
+        debugTrace.push({ type: "photo_fallback_filters", filters: fallbackArgs, timestamp: Date.now() });
+
+        if (Object.keys(fallbackArgs).length > 0) {
+          try {
+            const photoResult = await executeTool(inventoryTool, fallbackArgs, supabase, agent_id, latestUserText);
+            toolResultsContext.push(`[Resultado da ferramenta "consultar_estoque"]: ${photoResult}`);
+            console.log(`[PhotoFallback] Inventory query returned results`);
+            debugTrace.push({ type: "photo_fallback_result", result_length: photoResult.length, timestamp: Date.now() });
+          } catch (e: any) {
+            console.error("[PhotoFallback] Error:", e.message);
+          }
+        }
+      }
     } // close if (openaiTools)
 
     // ===== PHASE 2: CONVERSATIONAL LLM =====
