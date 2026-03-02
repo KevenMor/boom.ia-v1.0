@@ -55,6 +55,6 @@ export function useConversationMessages(agentId: string | null, conversationId: 
       return (data ?? []) as Message[];
     },
     enabled: !!agentId && !!conversationId,
-    refetchInterval: 3000,
+    refetchInterval: 1000,
   });
 }
