@@ -391,7 +391,7 @@ function splitIntoMessages(content: string): string[] {
 
   // Classify each paragraph
   type Block = { type: "text" | "images"; content: string; images?: string[] };
-  const blocks: Block[] = [];
+  const allBlocks: Block[] = [];
 
   for (const para of rawParagraphs) {
     const images: string[] = [];
@@ -402,55 +402,53 @@ function splitIntoMessages(content: string): string[] {
     const textOnly = para.replace(imgRegex, "").replace(/\n{2,}/g, "\n").trim();
 
     if (images.length > 0) {
-      // If there's caption text with images, keep it as a separate text block before images
-      if (textOnly && !isClosingQuestion(textOnly) && textOnly.length < 200) {
-        blocks.push({ type: "text", content: textOnly });
-      }
-      blocks.push({ type: "images", content: images.join("\n"), images });
-      // If the text is a closing/descriptive paragraph, push it AFTER images
-      if (textOnly && (isClosingQuestion(textOnly) || textOnly.length >= 200)) {
-        blocks.push({ type: "text", content: textOnly });
-      }
+      if (textOnly) allBlocks.push({ type: "text", content: textOnly });
+      allBlocks.push({ type: "images", content: images.join("\n"), images });
     } else if (textOnly) {
-      blocks.push({ type: "text", content: textOnly });
+      allBlocks.push({ type: "text", content: textOnly });
     }
   }
 
-  // Now check: if there are image blocks, ensure closing/descriptive text comes AFTER them
-  const hasImages = blocks.some((b) => b.type === "images");
-  if (hasImages) {
-    // Find the last image block index
-    let lastImageIdx = -1;
-    for (let i = blocks.length - 1; i >= 0; i--) {
-      if (blocks[i].type === "images") { lastImageIdx = i; break; }
-    }
+  const hasImages = allBlocks.some((b) => b.type === "images");
 
-    // Move any closing-question text blocks that are BEFORE the last image to AFTER it
-    const toMove: Block[] = [];
-    const remaining: Block[] = [];
-    for (let i = 0; i < blocks.length; i++) {
-      const b = blocks[i];
-      if (i < lastImageIdx && b.type === "text" && isClosingQuestion(b.content)) {
-        toMove.push(b);
+  // If there are images, enforce strict ordering:
+  // 1. Intro text (short text blocks BEFORE first image, max 1 block)
+  // 2. ALL image blocks consolidated together
+  // 3. ALL remaining text blocks AFTER images
+  if (hasImages) {
+    const introTexts: Block[] = [];
+    const imageBlocks: Block[] = [];
+    const afterTexts: Block[] = [];
+    let seenFirstImage = false;
+
+    for (const b of allBlocks) {
+      if (b.type === "images") {
+        seenFirstImage = true;
+        imageBlocks.push(b);
+      } else if (!seenFirstImage && b.content.length < 200) {
+        // Short intro text before any image — keep it before
+        introTexts.push(b);
       } else {
-        remaining.push(b);
+        // Everything else goes AFTER all images
+        afterTexts.push(b);
       }
     }
-    // Re-insert moved blocks after the last image
-    if (toMove.length > 0) {
-      const newLastImageIdx = remaining.findIndex((b, idx) => b.type === "images" && !remaining.slice(idx + 1).some((r) => r.type === "images"));
-      const insertAt = newLastImageIdx >= 0 ? newLastImageIdx + 1 : remaining.length;
-      remaining.splice(insertAt, 0, ...toMove);
-      blocks.length = 0;
-      blocks.push(...remaining);
+
+    // Rebuild: intro → images → after
+    allBlocks.length = 0;
+    // Only keep the LAST intro text (most relevant) to avoid too many pre-image messages
+    if (introTexts.length > 0) {
+      allBlocks.push(introTexts[introTexts.length - 1]);
     }
+    allBlocks.push(...imageBlocks);
+    allBlocks.push(...afterTexts);
   }
 
-  // Build final parts: group adjacent text blocks (up to 400 chars), batch images by 3
+  // Build final parts: batch images by 3, group adjacent text blocks (up to 400 chars)
   const parts: string[] = [];
   let pendingText = "";
 
-  for (const block of blocks) {
+  for (const block of allBlocks) {
     if (block.type === "images") {
       // Flush text before images
       if (pendingText.trim()) {
