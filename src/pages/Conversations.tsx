@@ -71,9 +71,25 @@ export default function Conversations() {
       }
       return key;
     };
+    // First pass: build a chatwoot_conversation_id → canonical key map
+    const cwConvKeyMap = new Map<number, string>();
+    for (const conv of conversations) {
+      const cwId = conv.chatwoot_conversation_id;
+      if (cwId && !cwConvKeyMap.has(cwId)) {
+        cwConvKeyMap.set(cwId, resolveContactKey(conv));
+      }
+    }
 
     for (const conv of conversations) {
-      const contactKey = resolveContactKey(conv);
+      // Use chatwoot_conversation_id to unify when available
+      let contactKey: string;
+      const cwId = conv.chatwoot_conversation_id;
+      if (cwId && cwConvKeyMap.has(cwId)) {
+        contactKey = cwConvKeyMap.get(cwId)!;
+      } else {
+        contactKey = resolveContactKey(conv);
+      }
+
       if (!idsMap.has(contactKey)) idsMap.set(contactKey, []);
       idsMap.get(contactKey)!.push(conv.id);
 
@@ -147,6 +163,14 @@ export default function Conversations() {
   };
   const initials = (conv: any) => (displayName(conv)).slice(0, 2).toUpperCase();
   const getContactKey = (conv: any) => {
+    // If this conv has a chatwoot_conversation_id, find the canonical key from our dedup map
+    const cwId = conv?.chatwoot_conversation_id;
+    if (cwId) {
+      for (const [key, ids] of contactConvIds.entries()) {
+        if (ids.includes(conv?.id)) return key;
+      }
+    }
+
     const digits = String(conv?.external_user_id ?? "").replace(/\D/g, "");
     if (digits.length >= 10) {
       const normalized = digits.startsWith("55") && digits.length >= 12 ? digits.slice(-11) : digits;
