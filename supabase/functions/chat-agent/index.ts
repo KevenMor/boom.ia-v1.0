@@ -28,8 +28,12 @@ function sanitizeLLMOutput(content: string): string {
   let text = content;
   // Remove lines like "ENVIAR_FOTOS_VEICULO: ...", "ENVIAR_FOTO: ...", etc.
   text = text.replace(/^.*ENVIAR_FOTOS?_VEICULOS?[:\s].*$/gmi, "");
+  // Remove HANDOFF_COMERCIAL command lines (should not be visible to client)
+  text = text.replace(/^.*HANDOFF_COMERCIAL.*$/gmi, "");
   // Remove other common tool artifact patterns
   text = text.replace(/^.*\b(TOOL_CALL|FUNCTION_CALL|ACTION_OUTPUT)[:\s].*$/gmi, "");
+  // Remove redundant "Como posso te chamar?" when it appears at the end and name is already known
+  text = text.replace(/\n*como posso te chamar\??\s*$/gi, "");
   // Clean up excessive newlines left behind
   text = text.replace(/\n{3,}/g, "\n\n").trim();
   return text;
