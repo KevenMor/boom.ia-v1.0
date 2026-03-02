@@ -813,7 +813,7 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         return JSON.stringify({
           total: data.length,
           _hint: isSpecificWithPhotos
-            ? "Envie TODAS as fotos do array 'photos' usando ![foto](URL). Se precisar de texto, use SOMENTE uma frase neutra e factual (ex.: 'Aqui estão as fotos desse veículo.'). PROIBIDO inventar atributos, acabamento, materiais ou equipamentos que não estejam explicitamente nos campos do veículo. NÃO faça pergunta de fechamento nesta mensagem — deixe o cliente reagir às fotos primeiro."
+            ? "Envie TODAS as fotos do array 'photos' usando ![foto](URL). Antes das fotos, escreva UMA frase curta e VARIADA (NUNCA repita 'Aqui estão as fotos'). Use variações como: 'Dá uma olhada!', 'Olha só como ela está!', 'Veja que linda!', 'Tá aqui pra você conferir!'. PROIBIDO inventar atributos, acabamento, materiais ou equipamentos que não estejam explicitamente nos campos do veículo. NÃO faça pergunta de fechamento nesta mensagem — deixe o cliente reagir às fotos primeiro."
             : `Apresente os ${data.length} veículos de forma NATURAL, como um vendedor experiente no WhatsApp. REGRAS ANTI-REPETIÇÃO: 1) NÃO repita o nome completo do carro se já mencionou antes — use apelidos curtos ("o Nivus", "o Haval", "esse aqui"). 2) Varie a estrutura das frases — cada parágrafo deve soar diferente. 3) NÃO use a mesma abertura para todos os carros. 4) Destaque algo ÚNICO de cada um (um é mais econômico, outro tem mais espaço, etc). 5) Finalize com UMA pergunta natural tipo "Algum te chamou atenção?". NÃO use listas numeradas. NÃO inclua fotos. NÃO repita dados que o cliente já sabe.`,
           vehicles: data.map((v: any) => {
             if (!isSpecificWithPhotos) {
