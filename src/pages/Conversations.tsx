@@ -55,9 +55,16 @@ export default function Conversations() {
     const contactMap = new Map<string, typeof conversations[number]>();
     // Conversations come sorted by started_at DESC, so first seen = most recent
     for (const conv of conversations) {
-      const contactKey = conv.contact_name || conv.external_user_id || conv.id;
-      // Skip entries that look like raw JSON (malformed external_user_id)
-      if (contactKey.startsWith("{") || contactKey.startsWith("[")) continue;
+      let contactKey = conv.contact_name || conv.external_user_id || conv.id;
+      // Try to extract name from JSON external_user_id instead of skipping
+      if (contactKey.startsWith("{") || contactKey.startsWith("[")) {
+        try {
+          const parsed = JSON.parse(contactKey);
+          contactKey = parsed?.name || parsed?.phone || parsed?.email || conv.id;
+        } catch {
+          contactKey = conv.id;
+        }
+      }
       if (!contactMap.has(contactKey)) {
         contactMap.set(contactKey, conv);
       } else {
