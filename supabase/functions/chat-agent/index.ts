@@ -1460,7 +1460,13 @@ RULES:
 
     // ===== PHASE 2: CONVERSATIONAL LLM =====
     // Build final messages WITH tool data injected as system context (no tool calling needed)
-    const conversationalMessages = [...fullMessages];
+    // Strip photo URLs from history to prevent LLM from regurgitating old photos
+    const conversationalMessages = fullMessages.map((msg: any) => {
+      if (msg.role === "assistant" && msg.content && hasMarkdownImages(msg.content)) {
+        return { ...msg, content: msg.content.replace(/!\[.*?\]\((https?:\/\/[^\s)]+)\)/gi, "[foto já enviada]") };
+      }
+      return msg;
+    });
 
     if (toolResultsContext.length > 0) {
       // Inject tool results as a system message so the conversational LLM has the data
@@ -1545,20 +1551,24 @@ RULES:
       }
     }
 
-    // Guard: when dispatcher did NOT fetch fresh tool data, never resend photo URLs
-    // that were already sent earlier in the same conversation context.
-    if (toolResultsContext.length === 0 && finalContent) {
-      const dedupedPhotos = removePreviouslySentPhotoBlocks(finalContent, messages as Array<{ role: string; content: string }>);
-      if (dedupedPhotos.removedCount > 0) {
-        console.log(`[Conversational] Removed ${dedupedPhotos.removedCount} previously sent photo(s) from response`);
+    // Guard: when dispatcher did NOT call any tool, NEVER allow photos in the response.
+    // The LLM may hallucinate or pull photos from conversation history.
+    if (toolResultsContext.length === 0 && finalContent && hasMarkdownImages(finalContent)) {
+      let strippedCount = 0;
+      finalContent = finalContent.replace(/!\[.*?\]\((https?:\/\/[^\s)]+)\)/gi, () => {
+        strippedCount++;
+        return "";
+      });
+      finalContent = finalContent.replace(/\n{3,}/g, "\n\n").trim();
+      if (strippedCount > 0) {
+        console.log(`[Conversational] Stripped ALL ${strippedCount} photo(s) — no tool was called, photos not allowed`);
         debugTrace.push({
-          type: "photo_dedup",
-          removed_count: dedupedPhotos.removedCount,
-          reason: "no_new_tool_results",
+          type: "photo_strip_no_tool",
+          removed_count: strippedCount,
+          reason: "no_tools_called",
           timestamp: Date.now(),
         });
       }
-      finalContent = dedupedPhotos.content;
     }
 
     // Save to memory — split into separate messages to match WhatsApp delivery
