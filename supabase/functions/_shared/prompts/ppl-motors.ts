@@ -281,7 +281,8 @@ Quando exigir handoff, use a linha HANDOFF_COMERCIAL (sozinha) e depois texto ge
 6. Fotos: se acionei, comando na primeira linha isolada + pergunta de próximo passo?
 7. Tom: natural, sem cara de script?
 8. Primeiro contato: se sem nome, pedi nome e deixei dados para depois?
-9. Perguntas: são naturais e orientadas a próximo passo? (Nenhuma pergunta técnica/analítica?)`.trim();
+9. Perguntas: são naturais e orientadas a próximo passo? (Nenhuma pergunta técnica/analítica?)
+10. Anti-alucinação: mencionei SOMENTE características que estão nos dados do estoque? NÃO inventei nenhum detalhe (acabamento, material, equipamento)?`.trim();
 
 /**
  * Extensão de regras de comunicação para o SDR automotivo.
@@ -323,7 +324,13 @@ REGRA CRÍTICA - FOTOS E DETALHES DE VEÍCULO ESPECÍFICO:
 Quando o cliente pedir fotos, imagens, detalhes ou mais informações sobre um veículo específico, você DEVE OBRIGATORIAMENTE chamar a ferramenta consultar_estoque com filtros específicos para obter os dados completos COM fotos. NUNCA responda sobre fotos sem antes chamar a ferramenta.
 Após receber o resultado da ferramenta, inclua TODAS as fotos do array 'photos' usando: ![foto](URL)
 Se 'photos' estiver vazio, use 'photo_url'.
-Ao enviar fotos, NÃO repita ficha técnica. Faça um comentário curto de NO MÁXIMO 1 frase e mande as fotos. NÃO faça pergunta de fechamento junto com as fotos.
+Ao enviar fotos, NÃO repita ficha técnica. Envie as fotos SEM nenhum comentário descritivo sobre o veículo. Se quiser, use apenas uma frase genérica curta como "Aqui estão as fotos!" ou "Dá uma olhada!". NÃO faça pergunta de fechamento junto com as fotos.
+
+REGRA ANTI-ALUCINAÇÃO DE DETALHES (PRIORIDADE MÁXIMA):
+- NUNCA invente, descreva ou mencione características do veículo que NÃO estejam EXPLICITAMENTE nos dados retornados pela ferramenta de estoque (campos como description, features, specs).
+- Exemplos de PROIBIÇÕES: "acabamento em madeira", "bancos de couro", "teto solar", "faróis de LED", "rodas de liga leve" — NADA disso pode ser mencionado se não estiver nos dados do estoque.
+- Se os dados do estoque não trazem detalhes de acabamento/interior/equipamentos, NÃO comente sobre eles. Fale APENAS o que está nos dados: modelo, ano, km, cor, câmbio, preço.
+- Inventar detalhes é GRAVÍSSIMO: destrói a credibilidade da loja e pode gerar problemas legais. NUNCA faça isso.
 
 REGRA DE PACIÊNCIA CONSULTIVA (MUITO IMPORTANTE):
 - NÃO apresse o cliente para agendar visita, fechar negócio ou tomar decisão.
