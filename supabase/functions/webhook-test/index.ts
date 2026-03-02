@@ -680,7 +680,8 @@ Deno.serve(async (req: Request) => {
     }
 
     // ---- Extra idempotency guard (covers retries across cold starts) ----
-    if (earlyConvId) {
+    // Skip dedup check for media-only messages (empty text content)
+    if (earlyConvId && userMessage) {
       const duplicated = await hasRecentDuplicateIncoming(
         supabase,
         agentId,

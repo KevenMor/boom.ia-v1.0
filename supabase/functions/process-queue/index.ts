@@ -209,12 +209,20 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    if (!finalMessage) {
+    // Allow processing if we have attachments (e.g., audio-only messages)
+    const hasAttachments = Array.isArray(attachments) && attachments.length > 0;
+    if (!finalMessage && !hasAttachments) {
       console.error("[ProcessQueue] No message to process");
       return new Response(
         JSON.stringify({ error: "No message to process" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // For audio/media-only messages, use a placeholder so the pipeline continues
+    if (!finalMessage && hasAttachments) {
+      finalMessage = "";
+      console.log(`[ProcessQueue] No text but ${attachments.length} attachment(s), proceeding`);
     }
 
     // Strip Chatwoot contact name prefix
