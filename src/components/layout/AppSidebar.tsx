@@ -65,6 +65,7 @@ const navGroups: NavGroup[] = [
     label: "Sistema",
     defaultOpen: false,
     items: [
+      { to: "/prompts", icon: FileText, label: "Prompts" },
       { to: "/monitoring", icon: Activity, label: "Monitoramento" },
       { to: "/audit", icon: FileText, label: "Auditoria" },
       { to: "/settings", icon: Settings, label: "Configurações" },
