@@ -111,23 +111,44 @@ function appendMissingVehiclePhotos(content: string, vehicles: any[], userContex
 
   if (!forceSpecificRequest && !isSpecificRequest) return content; // General listing — let LLM handle with 1 photo per car
 
-  // Rank vehicles by token overlap with user context and pick best match
-  const normalizedContext = userContext
+  // CRITICAL: Rank vehicles by overlap with the LLM RESPONSE CONTENT (not user text).
+  // The LLM response contains specific details (year, version, price) that identify which vehicle it's discussing.
+  // Using the user text caused mismatches when users say generic things like "essa mais nova".
+  const normalizedContent = content
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
 
   const scoreVehicle = (v: any) => {
+    let score = 0;
     const hay = `${v?.brand || ""} ${v?.model || ""} ${v?.version || ""}`
       .toLowerCase()
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "");
-    const tokens = hay.split(/\s+/).filter((t) => t.length >= 3);
-    return tokens.reduce((acc, token) => acc + (normalizedContext.includes(token) ? 1 : 0), 0);
+    const tokens = hay.split(/\s+/).filter((t: string) => t.length >= 3);
+    score += tokens.reduce((acc: number, token: string) => acc + (normalizedContent.includes(token) ? 1 : 0), 0);
+
+    // Bonus: match year, price, color in the LLM response for disambiguation
+    if (v?.year && normalizedContent.includes(String(v.year))) score += 3;
+    if (v?.price) {
+      const priceStr = Number(v.price).toLocaleString("pt-BR", { minimumFractionDigits: 0 });
+      if (normalizedContent.includes(priceStr) || normalizedContent.includes(String(v.price))) score += 3;
+    }
+    if (v?.color) {
+      const normColor = String(v.color).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      if (normColor.length >= 3 && normalizedContent.includes(normColor)) score += 2;
+    }
+    if (v?.version) {
+      const normVersion = String(v.version).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const versionTokens = normVersion.split(/\s+/).filter((t: string) => t.length >= 3);
+      score += versionTokens.reduce((acc: number, token: string) => acc + (normalizedContent.includes(token) ? 2 : 0), 0);
+    }
+    return score;
   };
 
   const ranked = [...vehicles].sort((a, b) => scoreVehicle(b) - scoreVehicle(a));
   const targetVehicle = ranked[0] || vehicles[0];
+  console.log(`[appendMissingVehiclePhotos] Ranked vehicles: ${ranked.map((v: any) => `${v.brand} ${v.model} ${v.year} → score=${scoreVehicle(v)}`).join(" | ")}`);
 
   if (!targetVehicle) return content;
 
