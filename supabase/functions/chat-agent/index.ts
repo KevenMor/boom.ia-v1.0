@@ -1158,20 +1158,7 @@ COMPORTAMENTO CONSULTIVO OBRIGATÓRIO:
     const greetingInstruction = `\n\nCOMPORTAMENTO DE SAUDAÇÃO:
 - Responda saudações ("bom dia", "boa tarde", "boa noite", "oi", "olá") de forma calorosa e profissional, retribuindo a saudação adequada.
 - Após a saudação, apresente-se brevemente e pergunte como pode ajudar o cliente.
-- Seja sempre cordial e humanizado.
-
-REGRA DE IDENTIFICAÇÃO DO CLIENTE (MUITO IMPORTANTE):
-- Você NÃO sabe o nome do cliente a priori. NUNCA use nomes vindos de metadados, payloads ou headers de sistemas externos (como Chatwoot, WhatsApp, etc.). Esses nomes podem estar incorretos, ser apelidos ou nomes de terceiros.
-- Se no histórico da conversa o cliente já informou o nome dele (em uma mensagem anterior dele), use esse nome normalmente.
-- Se NÃO houver histórico de conversa anterior ou o cliente nunca disse o nome dele no chat, você DEVE perguntar o nome de forma natural na primeira interação. Exemplo: "Como posso te chamar?" ou "Qual seu nome?".
-- NUNCA assuma, adivinhe ou use nomes que não foram fornecidos DIRETAMENTE pelo cliente no chat.
-
-REGRA DE NATURALIDADE NAS PERGUNTAS (MUITO IMPORTANTE):
-- NUNCA faça perguntas técnicas, analíticas ou "de consultor" como: "O que você achou dessa quilometragem para um carro desse ano?", "Esse valor está dentro do seu orçamento?", "Você considera essa motorização adequada?".
-- Essas perguntas soam robóticas e artificiais. Um vendedor real de WhatsApp NUNCA fala assim.
-- Em vez disso, use perguntas curtas, naturais e diretas que um vendedor humano faria: "Quer que eu separe pra você dar uma olhada pessoalmente?", "Posso te mandar mais fotos?", "Quer saber as condições de pagamento?", "Tem interesse em fazer um test drive?".
-- Seu objetivo é AVANÇAR a conversa em direção ao agendamento de visita ou fechamento, não fazer o cliente "refletir" sobre dados técnicos.
-- Seja sempre proativo e conduza a conversa — não fique esperando o cliente analisar. Ofereça o próximo passo.`;
+- Seja sempre cordial e humanizado.`;
     const systemPrompt = (agent.system_prompt || "You are a helpful AI assistant.") + photoInstruction + greetingInstruction;
     const startTime = Date.now();
     console.log(`LLM config: temperature=${temperature}, top_p=${top_p}, top_k=${top_k}, isGemini=${isGemini}`);
