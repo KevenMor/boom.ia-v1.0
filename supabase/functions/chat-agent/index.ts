@@ -932,15 +932,22 @@ Deno.serve(async (req) => {
     const lastUserMsg = messages[messages.length - 1];
     if (convId && lastUserMsg?.role === "user") {
       try {
-        await supabase.rpc("save_message", {
+        const { data: savedUserMsg, error: saveUserErr } = await supabase.rpc("save_message", {
           p_agent_id: agent_id,
           p_conversation_id: convId,
           p_role: "user",
           p_content: lastUserMsg.content,
         });
-      } catch (e) {
-        console.warn("Could not save user message:", e);
+        if (saveUserErr) {
+          console.error("[SaveUser] FAILED:", saveUserErr.message, saveUserErr.details, saveUserErr.hint);
+        } else {
+          console.log("[SaveUser] OK, msg_id:", savedUserMsg, "conv:", convId, "content_len:", lastUserMsg.content?.length);
+        }
+      } catch (e: any) {
+        console.error("[SaveUser] EXCEPTION:", e?.message || e);
       }
+    } else {
+      console.warn("[SaveUser] SKIPPED: convId=", convId, "lastRole=", lastUserMsg?.role);
     }
 
     // 5. Determine endpoint
