@@ -73,47 +73,71 @@ Deno.serve(async (req) => {
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Find matching model (fuzzy)
-    let matchedModel = models.find(m => fuzzyIncludes(m.name, modelo));
-    if (!matchedModel) {
-      const firstToken = normalize(modelo).split(" ")[0];
-      const partials = models.filter(m => normalize(m.name).includes(firstToken));
-      if (partials.length === 1) {
-        matchedModel = partials[0];
-      } else if (partials.length > 1) {
-        // Pick best match by token overlap
-        matchedModel = partials[0];
-      } else {
-        return new Response(JSON.stringify({
-          error: `Modelo "${modelo}" não encontrado para ${matchedBrand.name}`,
-          sugestoes: models.slice(0, 20).map(m => m.name),
-        }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    // Find matching model (fuzzy) — collect ALL candidates
+    const allMatchingModels = models.filter(m => fuzzyIncludes(m.name, modelo));
+    let candidates = allMatchingModels.length > 0 ? allMatchingModels : [];
+
+    if (candidates.length === 0) {
+      const normalizedModelo = normalize(modelo);
+      const tokens = normalizedModelo.split(" ").filter(t => t.length >= 2);
+      candidates = models.filter(m => {
+        const nm = normalize(m.name);
+        return tokens.every(t => nm.includes(t));
+      });
+      if (candidates.length === 0 && tokens.length > 0) {
+        candidates = models.filter(m => normalize(m.name).includes(tokens[0]));
       }
     }
 
-    // Step 3: Get years
-    const years: { code: string; name: string }[] = await fipeFetch(`/${vehicleType}/brands/${matchedBrand.code}/models/${matchedModel.code}/years`);
+    if (candidates.length === 0) {
+      return new Response(JSON.stringify({
+        error: `Modelo "${modelo}" não encontrado para ${matchedBrand.name}`,
+        sugestoes: models.slice(0, 20).map(m => m.name),
+      }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     if (ano) {
-      // Find matching year
-      const matchedYear = years.find(y => y.name.includes(String(ano)) || y.code.includes(String(ano)));
-      if (!matchedYear) {
-        return new Response(JSON.stringify({
-          error: `Ano ${ano} não encontrado para ${matchedBrand.name} ${matchedModel.name}`,
-          anos_disponiveis: years.map(y => y.name),
-        }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      // Check candidates in batches of 5 (parallel within batch, sequential between batches)
+      const batchSize = 5;
+      const checked: string[] = [];
+      for (let i = 0; i < candidates.length; i += batchSize) {
+        const batch = candidates.slice(i, i + batchSize);
+        const results = await Promise.allSettled(
+          batch.map(async (candidate) => {
+            const years: { code: string; name: string }[] = await fipeFetch(`/${vehicleType}/brands/${matchedBrand.code}/models/${candidate.code}/years`);
+            const matchedYear = years.find(y => y.name.includes(String(ano)) || y.code.includes(String(ano)));
+            return matchedYear ? { candidate, matchedYear } : null;
+          })
+        );
+        for (let j = 0; j < results.length; j++) {
+          const r = results[j];
+          checked.push(batch[j].name);
+          if (r.status === "fulfilled" && r.value) {
+            // Found! Fetch price
+            const { candidate, matchedYear } = r.value;
+            const priceData = await fipeFetch(`/${vehicleType}/brands/${matchedBrand.code}/models/${candidate.code}/years/${matchedYear.code}`);
+            return new Response(JSON.stringify({
+              marca: matchedBrand.name,
+              modelo: candidate.name,
+              ano: matchedYear.name,
+              resultado: priceData,
+            }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+        }
       }
 
-      // Step 4: Get price
-      const priceData = await fipeFetch(`/${vehicleType}/brands/${matchedBrand.code}/models/${matchedModel.code}/years/${matchedYear.code}`);
-
       return new Response(JSON.stringify({
-        marca: matchedBrand.name,
-        modelo: matchedModel.name,
-        ano: matchedYear.name,
-        resultado: priceData,
-      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        error: `Ano ${ano} não encontrado para "${modelo}" da ${matchedBrand.name}`,
+        modelos_verificados: checked,
+      }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+
+    // No year — use shortest candidate
+    candidates.sort((a, b) => a.name.length - b.name.length);
+
+    // No year provided — use first (shortest) candidate
+    const matchedModel = candidates[0];
+    const years: { code: string; name: string }[] = await fipeFetch(`/${vehicleType}/brands/${matchedBrand.code}/models/${matchedModel.code}/years`);
 
     // No year — return all years with prices (fetch top 3 for convenience)
     const topYears = years.slice(0, 5);
