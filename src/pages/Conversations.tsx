@@ -47,10 +47,23 @@ export default function Conversations() {
     const idsMap = new Map<string, string[]>();
 
     const resolveContactKey = (conv: (typeof conversations)[number]) => {
+      const normalizePhoneKey = (v: unknown) => {
+        const digits = String(v ?? "").replace(/\D/g, "");
+        if (digits.length < 10) return null;
+        // normalize BR with/without country code (55)
+        if (digits.startsWith("55") && digits.length >= 12) return digits.slice(-11);
+        return digits;
+      };
+
+      const phoneKey = normalizePhoneKey(conv.external_user_id);
+      if (phoneKey) return `phone:${phoneKey}`;
+
       let key = conv.contact_name || conv.external_user_id || conv.id;
       if (key.startsWith("{") || key.startsWith("[")) {
         try {
           const parsed = JSON.parse(key);
+          const parsedPhoneKey = normalizePhoneKey(parsed?.phone || parsed?.phone_number || parsed?.identifier);
+          if (parsedPhoneKey) return `phone:${parsedPhoneKey}`;
           key = parsed?.name || parsed?.phone || parsed?.email || conv.id;
         } catch {
           key = conv.id;
@@ -134,9 +147,25 @@ export default function Conversations() {
   };
   const initials = (conv: any) => (displayName(conv)).slice(0, 2).toUpperCase();
   const getContactKey = (conv: any) => {
+    const digits = String(conv?.external_user_id ?? "").replace(/\D/g, "");
+    if (digits.length >= 10) {
+      const normalized = digits.startsWith("55") && digits.length >= 12 ? digits.slice(-11) : digits;
+      return `phone:${normalized}`;
+    }
+
     let key = conv?.contact_name || conv?.external_user_id || conv?.id;
     if (key && (key.startsWith("{") || key.startsWith("["))) {
-      try { const p = JSON.parse(key); key = p?.name || p?.phone || p?.email || conv?.id; } catch { key = conv?.id; }
+      try {
+        const p = JSON.parse(key);
+        const pDigits = String(p?.phone || p?.phone_number || p?.identifier || "").replace(/\D/g, "");
+        if (pDigits.length >= 10) {
+          const normalized = pDigits.startsWith("55") && pDigits.length >= 12 ? pDigits.slice(-11) : pDigits;
+          return `phone:${normalized}`;
+        }
+        key = p?.name || p?.phone || p?.email || conv?.id;
+      } catch {
+        key = conv?.id;
+      }
     }
     return key;
   };
