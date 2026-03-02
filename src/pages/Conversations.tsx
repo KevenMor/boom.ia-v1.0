@@ -100,7 +100,17 @@ export default function Conversations() {
     (msg) => !!msg.metadata?.debug?.length || !!msg.metadata?.edge_logs?.length
   );
 
-  const displayName = (conv: any) => conv?.contact_name || conv?.external_user_id || "Anônimo";
+  const displayName = (conv: any) => {
+    if (conv?.contact_name) return conv.contact_name;
+    const ext = conv?.external_user_id;
+    if (ext && (ext.startsWith("{") || ext.startsWith("["))) {
+      try {
+        const parsed = JSON.parse(ext);
+        return parsed?.name || parsed?.phone || parsed?.email || "Anônimo";
+      } catch { /* ignore */ }
+    }
+    return ext || "Anônimo";
+  };
   const initials = (conv: any) => (displayName(conv)).slice(0, 2).toUpperCase();
 
   const normalizePhone = (value: string) => value.replace(/\D/g, "");
