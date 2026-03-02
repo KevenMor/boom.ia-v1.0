@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from "react";
-import { MessageSquare, Bot, ArrowLeft, Search, Send, Paperclip, Smile, CheckCheck, Bug } from "lucide-react";
+import { MessageSquare, Bot, ArrowLeft, Search, Send, Paperclip, Smile, CheckCheck, Bug, Trash2 } from "lucide-react";
 import { DebugBlock } from "@/components/sandbox/DebugBlock";
+import { cloudClient } from "@/integrations/supabase/cloud-client";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -37,6 +40,8 @@ export default function Conversations() {
   const [selectedContactKey, setSelectedContactKey] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [showDebug, setShowDebug] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const queryClient = useQueryClient();
 
   const { data: conversations, isLoading: convsLoading } = useConversations(selectedAgentId);
 
@@ -149,6 +154,27 @@ export default function Conversations() {
   const hasDebugData = (messages ?? []).some(
     (msg) => !!msg.metadata?.debug?.length || !!msg.metadata?.edge_logs?.length
   );
+
+  const handleClearConversation = async () => {
+    if (!selectedConvIds.length) return;
+    const name = displayName(selectedConv);
+    if (!confirm(`Tem certeza que deseja apagar todo o histórico de "${name}"? Essa ação não pode ser desfeita.`)) return;
+    setClearing(true);
+    try {
+      const { data, error } = await cloudClient.functions.invoke("clear-conversations", {
+        body: { conversation_ids: selectedConvIds },
+      });
+      if (error) throw error;
+      toast.success(`Histórico limpo: ${data.deleted_messages} mensagens removidas`);
+      setSelectedContactKey(null);
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["multi-conversation-messages"] });
+    } catch (e: any) {
+      toast.error("Erro ao limpar histórico: " + (e?.message || "erro desconhecido"));
+    } finally {
+      setClearing(false);
+    }
+  };
 
   const displayName = (conv: any) => {
     if (conv?.contact_name) return conv.contact_name;
@@ -460,6 +486,16 @@ export default function Conversations() {
                     aria-pressed={showDebug}
                   >
                     <Bug className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                    onClick={handleClearConversation}
+                    disabled={clearing}
+                    title="Limpar histórico deste contato"
+                  >
+                    <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
 
