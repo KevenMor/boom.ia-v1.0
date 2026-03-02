@@ -416,15 +416,44 @@ export default function Conversations() {
                               );
                             }
 
+                            // Split assistant messages into separate bubbles (like WhatsApp)
+                            const bubbles: { text: string; images: string[] }[] = [];
+                            if (!isUser) {
+                              // Split by double newlines to create separate bubbles
+                              const paragraphs = (msg.content || "").split(/\n\n+/);
+                              let currentBubble = { text: "", images: [] as string[] };
+                              for (const para of paragraphs) {
+                                const { text: pText, images: pImages } = extractImages(para);
+                                if (pImages.length > 0) {
+                                  // Flush current text bubble if any
+                                  if (currentBubble.text.trim()) {
+                                    bubbles.push({ ...currentBubble });
+                                    currentBubble = { text: "", images: [] };
+                                  }
+                                  // Group images (up to 3 per bubble like WhatsApp)
+                                  for (let i = 0; i < pImages.length; i += 3) {
+                                    bubbles.push({ text: pText && i === 0 ? pText : "", images: pImages.slice(i, i + 3) });
+                                  }
+                                } else if (pText.trim()) {
+                                  currentBubble.text += (currentBubble.text ? "\n\n" : "") + pText;
+                                }
+                              }
+                              if (currentBubble.text.trim()) bubbles.push(currentBubble);
+                              if (bubbles.length === 0 && text) bubbles.push({ text, images });
+                            } else {
+                              bubbles.push({ text, images });
+                            }
+
                             return (
-                              <div key={msg.id}>
+                              <div key={msg.id} className="space-y-1.5">
                                 {/* Debug block before assistant messages */}
                                 {!isUser && !isSystem && showDebug && (msg.metadata?.debug?.length || msg.metadata?.edge_logs?.length) && (
                                   <div className="flex justify-end mb-1">
                                     <DebugBlock debug={msg.metadata?.debug ?? []} edgeLogs={msg.metadata?.edge_logs} />
                                   </div>
                                 )}
-                              <div className={cn("flex", isUser ? "justify-start" : "justify-end")}>
+                                {bubbles.map((bubble, bIdx) => (
+                              <div key={`${msg.id}-${bIdx}`} className={cn("flex", isUser ? "justify-start" : "justify-end")}>
                               <div className="max-w-[75%]">
                                   <div
                                     className={cn(
@@ -435,9 +464,9 @@ export default function Conversations() {
                                     )}
                                   >
                                     {/* Images */}
-                                    {images.length > 0 && (
+                                    {bubble.images.length > 0 && (
                                       <div className="mb-1.5 grid gap-1 grid-cols-1">
-                                        {images.map((img, idx) => (
+                                        {bubble.images.map((img, idx) => (
                                           <a key={idx} href={img} target="_blank" rel="noopener noreferrer">
                                             <img
                                               src={img}
@@ -451,7 +480,7 @@ export default function Conversations() {
                                     )}
 
                                     {/* Text */}
-                                    {text && (
+                                    {bubble.text && (
                                       <div className="prose prose-sm max-w-none [&_p]:m-0 [&_p]:leading-relaxed">
                                         <ReactMarkdown
                                           components={{
@@ -464,13 +493,14 @@ export default function Conversations() {
                                             strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
                                           }}
                                         >
-                                          {text}
+                                          {bubble.text}
                                         </ReactMarkdown>
                                       </div>
                                     )}
                                   </div>
 
-                                  {/* Timestamp */}
+                                  {/* Timestamp only on last bubble */}
+                                  {bIdx === bubbles.length - 1 && (
                                   <div className={cn(
                                     "mt-1 flex items-center gap-1 px-1",
                                     isUser ? "justify-start" : "justify-end"
@@ -485,8 +515,10 @@ export default function Conversations() {
                                       <span className="text-[9px] text-muted-foreground font-mono">{msg.model.split("/").pop()}</span>
                                     )}
                                   </div>
+                                  )}
                                 </div>
                               </div>
+                                ))}
                               </div>
                             );
                           })}
