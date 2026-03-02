@@ -1129,7 +1129,17 @@ COMPORTAMENTO CONSULTIVO OBRIGATÓRIO:
     // ---------- OpenAI-compatible path with Tool Dispatcher Architecture ----------
     // Phase 1: Tool Dispatcher (cheap LLM good at tool calling) decides which tools to use
     // Phase 2: Conversational LLM (agent's configured model) generates response with tool data as context
-    const fullMessages = [{ role: "system", content: systemPrompt }, ...messages];
+
+    // Sanitize history: replace photo URLs with markers so LLM doesn't reproduce old photos
+    const sanitizedMessages = messages.map((m: any) => {
+      if (m.role === "assistant" && m.content && /!\[.*?\]\(https?:\/\//.test(m.content)) {
+        const cleaned = m.content.replace(/!\[.*?\]\((https?:\/\/[^\s)]+)\)/gi, "[foto já enviada anteriormente]");
+        return { ...m, content: cleaned };
+      }
+      return m;
+    });
+
+    const fullMessages = [{ role: "system", content: systemPrompt }, ...sanitizedMessages];
     const latestUserText = String(lastUserMsg?.content || "");
     const debugTrace: any[] = [];
 

@@ -90,6 +90,14 @@ export default function Conversations() {
   const displayName = (conv: any) => conv?.contact_name || conv?.external_user_id || "Anônimo";
   const initials = (conv: any) => (displayName(conv)).slice(0, 2).toUpperCase();
 
+  const getPhoneDisplay = (conv: any) => {
+    // Try external_user_id first (often contains phone from Chatwoot)
+    if (isLikelyPhone(conv?.external_user_id)) return formatPhone(conv.external_user_id);
+    // Try contact_name if it looks like a phone
+    if (isLikelyPhone(conv?.contact_name)) return formatPhone(conv.contact_name);
+    return null;
+  };
+
   const normalizePhone = (value: string) => value.replace(/\D/g, "");
   const isLikelyPhone = (value?: string | null) => {
     if (!value) return false;
@@ -293,9 +301,7 @@ export default function Conversations() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold truncate">{displayName(selectedConv)}</p>
                     <p className="text-xs text-muted-foreground">
-                      {isLikelyPhone(selectedConv?.external_user_id)
-                        ? formatPhone(selectedConv?.external_user_id)
-                        : "Telefone não informado"}
+                      {getPhoneDisplay(selectedConv) || "Telefone não informado"}
                     </p>
                   </div>
                   <Badge variant="outline" className="text-[9px] font-mono shrink-0">
