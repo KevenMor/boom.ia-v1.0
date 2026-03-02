@@ -405,7 +405,23 @@ function splitIntoMessages(content: string): string[] {
       if (textOnly) allBlocks.push({ type: "text", content: textOnly });
       allBlocks.push({ type: "images", content: images.join("\n"), images });
     } else if (textOnly) {
-      allBlocks.push({ type: "text", content: textOnly });
+      // Split long text paragraphs into sentence-level blocks for shorter WhatsApp bubbles
+      if (textOnly.length > 250) {
+        // Split by sentence boundaries (. ! ?)
+        const sentences = textOnly.match(/[^.!?]+[.!?]+\s*/g) || [textOnly];
+        let chunk = "";
+        for (const s of sentences) {
+          if (chunk && (chunk.length + s.length > 250)) {
+            allBlocks.push({ type: "text", content: chunk.trim() });
+            chunk = s;
+          } else {
+            chunk += s;
+          }
+        }
+        if (chunk.trim()) allBlocks.push({ type: "text", content: chunk.trim() });
+      } else {
+        allBlocks.push({ type: "text", content: textOnly });
+      }
     }
   }
 
@@ -461,8 +477,8 @@ function splitIntoMessages(content: string): string[] {
         parts.push(imgs.slice(i, i + 3).join("\n"));
       }
     } else {
-      // Group short text; flush when > 400 chars
-      if (pendingText && (pendingText.length + block.content.length > 400)) {
+      // Group short text; flush when > 250 chars for WhatsApp-like short bubbles
+      if (pendingText && (pendingText.length + block.content.length > 250)) {
         parts.push(pendingText.trim());
         pendingText = block.content;
       } else {
@@ -1079,16 +1095,17 @@ Deno.serve(async (req) => {
     const photoInstruction = agentTools.some(t => t.tool_type === "inventory_query")
       ? `\n\nREGRAS OBRIGATÓRIAS DE COMUNICAÇÃO (SDR humanizado):
 
-REGRA DE BREVIDADE (PRIORIDADE MÁXIMA):
-- Suas respostas devem ser CURTAS e DIRETAS, como mensagens de WhatsApp reais.
-- Máximo de 2-3 frases por parágrafo. Clientes têm preguiça de ler textos longos.
-- Quando listar veículos: NO MÁXIMO 2 linhas por carro (modelo, ano, preço, km — sem ficha técnica).
-- NUNCA escreva parágrafos com mais de 3 linhas.
-- Quando enviar fotos: um comentário curto de 1 frase + as fotos. Sem descrição longa.
-- Se o cliente perguntar algo simples, responda em 1-2 frases. Não enrole.
-- Prefira emojis a frases longas para transmitir entusiasmo.
-- Exemplo BOM: "Esse Nivus 2024 tá impecável, 39 mil km por R$ 119.900 😍"
+REGRA DE BREVIDADE (PRIORIDADE ABSOLUTA — ACIMA DE TUDO):
+- CADA MENSAGEM deve ter NO MÁXIMO 2-3 frases curtas. Se passar disso, PARE e quebre em outro parágrafo.
+- Pense que você está digitando no WhatsApp: ninguém lê blocos de texto. Seja TELEGRÁFICA.
+- Máximo de 1 linha por veículo na listagem (modelo, ano, preço, km — nada mais).
+- Quando enviar fotos: NO MÁXIMO 1 frase curta + as fotos. Zero descrição.
+- Perguntas simples = resposta de 1 frase. NUNCA enrole.
+- Use emojis no lugar de adjetivos longos.
+- LIMITE RÍGIDO: cada parágrafo não pode ter mais de 2 frases ou 150 caracteres (o que vier primeiro).
+- Exemplo BOM: "Esse Nivus 2024 tá novinho, 39 mil km por R$ 119.900 😍"
 - Exemplo RUIM: "Temos aqui um excelente Volkswagen Nivus 1.0 200 TSI Highline do ano de 2024, na cor branco, com câmbio automático, flex, que possui apenas 39.000 quilômetros rodados, e está sendo oferecido pelo valor de R$ 119.900,00."
+- SE VOCÊ ESCREVER MAIS DE 4 FRASES EM UMA ÚNICA RESPOSTA (exceto listagem de múltiplos veículos), ESTÁ ERRADO.
 
 FORMATO DE RESPOSTA PARA LISTAGEM DE VEÍCULOS:
 Sua resposta DEVE ser separada em parágrafos distintos (separados por linha em branco) assim:
