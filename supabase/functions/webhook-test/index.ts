@@ -97,20 +97,86 @@ async function sendChatwootImageMessage(
   }
 }
 
-// ---------- Chatwoot reply ----------
+// ---------- Chatwoot typing indicator ----------
+async function setChatwootTyping(
+  chatwootUrl: string,
+  apiToken: string,
+  accountId: string,
+  conversationId: number,
+  status: "on" | "off"
+): Promise<void> {
+  try {
+    const baseUrl = chatwootUrl.replace(/\/+$/, "");
+    const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}/toggle_typing_status`;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", api_access_token: apiToken },
+      body: JSON.stringify({ typing_status: status }),
+    });
+    if (!resp.ok) {
+      console.warn(`[Chatwoot] Typing ${status} failed ${resp.status}`);
+    }
+  } catch (e) {
+    console.warn(`[Chatwoot] Typing ${status} error:`, e);
+  }
+}
+
+// ---------- Humanization helpers ----------
+function applyJitter(ms: number): number {
+  // ±30% random jitter
+  const jitter = 0.7 + Math.random() * 0.6; // 0.7 to 1.3
+  return Math.round(ms * jitter);
+}
+
+interface HumanizationConfig {
+  readDelayMs: number;
+  typingDelayMs: number;
+  blockGapMs: number;
+}
+
+function getHumanizationConfig(cfg: Record<string, any>): HumanizationConfig {
+  return {
+    readDelayMs: Number(cfg.read_delay_ms) || 0,
+    typingDelayMs: Number(cfg.typing_delay_ms) || 0,
+    blockGapMs: Number(cfg.block_gap_ms) || 0,
+  };
+}
+
+// ---------- Chatwoot reply (with humanized delays + typing indicator) ----------
 async function replyToChatwoot(
   chatwootUrl: string,
   apiToken: string,
   accountId: string,
   conversationId: number,
   content: string,
-  messageParts: string[]
+  messageParts: string[],
+  humanization: HumanizationConfig = { readDelayMs: 0, typingDelayMs: 0, blockGapMs: 0 }
 ) {
   const baseUrl = chatwootUrl.replace(/\/+$/, "");
-  const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}/messages`;
+  const msgUrl = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}/messages`;
   const parts = messageParts.length > 0 ? messageParts : [content];
 
-  console.log(`[Chatwoot] Sending ${parts.length} message(s) to conv ${conversationId}`);
+  console.log(`[Chatwoot] Sending ${parts.length} message(s) to conv ${conversationId} | delays: read=${humanization.readDelayMs}ms typing=${humanization.typingDelayMs}ms gap=${humanization.blockGapMs}ms`);
+
+  // Time budget: Edge Functions have a 30s limit. Reserve time for message delivery.
+  const startTime = Date.now();
+  const MAX_DELAY_BUDGET_MS = 22000; // 22s max for delays, leave 8s for actual API calls
+
+  const hasTimeBudget = () => (Date.now() - startTime) < MAX_DELAY_BUDGET_MS;
+
+  const safeDelay = async (ms: number) => {
+    if (ms <= 0 || !hasTimeBudget()) return;
+    const capped = Math.min(ms, MAX_DELAY_BUDGET_MS - (Date.now() - startTime));
+    if (capped <= 0) return;
+    await new Promise(resolve => setTimeout(resolve, capped));
+  };
+
+  // 1) Initial "read" delay — agent reads the message before typing
+  if (humanization.readDelayMs > 0 && hasTimeBudget()) {
+    const readDelay = applyJitter(humanization.readDelayMs);
+    console.log(`[Humanize] Read delay: ${readDelay}ms`);
+    await safeDelay(readDelay);
+  }
 
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i];
@@ -118,35 +184,53 @@ async function replyToChatwoot(
 
     const { textOnly, imageUrls } = extractImagesFromMarkdown(part);
 
+    // 2) Show "typing..." indicator before each text block
+    if (textOnly.trim() && humanization.typingDelayMs > 0 && hasTimeBudget()) {
+      await setChatwootTyping(chatwootUrl, apiToken, accountId, conversationId, "on");
+      const typingDelay = applyJitter(humanization.typingDelayMs);
+      console.log(`[Humanize] Typing delay (part ${i + 1}): ${typingDelay}ms`);
+      await safeDelay(typingDelay);
+    }
+
     // Send text portion (if any)
     if (textOnly.trim()) {
-      const ok = await sendChatwootTextMessage(url, apiToken, textOnly.trim());
+      const ok = await sendChatwootTextMessage(msgUrl, apiToken, textOnly.trim());
       console.log(`[Chatwoot] Part ${i + 1} text: ${ok ? "OK" : "FAIL"}`);
+      // Turn off typing after sending
+      if (humanization.typingDelayMs > 0) {
+        await setChatwootTyping(chatwootUrl, apiToken, accountId, conversationId, "off");
+      }
     }
 
     // Send each image as attachment
     for (let j = 0; j < imageUrls.length; j++) {
       const caption = j === 0 && !textOnly.trim() ? "" : "";
-      const ok = await sendChatwootImageMessage(url, apiToken, imageUrls[j], caption);
+      const ok = await sendChatwootImageMessage(msgUrl, apiToken, imageUrls[j], caption);
       console.log(`[Chatwoot] Part ${i + 1} image ${j + 1}/${imageUrls.length}: ${ok ? "OK" : "FAIL"}`);
     }
 
-    // After sending images, add a short delay so WhatsApp delivers photos before follow-up text
-    // Keep delays SHORT to stay within Edge Function 30s timeout
+    // After sending images, short delay for WhatsApp to deliver them before next text
     if (imageUrls.length > 0) {
       const nextPartIndex = i + 1;
       const hasMoreAfter = nextPartIndex < parts.length && parts.slice(nextPartIndex).some(p => p?.trim());
-      if (hasMoreAfter) {
-        // 1.5s per photo, min 2s, max 5s — must fit within 30s total execution
+      if (hasMoreAfter && hasTimeBudget()) {
         const photoDelay = Math.min(5000, Math.max(2000, imageUrls.length * 1500));
         console.log(`[Chatwoot] Waiting ${photoDelay}ms after ${imageUrls.length} photo(s) before next part`);
-        await new Promise(resolve => setTimeout(resolve, photoDelay));
+        await safeDelay(photoDelay);
       }
     }
 
     // If no text and no images, send as-is
     if (!textOnly.trim() && imageUrls.length === 0) {
-      await sendChatwootTextMessage(url, apiToken, part.trim());
+      await sendChatwootTextMessage(msgUrl, apiToken, part.trim());
+    }
+
+    // 3) Block gap delay between parts (not after the last one)
+    const isLastPart = i === parts.length - 1;
+    if (!isLastPart && humanization.blockGapMs > 0 && hasTimeBudget()) {
+      const gapDelay = applyJitter(humanization.blockGapMs);
+      console.log(`[Humanize] Block gap (after part ${i + 1}): ${gapDelay}ms`);
+      await safeDelay(gapDelay);
     }
   }
 }
@@ -722,14 +806,16 @@ Deno.serve(async (req: Request) => {
     const hasChatwootConfig = !!(cfg.chatwoot_url && cfg.chatwoot_api_token && cfg.chatwoot_account_id);
 
     if (chatwoot.isChatwoot && chatwootConversationId && hasChatwootConfig) {
-      console.log(`[Webhook] → Replying to Chatwoot conv ${chatwootConversationId}`);
+      const humanization = getHumanizationConfig(cfg);
+      console.log(`[Webhook] → Replying to Chatwoot conv ${chatwootConversationId} (humanization: ${JSON.stringify(humanization)})`);
       await replyToChatwoot(
         cfg.chatwoot_url,
         cfg.chatwoot_api_token,
         cfg.chatwoot_account_id,
         chatwootConversationId,
         fullContent.trim(),
-        responseParts
+        responseParts,
+        humanization
       );
     }
 
