@@ -900,6 +900,42 @@ function toolsToOpenAI(tools: ToolDef[]) {
   });
 }
 
+// ---------- usage event helper ----------
+async function recordUsageEvent(
+  supabaseAdmin: any,
+  params: {
+    tenant_id: string;
+    agent_id: string;
+    conversation_id?: string;
+    provider: string;
+    model: string;
+    prompt_tokens: number;
+    completion_tokens: number;
+    latency_ms?: number;
+    tool_calls_count: number;
+    phase: "dispatcher" | "conversational";
+  }
+) {
+  try {
+    await supabaseAdmin
+      .from("usage_events")
+      .insert({
+        tenant_id: params.tenant_id,
+        agent_id: params.agent_id,
+        conversation_id: params.conversation_id || null,
+        provider: params.provider,
+        model: params.model,
+        prompt_tokens: params.prompt_tokens,
+        completion_tokens: params.completion_tokens,
+        latency_ms: params.latency_ms ?? null,
+        tool_calls_count: params.tool_calls_count,
+        phase: params.phase,
+      });
+  } catch (e: any) {
+    console.warn("[UsageEvent] Failed to record:", e?.message || e);
+  }
+}
+
 // ---------- main ----------
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -922,6 +958,7 @@ Deno.serve(async (req) => {
     const encryptionKey = Deno.env.get("ENCRYPTION_KEY");
     const nexusUrl = Deno.env.get("NEXUS_DB_URL");
     const nexusKey = Deno.env.get("NEXUS_DB_ANON_KEY");
+    const nexusServiceKey = Deno.env.get("NEXUS_SERVICE_ROLE_KEY");
 
     if (!encryptionKey || !nexusUrl || !nexusKey) {
       return new Response(JSON.stringify({ error: "Missing server configuration" }), {
@@ -933,6 +970,10 @@ Deno.serve(async (req) => {
     const supabase = createClient(nexusUrl, nexusKey, {
       global: { headers: authHeader ? { Authorization: authHeader } : {} },
     });
+    // Service-role client for usage_events inserts (bypasses RLS)
+    const supabaseAdmin = nexusServiceKey
+      ? createClient(nexusUrl, nexusServiceKey)
+      : supabase;
 
     const { agent_id, messages, conversation_id } = await req.json();
 
@@ -1323,6 +1364,18 @@ RULES:
 
             if (dispatchUsage) {
               console.log(`[Dispatcher] Tokens: prompt=${dispatchUsage.prompt_tokens}, completion=${dispatchUsage.completion_tokens}, total=${dispatchUsage.total_tokens}`);
+              // Record dispatcher usage event
+              recordUsageEvent(supabaseAdmin, {
+                tenant_id: agent.tenant_id,
+                agent_id: agent_id,
+                conversation_id: convId,
+                provider: dispatcherProvider.name,
+                model: dispatcherModel,
+                prompt_tokens: dispatchUsage.prompt_tokens || 0,
+                completion_tokens: dispatchUsage.completion_tokens || 0,
+                tool_calls_count: dispatchChoice?.message?.tool_calls?.length || 0,
+                phase: "dispatcher",
+              });
             }
 
             if (!dispatchChoice) {
@@ -1512,6 +1565,20 @@ RULES:
         completion_tokens: convUsage.completion_tokens,
         total_tokens: convUsage.total_tokens,
         timestamp: Date.now(),
+      });
+      // Record conversational usage event
+      const convLatency = Date.now() - startTime;
+      recordUsageEvent(supabaseAdmin, {
+        tenant_id: agent.tenant_id,
+        agent_id: agent_id,
+        conversation_id: convId,
+        provider: provider.name,
+        model,
+        prompt_tokens: convUsage.prompt_tokens || 0,
+        completion_tokens: convUsage.completion_tokens || 0,
+        latency_ms: convLatency,
+        tool_calls_count: 0,
+        phase: "conversational",
       });
     }
 
