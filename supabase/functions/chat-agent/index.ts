@@ -1654,14 +1654,46 @@ Deno.serve(async (req) => {
               if (matchedTool) {
                 const isInventoryTool = matchedTool.tool_type === "inventory_query";
                 if (isInventoryTool) {
+                  // === SKIP IF PHOTOS ALREADY SENT FOR THIS VEHICLE ===
+                  // Check if assistant already sent photos of this specific vehicle in history
+                  const queryVehicle = (toolArgs.modelo || toolArgs.model || toolArgs.search || toolArgs.marca || toolArgs.brand || "").toLowerCase().trim();
+                  if (queryVehicle) {
+                    const alreadySentPhotos = messages.some((m: any) => {
+                      if (m.role !== "assistant" || !m.content) return false;
+                      const hasPhotos = /!\[.*?\]\(https?:\/\//.test(m.content) || /\[foto já enviada anteriormente\]/.test(m.content);
+                      if (!hasPhotos) return false;
+                      const normalizedContent = m.content.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                      const queryTokens = queryVehicle.split(/\s+/).filter((t: string) => t.length >= 3);
+                      const matchCount = queryTokens.filter((t: string) => normalizedContent.includes(t)).length;
+                      return matchCount >= Math.max(1, queryTokens.length * 0.5);
+                    });
+
+                    if (alreadySentPhotos) {
+                      console.log(`[Dispatcher] Skipping redundant inventory_query for "${queryVehicle}" — photos already sent in history`);
+                      debugTrace.push({
+                        type: "dispatcher_tool_skipped",
+                        tool: toolName,
+                        reason: "photos_already_sent_for_vehicle",
+                        vehicle: queryVehicle,
+                        args: toolArgs,
+                        timestamp: Date.now(),
+                      });
+                      // Return empty result so dispatcher loop continues
+                      currentDispatchMessages.push({
+                        role: "tool",
+                        tool_call_id: toolCall.id,
+                        content: JSON.stringify({ skipped: true, reason: "Photos for this vehicle were already sent. Do not query again." }),
+                      });
+                      continue;
+                    }
+                  }
+
                   // === CONTEXT VALIDATION: Ensure dispatcher queried the RIGHT vehicle ===
                   // If user asked for photos/details implicitly (no explicit vehicle name),
                   // validate that dispatcher's args match the vehicle being discussed
                   const userMentionsExplicitVehicle = /(chevrolet|toyota|honda|hyundai|volkswagen|fiat|ford|bmw|mercedes|audi|nissan|renault|jeep|haval|gwm|peugeot|citroen|mitsubishi|kia|subaru|volvo|porsche|onix|hb20|corolla|civic|creta|tracker|nivus|kicks|polo|virtus|compass|renegade|hilux|s10|ranger|amarok|toro|strada|saveiro|cruze|cobalt|prisma|argo|mobi|kwid|gol|fit|city|sentra|jetta|tucson|sportage|duster|captur|ecosport|bronco|equinox|trailblazer|jolion|territory|haval)/i.test(latestUserText || "");
                   
                   if (!userMentionsExplicitVehicle) {
-                    // User didn't name a specific vehicle — they're referring to the one being discussed
-                    // Use extractVehicleFromContext to determine the CORRECT vehicle from conversation
                     const contextVehicle = extractVehicleFromContext(latestUserText, messages);
                     if (contextVehicle) {
                       const dispatcherSearch = (toolArgs.modelo || toolArgs.model || toolArgs.marca || toolArgs.brand || toolArgs.search || "").toLowerCase();
@@ -1676,7 +1708,6 @@ Deno.serve(async (req) => {
                           reason: "dispatcher_queried_wrong_vehicle",
                           timestamp: Date.now(),
                         });
-                        // Override dispatcher args with context-correct vehicle
                         toolArgs = { search: contextSearch };
                       }
                     }

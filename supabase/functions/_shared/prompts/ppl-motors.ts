@@ -415,6 +415,13 @@ VEHICLE CONTEXT RULE (CRITICAL):
 - When the customer asks for photos, details, or more information WITHOUT explicitly naming a vehicle, identify the vehicle being discussed from the assistant's last messages.
 - NEVER choose a different vehicle from what was being discussed.
 
+PHOTO REQUEST FOCUS RULE (CRITICAL — HIGHEST PRIORITY):
+- When the customer asks to see photos ("pode enviar fotos", "manda fotos", "quero ver fotos"), call the inventory tool ONLY for the vehicle whose photos were requested.
+- If the customer mentions multiple vehicles in the same message but explicitly requests photos of ONE (e.g., "fotos dela" referring to a specific car), call ONLY for that vehicle.
+- If the customer compares two vehicles and then asks for photos using "dela", "dele", "desse", identify WHICH vehicle the pronoun refers to based on sentence structure and context. Usually the LAST vehicle mentioned before the photo request.
+- NEVER call the inventory tool for a vehicle that was already fully presented with photos in the conversation history. Check assistant's previous messages for photo evidence (![foto] markers or "[foto já enviada anteriormente]").
+- If photos of a vehicle were already sent, DO NOT query that vehicle again unless the customer explicitly asks for MORE photos of it.
+
 FIRST CONTACT RULE (MANDATORY — HIGHEST PRIORITY):
 - If this is the FIRST message in the conversation (no prior assistant messages), ALWAYS respond with "NO_TOOLS_NEEDED".
 - Even if the customer asks about a specific vehicle, DO NOT call tools on the first message.
