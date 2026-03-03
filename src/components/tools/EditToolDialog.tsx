@@ -15,7 +15,7 @@ import { useUpdateTool } from "@/hooks/useTools";
 import { useTenants } from "@/hooks/useTenants";
 import { toast } from "sonner";
 import type { Tool, ToolType } from "@/types/database";
-import { Database, Globe, Server, Search, Car, MapPin, DollarSign } from "lucide-react";
+import { Database, Globe, Server, Search, Car, MapPin, DollarSign, CalendarDays } from "lucide-react";
 
 const TOOL_TYPE_META: Record<ToolType, { label: string; icon: any }> = {
   sql_query: { label: "Consulta SQL", icon: Database },
@@ -25,12 +25,13 @@ const TOOL_TYPE_META: Record<ToolType, { label: string; icon: any }> = {
   inventory_query: { label: "Estoque", icon: Car },
   nearest_unit: { label: "Unidade Próxima", icon: MapPin },
   fipe_query: { label: "Tabela FIPE", icon: DollarSign },
+  calendar_query: { label: "Agenda", icon: CalendarDays },
 };
 
 const schema = z.object({
   name: z.string().min(2),
   description: z.string().min(3),
-  tool_type: z.enum(["sql_query", "web_scraper", "api_rest", "rag_search", "inventory_query", "nearest_unit", "fipe_query"]),
+  tool_type: z.enum(["sql_query", "web_scraper", "api_rest", "rag_search", "inventory_query", "nearest_unit", "fipe_query", "calendar_query"]),
   tenant_id: z.string().optional(),
   endpoint: z.string().optional(),
   parameters_json: z.string().optional(),
