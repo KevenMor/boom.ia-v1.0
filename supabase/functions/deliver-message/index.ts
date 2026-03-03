@@ -329,28 +329,17 @@ Deno.serve(async (req: Request) => {
         console.log(`[Deliver] Sending welcome video: ${welcome_video_url}`);
         const videoOk = await sendChatwootMediaMessage(msgUrl, cfg.chatwoot_api_token, welcome_video_url, "video/mp4", "");
         console.log(`[Deliver] Welcome video: ${videoOk ? "OK" : "FAIL"}`);
-        // Wait for video to be fully delivered before sending name question
-        await new Promise((r) => setTimeout(r, videoOk ? 4000 : 1500));
+        // Wait longer for video to be fully delivered/processed by Chatwoot before sending name question
+        await new Promise((r) => setTimeout(r, videoOk ? 6000 : 2000));
 
         // 3) Ask for the client's name
         const nameQuestion = cfg.welcome_name_question || "Como posso te chamar?";
         console.log(`[Deliver] Sending name question`);
         await sendChatwootTextMessage(msgUrl, cfg.chatwoot_api_token, nameQuestion);
 
-        // 4) Save all welcome messages to conversation history
+        // 4) Save video + name question to conversation history (greeting already saved by chat-agent)
         if (conversation_id) {
           try {
-            if (greetingText) {
-              await supabase.rpc("save_message", {
-                p_agent_id: agent_id,
-                p_conversation_id: conversation_id,
-                p_role: "assistant",
-                p_content: greetingText,
-                p_model: "system",
-                p_latency_ms: null,
-                p_metadata: { type: "welcome_greeting" },
-              });
-            }
             await supabase.rpc("save_message", {
               p_agent_id: agent_id,
               p_conversation_id: conversation_id,
