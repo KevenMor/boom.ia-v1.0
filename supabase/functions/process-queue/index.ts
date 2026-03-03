@@ -344,6 +344,15 @@ Deno.serve(async (req: Request) => {
 
     // ---------- Call chat-agent ----------
     const messages = [...conversationMessages, { role: "user", content: finalMessage }];
+
+    // If welcome flow is active, inject context so LLM knows greeting + video were already sent
+    if (welcomeVideoUrl && isFirstInteraction) {
+      messages.unshift({
+        role: "system",
+        content: "[SISTEMA] A saudação inicial e o vídeo institucional da loja JÁ FORAM ENVIADOS automaticamente ao cliente ANTES desta mensagem. NÃO se apresente novamente. NÃO diga 'sou a Juliana' de novo. Apenas responda de forma natural e pergunte o nome do cliente: 'Como posso te chamar?' — curto e direto.",
+      });
+    }
+
     console.log(`[ProcessQueue] Calling chat-agent with ${messages.length} messages, ${(attachments || []).length} attachment(s)`);
 
     const result = await callChatAgent(cloudUrl, cloudKey, nexusKey, agent_id, messages, convId, attachments);
