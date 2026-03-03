@@ -2408,11 +2408,36 @@ REGRAS ABSOLUTAS QUANDO O ESTOQUE RETORNA ZERO:
 
 ${toolResultsContext.join("\n\n")}`;
       } else {
-        toolContextMsg = `⚠️ DADOS REAIS OBTIDOS AGORA DAS FERRAMENTAS — PRIORIDADE MÁXIMA:
+        // Check if any result is from FIPE (appraisal context)
+        const hasFipeResult = toolResultsContext.some(ctx => ctx.includes('consultar_fipe'));
+        const hasInventoryResult = toolResultsContext.some(ctx => ctx.includes('consultar_estoque'));
+        
+        let contextHeader: string;
+        if (hasFipeResult && !hasInventoryResult) {
+          contextHeader = `⚠️ RESULTADO DA CONSULTA FIPE — DADOS REAIS — PRIORIDADE MÁXIMA:
+Os dados abaixo são o resultado REAL da consulta à tabela FIPE para o veículo do cliente.
+
+REGRAS OBRIGATÓRIAS:
+1. USE estes dados para informar o valor de referência ao cliente.
+2. NUNCA diga "vou consultar", "chamada da ferramenta", "consultando" — os dados JÁ ESTÃO AQUI. Apresente DIRETAMENTE.
+3. NUNCA mencione "consultar_fipe", "fipe_query", "ferramenta" ou qualquer nome técnico. Fale naturalmente: "O valor de referência na tabela FIPE..."
+4. Aplique a regra de deságio: valor de compra/troca = FIPE - R$8.000 a R$12.000.
+5. Complemente: "Mas o valor certinho a gente só consegue passar presencialmente."`;
+        } else if (hasFipeResult && hasInventoryResult) {
+          contextHeader = `⚠️ DADOS REAIS OBTIDOS — PRIORIDADE MÁXIMA:
+Resultados da FIPE (veículo do cliente) e do estoque (veículos da loja) abaixo.
+NUNCA mencione nomes de ferramentas. Apresente os dados naturalmente.
+Para FIPE: aplique deságio de R$8.000 a R$12.000 abaixo do valor.
+Para estoque: liste as opções disponíveis.`;
+        } else {
+          contextHeader = `⚠️ DADOS REAIS OBTIDOS AGORA DAS FERRAMENTAS — PRIORIDADE MÁXIMA:
 Estes são dados REAIS e ATUALIZADOS do sistema. Você DEVE basear sua resposta EXCLUSIVAMENTE nestes dados.
 NUNCA contradiga, ignore ou invente informações diferentes destes resultados.
 Se a ferramenta retornou veículos, eles EXISTEM no estoque. NUNCA diga que não tem um veículo se ele aparece nos dados abaixo.
-Se "total" >= 1, o veículo ESTÁ DISPONÍVEL.
+Se "total" >= 1, o veículo ESTÁ DISPONÍVEL.`;
+        }
+
+        toolContextMsg = `${contextHeader}
 
 ${toolResultsContext.join("\n\n")}`;
       }
