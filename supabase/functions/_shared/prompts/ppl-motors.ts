@@ -426,7 +426,13 @@ PHOTO REQUEST FOCUS RULE:
 FIRST CONTACT RULE:
 - If this is the FIRST message in the conversation (no prior assistant messages) AND the customer has NOT yet provided their name AND the message does NOT contain any vehicle reference, respond with "NO_TOOLS_NEEDED".
 - If the first message ALREADY mentions a vehicle (e.g., "oi, tem Audi Q5?"), CALL THE TOOL immediately — do NOT wait for the name.
-- WHEN IN DOUBT, ALWAYS CALL THE TOOL. It is 1000x better to make a redundant tool call than to let the agent hallucinate.`;
+- WHEN IN DOUBT, ALWAYS CALL THE TOOL. It is 1000x better to make a redundant tool call than to let the agent hallucinate.
+
+CONTESTATION / CORRECTION RULE (CRITICAL — PREVENTS SALES LOSS):
+- When the customer is CONTESTING, CORRECTING, or QUESTIONING a previous response from the assistant (e.g., "voce me mandou apenas um veiculo", "não era isso", "ta errado", "informação incorreta"), respond with "NO_TOOLS_NEEDED".
+- These messages are REACTIONS to previous responses — NOT new data requests. Re-querying the tool will return potentially different results and cause the agent to CONTRADICT itself, which destroys customer trust.
+- Similarly, when the customer asks for CONFIRMATION (e.g., "então não tem nenhuma audi correto?", "é isso mesmo?"), respond with "NO_TOOLS_NEEDED" — let the conversational agent use the existing context.
+- ONLY re-query when the customer explicitly asks for NEW or DIFFERENT data (e.g., "e de Toyota, tem?", "busca outro modelo", "atualiza o estoque").`;
 
 /**
  * Prompt de follow-up automático específico para PPL Motors.

@@ -1580,9 +1580,37 @@ Deno.serve(async (req) => {
           debugTrace.push({ type: "dispatcher_start", provider: dispatcherProvider.name, model: dispatcherModel, tools_count: openaiTools.length, timestamp: Date.now() });
 
         // Build dispatcher prompt from registry (per-tenant, managed in code)
-        const tenantSlug = (agent.tenants as any)?.slug || null;
-        const dispatcherSystemPrompt = getDispatcherPrompt(tenantSlug);
-        console.log(`[Dispatcher] Using registry prompt for tenant: ${tenantSlug || "default"}`);
+        const tenantSlugForDispatcher = (agent.tenants as any)?.slug || null;
+        const dispatcherSystemPrompt = getDispatcherPrompt(tenantSlugForDispatcher);
+        console.log(`[Dispatcher] Using registry prompt for tenant: ${tenantSlugForDispatcher || "default"}`);
+
+        // === CONTESTATION DETECTION ===
+        // When user is questioning/contesting a previous response (not requesting new data),
+        // skip the dispatcher entirely to prevent contradictory re-queries.
+        const contestationPattern = /^(voce me mandou|voce so mandou|voce enviou|me mandou|mandou so|so mandou|mandou apenas|apenas um|so um|nao era|nao eram|estava errado|estavam erradas|informacao errada|informacoes erradas|contradiz|contradit|voce disse|mas voce|nao entendi|ta errado|incorreto|informacoes incorretas|informacao incorreta|nao bate|voce falou|nao foi isso|corrigir|corrija|retifique|nao confere|conferir)/i;
+        const isContestationMsg = contestationPattern.test(
+          latestUserText.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim()
+        );
+
+        // Also detect "então não tem X correto?" pattern — user is asking for confirmation, not new data
+        const isConfirmationQuestion = /^(entao nao tem|nao tem nenhum|nao tem mais|afinal tem|afinal nao|correto\??|certo\??|isso mesmo|e isso)[\s?!.]*$/i.test(
+          latestUserText.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s?!.]/g, " ").replace(/\s+/g, " ").trim()
+        );
+
+        // Check if the user is asking a clarification about a previous assistant response
+        const isReactingToPreviousResponse = /^(voce|vc|ce|tu)\s+(me\s+)?(mandou|enviou|passou|falou|disse|mostrou|apresentou)/i.test(
+          latestUserText.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim()
+        );
+
+        if (isContestationMsg || isConfirmationQuestion || isReactingToPreviousResponse) {
+          console.log(`[Dispatcher] CONTESTATION/CONFIRMATION detected: "${latestUserText.slice(0, 80)}". Skipping dispatcher to avoid contradictory re-queries.`);
+          debugTrace.push({
+            type: "dispatcher_skip",
+            reason: isContestationMsg ? "user_contestation_detected" : isConfirmationQuestion ? "confirmation_question" : "reaction_to_previous",
+            user_text: latestUserText.slice(0, 120),
+            timestamp: Date.now(),
+          });
+        } else {
 
         const dispatcherMessages = [
           { role: "system", content: dispatcherSystemPrompt },
@@ -1886,6 +1914,7 @@ Deno.serve(async (req) => {
           // Continue — conversational LLM will respond without tool data
         }
         } // close else (provider loaded successfully)
+        } // close contestation else block
       } // close else (dispatcherProviderId exists)
 
       // ===== VEHICLE MENTION FALLBACK (ANTI-HALLUCINATION SAFETY NET) =====
