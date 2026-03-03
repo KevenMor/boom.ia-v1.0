@@ -29,6 +29,8 @@ export function DebugBlock({ debug, edgeLogs }: DebugBlockProps) {
   const llmTransforms = debug.filter((d) => d.type === "llm_transform");
   const geminiResponses = debug.filter((d) => d.type === "gemini_response");
   const mediaAttachments = debug.filter((d) => d.type === "media_attachments" || d.type === "audio_transcription" || d.type === "image_attachment");
+  const fipeExtractions = debug.filter((d) => d.type === "fipe_extraction");
+  const fipeIntercepts = debug.filter((d) => d.type === "fipe_intercept" || d.type === "fipe_intercept_result");
   const dispatcherSteps = debug.filter((d) => d.type?.startsWith("dispatcher_"));
   const tokenUsages = debug.filter((d) => d.type === "token_usage");
   const dispatcherTokens = dispatcherSteps
@@ -54,6 +56,7 @@ export function DebugBlock({ debug, edgeLogs }: DebugBlockProps) {
         <Bug className="h-3 w-3" />
         <span>Debug</span>
         <span className="text-[#00a884]">{toolCalls.length} tool call{toolCalls.length !== 1 ? "s" : ""}</span>
+        {fipeExtractions.length > 0 && <span className="text-amber-400">🔍 FIPE</span>}
         {dispatcherSteps.length > 0 && <span className="text-purple-400">{dispatcherSteps.length} dispatch</span>}
         <span className="text-[#53bdeb]">{llmIterations.length} LLM step{llmIterations.length !== 1 ? "s" : ""}</span>
         {errors.length > 0 && <span className="text-red-400">{errors.length} erro{errors.length !== 1 ? "s" : ""}</span>}
@@ -95,6 +98,68 @@ export function DebugBlock({ debug, edgeLogs }: DebugBlockProps) {
                     )}
                     {m.type === "image_attachment" && (
                       <div>🖼️ Imagem: <span className="text-[#e9edef]">{m.mime_type} ({Math.round((m.size || 0) / 1024)}KB)</span></div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* FIPE Intercept Section */}
+          {(fipeExtractions.length > 0 || fipeIntercepts.length > 0) && (
+            <div className="border-t border-[#2a3942] pt-2">
+              <div className="text-amber-400 font-semibold mb-1">🔍 FIPE Intercept (Pré-Dispatcher)</div>
+              <div className="text-[#8696a0] space-y-2">
+                {fipeExtractions.map((ext, i) => (
+                  <div key={`ext-${i}`} className="space-y-1">
+                    <div>
+                      <span className="text-amber-300">Gatilho:</span>{" "}
+                      <span className="text-[#e9edef]">{ext.trigger}</span>
+                      {ext.matched_regex && (
+                        <span className="text-amber-200 ml-1">
+                          (regex: <code className="bg-[#0b141a] px-1 rounded">{ext.matched_regex}</code>)
+                        </span>
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-amber-300">Texto do cliente:</span>{" "}
+                      <span className="text-[#e9edef] italic">"{ext.user_text}"</span>
+                    </div>
+                    <div className="bg-[#0b141a] rounded p-2 space-y-1">
+                      <div className="text-amber-300 font-semibold text-[10px]">📍 Extração da mensagem atual:</div>
+                      <div className="pl-2">
+                        Marca: <span className={ext.current_msg_extraction?.marca !== "(nenhuma)" ? "text-green-400" : "text-red-400"}>{ext.current_msg_extraction?.marca}</span>{" | "}
+                        Modelo: <span className={ext.current_msg_extraction?.modelo !== "(nenhum)" ? "text-green-400" : "text-red-400"}>{ext.current_msg_extraction?.modelo}</span>{" | "}
+                        Ano: <span className={ext.current_msg_extraction?.ano !== "(nenhum)" ? "text-green-400" : "text-red-400"}>{String(ext.current_msg_extraction?.ano)}</span>
+                      </div>
+                      <div className="text-amber-300 font-semibold text-[10px] mt-1">📜 Fallback do histórico:</div>
+                      <div className="pl-2">
+                        Marca: <span className={ext.history_fallback?.marca !== "(não usado)" ? "text-yellow-400" : "text-[#8696a0]"}>{ext.history_fallback?.marca}</span>{" | "}
+                        Modelo: <span className={ext.history_fallback?.modelo !== "(não usado)" ? "text-yellow-400" : "text-[#8696a0]"}>{ext.history_fallback?.modelo}</span>{" | "}
+                        Ano: <span className={ext.history_fallback?.ano !== "(não usado)" ? "text-yellow-400" : "text-[#8696a0]"}>{String(ext.history_fallback?.ano)}</span>
+                      </div>
+                      <div className="text-amber-300 font-semibold text-[10px] mt-1 border-t border-[#2a3942] pt-1">✅ Resultado final:</div>
+                      <div className="pl-2">
+                        Marca: <span className="text-[#e9edef] font-semibold">{ext.final?.marca}</span>{" | "}
+                        Modelo: <span className="text-[#e9edef] font-semibold">{ext.final?.modelo}</span>{" | "}
+                        Ano: <span className="text-[#e9edef] font-semibold">{String(ext.final?.ano)}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {fipeIntercepts.map((fi, i) => (
+                  <div key={`fi-${i}`}>
+                    {fi.type === "fipe_intercept" && (
+                      <div>
+                        <span className="text-green-400">✅ Chamando fipe_query</span> — args:{" "}
+                        <code className="text-[#e9edef] bg-[#0b141a] px-1 rounded">{JSON.stringify(fi.args)}</code>
+                      </div>
+                    )}
+                    {fi.type === "fipe_intercept_result" && (
+                      <div>
+                        <span className="text-green-400">📊 Resultado FIPE:</span>{" "}
+                        <span className="text-[#e9edef]">{fi.result_length} chars recebidos</span>
+                      </div>
                     )}
                   </div>
                 ))}

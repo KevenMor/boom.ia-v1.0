@@ -1721,6 +1721,16 @@ Deno.serve(async (req) => {
         }
 
         console.log(`[FipeIntercept] Extraction: marca=${fMarca}, modelo=${fModelo}, ano=${fAno} (from current msg: marca=${currentResult.marca}, modelo=${currentResult.modelo})`);
+        debugTrace.push({
+          type: "fipe_extraction",
+          trigger: isFipeExplicitRequest ? "explicit_fipe_mention" : "appraisal_context",
+          matched_regex: isFipeExplicitRequest ? "fipe keyword" : (normalizedUserForFipe.match(/(meu carro|meu veiculo|tenho um|tenho uma|quero avaliar|avaliar meu|pre.?avaliacao|avaliacao|quanto vale meu|dar na troca|dar como entrada|colocar na troca|colocar como entrada)/)?.[0] || "unknown"),
+          current_msg_extraction: { marca: currentResult.marca || "(nenhuma)", modelo: currentResult.modelo || "(nenhum)", ano: currentResult.ano || "(nenhum)" },
+          history_fallback: { marca: !currentResult.marca && fMarca ? fMarca : "(não usado)", modelo: !currentResult.modelo && fModelo ? fModelo : "(não usado)", ano: !currentResult.ano && fAno ? fAno : "(não usado)" },
+          final: { marca: fMarca || "(nenhuma)", modelo: fModelo || "(nenhum)", ano: fAno || "(nenhum)" },
+          user_text: latestUserText.slice(0, 150),
+          timestamp: Date.now(),
+        });
 
         if (fMarca || fModelo) {
           const fipeArgs: Record<string, any> = {};
