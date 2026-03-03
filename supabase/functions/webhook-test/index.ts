@@ -867,6 +867,9 @@ Deno.serve(async (req: Request) => {
         attachments: chatwoot.attachments,
       };
 
+      let queueAccepted = false;
+      let queueErrorDetail = "";
+
       try {
         const controller = new AbortController();
         setTimeout(() => controller.abort(), 1500);
@@ -876,14 +879,53 @@ Deno.serve(async (req: Request) => {
           body: JSON.stringify(payload),
           signal: controller.signal,
         });
-        console.log(`[Webhook] Fired process-queue: ${resp.status}`);
-        await resp.text().catch(() => {});
+
+        const respText = await resp.text().catch(() => "");
+        if (resp.ok) {
+          queueAccepted = true;
+          console.log(`[Webhook] Fired process-queue: ${resp.status}`);
+        } else {
+          queueErrorDetail = `process-queue status=${resp.status} body=${respText}`;
+          console.error(`[Webhook] process-queue rejected: ${queueErrorDetail}`);
+        }
       } catch (e: any) {
         if (e.name === "AbortError") {
+          // Timeout here means request was sent and function is likely processing async.
+          queueAccepted = true;
           console.log("[Webhook] Fired process-queue (still processing)");
         } else {
-          console.error("[Webhook] Fire process-queue error:", e.message);
+          queueErrorDetail = e?.message || "unknown fetch error";
+          console.error("[Webhook] Fire process-queue error:", queueErrorDetail);
         }
+      }
+
+      if (!queueAccepted) {
+        // Fallback: persist incoming user message so Chat ao Vivo is not blind if queue failed.
+        if (earlyConvId && userMessage?.trim()) {
+          try {
+            await supabase.rpc("save_message", {
+              p_agent_id: agentId,
+              p_conversation_id: earlyConvId,
+              p_role: "user",
+              p_content: userMessage,
+              p_model: null,
+              p_tokens_in: 0,
+              p_tokens_out: 0,
+              p_latency_ms: 0,
+            });
+            console.warn(`[Webhook] Fallback saved incoming message to conv ${earlyConvId}`);
+          } catch (saveErr: any) {
+            console.error("[Webhook] Fallback save_message failed:", saveErr?.message || saveErr);
+          }
+        }
+
+        return new Response(
+          JSON.stringify({
+            error: "Queue dispatch failed",
+            detail: queueErrorDetail || "process-queue did not accept request",
+          }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       return new Response(
