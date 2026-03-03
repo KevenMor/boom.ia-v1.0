@@ -542,7 +542,76 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Also ignore outgoing messages (sent by the bot itself or agents)
+    // Outgoing messages from human agents: save to conversation history for live chat visibility
+    if (body.event === "message_created" && body.message_type === "outgoing") {
+      // Check if this is from a human agent (not our bot)
+      const sender = (body.sender || {}) as Record<string, unknown>;
+      const senderType = sender.type as string || "";
+      // Chatwoot bot messages have sender type "agent_bot" or no sender; human agents have type "user" (agent user)
+      const isHumanAgent = senderType === "user" || (sender.id && senderType !== "agent_bot");
+
+      if (!isHumanAgent) {
+        console.log(`[Webhook] Ignoring bot outgoing message (sender type: ${senderType})`);
+        return new Response(
+          JSON.stringify({ status: "ignored", reason: "Bot outgoing message" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Human agent outgoing message — save to conversation so it appears in live chat
+      console.log(`[Webhook] Human agent outgoing message from ${sender.name || sender.id}, saving to conversation`);
+
+      const reqUrl = new URL(req.url);
+      const agentIdParam = reqUrl.searchParams.get("agent_id") || (body.agent_id as string) || null;
+      if (!agentIdParam) {
+        return new Response(JSON.stringify({ status: "ignored", reason: "No agent_id for outgoing" }), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const supabaseForOutgoing = createClient(nexusUrl, nexusKey);
+      const conversation = (body.conversation || {}) as Record<string, unknown>;
+      const cwConvId = (conversation.id as number) ?? null;
+      const outgoingContent = (body.content as string) || "";
+
+      if (cwConvId && outgoingContent.trim()) {
+        try {
+          // Find existing conversation by chatwoot_conversation_id
+          const { data: convId } = await supabaseForOutgoing.rpc("find_or_create_webhook_conversation", {
+            p_agent_id: agentIdParam,
+            p_channel: (conversation.channel as string) || "chatwoot",
+            p_external_user_id: "human-agent",
+            p_chatwoot_conversation_id: cwConvId,
+            p_chatwoot_contact_id: null,
+            p_contact_name: null,
+            p_contact_avatar_url: null,
+          });
+
+          if (convId) {
+            await supabaseForOutgoing.rpc("save_message", {
+              p_agent_id: agentIdParam,
+              p_conversation_id: convId,
+              p_role: "assistant",
+              p_content: `[Atendente: ${sender.name || "Humano"}] ${outgoingContent}`,
+              p_model: "human-agent",
+              p_tokens_in: 0,
+              p_tokens_out: 0,
+              p_latency_ms: 0,
+            });
+            console.log(`[Webhook] Saved human agent message to conv ${convId}`);
+          }
+        } catch (e: any) {
+          console.warn("[Webhook] Failed to save human agent outgoing:", e.message);
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ status: "saved_human_agent_message" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Ignore other non-incoming messages
     if (body.event === "message_created" && body.message_type !== "incoming") {
       console.log(`[Webhook] Ignoring non-incoming message_type: ${body.message_type}`);
       return new Response(
@@ -627,11 +696,47 @@ Deno.serve(async (req: Request) => {
     let contactAvatarUrl: string | null = null;
 
     if (chatwoot.isChatwoot) {
-      // ---- Guard: if a human agent is assigned, AI must NOT respond ----
+      // ---- Guard: if a human agent is assigned, save message but AI must NOT respond ----
       if (chatwoot.assigneeId) {
-        console.log(`[Webhook] Human agent assigned (id=${chatwoot.assigneeId}, name=${chatwoot.assigneeName}), AI will NOT respond`);
+        console.log(`[Webhook] Human agent assigned (id=${chatwoot.assigneeId}, name=${chatwoot.assigneeName}), saving message but AI will NOT respond`);
+
+        // Still save the incoming message to the conversation for live chat visibility
+        try {
+          const convIdForSave = earlyConvId || null;
+          let resolvedConvId = convIdForSave;
+
+          if (!resolvedConvId) {
+            const { data: newConvId } = await supabase.rpc("find_or_create_webhook_conversation", {
+              p_agent_id: agentId,
+              p_channel: chatwoot.channel,
+              p_external_user_id: chatwoot.externalUserId,
+              p_chatwoot_conversation_id: chatwoot.chatwootConversationId,
+              p_chatwoot_contact_id: chatwoot.chatwootContactId,
+              p_contact_name: chatwoot.contactName,
+              p_contact_avatar_url: chatwoot.contactAvatarUrl,
+            });
+            resolvedConvId = newConvId;
+          }
+
+          if (resolvedConvId && chatwoot.message?.trim()) {
+            await supabase.rpc("save_message", {
+              p_agent_id: agentId,
+              p_conversation_id: resolvedConvId,
+              p_role: "user",
+              p_content: chatwoot.message,
+              p_model: null,
+              p_tokens_in: 0,
+              p_tokens_out: 0,
+              p_latency_ms: 0,
+            });
+            console.log(`[Webhook] Saved client message (human-assigned) to conv ${resolvedConvId}`);
+          }
+        } catch (e: any) {
+          console.warn("[Webhook] Failed to save message for human-assigned conv:", e.message);
+        }
+
         return new Response(
-          JSON.stringify({ status: "ignored", reason: `Human agent assigned: ${chatwoot.assigneeName || chatwoot.assigneeId}` }),
+          JSON.stringify({ status: "saved_no_ai", reason: `Human agent assigned: ${chatwoot.assigneeName || chatwoot.assigneeId}` }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
