@@ -414,6 +414,12 @@ RULES:
 - ONLY return "NO_TOOLS_NEEDED" when the LATEST message is purely conversational with ZERO new vehicle/price/stock request (like "gostei", "muito bonitas", "legal", "ok", "obrigado", "gosto da segunda opção").
 - You may call multiple tools if needed.
 
+FIPE QUERY RULE (VEHICLE APPRAISAL / PRÉ-AVALIAÇÃO):
+- When the customer mentions they HAVE a vehicle to trade/sell/evaluate (e.g., "tenho um Cruze 2020", "meu carro é um Civic 2019", "quero avaliar meu carro", "quanto vale meu X"), call the fipe_query tool with marca, modelo, and ano.
+- This is DIFFERENT from inventory_query — fipe_query checks the FIPE market reference price, NOT the dealership stock.
+- If the customer mentions brand + model + year of THEIR vehicle (for trade-in or appraisal), ALWAYS call fipe_query. Do NOT wait — call it immediately.
+- You can call BOTH inventory_query AND fipe_query in the same turn if needed (e.g., customer wants to buy car X and trade car Y).
+
 VEHICLE CONTEXT RULE (CRITICAL):
 - When the customer asks for photos, details, price, or more information WITHOUT explicitly naming a vehicle, identify the vehicle being discussed from the assistant's MOST RECENT messages.
 - Use pronouns ("dela", "dele", "desse", "dessa") to identify which vehicle the customer refers to.
