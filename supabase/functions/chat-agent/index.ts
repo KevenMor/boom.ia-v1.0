@@ -780,6 +780,183 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         }
       }
 
+      case "calendar_query": {
+        // Query calendar availability and create appointments
+        const { data: agentData } = await supabase
+          .from("agents")
+          .select("tenant_id")
+          .eq("id", agentId)
+          .single();
+
+        if (!agentData?.tenant_id) return JSON.stringify({ error: "Agent has no tenant assigned" });
+
+        const action = (args.action || args.acao || "check_availability").toLowerCase();
+
+        if (action === "create" || action === "agendar" || action === "criar") {
+          // Create a new calendar event
+          const title = args.title || args.titulo || "Agendamento via IA";
+          const description = args.description || args.descricao || "";
+          const startAt = args.start_at || args.data_hora || args.datetime;
+          const durationMin = args.duration_minutes || args.duracao_minutos || 60;
+
+          if (!startAt) return JSON.stringify({ error: "Data e hora são obrigatórios para agendar" });
+
+          // Find the default calendar for this tenant
+          let calendarId = args.calendar_id;
+          if (!calendarId) {
+            const { data: calendars } = await supabase
+              .from("calendars")
+              .select("id, name")
+              .eq("tenant_id", agentData.tenant_id)
+              .eq("is_active", true)
+              .order("created_at", { ascending: true })
+              .limit(1);
+
+            if (!calendars?.length) return JSON.stringify({ error: "Nenhuma agenda configurada para este tenant" });
+            calendarId = calendars[0].id;
+          }
+
+          // Calculate end time
+          const startDate = new Date(startAt);
+          const endDate = new Date(startDate.getTime() + durationMin * 60000);
+
+          // Check for conflicts
+          const { data: conflicts } = await supabase
+            .from("calendar_events")
+            .select("id, title, start_at, end_at")
+            .eq("tenant_id", agentData.tenant_id)
+            .eq("calendar_id", calendarId)
+            .lt("start_at", endDate.toISOString())
+            .gt("end_at", startDate.toISOString());
+
+          if (conflicts && conflicts.length > 0) {
+            return JSON.stringify({
+              error: "Horário indisponível — já existe agendamento neste período",
+              conflitos: conflicts.map((c: any) => ({
+                titulo: c.title,
+                inicio: c.start_at,
+                fim: c.end_at,
+              })),
+            });
+          }
+
+          // Create the event
+          const { data: newEvent, error: createError } = await supabase
+            .from("calendar_events")
+            .insert({
+              calendar_id: calendarId,
+              tenant_id: agentData.tenant_id,
+              title,
+              description,
+              start_at: startDate.toISOString(),
+              end_at: endDate.toISOString(),
+              all_day: false,
+              color: "primary",
+              metadata: { created_by: "ai_agent", agent_id: agentId },
+            })
+            .select()
+            .single();
+
+          if (createError) return JSON.stringify({ error: createError.message });
+
+          return JSON.stringify({
+            status: "agendado",
+            evento: {
+              id: newEvent.id,
+              titulo: newEvent.title,
+              inicio: newEvent.start_at,
+              fim: newEvent.end_at,
+              descricao: newEvent.description,
+            },
+          });
+        }
+
+        // Default: check availability
+        const dateStr = args.date || args.data || new Date().toISOString().split("T")[0];
+        const daysAhead = args.days_ahead || args.dias || 7;
+
+        // Build date range
+        const fromDate = new Date(dateStr + "T00:00:00-03:00");
+        const toDate = new Date(fromDate.getTime() + daysAhead * 86400000);
+
+        // Get all calendars for this tenant
+        let calendarFilter = args.calendar_id;
+        let calendarIds: string[] = [];
+
+        if (calendarFilter) {
+          calendarIds = [calendarFilter];
+        } else {
+          const { data: calendars } = await supabase
+            .from("calendars")
+            .select("id, name")
+            .eq("tenant_id", agentData.tenant_id)
+            .eq("is_active", true);
+
+          if (!calendars?.length) return JSON.stringify({ message: "Nenhuma agenda configurada" });
+          calendarIds = calendars.map((c: any) => c.id);
+        }
+
+        // Get existing events in the range
+        const { data: existingEvents, error: evError } = await supabase
+          .from("calendar_events")
+          .select("id, title, start_at, end_at, calendar_id, all_day")
+          .eq("tenant_id", agentData.tenant_id)
+          .in("calendar_id", calendarIds)
+          .gte("start_at", fromDate.toISOString())
+          .lte("start_at", toDate.toISOString())
+          .order("start_at", { ascending: true });
+
+        if (evError) return JSON.stringify({ error: evError.message });
+
+        // Build availability summary
+        const busySlots = (existingEvents || []).map((ev: any) => ({
+          titulo: ev.title,
+          inicio: ev.start_at,
+          fim: ev.end_at,
+          dia_inteiro: ev.all_day,
+        }));
+
+        // Generate available slots (business hours 8-18, 1h blocks)
+        const availableSlots: { data: string; horarios: string[] }[] = [];
+        for (let d = 0; d < daysAhead; d++) {
+          const day = new Date(fromDate.getTime() + d * 86400000);
+          const dayOfWeek = day.getDay();
+          if (dayOfWeek === 0) continue; // Skip Sunday
+
+          const dayStr = day.toISOString().split("T")[0];
+          const slots: string[] = [];
+
+          for (let hour = 8; hour < 18; hour++) {
+            const slotStart = new Date(`${dayStr}T${String(hour).padStart(2, "0")}:00:00-03:00`);
+            const slotEnd = new Date(slotStart.getTime() + 3600000);
+
+            // Check if slot conflicts with any event
+            const hasConflict = busySlots.some((ev: any) => {
+              if (ev.dia_inteiro) return true;
+              const evStart = new Date(ev.inicio);
+              const evEnd = new Date(ev.fim);
+              return slotStart < evEnd && slotEnd > evStart;
+            });
+
+            if (!hasConflict) {
+              slots.push(`${String(hour).padStart(2, "0")}:00`);
+            }
+          }
+
+          if (slots.length > 0) {
+            const weekday = day.toLocaleDateString("pt-BR", { weekday: "long", timeZone: "America/Sao_Paulo" });
+            availableSlots.push({ data: `${dayStr} (${weekday})`, horarios: slots });
+          }
+        }
+
+        return JSON.stringify({
+          periodo: `${fromDate.toISOString().split("T")[0]} a ${toDate.toISOString().split("T")[0]}`,
+          horarios_disponiveis: availableSlots,
+          compromissos_existentes: busySlots.length,
+          _hint: "Apresente os horários disponíveis de forma organizada. Pergunte qual dia e horário o cliente prefere. Quando ele escolher, use a ação 'criar'/'agendar' para confirmar.",
+        });
+      }
+
       default:
         return JSON.stringify({ error: `Unknown tool type: ${tool.tool_type}` });
     }
@@ -835,6 +1012,23 @@ const BUILTIN_SCHEMAS: Record<string, { description: string; parameters: any }> 
         tipo:   { type: "integer", description: "Tipo: 1=carros (padrão), 2=motos, 3=caminhões" },
       },
       required: ["marca", "modelo"],
+    },
+  },
+  calendar_query: {
+    description: "Consulta horários disponíveis na agenda e realiza agendamentos. Use 'check_availability' para ver horários livres e 'criar' para agendar.",
+    parameters: {
+      type: "object",
+      properties: {
+        action: { type: "string", description: "Ação: 'check_availability' para consultar horários, 'criar' ou 'agendar' para criar agendamento" },
+        date: { type: "string", description: "Data inicial para busca (formato YYYY-MM-DD). Padrão: hoje" },
+        days_ahead: { type: "integer", description: "Quantos dias à frente consultar (padrão: 7)" },
+        title: { type: "string", description: "Título do agendamento (ex: 'Visita - João Silva')" },
+        description: { type: "string", description: "Descrição/observações do agendamento" },
+        start_at: { type: "string", description: "Data e hora do agendamento (formato ISO 8601, ex: '2025-03-15T10:00:00')" },
+        duration_minutes: { type: "integer", description: "Duração em minutos (padrão: 60)" },
+        calendar_id: { type: "string", description: "ID da agenda específica (opcional, usa a primeira agenda ativa se não informado)" },
+      },
+      required: ["action"],
     },
   },
 };

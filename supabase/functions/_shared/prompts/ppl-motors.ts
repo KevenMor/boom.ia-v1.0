@@ -466,9 +466,14 @@ C) BOTH (customer wants to buy AND trade)
    → Call BOTH consultar_fipe AND consultar_estoque
    Example: "Quero trocar meu Cruze 2020 por um Audi A3 de vocês"
 
-D) CONVERSATIONAL (no vehicle/stock/fipe request)
+D) SCHEDULING (customer wants to book a visit, test drive, or appointment)
+   → Call: consultar_agenda
+   Keywords: "agendar", "marcar", "horário", "disponibilidade", "quando posso ir", 
+   "test drive", "visita", "que horas", "dia disponível", "quero ir aí", "posso ir"
+
+E) CONVERSATIONAL (no vehicle/stock/fipe/scheduling request)
    → Return: NO_TOOLS_NEEDED
-   Examples: greetings, name, confirmation, reactions, questions about financing/visit
+   Examples: greetings, name, confirmation, reactions, questions about financing
 
 ═══════════════════════════════════════════════
 STEP 2: EXTRACT PARAMETERS
@@ -498,11 +503,17 @@ CALL consultar_fipe:
 CALL BOTH:
 - "quero trocar meu Cruze 2020 por um A3" → consultar_fipe(marca="Chevrolet", modelo="Cruze", ano=2020) + consultar_estoque(marca="Audi", modelo="A3")
 
+CALL consultar_agenda:
+- "quero agendar visita" → consultar_agenda(action="check_availability")
+- "que horários vocês têm?" → consultar_agenda(action="check_availability")
+- "posso ir amanhã?" → consultar_agenda(action="check_availability", date="YYYY-MM-DD")
+- "quero marcar um test drive" → consultar_agenda(action="check_availability")
+- "pode marcar pra sexta às 10h" → consultar_agenda(action="criar", title="Visita - [nome do cliente]", start_at="YYYY-MM-DDT10:00:00")
+
 NO_TOOLS_NEEDED:
 - "oi", "bom dia", "meu nome é João"
 - "voce me mandou apenas um veiculo" (contestation)
 - "então não tem nenhuma audi correto?" (confirmation)
-- "quero agendar visita" (handoff topic)
 - "posso financiar?" (financing question)
 - Customer sent photos during appraisal AND fipe was already called
 - Reactions: "legal", "ok", "entendi", "vou pensar"
