@@ -1211,6 +1211,42 @@ Deno.serve(async (req) => {
       console.warn("Could not load agent tools:", e);
     }
 
+    // SAFETY NET: For PPL appraisal flow, ensure FIPE tool is always available to dispatcher.
+    // Some agents are misconfigured with only inventory_query linked, which prevents fipe_query tool calls.
+    const tenantSlugLoaded = (agent.tenants as any)?.slug || "";
+    const isPplTenant = tenantSlugLoaded === "ppl-motors" || tenantSlugLoaded === "ppl-mortors";
+    const hasFipeToolLinked = agentTools.some((t) => t.tool_type === "fipe_query");
+
+    if (isPplTenant && !hasFipeToolLinked) {
+      const virtualFipeTool: ToolDef = {
+        id: "virtual-fipe-query-tool",
+        name: "consultar_fipe",
+        description: "Consulta o valor de referência da Tabela FIPE para avaliação de veículo do cliente.",
+        tool_type: "fipe_query",
+        function_def: {
+          name: "consultar_fipe",
+          description: "Consulta a Tabela FIPE para avaliação de troca/pre-avaliação do veículo do cliente.",
+          parameters: {
+            type: "object",
+            properties: {
+              marca: { type: "string", description: "Marca do veículo (ex: Chevrolet, Toyota, Honda)" },
+              modelo: { type: "string", description: "Modelo do veículo (ex: Cruze, Corolla, Civic)" },
+              ano: { type: "integer", description: "Ano do veículo (ex: 2020)" },
+            },
+            required: ["marca", "modelo"],
+          },
+        },
+        execution_config: {},
+        endpoint: null,
+        auth_config: {},
+      };
+      agentTools.push(virtualFipeTool);
+      console.warn("[Tools] fipe_query missing from agent_tools; injected virtual consultar_fipe for PPL tenant");
+    }
+
+    console.log(`[Tools] Loaded ${agentTools.length} tool(s): ${agentTools.map((t) => `${t.name}:${t.tool_type}`).join(", ")}`);
+
+
     // 4. Memory: create or reuse conversation
     let convId = conversation_id;
     if (!convId) {
