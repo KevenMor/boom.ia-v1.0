@@ -2034,6 +2034,109 @@ Deno.serve(async (req) => {
           }
         }
       }
+
+      // ===== FIPE APPRAISAL FALLBACK =====
+      // When conversation is in appraisal mode (customer's OWN vehicle for trade-in)
+      // and we have brand+model+year from context but fipe_query was never called, force it.
+      const hasFipeTool = agentTools.some(t => t.tool_type === "fipe_query");
+      const dispatcherAlreadyQueriedFipe = toolResultsContext.some(r => /fipe|tabela fipe|preco_medio|valor_medio|fipe_query/i.test(r));
+      
+      if (hasFipeTool && !dispatcherAlreadyQueriedFipe) {
+        // Check if conversation is in appraisal mode by scanning history
+        const fullHistory = messages.map((m: any) => String(m.content || "").toLowerCase()).join(" ");
+        const isAppraisalMode = /(pre.?avalia|avalia|troca|meu carro|meu veiculo|meu ve[ií]culo|quero vender|quero trocar|carro pra trocar|pra troca|na troca|dar como entrada|dar na troca|quilometr|km rodad|unico dono|único dono)/.test(
+          fullHistory.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        );
+
+        if (isAppraisalMode) {
+          // Check if FIPE was already consulted in any previous assistant message
+          const fipeAlreadyInHistory = messages.some((m: any) => 
+            m.role === "assistant" && /\b(tabela fipe|valor fipe|pre.o.*(fipe|mercado)|fipe.*(refer|tabela)|r\$\s*[\d.,]+.*fipe|estimativa.*fipe)\b/i.test(String(m.content || ""))
+          );
+
+          if (!fipeAlreadyInHistory) {
+            // Extract brand/model/year from conversation context for the CUSTOMER'S vehicle
+            const appraisalVehiclePattern = /(tenho|meu|possuo|vou dar|dar na troca|trocar|avaliar|pra troca)\s+(?:um |uma |o |a )?([\w\s/-]+?)(?:\s+(\d{4}))?(?:\s|$|,|\.|!|\?)/i;
+            // Also try to find standalone brand+model mentions in the context
+            const knownBrandsForFipe = ["chevrolet", "toyota", "honda", "hyundai", "volkswagen", "fiat", "ford", "jeep", "nissan", "renault", "mitsubishi", "kia", "peugeot", "citroen", "bmw", "mercedes", "audi", "volvo", "subaru", "suzuki"];
+            
+            let fipeMarca = "";
+            let fipeModelo = "";
+            let fipeAno = 0;
+
+            // Scan messages for vehicle info
+            for (const msg of messages) {
+              const text = String(msg.content || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+              
+              // Extract year
+              const yearMatch = text.match(/\b(20[0-2]\d|19[89]\d)\b/);
+              if (yearMatch && !fipeAno) fipeAno = parseInt(yearMatch[1]);
+              
+              // Extract brand
+              for (const brand of knownBrandsForFipe) {
+                if (text.includes(brand) && !fipeMarca) {
+                  fipeMarca = brand;
+                  break;
+                }
+              }
+              
+              // Extract model from context: look for known models
+              const knownModelsForFipe = ["cruze", "onix", "tracker", "spin", "cobalt", "prisma", "s10", "corolla", "civic", "hb20", "creta", "tucson", "compass", "renegade", "polo", "virtus", "gol", "hilux", "ranger", "toro", "argo", "mobi", "kicks", "nivus", "t-cross", "tcross", "fit", "city", "hr-v", "hrv", "duster", "captur", "sentra", "jetta", "amarok", "strada", "saveiro"];
+              for (const model of knownModelsForFipe) {
+                if (text.includes(model) && !fipeModelo) {
+                  fipeModelo = model;
+                  break;
+                }
+              }
+            }
+
+            if (fipeMarca && fipeModelo) {
+              console.log(`[FipeAppraisalFallback] Appraisal mode detected with vehicle: ${fipeMarca} ${fipeModelo} ${fipeAno || "?"} — forcing fipe_query`);
+              debugTrace.push({
+                type: "fipe_appraisal_fallback",
+                marca: fipeMarca,
+                modelo: fipeModelo,
+                ano: fipeAno || null,
+                timestamp: Date.now(),
+              });
+
+              const fipeTool = agentTools.find(t => t.tool_type === "fipe_query")!;
+              const fipeArgs: Record<string, any> = { marca: fipeMarca, modelo: fipeModelo };
+              if (fipeAno) fipeArgs.ano = fipeAno;
+
+              try {
+                const fipeResult = await executeTool(fipeTool, fipeArgs, supabase, agent_id, latestUserText);
+                toolResultsContext.push(`[Resultado da ferramenta "consultar_fipe"]: ${fipeResult}`);
+                console.log(`[FipeAppraisalFallback] FIPE query returned results`);
+                debugTrace.push({ type: "fipe_appraisal_result", result_length: fipeResult.length, timestamp: Date.now() });
+
+                // Save tool result to memory
+                if (convId) {
+                  try {
+                    await supabase.rpc("save_message", {
+                      p_agent_id: agent_id,
+                      p_conversation_id: convId,
+                      p_role: "tool",
+                      p_content: fipeResult,
+                      p_model: null,
+                      p_tokens_input: 0,
+                      p_tokens_output: 0,
+                      p_latency_ms: null,
+                      p_metadata: null,
+                    });
+                  } catch {}
+                }
+              } catch (e: any) {
+                console.error("[FipeAppraisalFallback] Error:", e.message);
+              }
+            } else {
+              console.log(`[FipeAppraisalFallback] Appraisal mode but insufficient vehicle data: marca="${fipeMarca}" modelo="${fipeModelo}" ano=${fipeAno}`);
+            }
+          } else {
+            console.log("[FipeAppraisalFallback] FIPE already consulted in history — skipping");
+          }
+        }
+      }
     } // close if (openaiTools)
 
     // ===== PHASE 2: CONVERSATIONAL LLM =====
