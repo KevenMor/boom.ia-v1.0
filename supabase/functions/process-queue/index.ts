@@ -50,7 +50,7 @@ async function consumeBufferedMessages(
   return pending.map((m: any) => m.content as string);
 }
 
-// ---------- Call chat-agent ----------
+// ---------- Call chat-agent (with retry for transient errors) ----------
 async function callChatAgent(
   cloudUrl: string,
   cloudKey: string,
@@ -61,23 +61,41 @@ async function callChatAgent(
   attachments?: any[]
 ) {
   const chatAgentUrl = `${cloudUrl}/functions/v1/chat-agent`;
-  const chatResp = await fetch(chatAgentUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${cloudKey}`,
-      "x-nexus-auth": `Bearer ${nexusKey}`,
-    },
-    body: JSON.stringify({ agent_id: agentId, messages, conversation_id: convId, attachments }),
-  });
+  const MAX_RETRIES = 3;
+  let lastError = "";
 
-  if (!chatResp.ok) {
-    const errText = await chatResp.text();
-    console.error("[ProcessQueue] chat-agent error:", chatResp.status, errText);
-    return { error: errText, fullContent: "", responseParts: [] as string[], responseConvId: convId };
-  }
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const chatResp = await fetch(chatAgentUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${cloudKey}`,
+          "x-nexus-auth": `Bearer ${nexusKey}`,
+        },
+        body: JSON.stringify({ agent_id: agentId, messages, conversation_id: convId, attachments }),
+      });
 
-  const reader = chatResp.body!.getReader();
+      if (!chatResp.ok) {
+        const errText = await chatResp.text();
+        const isRetryable = chatResp.status >= 500 || chatResp.status === 404 || /dns error|ECONNREFUSED|timeout|name resolution/i.test(errText);
+
+        if (!isRetryable || attempt === MAX_RETRIES) {
+          console.error(`[ProcessQueue] chat-agent error (attempt ${attempt}/${MAX_RETRIES}):`, chatResp.status, errText);
+          return { error: errText, fullContent: "", responseParts: [] as string[], responseConvId: convId };
+        }
+
+        lastError = errText;
+        const backoffMs = attempt * 1500;
+        console.warn(`[ProcessQueue] chat-agent attempt ${attempt}/${MAX_RETRIES} failed (${chatResp.status}), retrying in ${backoffMs}ms...`);
+        await new Promise(r => setTimeout(r, backoffMs));
+        continue;
+      }
+
+      if (attempt > 1) console.log(`[ProcessQueue] chat-agent succeeded on attempt ${attempt}`);
+
+      // Success — process the SSE stream
+      const reader = chatResp.body!.getReader();
   const decoder = new TextDecoder();
   let buf = "";
   let fullContent = "";
@@ -135,9 +153,27 @@ async function callChatAgent(
     processSseLine(buf);
   }
 
-  if (currentPart.trim()) responseParts.push(currentPart.trim());
+      if (currentPart.trim()) responseParts.push(currentPart.trim());
 
-  return { error: null, fullContent, responseParts, responseConvId };
+      return { error: null, fullContent, responseParts, responseConvId };
+
+    } catch (fetchErr: any) {
+      // Network-level error (DNS, connection refused, etc.)
+      lastError = fetchErr?.message || "fetch error";
+      const isRetryable = /dns|ECONNREFUSED|timeout|name resolution|connection/i.test(lastError);
+
+      if (!isRetryable || attempt === MAX_RETRIES) {
+        console.error(`[ProcessQueue] chat-agent fetch error (attempt ${attempt}/${MAX_RETRIES}):`, lastError);
+        return { error: lastError, fullContent: "", responseParts: [] as string[], responseConvId: convId };
+      }
+
+      const backoffMs = attempt * 1500;
+      console.warn(`[ProcessQueue] chat-agent fetch attempt ${attempt}/${MAX_RETRIES} failed (${lastError}), retrying in ${backoffMs}ms...`);
+      await new Promise(r => setTimeout(r, backoffMs));
+    }
+  }
+
+  return { error: lastError || "max retries exceeded", fullContent: "", responseParts: [] as string[], responseConvId: convId };
 }
 
 // ---------- Fire next stage (with retry on failure) ----------
@@ -370,6 +406,24 @@ Deno.serve(async (req: Request) => {
     const result = await callChatAgent(cloudUrl, cloudKey, nexusKey, agent_id, messages, convId, attachments);
 
     if (result.error) {
+      // Fallback: save the user message so it at least appears in Chat ao Vivo
+      if (convId && finalMessage?.trim()) {
+        try {
+          await supabase.rpc("save_message", {
+            p_agent_id: agent_id,
+            p_conversation_id: convId,
+            p_role: "user",
+            p_content: finalMessage,
+            p_model: null,
+            p_tokens_in: 0,
+            p_tokens_out: 0,
+            p_latency_ms: 0,
+          });
+          console.warn(`[ProcessQueue] Fallback: saved user message to conv ${convId} despite chat-agent failure`);
+        } catch (saveErr: any) {
+          console.error("[ProcessQueue] Fallback save_message failed:", saveErr?.message);
+        }
+      }
       return new Response(
         JSON.stringify({ error: "LLM processing failed", detail: result.error }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
