@@ -5,8 +5,8 @@ export const providerModels: Record<string, { label: string; models: { value: st
     models: [
       { value: "gemini-3-pro-preview", label: "Gemini 3 Pro Preview", description: "Próxima geração, máxima capacidade" },
       { value: "gemini-3-flash-preview", label: "Gemini 3 Flash Preview", description: "Próxima geração, rápido e eficiente" },
-      { value: "gemini-2.5-pro-preview-06-05", label: "Gemini 2.5 Pro", description: "Thinking model mais avançado" },
-      { value: "gemini-2.5-flash-preview-05-20", label: "Gemini 2.5 Flash", description: "Thinking rápido e econômico" },
+      { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro", description: "Thinking model mais avançado" },
+      { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash", description: "Thinking rápido e econômico" },
       { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", description: "Ultra econômico, alto volume" },
       { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash", description: "Rápido, multimodal, uso geral" },
       { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite", description: "Mais leve e econômico" },
