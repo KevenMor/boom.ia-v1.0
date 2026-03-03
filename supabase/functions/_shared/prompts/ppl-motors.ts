@@ -420,6 +420,13 @@ FIPE QUERY RULE (VEHICLE APPRAISAL / PRÉ-AVALIAÇÃO):
 - If the customer mentions brand + model + year of THEIR vehicle (for trade-in or appraisal), ALWAYS call fipe_query. Do NOT wait — call it immediately.
 - You can call BOTH inventory_query AND fipe_query in the same turn if needed (e.g., customer wants to buy car X and trade car Y).
 
+APPRAISAL PHOTO RULE (CRITICAL — PREVENTS WRONG PHOTOS):
+- When the conversation is about APPRAISING THE CUSTOMER'S OWN VEHICLE (trade-in, pré-avaliação) and the customer sends photos or images, DO NOT call inventory_query.
+- The customer is sending photos of THEIR car for evaluation — NOT asking to see dealer stock photos.
+- In this context, return "NO_TOOLS_NEEDED". The conversational agent will handle the photo acknowledgment.
+- Clues that the conversation is in appraisal mode: assistant previously asked for photos of the customer's car, asked about KM, asked about "único dono", asked about version (LT, LTZ, etc.), mentioned "pré-avaliação" or "avaliação".
+- ONLY call inventory_query during appraisal if the customer EXPLICITLY asks about a DIFFERENT vehicle to BUY (e.g., "e vocês têm algum Corolla?").
+
 VEHICLE CONTEXT RULE (CRITICAL):
 - When the customer asks for photos, details, price, or more information WITHOUT explicitly naming a vehicle, identify the vehicle being discussed from the assistant's MOST RECENT messages.
 - Use pronouns ("dela", "dele", "desse", "dessa") to identify which vehicle the customer refers to.
