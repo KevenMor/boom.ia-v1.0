@@ -250,6 +250,19 @@ function buildRecentUserContextText(conversationMessages: any[], maxMessages = 4
     .join(" ");
 }
 
+function isUserSelectingPreviousOption(text: string): boolean {
+  if (!text) return false;
+  const normalized = text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return /\b(gosto da|gostei da|prefiro a|prefiro essa|prefiro esta|fico com|vou de|quero a|quero essa|essa mesmo|esta mesmo|a segunda opcao|segunda opcao|a primeira opcao|primeira opcao|a terceira opcao|terceira opcao|opcao 2|opcao 1|opcao 3|numero 2|numero 1|numero 3|a de baixo|a de cima)\b/i.test(normalized);
+}
+
 function buildFallbackInventoryArgs(userText: string, conversationMessages?: any[]): Record<string, any> {
   // Try to extract the vehicle model/brand from conversation context first
   // The user might say "gostei do corola, fotos?" — we need to find "COROLLA" from assistant's previous messages
@@ -1584,29 +1597,35 @@ Deno.serve(async (req) => {
         const dispatcherSystemPrompt = getDispatcherPrompt(tenantSlugForDispatcher);
         console.log(`[Dispatcher] Using registry prompt for tenant: ${tenantSlugForDispatcher || "default"}`);
 
-        // === CONTESTATION DETECTION ===
-        // When user is questioning/contesting a previous response (not requesting new data),
-        // skip the dispatcher entirely to prevent contradictory re-queries.
+        // === CONTESTATION / SELECTION DETECTION ===
+        // When user is questioning/contesting a previous response OR selecting an already-listed option,
+        // skip dispatcher to prevent contradictory re-queries.
         const contestationPattern = /^(voce me mandou|voce so mandou|voce enviou|me mandou|mandou so|so mandou|mandou apenas|apenas um|so um|nao era|nao eram|estava errado|estavam erradas|informacao errada|informacoes erradas|contradiz|contradit|voce disse|mas voce|nao entendi|ta errado|incorreto|informacoes incorretas|informacao incorreta|nao bate|voce falou|nao foi isso|corrigir|corrija|retifique|nao confere|conferir)/i;
-        const isContestationMsg = contestationPattern.test(
-          latestUserText.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim()
-        );
+        const normalizedLatestUser = latestUserText.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+        const isContestationMsg = contestationPattern.test(normalizedLatestUser);
 
         // Also detect "então não tem X correto?" pattern — user is asking for confirmation, not new data
         const isConfirmationQuestion = /^(entao nao tem|nao tem nenhum|nao tem mais|afinal tem|afinal nao|correto\??|certo\??|isso mesmo|e isso)[\s?!.]*$/i.test(
-          latestUserText.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s?!.]/g, " ").replace(/\s+/g, " ").trim()
+          normalizedLatestUser.replace(/[^a-z0-9\s?!.]/g, " ").replace(/\s+/g, " ").trim()
         );
 
         // Check if the user is asking a clarification about a previous assistant response
-        const isReactingToPreviousResponse = /^(voce|vc|ce|tu)\s+(me\s+)?(mandou|enviou|passou|falou|disse|mostrou|apresentou)/i.test(
-          latestUserText.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim()
-        );
+        const isReactingToPreviousResponse = /^(voce|vc|ce|tu)\s+(me\s+)?(mandou|enviou|passou|falou|disse|mostrou|apresentou)/i.test(normalizedLatestUser);
 
-        if (isContestationMsg || isConfirmationQuestion || isReactingToPreviousResponse) {
-          console.log(`[Dispatcher] CONTESTATION/CONFIRMATION detected: "${latestUserText.slice(0, 80)}". Skipping dispatcher to avoid contradictory re-queries.`);
+        // User selecting one option that was already presented in previous assistant message(s)
+        const isSelectingPreviousOption = isUserSelectingPreviousOption(latestUserText || "");
+
+        if (isContestationMsg || isConfirmationQuestion || isReactingToPreviousResponse || isSelectingPreviousOption) {
+          console.log(`[Dispatcher] Skip detected (contestation/confirmation/reaction/selection): "${latestUserText.slice(0, 80)}"`);
           debugTrace.push({
             type: "dispatcher_skip",
-            reason: isContestationMsg ? "user_contestation_detected" : isConfirmationQuestion ? "confirmation_question" : "reaction_to_previous",
+            reason: isContestationMsg
+              ? "user_contestation_detected"
+              : isConfirmationQuestion
+                ? "confirmation_question"
+                : isReactingToPreviousResponse
+                  ? "reaction_to_previous"
+                  : "selection_of_previous_option",
             user_text: latestUserText.slice(0, 120),
             timestamp: Date.now(),
           });
@@ -1928,10 +1947,14 @@ Deno.serve(async (req) => {
       const userMentionsVehicle = vehicleMentionPattern.test(latestUserText || "");
       const userAsksAboutAvailability = priceAvailabilityPattern.test(latestUserText || "");
       const userAskedForPhotos = photoFallbackPattern.test(latestUserText || "");
+      const userSelectingPreviousOption = isUserSelectingPreviousOption(latestUserText || "");
       const dispatcherAlreadyQueriedInventory = toolResultsContext.some(r => r.includes('"total"'));
       const hasInventoryToolForFallback = agentTools.some(t => t.tool_type === "inventory_query");
 
-      const shouldForceFallback = hasInventoryToolForFallback && !dispatcherAlreadyQueriedInventory && (userMentionsVehicle || userAsksAboutAvailability || userAskedForPhotos);
+      const shouldForceFallback = hasInventoryToolForFallback
+        && !dispatcherAlreadyQueriedInventory
+        && !userSelectingPreviousOption
+        && (userMentionsVehicle || userAsksAboutAvailability || userAskedForPhotos);
 
       if (shouldForceFallback) {
         const fallbackReason = userMentionsVehicle ? "vehicle_mention" : userAsksAboutAvailability ? "availability_question" : "photo_request";
@@ -1979,6 +2002,25 @@ Deno.serve(async (req) => {
         }
         return msg;
       });
+
+    const userSelectingPreviousOptionForPhase2 = isUserSelectingPreviousOption(latestUserText || "");
+
+    // If the customer is selecting an option already presented, force continuity and block contradictions.
+    if (userSelectingPreviousOptionForPhase2 && toolResultsContext.length === 0) {
+      const continuityMsg = `⚠️ CONTINUIDADE DE CONTEXTO (PRIORIDADE MÁXIMA):
+O cliente está escolhendo uma opção JÁ apresentada anteriormente nesta conversa.
+NÃO contradiga a disponibilidade já apresentada.
+NÃO diga que "não tem" ou "não encontramos" nesta resposta.
+Aja com continuidade comercial: confirme a opção escolhida e avance com próximos passos (detalhes, fotos, visita, proposta).`;
+      const lastUserIdx = conversationalMessages.map((m: any) => m.role).lastIndexOf("user");
+      if (lastUserIdx > 0) {
+        conversationalMessages.splice(lastUserIdx, 0, { role: "system", content: continuityMsg });
+      } else {
+        conversationalMessages.splice(1, 0, { role: "system", content: continuityMsg });
+      }
+      debugTrace.push({ type: "continuity_guard_injected", reason: "user_selected_previous_option", timestamp: Date.now() });
+      console.log("[Conversational] Injected continuity guard for previous-option selection");
+    }
 
     if (toolResultsContext.length > 0) {
       // Inject tool results as a system message CLOSE TO THE END for maximum recency weight
