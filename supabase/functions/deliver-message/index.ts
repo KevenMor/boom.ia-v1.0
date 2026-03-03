@@ -307,66 +307,85 @@ Deno.serve(async (req: Request) => {
     const hasChatwootConfig = !!(cfg.chatwoot_url && cfg.chatwoot_api_token && cfg.chatwoot_account_id);
     console.log(`[Deliver] Payload welcome_video_url: ${welcome_video_url ? "YES" : "NO"}`);
 
-    // ---------- Send welcome flow (greeting + video) ----------
-    if (welcome_video_url && chatwoot_conversation_id && hasChatwootConfig) {
-      const baseUrl = cfg.chatwoot_url.replace(/\/+$/, "");
-      const msgUrl = `${baseUrl}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${chatwoot_conversation_id}/messages`;
-
-      // 1) Send greeting text BEFORE the video
-      const welcomeGreeting = cfg.welcome_greeting_text ||
-        "Oi! Sou a Juliana, aqui da PPL Motors de Sorocaba, e vou cuidar do seu atendimento. Mas antes, aqui vai um breve vídeo da nossa loja pra você nos conhecer melhor!";
-      console.log(`[Deliver] Sending welcome greeting text`);
-      await sendChatwootTextMessage(msgUrl, cfg.chatwoot_api_token, welcomeGreeting);
-      await new Promise((r) => setTimeout(r, 1500));
-
-      // 2) Send the video file
-      console.log(`[Deliver] Sending welcome video: ${welcome_video_url}`);
-      const videoOk = await sendChatwootMediaMessage(msgUrl, cfg.chatwoot_api_token, welcome_video_url, "video/mp4", "");
-      console.log(`[Deliver] Welcome video: ${videoOk ? "OK" : "FAIL"}`);
-      if (videoOk) await new Promise((r) => setTimeout(r, 2000));
-
-      // 3) Save welcome messages to conversation history (for live chat visibility)
-      if (conversation_id) {
-        try {
-          await supabase.rpc("save_message", {
-            p_agent_id: agent_id,
-            p_conversation_id: conversation_id,
-            p_role: "assistant",
-            p_content: welcomeGreeting,
-            p_model: "system",
-            p_latency_ms: null,
-            p_metadata: { type: "welcome_greeting" },
-          });
-          await supabase.rpc("save_message", {
-            p_agent_id: agent_id,
-            p_conversation_id: conversation_id,
-            p_role: "assistant",
-            p_content: "[Vídeo institucional enviado]",
-            p_model: "system",
-            p_latency_ms: null,
-            p_metadata: { type: "welcome_video", video_url: welcome_video_url },
-          });
-          console.log(`[Deliver] Welcome messages saved to conversation history`);
-        } catch (e: any) {
-          console.warn(`[Deliver] Failed to save welcome messages:`, e.message);
-        }
-      }
-    }
-
     // ---------- Send to Chatwoot ----------
     if (chatwoot_conversation_id && hasChatwootConfig) {
+      const baseUrl = cfg.chatwoot_url.replace(/\/+$/, "");
+      const msgUrl = `${baseUrl}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${chatwoot_conversation_id}/messages`;
       const humanization = getHumanizationConfig(cfg);
-      console.log(`[Deliver] → Replying to Chatwoot conv ${chatwoot_conversation_id} (humanization: ${JSON.stringify(humanization)})`);
 
-      await replyToChatwoot(
-        cfg.chatwoot_url,
-        cfg.chatwoot_api_token,
-        cfg.chatwoot_account_id,
-        chatwoot_conversation_id,
-        (response_text || "").trim(),
-        response_parts || [],
-        humanization
-      );
+      if (welcome_video_url) {
+        // ===== WELCOME FLOW: LLM greeting → video → "Como posso te chamar?" =====
+        console.log(`[Deliver] Welcome flow active`);
+
+        // 1) Send LLM-generated greeting (responds naturally to client + intro)
+        const greetingText = (response_text || "").trim();
+        if (greetingText) {
+          console.log(`[Deliver] Sending LLM greeting: "${greetingText.substring(0, 80)}..."`);
+          await sendChatwootTextMessage(msgUrl, cfg.chatwoot_api_token, greetingText);
+          await new Promise((r) => setTimeout(r, 1500));
+        }
+
+        // 2) Send the video
+        console.log(`[Deliver] Sending welcome video: ${welcome_video_url}`);
+        const videoOk = await sendChatwootMediaMessage(msgUrl, cfg.chatwoot_api_token, welcome_video_url, "video/mp4", "");
+        console.log(`[Deliver] Welcome video: ${videoOk ? "OK" : "FAIL"}`);
+        if (videoOk) await new Promise((r) => setTimeout(r, 2000));
+
+        // 3) Ask for the client's name
+        const nameQuestion = cfg.welcome_name_question || "Como posso te chamar?";
+        console.log(`[Deliver] Sending name question`);
+        await sendChatwootTextMessage(msgUrl, cfg.chatwoot_api_token, nameQuestion);
+
+        // 4) Save all welcome messages to conversation history
+        if (conversation_id) {
+          try {
+            if (greetingText) {
+              await supabase.rpc("save_message", {
+                p_agent_id: agent_id,
+                p_conversation_id: conversation_id,
+                p_role: "assistant",
+                p_content: greetingText,
+                p_model: "system",
+                p_latency_ms: null,
+                p_metadata: { type: "welcome_greeting" },
+              });
+            }
+            await supabase.rpc("save_message", {
+              p_agent_id: agent_id,
+              p_conversation_id: conversation_id,
+              p_role: "assistant",
+              p_content: "[Vídeo institucional enviado]",
+              p_model: "system",
+              p_latency_ms: null,
+              p_metadata: { type: "welcome_video", video_url: welcome_video_url },
+            });
+            await supabase.rpc("save_message", {
+              p_agent_id: agent_id,
+              p_conversation_id: conversation_id,
+              p_role: "assistant",
+              p_content: nameQuestion,
+              p_model: "system",
+              p_latency_ms: null,
+              p_metadata: { type: "welcome_name_question" },
+            });
+            console.log(`[Deliver] Welcome messages saved to conversation history`);
+          } catch (e: any) {
+            console.warn(`[Deliver] Failed to save welcome messages:`, e.message);
+          }
+        }
+      } else {
+        // ===== NORMAL FLOW =====
+        console.log(`[Deliver] → Replying to Chatwoot conv ${chatwoot_conversation_id} (humanization: ${JSON.stringify(humanization)})`);
+        await replyToChatwoot(
+          cfg.chatwoot_url,
+          cfg.chatwoot_api_token,
+          cfg.chatwoot_account_id,
+          chatwoot_conversation_id,
+          (response_text || "").trim(),
+          response_parts || [],
+          humanization
+        );
+      }
     } else {
       console.log("[Deliver] No Chatwoot config or conversation ID, skipping delivery");
     }
