@@ -21,6 +21,7 @@ import { getModelsForProvider } from "@/lib/provider-models";
 import { ChatwootConfigSection } from "@/components/agents/ChatwootConfigSection";
 import { FollowUpConfigSection } from "@/components/agents/FollowUpConfigSection";
 import { AgentAvatarUpload } from "@/components/agents/AgentAvatarUpload";
+import { BusinessHoursSection, DEFAULT_BUSINESS_HOURS, type BusinessHours } from "@/components/agents/BusinessHoursSection";
 import type { Agent } from "@/types/database";
 
 const WEBHOOK_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/webhook-test`;
@@ -70,6 +71,9 @@ export default function EditAgent() {
   const [followupQuietEnd, setFollowupQuietEnd] = useState("08:00");
   const [followupPrompt, setFollowupPrompt] = useState("");
   const [followupAgentId, setFollowupAgentId] = useState("");
+  const [businessHoursEnabled, setBusinessHoursEnabled] = useState(false);
+  const [businessHours, setBusinessHours] = useState<BusinessHours>(DEFAULT_BUSINESS_HOURS);
+  const [offlineMessage, setOfflineMessage] = useState("");
 
   const { register, handleSubmit, setValue, watch, reset } = useForm<FormData>({ resolver: zodResolver(schema) });
 
@@ -102,6 +106,9 @@ export default function EditAgent() {
       setFollowupQuietEnd((cfg as any).followup_quiet_end ?? "08:00");
       setFollowupPrompt((cfg as any).followup_prompt ?? "");
       setFollowupAgentId((cfg as any).followup_agent_id ?? "");
+      setBusinessHoursEnabled((cfg as any).business_hours_enabled ?? false);
+      setBusinessHours((cfg as any).business_hours ?? DEFAULT_BUSINESS_HOURS);
+      setOfflineMessage((cfg as any).business_hours_offline_message ?? "");
     }
   }, [agent, reset]);
 
@@ -129,6 +136,9 @@ export default function EditAgent() {
           followup_quiet_end: followupQuietEnd || undefined,
           followup_prompt: followupPrompt || undefined,
           followup_agent_id: followupAgentId || undefined,
+          business_hours_enabled: businessHoursEnabled,
+          business_hours: businessHours,
+          business_hours_offline_message: offlineMessage || undefined,
         },
       });
       toast.success("Agente atualizado");
@@ -400,6 +410,15 @@ export default function EditAgent() {
             chatwootApiToken={chatwootApiToken} setChatwootApiToken={setChatwootApiToken}
             chatwootAccountId={chatwootAccountId} setChatwootAccountId={setChatwootAccountId}
             webhookUrl={`${WEBHOOK_BASE}?agent_id=${agent.id}`}
+          />
+        </div>
+
+        {/* Business Hours */}
+        <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+          <BusinessHoursSection
+            enabled={businessHoursEnabled} setEnabled={setBusinessHoursEnabled}
+            hours={businessHours} setHours={setBusinessHours}
+            offlineMessage={offlineMessage} setOfflineMessage={setOfflineMessage}
           />
         </div>
 
