@@ -371,16 +371,44 @@ function extractVehicleFromContext(userText: string, conversationMessages: any[]
       "aqui", "ali", "la", "onde", "quando", "como", "porque", "pois",
       "olha", "veja", "acho", "gosto", "quero", "prefiro", "preciso",
       "realmente", "certamente", "excelente", "perfeito", "perfeita",
+      // Words that caused false extractions in production:
+      "entrar", "no", "nosso", "nossa", "nossas", "nossos", "patio", "loja", "estoque",
+      "disponivel", "disponibilidade", "outra", "outro", "hora", "vezes", "vez",
+      "fala", "falou", "falar", "disse", "diz", "dizer", "voce", "voces",
+      "temos", "tinha", "tinham", "ter", "tendo", "sera", "serao",
+      "ainda", "tambem", "ja", "nunca", "sempre", "agora", "depois", "antes",
+      "carro", "carros", "veiculo", "veiculos", "modelo", "modelos", "marca",
+      "avisasse", "avisar", "avise", "avisa", "assim",
+    ]);
+
+    // Known model names that should be captured (whitelist approach for short words)
+    const knownModels = new Set([
+      "q3", "q5", "q7", "q8", "a1", "a3", "a4", "a5", "a6", "a7", "a8", "tt", "rs3", "rs5", "rs6", "rs7",
+      "x1", "x2", "x3", "x4", "x5", "x6", "x7", "m3", "m4", "m5",
+      "c180", "c200", "c250", "c300", "e300", "e350", "gla", "glb", "glc", "gle", "gls", "cla",
+      "onix", "hb20", "corolla", "civic", "creta", "tracker", "nivus", "kicks", "polo", "virtus",
+      "compass", "renegade", "hilux", "s10", "ranger", "amarok", "toro", "strada", "saveiro",
+      "cruze", "cobalt", "prisma", "argo", "mobi", "kwid", "gol", "fit", "city", "sentra",
+      "jetta", "tucson", "sportage", "duster", "captur", "ecosport", "bronco", "equinox",
+      "trailblazer", "jolion", "territory", "haval",
     ]);
 
     for (const brand of knownBrands) {
       const pattern = new RegExp(`\\b${escapeRegExp(brand)}\\b\\s+([a-z0-9][a-z0-9./-]*(?:\\s+[a-z0-9][a-z0-9./-]*){0,4})`, "gi");
       let m: RegExpExecArray | null;
       while ((m = pattern.exec(normalizedContent)) !== null) {
-        const model = (m[1] || "").trim();
-        if (!model) continue;
-        const firstWord = model.split(/\s+/)[0].toLowerCase();
-        if (notModelWords.has(firstWord)) continue;
+        const rawModel = (m[1] || "").trim();
+        if (!rawModel) continue;
+        // Filter model tokens: keep only those that are known models OR not in notModelWords
+        const modelTokens = rawModel.split(/\s+/).filter((t: string) => {
+          const tLower = t.toLowerCase();
+          if (knownModels.has(tLower)) return true; // Always keep known models
+          if (notModelWords.has(tLower)) return false; // Reject known non-model words
+          if (t.length < 2) return false; // Too short
+          return true;
+        });
+        if (!modelTokens.length) continue;
+        const model = modelTokens.slice(0, 3).join(" ");
         const full = `${brand} ${model}`.trim();
         vehicleMentions.push({ brand, model, full, sourceIndex: idx });
       }
@@ -1767,17 +1795,23 @@ Deno.serve(async (req) => {
                   }
 
                   // === CONTEXT VALIDATION: Ensure dispatcher queried the RIGHT vehicle ===
-                  // If user asked for photos/details implicitly (no explicit vehicle name),
-                  // validate that dispatcher's args match the vehicle being discussed
-                  const userMentionsExplicitVehicle = /(chevrolet|toyota|honda|hyundai|volkswagen|fiat|ford|bmw|mercedes|audi|nissan|renault|jeep|haval|gwm|peugeot|citroen|mitsubishi|kia|subaru|volvo|porsche|onix|hb20|corolla|civic|creta|tracker|nivus|kicks|polo|virtus|compass|renegade|hilux|s10|ranger|amarok|toro|strada|saveiro|cruze|cobalt|prisma|argo|mobi|kwid|gol|fit|city|sentra|jetta|tucson|sportage|duster|captur|ecosport|bronco|equinox|trailblazer|jolion|territory|haval)/i.test(latestUserText || "");
+                  // ONLY override if dispatcher's args look like garbage AND context has a KNOWN model
+                  const userMentionsExplicitVehicle = /(chevrolet|toyota|honda|hyundai|volkswagen|fiat|ford|bmw|mercedes|audi|nissan|renault|jeep|haval|gwm|peugeot|citroen|mitsubishi|kia|subaru|volvo|porsche|onix|hb20|corolla|civic|creta|tracker|nivus|kicks|polo|virtus|compass|renegade|hilux|s10|ranger|amarok|toro|strada|saveiro|cruze|cobalt|prisma|argo|mobi|kwid|gol|fit|city|sentra|jetta|tucson|sportage|duster|captur|ecosport|bronco|equinox|trailblazer|jolion|territory|haval|q\d|a\d|x\d|c\d{2,3}|gl[abces]\d{2,3})/i.test(latestUserText || "");
                   
                   if (!userMentionsExplicitVehicle) {
                     const contextVehicle = extractVehicleFromContext(latestUserText, messages);
                     if (contextVehicle) {
-                      const dispatcherSearch = (toolArgs.modelo || toolArgs.model || toolArgs.marca || toolArgs.brand || toolArgs.search || "").toLowerCase();
-                      const contextSearch = (contextVehicle.search || contextVehicle.modelo || contextVehicle.model || "").toLowerCase();
+                      const dispatcherSearch = (toolArgs.modelo || toolArgs.model || toolArgs.marca || toolArgs.brand || toolArgs.search || "").toLowerCase().trim();
+                      const contextSearch = (contextVehicle.search || contextVehicle.modelo || contextVehicle.model || "").toLowerCase().trim();
                       
-                      if (dispatcherSearch && contextSearch && !dispatcherSearch.includes(contextSearch) && !contextSearch.includes(dispatcherSearch)) {
+                      // Only override if context search looks like a REAL vehicle term (not garbage)
+                      const contextLooksLikeVehicle = /^[a-z0-9\s./-]{1,30}$/.test(contextSearch) && 
+                        !/\b(entrar|nosso|nossa|outra|hora|vez|fala|disse|voce|ainda|agora|depois|antes|carro|veiculo|estoque|patio|loja)\b/i.test(contextSearch);
+                      
+                      // Only override if dispatcher's search is ALSO not a known model code
+                      const dispatcherHasKnownModel = /\b(q[0-9]|a[0-9]|x[0-9]|c\d{2,3}|gl[abces]\d{2,3}|onix|hb20|corolla|civic|creta|tracker|nivus|kicks|polo|virtus|hilux|s10|ranger|amarok|toro|strada|compass|renegade)\b/i.test(dispatcherSearch);
+                      
+                      if (!dispatcherHasKnownModel && contextLooksLikeVehicle && dispatcherSearch && contextSearch && !dispatcherSearch.includes(contextSearch) && !contextSearch.includes(dispatcherSearch)) {
                         console.warn(`[Dispatcher] CONTEXT MISMATCH! Dispatcher wants "${dispatcherSearch}" but conversation context is about "${contextSearch}". Overriding.`);
                         debugTrace.push({
                           type: "dispatcher_context_override",
@@ -1786,7 +1820,9 @@ Deno.serve(async (req) => {
                           reason: "dispatcher_queried_wrong_vehicle",
                           timestamp: Date.now(),
                         });
-                        toolArgs = { search: contextSearch };
+                        toolArgs = { ...toolArgs, search: contextSearch };
+                      } else if (!contextLooksLikeVehicle) {
+                        console.log(`[Dispatcher] Context extraction returned garbage "${contextSearch}" — keeping dispatcher's original args "${dispatcherSearch}"`);
                       }
                     }
                   }
@@ -1939,10 +1975,14 @@ Deno.serve(async (req) => {
       // ===== VEHICLE MENTION FALLBACK (ANTI-HALLUCINATION SAFETY NET) =====
       // If user mentions ANY vehicle brand/model/category/price OR asks about availability
       // but the dispatcher didn't call inventory_query, FORCE the call.
-      // This prevents the conversational agent from hallucinating stock info.
+      // CRITICAL: Do NOT force when user is contesting, reacting to, or selecting from previous response.
       const vehicleMentionPattern = /(audi|toyota|honda|hyundai|chevrolet|fiat|ford|bmw|mercedes|nissan|renault|jeep|haval|gwm|peugeot|citroen|mitsubishi|kia|subaru|volvo|porsche|land rover|jaguar|ram|dodge|caoa|chery|byd|onix|hb20|corolla|civic|creta|tracker|nivus|kicks|polo|virtus|compass|renegade|hilux|s10|ranger|amarok|toro|strada|saveiro|cruze|cobalt|prisma|argo|mobi|kwid|gol|fit|city|sentra|jetta|tucson|sportage|duster|captur|ecosport|bronco|equinox|trailblazer|jolion|territory|q\s?\d|a\s?\d|x\s?\d|serie\s?\d|classe\s?[a-e]|suv|sedan|hatch|picape|caminhonete|camionete)/i;
       const priceAvailabilityPattern = /(tem |temos|disponivel|disponível|estoque|qual valor|quanto custa|qual preço|qual preco|em qual|faixa de preço|faixa de preco|até \d|ate \d)/i;
       const photoFallbackPattern = /(foto|imagem|image|photo|manda foto|envia foto|pode enviar|enviar fotos|ver foto|ver imagem|mostra foto|mostra imagem|fotos)/i;
+
+      // Detect contestation/reaction patterns to BLOCK the fallback
+      const fallbackContestationPattern = /\b(uma hora|outra hora|voce fala|voce disse|voce falou|me mandou|contradiz|ta errado|incorreto|errada|errado|confusao|confusa|confuso|insistencia|denovo|de novo|nao entendi|afinal)\b/i;
+      const isContestationForFallback = fallbackContestationPattern.test(latestUserText || "");
 
       const userMentionsVehicle = vehicleMentionPattern.test(latestUserText || "");
       const userAsksAboutAvailability = priceAvailabilityPattern.test(latestUserText || "");
@@ -1954,7 +1994,13 @@ Deno.serve(async (req) => {
       const shouldForceFallback = hasInventoryToolForFallback
         && !dispatcherAlreadyQueriedInventory
         && !userSelectingPreviousOption
+        && !isContestationForFallback
         && (userMentionsVehicle || userAsksAboutAvailability || userAskedForPhotos);
+
+      if (isContestationForFallback && !dispatcherAlreadyQueriedInventory) {
+        console.log(`[VehicleFallback] BLOCKED — user is contesting/reacting, not requesting new data: "${(latestUserText || "").slice(0, 80)}"`);
+        debugTrace.push({ type: "vehicle_fallback_blocked", reason: "contestation_detected", user_text: (latestUserText || "").slice(0, 120), timestamp: Date.now() });
+      }
 
       if (shouldForceFallback) {
         const fallbackReason = userMentionsVehicle ? "vehicle_mention" : userAsksAboutAvailability ? "availability_question" : "photo_request";
