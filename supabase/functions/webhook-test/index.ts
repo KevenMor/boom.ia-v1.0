@@ -702,34 +702,46 @@ Deno.serve(async (req: Request) => {
 
         // Still save the incoming message to the conversation for live chat visibility
         try {
-          const convIdForSave = earlyConvId || null;
-          let resolvedConvId = convIdForSave;
+          let resolvedConvId: string | null = null;
 
-          if (!resolvedConvId) {
-            const { data: newConvId } = await supabase.rpc("find_or_create_webhook_conversation", {
-              p_agent_id: agentId,
-              p_channel: chatwoot.channel,
-              p_external_user_id: chatwoot.externalUserId,
-              p_chatwoot_conversation_id: chatwoot.chatwootConversationId,
-              p_chatwoot_contact_id: chatwoot.chatwootContactId,
-              p_contact_name: chatwoot.contactName,
-              p_contact_avatar_url: chatwoot.contactAvatarUrl,
-            });
-            resolvedConvId = newConvId;
-          }
+          const { data: newConvId } = await supabase.rpc("find_or_create_webhook_conversation", {
+            p_agent_id: agentId,
+            p_channel: chatwoot.channel,
+            p_external_user_id: chatwoot.externalUserId,
+            p_chatwoot_conversation_id: chatwoot.chatwootConversationId,
+            p_chatwoot_contact_id: chatwoot.chatwootContactId,
+            p_contact_name: chatwoot.contactName,
+            p_contact_avatar_url: chatwoot.contactAvatarUrl,
+          });
+          resolvedConvId = newConvId;
 
-          if (resolvedConvId && chatwoot.message?.trim()) {
-            await supabase.rpc("save_message", {
-              p_agent_id: agentId,
-              p_conversation_id: resolvedConvId,
-              p_role: "user",
-              p_content: chatwoot.message,
-              p_model: null,
-              p_tokens_in: 0,
-              p_tokens_out: 0,
-              p_latency_ms: 0,
-            });
-            console.log(`[Webhook] Saved client message (human-assigned) to conv ${resolvedConvId}`);
+          if (resolvedConvId) {
+            // Cancel any pending follow-ups — human is handling this conversation
+            try {
+              const { data: cancelledCount } = await supabase.rpc("cancel_pending_followups", {
+                p_agent_id: agentId,
+                p_conversation_id: resolvedConvId,
+              });
+              if (cancelledCount && cancelledCount > 0) {
+                console.log(`[FollowUp] Cancelled ${cancelledCount} pending follow-up(s) — human agent assigned`);
+              }
+            } catch (e) {
+              console.warn("[FollowUp] Cancel on human-assign failed (non-critical):", e);
+            }
+
+            if (chatwoot.message?.trim()) {
+              await supabase.rpc("save_message", {
+                p_agent_id: agentId,
+                p_conversation_id: resolvedConvId,
+                p_role: "user",
+                p_content: chatwoot.message,
+                p_model: null,
+                p_tokens_in: 0,
+                p_tokens_out: 0,
+                p_latency_ms: 0,
+              });
+              console.log(`[Webhook] Saved client message (human-assigned) to conv ${resolvedConvId}`);
+            }
           }
         } catch (e: any) {
           console.warn("[Webhook] Failed to save message for human-assigned conv:", e.message);
