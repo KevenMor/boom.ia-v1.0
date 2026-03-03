@@ -2026,7 +2026,9 @@ Deno.serve(async (req) => {
 
                   // === CONTEXT VALIDATION: Ensure dispatcher queried the RIGHT vehicle ===
                   // ONLY override if dispatcher's args look like garbage AND context has a KNOWN model
-                  const userMentionsExplicitVehicle = /(chevrolet|toyota|honda|hyundai|volkswagen|fiat|ford|bmw|mercedes|audi|nissan|renault|jeep|haval|gwm|peugeot|citroen|mitsubishi|kia|subaru|volvo|porsche|onix|hb20|corolla|civic|creta|tracker|nivus|kicks|polo|virtus|compass|renegade|hilux|s10|ranger|amarok|toro|strada|saveiro|cruze|cobalt|prisma|argo|mobi|kwid|gol|fit|city|sentra|jetta|tucson|sportage|duster|captur|ecosport|bronco|equinox|trailblazer|jolion|territory|haval|q\d|a\d|x\d|c\d{2,3}|gl[abces]\d{2,3})/i.test(latestUserText || "");
+                  // COMPREHENSIVE known models list to prevent false overrides
+                  const KNOWN_MODELS_RE = /\b(q[0-9]|a[0-9]|x[0-9]|c\d{2,3}|gl[abces]\d{2,3}|onix|hb20|corolla|civic|creta|tracker|nivus|kicks|polo|virtus|hilux|s10|ranger|amarok|toro|strada|compass|renegade|montana|cruze|cobalt|prisma|argo|mobi|kwid|gol|fit|city|sentra|jetta|tucson|sportage|duster|captur|ecosport|bronco|equinox|trailblazer|jolion|territory|saveiro|spin|joy|yaris|etios|rampage|pulse|fastback|cronos|uno|siena|palio|sandero|logan|oroch|jimny|vitara|sw4|corolla cross|rav4|camry|frontier|versa|march|hr-v|wr-v|zr-v|t-cross|taos|tiguan|tiggo|arrizo|caoa|chery|haval|gwm)\b/i;
+                  const userMentionsExplicitVehicle = /(chevrolet|toyota|honda|hyundai|volkswagen|fiat|ford|bmw|mercedes|audi|nissan|renault|jeep|haval|gwm|peugeot|citroen|mitsubishi|kia|subaru|volvo|porsche)/i.test(latestUserText || "") || KNOWN_MODELS_RE.test(latestUserText || "");
                   
                   if (!userMentionsExplicitVehicle) {
                     const contextVehicle = extractVehicleFromContext(latestUserText, messages);
@@ -2038,10 +2040,24 @@ Deno.serve(async (req) => {
                       const contextLooksLikeVehicle = /^[a-z0-9\s./-]{1,30}$/.test(contextSearch) && 
                         !/\b(entrar|nosso|nossa|outra|hora|vez|fala|disse|voce|ainda|agora|depois|antes|carro|veiculo|estoque|patio|loja)\b/i.test(contextSearch);
                       
-                      // Only override if dispatcher's search is ALSO not a known model code
-                      const dispatcherHasKnownModel = /\b(q[0-9]|a[0-9]|x[0-9]|c\d{2,3}|gl[abces]\d{2,3}|onix|hb20|corolla|civic|creta|tracker|nivus|kicks|polo|virtus|hilux|s10|ranger|amarok|toro|strada|compass|renegade)\b/i.test(dispatcherSearch);
+                      // Only override if dispatcher's search is ALSO not a known model
+                      const dispatcherHasKnownModel = KNOWN_MODELS_RE.test(dispatcherSearch);
                       
-                      if (!dispatcherHasKnownModel && contextLooksLikeVehicle && dispatcherSearch && contextSearch && !dispatcherSearch.includes(contextSearch) && !contextSearch.includes(dispatcherSearch)) {
+                      // CRITICAL: Check if context vehicle is from a TRADE-IN/APPRAISAL (customer's own car)
+                      // If history shows fipe_query was called for this vehicle, it's the customer's car — DO NOT override
+                      const contextIsTradeIn = messages.some((m: any) => {
+                        const c = String(m.content || "").toLowerCase();
+                        return m.role === "tool" && (c.includes("fipe") || c.includes("avalia"));
+                      }) && contextSearch && messages.some((m: any) => {
+                        const c = String(m.content || "").toLowerCase();
+                        return (m.role === "user" || m.role === "tool") && 
+                          (c.includes("meu") || c.includes("trocar") || c.includes("troca") || c.includes("avaliar") || c.includes("fipe")) &&
+                          contextSearch.split(/\s+/).some((w: string) => w.length >= 3 && c.includes(w));
+                      });
+                      
+                      if (contextIsTradeIn) {
+                        console.log(`[Dispatcher] Context vehicle "${contextSearch}" appears to be customer's TRADE-IN — keeping dispatcher's original args "${dispatcherSearch}"`);
+                      } else if (!dispatcherHasKnownModel && contextLooksLikeVehicle && dispatcherSearch && contextSearch && !dispatcherSearch.includes(contextSearch) && !contextSearch.includes(dispatcherSearch)) {
                         console.warn(`[Dispatcher] CONTEXT MISMATCH! Dispatcher wants "${dispatcherSearch}" but conversation context is about "${contextSearch}". Overriding.`);
                         debugTrace.push({
                           type: "dispatcher_context_override",
