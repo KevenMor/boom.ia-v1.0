@@ -480,8 +480,11 @@ function isClosingQuestion(text: string): boolean {
 }
 
 function protectNumericDots(text: string): string {
-  // Protect thousand separators and decimal dots so sentence split does not break prices like "R$ 115.900"
-  return text.replace(/(\d)\.(?=\d{3}(\D|$))/g, "$1__NUM_DOT__");
+  // Protect thousand separators (e.g. "115.900") AND decimal dots (e.g. "2.0", "1.6", "3.5")
+  // so sentence split does not break prices or engine specs
+  return text
+    .replace(/(\d)\.(?=\d{3}(\D|$))/g, "$1__NUM_DOT__")  // thousand separators: 115.900
+    .replace(/(\d)\.(\d{1,2})(?=\s|[^0-9]|$)/g, "$1__NUM_DOT__$2"); // decimals: 2.0, 1.6T, 3.5
 }
 
 function restoreNumericDots(text: string): string {
@@ -514,7 +517,9 @@ function splitIntoMessages(content: string): string[] {
       if (textOnly.length > 250) {
         const protectedText = protectNumericDots(textOnly);
         // Split by sentence boundaries (. ! ?) but preserve protected numeric separators
-        const sentences = protectedText.match(/[^.!?]+(?:[.!?]+(?=\s|$)|$)/g) || [protectedText];
+        // Use a safer split that doesn't lose unmatched segments
+        const sentenceSplitRegex = /(?<=[.!?])\s+(?=[A-ZÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇÑ])/g;
+        const sentences = protectedText.split(sentenceSplitRegex).filter(s => s.trim());
         let chunk = "";
         for (const s of sentences) {
           if (chunk && (chunk.length + s.length > 250)) {
