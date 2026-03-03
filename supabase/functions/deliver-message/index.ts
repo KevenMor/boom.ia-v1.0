@@ -250,12 +250,14 @@ async function replyToChatwoot(
       await sendChatwootTextMessage(msgUrl, apiToken, part.trim());
     }
 
-    // 3) Block gap
+    // 3) Inter-split delay (2s minimum for natural feel) + configurable block gap
     const isLastPart = i === parts.length - 1;
-    if (!isLastPart && humanization.blockGapMs > 0 && hasTimeBudget()) {
-      const gapDelay = applyJitter(humanization.blockGapMs);
-      console.log(`[Deliver] Block gap (after part ${i + 1}): ${gapDelay}ms`);
-      await safeDelay(gapDelay);
+    if (!isLastPart && hasTimeBudget()) {
+      const baseDelay = 2000; // 2s fixed between splits
+      const extraGap = humanization.blockGapMs > 0 ? applyJitter(humanization.blockGapMs) : 0;
+      const totalGap = Math.max(baseDelay, extraGap);
+      console.log(`[Deliver] Inter-split delay (after part ${i + 1}): ${totalGap}ms`);
+      await safeDelay(totalGap);
     }
   }
 }
