@@ -270,7 +270,12 @@ function buildFallbackInventoryArgs(userText: string, conversationMessages?: any
   const tokens = normalized
     .split(/\s+/)
     .map((t) => t.trim())
-    .filter((t) => t.length >= 3 && !stopWords.has(t) && !/^\d+$/.test(t));
+    .filter((t) => {
+      if (!t || stopWords.has(t) || /^\d+$/.test(t)) return false;
+      // Keep normal terms (>=3) and short alphanumeric model codes (q5, x1, c180, a3...)
+      if (t.length >= 3) return true;
+      return /^[a-z]{1,3}\d{1,4}[a-z0-9-]*$/i.test(t);
+    });
 
   const args: Record<string, any> = {};
   if (yearMatch) args.year = Number(yearMatch[0]);
@@ -1708,6 +1713,46 @@ Deno.serve(async (req) => {
                         });
                         toolArgs = { search: contextSearch };
                       }
+                    }
+                  }
+
+                  // === ARGUMENT SANITIZATION: block low-signal generic searches ===
+                  // Example bad args: { search: "disponivel no estoque" }
+                  const normalizedSearchArg = String(
+                    toolArgs?.search || toolArgs?.query || toolArgs?.termo || ""
+                  )
+                    .toLowerCase()
+                    .normalize("NFD")
+                    .replace(/[\u0300-\u036f]/g, "")
+                    .replace(/[^a-z0-9\s]/g, " ")
+                    .replace(/\s+/g, " ")
+                    .trim();
+
+                  const genericSearchPattern = /^(disponivel( no estoque)?|em estoque|no estoque|estoque|tem disponivel|tem em estoque|disponibilidade|tem|quero|veiculo|veiculos|carro|carros)$/i;
+                  const hasModelCode = /\b[a-z]{1,3}\s?\d{1,4}[a-z0-9-]*\b/i.test(normalizedSearchArg);
+                  const hasBrandWord = /(audi|toyota|honda|hyundai|chevrolet|fiat|ford|bmw|mercedes|nissan|renault|jeep|haval|gwm|peugeot|citroen|mitsubishi|kia|subaru|volvo|porsche|land rover|jaguar)/i.test(normalizedSearchArg);
+                  const hasSpecificVehicleSignalInArgs = !!(
+                    toolArgs?.brand || toolArgs?.marca ||
+                    toolArgs?.model || toolArgs?.modelo ||
+                    (normalizedSearchArg && (hasModelCode || hasBrandWord || normalizedSearchArg.split(" ").length >= 2) && !genericSearchPattern.test(normalizedSearchArg))
+                  );
+
+                  const userHasExplicitVehicleMention = /(audi|toyota|honda|hyundai|chevrolet|fiat|ford|bmw|mercedes|nissan|renault|jeep|haval|gwm|peugeot|citroen|mitsubishi|kia|subaru|volvo|porsche|onix|hb20|corolla|civic|creta|tracker|nivus|kicks|polo|virtus|compass|renegade|hilux|s10|ranger|amarok|toro|strada|saveiro|q\s?\d|a\s?\d|x\s?\d|c\s?\d{2,3}|gl[abces]?\s?\d{2,3})/i.test(latestUserText || "");
+
+                  if (genericSearchPattern.test(normalizedSearchArg) || (userHasExplicitVehicleMention && !hasSpecificVehicleSignalInArgs)) {
+                    const correctedArgs = buildFallbackInventoryArgs(latestUserText || "", messages);
+                    if (correctedArgs && Object.keys(correctedArgs).length > 0) {
+                      console.warn(`[Dispatcher] Sanitizing weak inventory args. Original=${JSON.stringify(toolArgs)} Corrected=${JSON.stringify(correctedArgs)}`);
+                      debugTrace.push({
+                        type: "dispatcher_args_sanitized",
+                        original_args: { ...toolArgs },
+                        corrected_args: correctedArgs,
+                        reason: genericSearchPattern.test(normalizedSearchArg)
+                          ? "generic_search_term"
+                          : "explicit_vehicle_missing_in_args",
+                        timestamp: Date.now(),
+                      });
+                      toolArgs = correctedArgs;
                     }
                   }
 
