@@ -86,53 +86,53 @@ async function callChatAgent(
   const responseParts: string[] = [];
   let currentPart = "";
 
+  const processSseLine = (rawLine: string) => {
+    const line = rawLine.trim();
+    if (!line.startsWith("data: ")) return;
+
+    const json = line.slice(6);
+    if (!json || json === "[DONE]") return;
+
+    try {
+      const ev = JSON.parse(json);
+      if (ev.conversation_id) {
+        responseConvId = ev.conversation_id;
+        return;
+      }
+      if (ev.debug || ev.edge_logs) return;
+
+      const delta = ev.choices?.[0]?.delta?.content;
+      if (!delta) return;
+
+      if (delta === MSG_SPLIT) {
+        if (currentPart.trim()) responseParts.push(currentPart.trim());
+        currentPart = "";
+      } else {
+        currentPart += delta;
+        fullContent += delta;
+      }
+    } catch {
+      // skip malformed SSE chunks
+    }
+  };
+
   while (true) {
     const { done, value } = await reader.read();
-    if (done) {
-      // Flush remaining buffer after stream ends
-      buf += decoder.decode(undefined, { stream: false });
-      break;
-    }
-    buf += decoder.decode(value, { stream: true });
+    buf += decoder.decode(value || new Uint8Array(), { stream: !done });
 
     let nl: number;
     while ((nl = buf.indexOf("\n")) !== -1) {
-      const line = buf.slice(0, nl).trim();
+      const line = buf.slice(0, nl);
       buf = buf.slice(nl + 1);
-      if (!line.startsWith("data: ")) continue;
-      const json = line.slice(6);
-      if (json === "[DONE]") continue;
-      try {
-        const ev = JSON.parse(json);
-        if (ev.conversation_id) { responseConvId = ev.conversation_id; continue; }
-        if (ev.debug || ev.edge_logs) continue;
-        const delta = ev.choices?.[0]?.delta?.content;
-        if (delta) {
-          if (delta === MSG_SPLIT) {
-            if (currentPart.trim()) responseParts.push(currentPart.trim());
-            currentPart = "";
-          } else {
-            currentPart += delta;
-            fullContent += delta;
-          }
-        }
-      } catch { /* skip */ }
+      processSseLine(line);
     }
+
+    if (done) break;
   }
 
-  // Process any remaining data in buffer after stream ends
+  // Flush any trailing (non-newline-terminated) SSE line
   if (buf.trim()) {
-    const remaining = buf.trim();
-    if (remaining.startsWith("data: ") && remaining.slice(6) !== "[DONE]") {
-      try {
-        const ev = JSON.parse(remaining.slice(6));
-        const delta = ev.choices?.[0]?.delta?.content;
-        if (delta && delta !== MSG_SPLIT) {
-          currentPart += delta;
-          fullContent += delta;
-        }
-      } catch { /* skip */ }
-    }
+    processSseLine(buf);
   }
 
   if (currentPart.trim()) responseParts.push(currentPart.trim());
@@ -329,7 +329,13 @@ Deno.serve(async (req: Request) => {
           .maybeSingle();
 
         const agentCfg = (agentData?.config || {}) as Record<string, any>;
-        welcomeVideoUrl = agentCfg.welcome_video_url || null;
+        welcomeVideoUrl =
+          agentCfg.welcome_video_url ||
+          agentCfg.welcomeVideoUrl ||
+          agentCfg.intro_video_url ||
+          agentCfg.introVideoUrl ||
+          agentCfg?.welcome?.video_url ||
+          null;
         console.log(`[ProcessQueue] First interaction detected. Welcome video: ${welcomeVideoUrl ? "YES" : "NO"}`);
       } catch (e: any) {
         console.warn("[ProcessQueue] Failed to load agent config for welcome flow:", e.message);
