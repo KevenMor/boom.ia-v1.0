@@ -175,11 +175,13 @@ Deno.serve(async (req) => {
         const action = calendarArgs.action || "check_availability";
 
         if (action === "check_availability") {
-          // Query calendars + events for the tenant
           const date = calendarArgs.date || new Date().toISOString().slice(0, 10);
           const daysAhead = calendarArgs.days_ahead || 3;
+          const slotDuration = calendarArgs.slot_duration_minutes || 60;
+          // Business hours config (can be overridden per calendar later)
+          const businessStart = 8; // 08:00
+          const businessEnd = 18;  // 18:00
 
-          // Get calendars for this tenant
           const { data: calendars, error: calErr } = await supabase
             .from("calendars")
             .select("*")
@@ -190,13 +192,11 @@ Deno.serve(async (req) => {
             result = { error: "Failed to fetch calendars", detail: calErr.message };
             break;
           }
-
           if (!calendars || calendars.length === 0) {
             result = { error: "No calendars found for this tenant", tenant_id: calendarArgs.tenant_id };
             break;
           }
 
-          // Get events in the date range
           const startDate = new Date(date);
           const endDate = new Date(startDate);
           endDate.setDate(endDate.getDate() + daysAhead);
@@ -210,11 +210,52 @@ Deno.serve(async (req) => {
             .lte("start_at", endDate.toISOString())
             .order("start_at", { ascending: true });
 
+          // Generate available slots per day
+          const availableSlots: Record<string, string[]> = {};
+          for (let d = 0; d < daysAhead; d++) {
+            const current = new Date(startDate);
+            current.setDate(current.getDate() + d);
+            const dayOfWeek = current.getDay();
+            // Skip weekends (0=Sun, 6=Sat)
+            if (dayOfWeek === 0 || dayOfWeek === 6) continue;
+
+            const dayStr = current.toISOString().slice(0, 10);
+            const dayEvents = (events || []).filter((e: any) => e.start_at?.slice(0, 10) === dayStr);
+            const slots: string[] = [];
+
+            for (let h = businessStart; h < businessEnd; h++) {
+              for (let m = 0; m < 60; m += slotDuration) {
+                if (h + m / 60 >= businessEnd) break;
+                const slotStart = new Date(`${dayStr}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`);
+                const slotEnd = new Date(slotStart.getTime() + slotDuration * 60000);
+
+                // Check if slot conflicts with any existing event
+                const conflict = dayEvents.some((ev: any) => {
+                  const evStart = new Date(ev.start_at).getTime();
+                  const evEnd = new Date(ev.end_at).getTime();
+                  return slotStart.getTime() < evEnd && slotEnd.getTime() > evStart;
+                });
+
+                if (!conflict) {
+                  slots.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
+                }
+              }
+            }
+            availableSlots[dayStr] = slots;
+          }
+
           result = {
             action: "check_availability",
             calendars: calendars.map((c: any) => ({ id: c.id, name: c.name })),
-            existing_events: events || [],
+            available_slots: availableSlots,
+            existing_events: (events || []).map((e: any) => ({
+              title: e.title,
+              start: e.start_at,
+              end: e.end_at,
+            })),
             date_range: { from: startDate.toISOString().slice(0, 10), to: endDate.toISOString().slice(0, 10) },
+            slot_duration_minutes: slotDuration,
+            business_hours: `${businessStart}:00 - ${businessEnd}:00`,
             note: evErr ? `Warning: ${evErr.message}` : undefined,
           };
         } else if (action === "criar" || action === "create") {
