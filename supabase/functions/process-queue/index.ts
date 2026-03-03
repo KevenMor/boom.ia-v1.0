@@ -88,7 +88,11 @@ async function callChatAgent(
 
   while (true) {
     const { done, value } = await reader.read();
-    if (done) break;
+    if (done) {
+      // Flush remaining buffer after stream ends
+      buf += decoder.decode(undefined, { stream: false });
+      break;
+    }
     buf += decoder.decode(value, { stream: true });
 
     let nl: number;
@@ -111,6 +115,21 @@ async function callChatAgent(
             currentPart += delta;
             fullContent += delta;
           }
+        }
+      } catch { /* skip */ }
+    }
+  }
+
+  // Process any remaining data in buffer after stream ends
+  if (buf.trim()) {
+    const remaining = buf.trim();
+    if (remaining.startsWith("data: ") && remaining.slice(6) !== "[DONE]") {
+      try {
+        const ev = JSON.parse(remaining.slice(6));
+        const delta = ev.choices?.[0]?.delta?.content;
+        if (delta && delta !== MSG_SPLIT) {
+          currentPart += delta;
+          fullContent += delta;
         }
       } catch { /* skip */ }
     }
