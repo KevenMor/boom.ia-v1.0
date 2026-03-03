@@ -415,12 +415,19 @@ NEVER write phrases like "Fico feliz", "Que bom", "Se precisar", "Posso ajudar",
 
 RULES:
 - Use the LATEST user message as the primary trigger decision. Use history ONLY to resolve references (e.g. "ela", "segunda opção", "esse carro").
-- MANDATORY STOCK CHECK (ABSOLUTE HIGHEST PRIORITY — ANTI-HALLUCINATION):
-  * If the LATEST customer message mentions ANY vehicle brand (Audi, Toyota, BMW, Chevrolet, etc.), model (Q5, Corolla, Onix, etc.), type (SUV, sedan, picape, etc.), or asks about availability/stock/price of ANY vehicle, you MUST call the inventory tool. NO EXCEPTIONS.
-  * This applies to every NEW data request. If the customer asks for fresh data again (price/details/availability), CALL THE TOOL AGAIN.
-  * NEVER return NO_TOOLS_NEEDED when the LATEST customer message contains a vehicle/data request. The conversational agent CANNOT answer about vehicles without real data — it WILL hallucinate and cause critical business failures.
-  * Examples that MUST trigger inventory_query: "tem audi?", "oque voce tem de audi?", "quanto custa a Q5?", "quero um SUV", "tem algo até 200 mil?", "e a Q5?", "qual valor dela?", "tem disponível?", "saiu do estoque?"
-- ONLY return "NO_TOOLS_NEEDED" when the LATEST message is purely conversational with ZERO new vehicle/price/stock request (like "gostei", "muito bonitas", "legal", "ok", "obrigado", "gosto da segunda opção").
+- FIPE vs INVENTORY DISTINCTION (ABSOLUTE HIGHEST PRIORITY):
+  * FIRST, determine if the customer is asking about THEIR OWN vehicle (appraisal/trade-in/FIPE) or about the DEALERSHIP STOCK.
+  * APPRAISAL signals (→ call fipe_query, NOT inventory_query): "meu carro", "meu veículo", "tenho um", "valor da fipe", "tabela fipe", "quanto vale", "avaliar", "avaliação", "pré-avaliação", "trocar", "dar na troca", "dar como entrada", "quero vender meu".
+  * STOCK signals (→ call inventory_query): "tem?", "disponível?", "estoque", "quero comprar", "quanto custa" (without "meu"/"minha"), "opções de", "o que vocês têm".
+  * When the customer explicitly says "fipe", "valor da fipe", "tabela fipe", or "meu carro" + brand/model → call ONLY fipe_query. Do NOT call inventory_query.
+  * When BOTH signals are present (e.g., customer wants to buy car X AND trade car Y) → call BOTH tools.
+- MANDATORY STOCK CHECK (when NOT in appraisal context):
+  * If the LATEST customer message mentions ANY vehicle brand/model/type asking about DEALERSHIP availability, you MUST call the inventory tool.
+  * This applies to every NEW data request about DEALER STOCK.
+  * NEVER return NO_TOOLS_NEEDED when the LATEST customer message contains a vehicle/stock request.
+  * Examples that MUST trigger inventory_query: "tem audi?", "oque voce tem de audi?", "quanto custa a Q5?", "quero um SUV", "tem algo até 200 mil?"
+  * Examples that must trigger fipe_query INSTEAD: "qual valor da fipe do meu carro?", "tenho um Cruze 2020", "meu Civic vale quanto?", "quero avaliar meu carro", "chevrolet 2020 cruze meu"
+- ONLY return "NO_TOOLS_NEEDED" when the LATEST message is purely conversational with ZERO new vehicle/price/stock/fipe request.
 - You may call multiple tools if needed.
 
 FIPE QUERY RULE (VEHICLE APPRAISAL / PRÉ-AVALIAÇÃO):

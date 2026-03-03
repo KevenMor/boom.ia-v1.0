@@ -1992,6 +1992,10 @@ Deno.serve(async (req) => {
       const fallbackContestationPattern = /\b(uma hora|outra hora|voce fala|voce disse|voce falou|me mandou|contradiz|ta errado|incorreto|errada|errado|confusao|confusa|confuso|insistencia|denovo|de novo|nao entendi|afinal)\b/i;
       const isContestationForFallback = fallbackContestationPattern.test(latestUserText || "");
 
+      // Detect appraisal/FIPE context — user is talking about THEIR OWN car, NOT dealer stock
+      const normalizedUserForAppraisal = (latestUserText || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const isAppraisalContext = /(meu carro|meu veiculo|minha |tenho um|tenho uma|fipe|tabela fipe|valor da fipe|avaliar|avaliacao|pre.?avaliacao|quero trocar|dar na troca|dar como entrada|quero vender|meu .{2,20} vale)/i.test(normalizedUserForAppraisal);
+
       const userMentionsVehicle = vehicleMentionPattern.test(latestUserText || "");
       const userAsksAboutAvailability = priceAvailabilityPattern.test(latestUserText || "");
       const userAskedForPhotos = photoFallbackPattern.test(latestUserText || "");
@@ -2003,7 +2007,13 @@ Deno.serve(async (req) => {
         && !dispatcherAlreadyQueriedInventory
         && !userSelectingPreviousOption
         && !isContestationForFallback
+        && !isAppraisalContext  // DO NOT force inventory when user is asking about THEIR car/FIPE
         && (userMentionsVehicle || userAsksAboutAvailability || userAskedForPhotos);
+
+      if (isAppraisalContext && !dispatcherAlreadyQueriedInventory) {
+        console.log(`[VehicleFallback] BLOCKED — appraisal/FIPE context detected, skipping inventory fallback: "${(latestUserText || "").slice(0, 80)}"`);
+        debugTrace.push({ type: "vehicle_fallback_blocked", reason: "appraisal_context_detected", user_text: (latestUserText || "").slice(0, 120), timestamp: Date.now() });
+      }
 
       if (isContestationForFallback && !dispatcherAlreadyQueriedInventory) {
         console.log(`[VehicleFallback] BLOCKED — user is contesting/reacting, not requesting new data: "${(latestUserText || "").slice(0, 80)}"`);
