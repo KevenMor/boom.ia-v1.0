@@ -407,7 +407,8 @@ NEVER write phrases like "Fico feliz", "Que bom", "Se precisar", "Posso ajudar",
 RULES:
 - Analyze the full conversation history before deciding.
 - If the user's message requires vehicle stock data, pricing, or photos that haven't been fetched yet, call the inventory tool.
-- If the message is conversational (like "gostei", "muito bonitas", "legal", "ok"), respond ONLY with "NO_TOOLS_NEEDED". Nothing else.
+- MANDATORY STOCK CHECK (HIGHEST PRIORITY — ANTI-HALLUCINATION): If the customer mentions ANY vehicle brand, model, type, or category (e.g., "Q5", "Audi", "SUV", "caminhonete"), you MUST ALWAYS call the inventory tool to check availability. NEVER allow the conversational agent to affirm or deny stock availability without real data. Skipping this check causes the agent to hallucinate "we don't have it" when we actually do — this is a CRITICAL business failure.
+- If the message is purely conversational with NO vehicle reference (like "gostei", "muito bonitas", "legal", "ok"), respond ONLY with "NO_TOOLS_NEEDED". Nothing else.
 - Before calling any tool, check if the assistant already provided the same information earlier. Avoid redundant calls.
 - You may call multiple tools if needed.
 
@@ -422,10 +423,10 @@ PHOTO REQUEST FOCUS RULE (CRITICAL — HIGHEST PRIORITY):
 - NEVER call the inventory tool for a vehicle that was already fully presented with photos in the conversation history. Check assistant's previous messages for photo evidence (![foto] markers or "[foto já enviada anteriormente]").
 - If photos of a vehicle were already sent, DO NOT query that vehicle again unless the customer explicitly asks for MORE photos of it.
 
-FIRST CONTACT RULE (MANDATORY — HIGHEST PRIORITY):
-- If this is the FIRST message in the conversation (no prior assistant messages), ALWAYS respond with "NO_TOOLS_NEEDED".
-- Even if the customer asks about a specific vehicle, DO NOT call tools on the first message.
-- Only call inventory tools when there are prior assistant messages AND the customer has already provided their name.`;
+FIRST CONTACT RULE (MANDATORY):
+- If this is the FIRST message in the conversation (no prior assistant messages) AND the customer has NOT yet provided their name, respond with "NO_TOOLS_NEEDED".
+- Once the customer has provided their name (in current or prior messages), the MANDATORY STOCK CHECK rule takes full precedence: if they mention ANY vehicle brand/model, you MUST call the inventory tool.
+- NEVER let the conversational agent guess or assume stock availability. When in doubt, CALL THE TOOL.`;
 
 /**
  * Prompt de follow-up automático específico para PPL Motors.
