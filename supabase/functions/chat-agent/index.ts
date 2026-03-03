@@ -1593,6 +1593,7 @@ Deno.serve(async (req) => {
 
     // ===== PHASE 1: TOOL DISPATCHER =====
     const toolResultsContext: string[] = [];
+    let dispatcherHint = ""; // Captures dispatcher's conversational text when no tools are called
 
     // All tool dispatch decisions are made solely by the dispatcher LLM — no regex overrides.
 
@@ -1735,7 +1736,15 @@ Deno.serve(async (req) => {
 
             // No tool calls — dispatcher decided tools aren't needed
             if (!dispatchMsg.tool_calls || dispatchMsg.tool_calls.length === 0) {
-              console.log("[Dispatcher] No tools needed");
+              // Capture dispatcher's conversational text as hint for Phase 2
+              const dispatcherText = String(dispatchMsg.content || "").trim();
+              if (dispatcherText && dispatcherText !== "NO_TOOLS_NEEDED" && dispatcherText.length > 10) {
+                dispatcherHint = dispatcherText;
+                console.log(`[Dispatcher] No tools needed — captured hint (${dispatcherHint.length} chars): "${dispatcherHint.slice(0, 120)}"`);
+                debugTrace.push({ type: "dispatcher_hint_captured", hint_length: dispatcherHint.length, hint_preview: dispatcherHint.slice(0, 200), timestamp: Date.now() });
+              } else {
+                console.log("[Dispatcher] No tools needed, no usable hint text");
+              }
               break;
             }
 
@@ -1937,6 +1946,32 @@ ${toolResultsContext.join("\n\n")}`;
         conversationalMessages.splice(1, 0, { role: "system", content: toolContextMsg });
       }
       console.log(`[Conversational] Injecting ${toolResultsContext.length} tool result(s) as context (position: before last user msg, empty=${allToolsReturnedEmpty})`);
+    }
+
+    // ===== DISPATCHER HINT INJECTION =====
+    // When the dispatcher generated useful conversational text but no tools were called,
+    // inject it as guidance so Gemini produces a coherent, aligned response instead of diverging.
+    if (dispatcherHint && toolResultsContext.length === 0) {
+      const hintMsg = `⚠️ ORIENTAÇÃO DO SISTEMA (PRIORIDADE ALTA):
+O sistema analisou a mensagem do cliente e sugeriu a seguinte abordagem de resposta:
+"${dispatcherHint}"
+
+REGRAS:
+1. Use esta orientação como BASE para sua resposta — mantenha a mesma INTENÇÃO e DIREÇÃO.
+2. Reformule com seu tom natural e humanizado, mas NÃO contradiga a sugestão acima.
+3. NÃO copie o texto literalmente — adapte ao seu estilo conversacional.
+4. NÃO mencione "sistema", "orientação", "sugestão" ou qualquer referência técnica interna.
+5. NÃO invente dados, preços ou disponibilidade que não estejam no histórico da conversa.
+6. NÃO use comandos técnicos como ENVIAR_FOTOS, TOOL_CALL, etc.`;
+
+      const lastUserIdx = conversationalMessages.map((m: any) => m.role).lastIndexOf("user");
+      if (lastUserIdx > 0) {
+        conversationalMessages.splice(lastUserIdx, 0, { role: "system", content: hintMsg });
+      } else {
+        conversationalMessages.splice(1, 0, { role: "system", content: hintMsg });
+      }
+      console.log(`[Conversational] Injected dispatcher hint as guidance (${dispatcherHint.length} chars)`);
+      debugTrace.push({ type: "dispatcher_hint_injected", hint_length: dispatcherHint.length, timestamp: Date.now() });
     }
 
     // Inject image attachments as multimodal content in the last user message
