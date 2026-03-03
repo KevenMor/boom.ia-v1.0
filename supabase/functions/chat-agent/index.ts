@@ -1651,24 +1651,76 @@ Deno.serve(async (req) => {
         const knownBrandsIntercept = ["chevrolet", "toyota", "honda", "hyundai", "volkswagen", "fiat", "ford", "jeep", "nissan", "renault", "mitsubishi", "kia", "peugeot", "citroen", "bmw", "mercedes", "audi", "volvo", "subaru", "suzuki", "ram", "dodge", "caoa", "chery", "byd", "gwm", "land rover", "porsche"];
         const knownModelsIntercept = ["cruze", "onix", "tracker", "spin", "cobalt", "prisma", "s10", "corolla", "civic", "hb20", "creta", "tucson", "compass", "renegade", "polo", "virtus", "gol", "hilux", "ranger", "toro", "argo", "mobi", "kicks", "nivus", "t-cross", "tcross", "fit", "city", "hr-v", "hrv", "duster", "captur", "sentra", "jetta", "amarok", "strada", "saveiro", "kwid", "sportage", "ecosport", "bronco", "equinox", "trailblazer", "jolion", "territory", "q3", "q5", "q7", "a3", "a4", "c180", "c200", "c300", "gla", "glc", "gle", "x1", "x3", "x5"];
 
-        // Scan latest user text + recent messages for vehicle data
-        const textsToScan = [
-          normalizedUserForFipe,
-          ...messages.slice(-6).map((m: any) => String(m.content || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")),
-        ].join(" ");
+        // Common misspellings/variations mapping
+        const modelAliases: Record<string, string> = {
+          "cruzo": "cruze", "cruse": "cruze", "onx": "onix", "onyx": "onix",
+          "corola": "corolla", "civico": "civic", "civyc": "civic",
+          "polho": "polo", "pollo": "polo", "renegad": "renegade",
+          "compas": "compass", "tracke": "tracker", "traker": "tracker",
+          "cret": "creta", "creata": "creta", "tuccson": "tucson",
+          "ducster": "duster", "duxter": "duster", "ecoesport": "ecosport",
+          "equinx": "equinox", "hb 20": "hb20", "h20": "hb20",
+          "t cross": "t-cross", "hr v": "hr-v",
+        };
+        const brandAliases: Record<string, string> = {
+          "vw": "volkswagen", "volks": "volkswagen", "chev": "chevrolet",
+          "chevy": "chevrolet", "mb": "mercedes", "merc": "mercedes",
+        };
 
+        // Helper: find brand/model in a single text
+        const findInText = (text: string) => {
+          let marca = "";
+          let modelo = "";
+          let ano = 0;
+
+          // Check brand aliases first, then exact brands
+          for (const [alias, real] of Object.entries(brandAliases)) {
+            if (text.includes(alias)) { marca = real; break; }
+          }
+          if (!marca) {
+            for (const brand of knownBrandsIntercept) {
+              if (text.includes(brand)) { marca = brand; break; }
+            }
+          }
+
+          // Check model aliases first, then exact models
+          for (const [alias, real] of Object.entries(modelAliases)) {
+            if (text.includes(alias)) { modelo = real; break; }
+          }
+          if (!modelo) {
+            for (const model of knownModelsIntercept) {
+              if (text.includes(model)) { modelo = model; break; }
+            }
+          }
+
+          const ym = text.match(/\b(19[89]\d|20[0-2]\d)\b/);
+          if (ym) ano = parseInt(ym[1]);
+
+          return { marca, modelo, ano };
+        };
+
+        // PRIORITY: search current message FIRST, fallback to history
         let fMarca = "";
         let fModelo = "";
         let fAno = 0;
 
-        for (const brand of knownBrandsIntercept) {
-          if (textsToScan.includes(brand)) { fMarca = brand; break; }
+        const currentResult = findInText(normalizedUserForFipe);
+        fMarca = currentResult.marca;
+        fModelo = currentResult.modelo;
+        fAno = currentResult.ano;
+
+        // Only fallback to history for MISSING fields
+        if (!fMarca || !fModelo || !fAno) {
+          const historyTexts = messages.slice(-6).map((m: any) =>
+            String(m.content || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+          ).join(" ");
+          const histResult = findInText(historyTexts);
+          if (!fMarca) fMarca = histResult.marca;
+          if (!fModelo) fModelo = histResult.modelo;
+          if (!fAno) fAno = histResult.ano;
         }
-        for (const model of knownModelsIntercept) {
-          if (textsToScan.includes(model)) { fModelo = model; break; }
-        }
-        const yearMatch = textsToScan.match(/\b(19[89]\d|20[0-2]\d)\b/);
-        if (yearMatch) fAno = parseInt(yearMatch[1]);
+
+        console.log(`[FipeIntercept] Extraction: marca=${fMarca}, modelo=${fModelo}, ano=${fAno} (from current msg: marca=${currentResult.marca}, modelo=${currentResult.modelo})`);
 
         if (fMarca || fModelo) {
           const fipeArgs: Record<string, any> = {};
