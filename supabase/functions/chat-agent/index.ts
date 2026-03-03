@@ -32,7 +32,16 @@ function sanitizeLLMOutput(content: string): string {
   text = text.replace(/^.*HANDOFF_COMERCIAL.*$/gmi, "");
   // Remove other common tool artifact patterns
   text = text.replace(/^.*\b(TOOL_CALL|FUNCTION_CALL|ACTION_OUTPUT)[:\s].*$/gmi, "");
-  // Keep closing questions intact (e.g., "Como posso te chamar?") on first contact
+
+  // Remove leaked JSON blocks (tool calls, action objects, query objects)
+  // Matches standalone JSON-like blocks: { "key": "value" } or { "action": ... }
+  text = text.replace(/^\s*\{[\s\S]*?"(action|action_input|modelo|marca|tool|function|query|search|consultar_estoque)"[\s\S]*?\}\s*$/gmi, "");
+  // Also catch inline JSON artifacts within paragraphs
+  text = text.replace(/\{\s*"(action|action_input|modelo|marca|tool_name|function_name|consultar_estoque)"[^}]*\}/gi, "");
+
+  // Remove "Vou verificar/consultar no sistema" + JSON blocks (LLM thinking out loud)
+  text = text.replace(/^.*(?:vou (?:verificar|consultar|checar|buscar)|verificando|consultando|buscando).*(?:sistema|estoque|banco).*[:]\s*$/gmi, "");
+
   // Clean up excessive newlines left behind
   text = text.replace(/\n{3,}/g, "\n\n").trim();
   return text;
@@ -2068,14 +2077,39 @@ Aja com continuidade comercial: confirme a opção escolhida e avance com próxi
     }
 
     if (toolResultsContext.length > 0) {
-      // Inject tool results as a system message CLOSE TO THE END for maximum recency weight
-      const toolContextMsg = `⚠️ DADOS REAIS OBTIDOS AGORA DAS FERRAMENTAS — PRIORIDADE MÁXIMA:
+      // Check if ALL tool results returned zero vehicles
+      const allToolsReturnedEmpty = toolResultsContext.every(ctx => {
+        try {
+          const cleaned = ctx.replace(/^\[Resultado da ferramenta "[^"]+"\]: /, "");
+          const parsed = JSON.parse(cleaned);
+          return parsed?.total === 0 || (parsed?.message && /nenhum/i.test(parsed.message));
+        } catch { return false; }
+      });
+
+      let toolContextMsg: string;
+      if (allToolsReturnedEmpty) {
+        // ANTI-HALLUCINATION: When inventory returns 0, inject STRICT instructions
+        toolContextMsg = `⚠️ DADOS REAIS OBTIDOS AGORA DAS FERRAMENTAS — PRIORIDADE MÁXIMA:
+A consulta ao estoque NÃO ENCONTROU este veículo. Resultado: 0 veículos.
+
+REGRAS ABSOLUTAS QUANDO O ESTOQUE RETORNA ZERO:
+1. DIGA que não encontramos esse modelo no estoque no momento. Seja transparente.
+2. NUNCA invente que o carro foi "vendido", "reservado", "saiu do estoque", "acabou de sair" ou qualquer outro status. Você NÃO TEM essa informação.
+3. NUNCA invente detalhes técnicos (motor, cor, versão) de um veículo que NÃO está no estoque.
+4. Ofereça alternativas: pergunte se o cliente tem interesse em outro modelo ou se quer ser avisado quando entrar.
+5. Se você ANTERIORMENTE descreveu o veículo com entusiasmo (antes de verificar o estoque), CORRIJA-SE com transparência: "Verifiquei aqui e infelizmente não estamos com esse modelo no momento."
+
+${toolResultsContext.join("\n\n")}`;
+      } else {
+        toolContextMsg = `⚠️ DADOS REAIS OBTIDOS AGORA DAS FERRAMENTAS — PRIORIDADE MÁXIMA:
 Estes são dados REAIS e ATUALIZADOS do sistema. Você DEVE basear sua resposta EXCLUSIVAMENTE nestes dados.
 NUNCA contradiga, ignore ou invente informações diferentes destes resultados.
 Se a ferramenta retornou veículos, eles EXISTEM no estoque. NUNCA diga que não tem um veículo se ele aparece nos dados abaixo.
 Se "total" >= 1, o veículo ESTÁ DISPONÍVEL.
 
 ${toolResultsContext.join("\n\n")}`;
+      }
+
       // Insert just before the last user message for maximum LLM attention
       const lastUserIdx = conversationalMessages.map((m: any) => m.role).lastIndexOf("user");
       if (lastUserIdx > 0) {
@@ -2083,7 +2117,7 @@ ${toolResultsContext.join("\n\n")}`;
       } else {
         conversationalMessages.splice(1, 0, { role: "system", content: toolContextMsg });
       }
-      console.log(`[Conversational] Injecting ${toolResultsContext.length} tool result(s) as context (position: before last user msg)`);
+      console.log(`[Conversational] Injecting ${toolResultsContext.length} tool result(s) as context (position: before last user msg, empty=${allToolsReturnedEmpty})`);
     }
 
     // Inject image attachments as multimodal content in the last user message
@@ -2190,6 +2224,21 @@ ${toolResultsContext.join("\n\n")}`;
 
     finalContent = dedupeRepeatedParagraphs(finalContent);
     finalContent = removeRedundantPhotoOfferWhenPhotosPresent(finalContent);
+
+    // GUARD: Detect hallucinated "sold/reserved" claims when inventory returned 0
+    const soldPattern = /\b(acabou de ser vendid|foi vendid|foi reservad|saiu do estoque|ultimo.?foi|já foi vendid|acabou.?de sair|não está mais disponível.*vendid|esgotou)\b/i;
+    if (soldPattern.test(finalContent)) {
+      // Check if any tool result actually confirms the vehicle was sold
+      const hasSoldConfirmation = toolResultsContext.some(ctx => /vendido|reservado|indisponível/i.test(ctx));
+      if (!hasSoldConfirmation) {
+        console.warn("[PostProcess] BLOCKED hallucinated 'sold/reserved' claim — rewriting");
+        debugTrace.push({ type: "hallucination_blocked", pattern: "sold_claim", original_snippet: finalContent.slice(0, 200), timestamp: Date.now() });
+        // Replace the fabricated sold claim with honest language
+        finalContent = finalContent.replace(/[^.!?\n]*\b(acabou de ser vendid|foi vendid|foi reservad|saiu do estoque|ultimo.?foi vendid|já foi vendid|acabou.?de sair)[^.!?\n]*/gi, 
+          "Verifiquei aqui e não estamos com esse modelo no estoque no momento");
+        finalContent = finalContent.replace(/\n{3,}/g, "\n\n").trim();
+      }
+    }
 
     // Inject missing photos: if tool results contain vehicles with photos, ensure they appear in content
     // BUT NOT when user sent images (appraisal flow — they sent THEIR car photos, don't inject dealer photos)
