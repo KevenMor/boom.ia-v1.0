@@ -2192,7 +2192,9 @@ ${toolResultsContext.join("\n\n")}`;
     finalContent = removeRedundantPhotoOfferWhenPhotosPresent(finalContent);
 
     // Inject missing photos: if tool results contain vehicles with photos, ensure they appear in content
-    if (toolResultsContext.length > 0) {
+    // BUT NOT when user sent images (appraisal flow — they sent THEIR car photos, don't inject dealer photos)
+    const isAppraisalPhotoContext = imageBase64Parts.length > 0 && !(latestUserText || "").trim();
+    if (toolResultsContext.length > 0 && !isAppraisalPhotoContext) {
       try {
         for (const ctx of toolResultsContext) {
           const parsed = JSON.parse(ctx.replace(/^\[Resultado da ferramenta "[^"]+"\]: /, ""));
@@ -2204,6 +2206,8 @@ ${toolResultsContext.join("\n\n")}`;
       } catch (e: any) {
         console.warn("[PostProcess] Could not extract vehicles for photo injection:", e?.message);
       }
+    } else if (isAppraisalPhotoContext && toolResultsContext.length > 0) {
+      console.log(`[PostProcess] Skipping photo injection — appraisal context (user sent image, no text)`);
     }
 
     // Guard: strip premature closing questions (scheduling, simulation, visit) when photos are being sent
