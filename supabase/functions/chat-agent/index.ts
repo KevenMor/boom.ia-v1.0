@@ -2060,7 +2060,11 @@ Deno.serve(async (req) => {
                 let resultPreview: any = {};
                 try {
                   const parsed = JSON.parse(toolResult);
-                  resultPreview = { total: parsed.total, vehicle_count: parsed.vehicles?.length, hint: parsed._hint, error: parsed.error, message: parsed.message };
+                  if (matchedTool.tool_type === "fipe_query") {
+                    resultPreview = { marca: parsed.marca, modelo: parsed.modelo, ano: parsed.ano, preco: parsed.resultado?.price, error: parsed.error };
+                  } else {
+                    resultPreview = { total: parsed.total, vehicle_count: parsed.vehicles?.length, hint: parsed._hint, error: parsed.error, message: parsed.message };
+                  }
                 } catch {
                   resultPreview = { raw_length: toolResult.length };
                 }
