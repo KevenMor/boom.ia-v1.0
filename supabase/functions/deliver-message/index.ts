@@ -329,7 +329,8 @@ Deno.serve(async (req: Request) => {
         console.log(`[Deliver] Sending welcome video: ${welcome_video_url}`);
         const videoOk = await sendChatwootMediaMessage(msgUrl, cfg.chatwoot_api_token, welcome_video_url, "video/mp4", "");
         console.log(`[Deliver] Welcome video: ${videoOk ? "OK" : "FAIL"}`);
-        if (videoOk) await new Promise((r) => setTimeout(r, 2000));
+        // Wait for video to be fully delivered before sending name question
+        await new Promise((r) => setTimeout(r, videoOk ? 4000 : 1500));
 
         // 3) Ask for the client's name
         const nameQuestion = cfg.welcome_name_question || "Como posso te chamar?";
