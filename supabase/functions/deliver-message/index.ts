@@ -289,15 +289,25 @@ Deno.serve(async (req: Request) => {
 
     const supabase = createClient(nexusUrl, nexusKey);
 
-    // ---------- Lookup agent config ----------
-    const { data: agent, error: agentErr } = await supabase
-      .from("agents")
-      .select("id, name, tenant_id, config")
-      .eq("id", agent_id)
-      .maybeSingle();
+    // ---------- Lookup agent config (with retry) ----------
+    console.log("[Deliver] Looking up agent:", agent_id);
+    let agent: any = null;
+    let agentErr: any = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const res = await supabase
+        .from("agents")
+        .select("id, name, tenant_id, config")
+        .eq("id", agent_id)
+        .maybeSingle();
+      agent = res.data;
+      agentErr = res.error;
+      if (agent) break;
+      console.warn(`[Deliver] Agent lookup attempt ${attempt}/3 failed:`, agentErr?.message || "not found");
+      if (attempt < 3) await new Promise(r => setTimeout(r, 500));
+    }
 
     if (agentErr || !agent) {
-      console.error("[Deliver] Agent not found:", agent_id);
+      console.error("[Deliver] Agent not found after 3 attempts:", agent_id, "error:", agentErr?.message);
       return new Response(JSON.stringify({ error: "Agent not found" }), {
         status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

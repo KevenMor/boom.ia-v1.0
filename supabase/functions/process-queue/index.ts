@@ -140,29 +140,41 @@ async function callChatAgent(
   return { error: null, fullContent, responseParts, responseConvId };
 }
 
-// ---------- Fire next stage ----------
+// ---------- Fire next stage (with retry on failure) ----------
 async function fireNextStage(url: string, body: Record<string, unknown>, authKey: string): Promise<void> {
-  try {
-    const controller = new AbortController();
-    setTimeout(() => controller.abort(), 2000);
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${authKey}`,
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    console.log(`[ProcessQueue] Fired deliver-message: ${resp.status}`);
-    await resp.text().catch(() => {});
-  } catch (e: any) {
-    if (e.name === "AbortError") {
-      console.log("[ProcessQueue] Fired deliver-message (still processing)");
-    } else {
-      console.error("[ProcessQueue] Fire deliver-message error:", e.message);
+  const maxRetries = 3;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), 5000); // increased from 2s to 5s
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authKey}`,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      if (resp.status >= 200 && resp.status < 300) {
+        console.log(`[ProcessQueue] Fired deliver-message: ${resp.status}`);
+        await resp.text().catch(() => {});
+        return;
+      }
+      // Non-success status — retry
+      const respBody = await resp.text().catch(() => "");
+      console.warn(`[ProcessQueue] deliver-message attempt ${attempt}/${maxRetries} failed: ${resp.status} ${respBody}`);
+      if (attempt < maxRetries) await new Promise(r => setTimeout(r, 1000));
+    } catch (e: any) {
+      if (e.name === "AbortError") {
+        console.log(`[ProcessQueue] Fired deliver-message (still processing, attempt ${attempt})`);
+        return; // AbortError means it's running, no retry needed
+      }
+      console.error(`[ProcessQueue] deliver-message attempt ${attempt}/${maxRetries} error:`, e.message);
+      if (attempt < maxRetries) await new Promise(r => setTimeout(r, 1000));
     }
   }
+  console.error("[ProcessQueue] deliver-message FAILED after all retries");
 }
 
 // ---------- Main handler ----------
