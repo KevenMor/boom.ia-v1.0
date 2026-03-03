@@ -282,6 +282,13 @@ function isClosingQuestion(text: string): boolean {
     && text.length < 300; // Closing questions are short
 }
 
+// Detect when user is selecting/referring to an option already presented by the assistant
+function isUserSelectingPreviousOption(text: string): boolean {
+  if (text.length > 200) return false;
+  const normalized = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  return /^(ess[ae]|est[ae]|quero\s+(ess[ae]|est[ae]|o\s|a\s)|a\s+(primeir|segund|terceir)|o\s+(primeir|segund|terceir)|me\s+(fala|conta|manda|envia|mostra)\s+(mais\s+)?(d[aoe]\s)?(primeir|segund|terceir|ess[ae]|est[ae])|sim\s*,?\s*(ess[ae]|est[ae])|gostei\s+(d[aoe]\s)?(primeir|segund|terceir|ess[ae])|prefiro\s+(ess[ae]|est[ae]|o\s|a\s))/.test(normalized);
+}
+
 function protectNumericDots(text: string): string {
   // Protect thousand separators (e.g. "115.900") AND decimal dots (e.g. "2.0", "1.6", "3.5")
   // so sentence split does not break prices or engine specs
