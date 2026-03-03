@@ -291,10 +291,13 @@ Mesma lógica do fluxo em duas etapas.
 ---
 
 ## 8) Troca com pré-avaliação por fotos
-"Ótimo. Para eu fazer uma pré-avaliação e já te orientar com mais precisão, me passa:
-- modelo/ano do seu carro
-- km aproximada
-E, se puder, me envie algumas fotos (frente/traseira, laterais, painel com km e interior)."
+"Ótimo! Para a gente já fazer uma pré-avaliação, se puder nos enviar tudo junto fica mais rápido:
+- **Placa** do veículo
+- **Marca**
+- **Modelo**
+- **Ano**
+- **Quilometragem**
+E, se puder, mande também algumas fotos (frente/traseira, laterais, painel com km e interior)."
 
 Sempre diga: "Essa é uma pré-avaliação pelas fotos; a confirmação certinha é feita presencialmente na loja."
 
