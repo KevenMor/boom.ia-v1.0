@@ -997,6 +997,7 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         const fipeArgs: Record<string, any> = {};
         if (args.marca || args.brand) fipeArgs.marca = args.marca || args.brand;
         if (args.modelo || args.model) fipeArgs.modelo = args.modelo || args.model;
+        if (args.versao || args.version) fipeArgs.versao = args.versao || args.version;
         if (args.ano || args.year) fipeArgs.ano = args.ano || args.year;
         if (args.codigo_fipe) fipeArgs.codigo_fipe = args.codigo_fipe;
         if (args.tipo) fipeArgs.tipo = args.tipo;
@@ -1067,6 +1068,7 @@ const BUILTIN_SCHEMAS: Record<string, { description: string; parameters: any }> 
       properties: {
         marca:  { type: "string", description: "Marca do veículo (ex: Toyota, Honda, Chevrolet, Volkswagen)" },
         modelo: { type: "string", description: "Modelo do veículo (ex: Corolla, Civic, Onix, Polo)" },
+        versao: { type: "string", description: "Versão/acabamento do veículo (ex: LTZ, EXL, Highline, Touring)" },
         ano:    { type: "integer", description: "Ano do veículo (ex: 2023)" },
         codigo_fipe: { type: "string", description: "Código FIPE direto se disponível (ex: 001004-9)" },
         tipo:   { type: "integer", description: "Tipo: 1=carros (padrão), 2=motos, 3=caminhões" },
@@ -1231,6 +1233,7 @@ Deno.serve(async (req) => {
             properties: {
               marca: { type: "string", description: "Marca do veículo (ex: Chevrolet, Toyota, Honda)" },
               modelo: { type: "string", description: "Modelo do veículo (ex: Cruze, Corolla, Civic)" },
+              versao: { type: "string", description: "Versão/acabamento (ex: LTZ, EXL, Highline)" },
               ano: { type: "integer", description: "Ano do veículo (ex: 2020)" },
             },
             required: ["marca", "modelo"],
@@ -1667,10 +1670,16 @@ Deno.serve(async (req) => {
           "chevy": "chevrolet", "mb": "mercedes", "merc": "mercedes",
         };
 
-        // Helper: find brand/model in a single text
+        // Helper: find brand/model/version/year in a single text
+        const knownVersionTokens = [
+          "ltz", "lt", "lts", "ltx", "lt plus", "ex", "exl", "lx", "lxl", "sport", "touring", "sense", "advance",
+          "comfortline", "highline", "trendline", "limited", "premier", "rs", "gl", "gls", "xlt", "sr", "srx", "at", "mt",
+        ];
+
         const findInText = (text: string) => {
           let marca = "";
           let modelo = "";
+          let versao = "";
           let ano = 0;
 
           // Check brand aliases first, then exact brands
@@ -1693,41 +1702,63 @@ Deno.serve(async (req) => {
             }
           }
 
+          // Extract version from known tokens and common alphanumeric trims (EXL, C180, etc.)
+          const normalizedText = ` ${text} `;
+          for (const vt of knownVersionTokens) {
+            const token = vt.toLowerCase();
+            if (normalizedText.includes(` ${token} `)) {
+              versao = vt.toUpperCase();
+              break;
+            }
+          }
+          if (!versao) {
+            const trimMatch = text.match(/\b([a-z]{1,3}\d{1,4}[a-z]{0,2})\b/i);
+            if (trimMatch) versao = trimMatch[1].toUpperCase();
+          }
+
           const ym = text.match(/\b(19[89]\d|20[0-2]\d)\b/);
           if (ym) ano = parseInt(ym[1]);
 
-          return { marca, modelo, ano };
+          return { marca, modelo, versao, ano };
         };
 
         // PRIORITY: search current message FIRST, fallback to history
         let fMarca = "";
         let fModelo = "";
+        let fVersao = "";
         let fAno = 0;
 
         const currentResult = findInText(normalizedUserForFipe);
         fMarca = currentResult.marca;
         fModelo = currentResult.modelo;
+        fVersao = currentResult.versao;
         fAno = currentResult.ano;
 
         // Only fallback to history for MISSING fields
-        if (!fMarca || !fModelo || !fAno) {
+        if (!fMarca || !fModelo || !fVersao || !fAno) {
           const historyTexts = messages.slice(-6).map((m: any) =>
             String(m.content || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
           ).join(" ");
           const histResult = findInText(historyTexts);
           if (!fMarca) fMarca = histResult.marca;
           if (!fModelo) fModelo = histResult.modelo;
+          if (!fVersao) fVersao = histResult.versao;
           if (!fAno) fAno = histResult.ano;
         }
 
-        console.log(`[FipeIntercept] Extraction: marca=${fMarca}, modelo=${fModelo}, ano=${fAno} (from current msg: marca=${currentResult.marca}, modelo=${currentResult.modelo})`);
+        console.log(`[FipeIntercept] Extraction: marca=${fMarca}, modelo=${fModelo}, versao=${fVersao || "-"}, ano=${fAno} (from current msg: marca=${currentResult.marca}, modelo=${currentResult.modelo}, versao=${currentResult.versao || "-"})`);
         debugTrace.push({
           type: "fipe_extraction",
           trigger: isFipeExplicitRequest ? "explicit_fipe_mention" : "appraisal_context",
           matched_regex: isFipeExplicitRequest ? "fipe keyword" : (normalizedUserForFipe.match(/(meu carro|meu veiculo|tenho um|tenho uma|quero avaliar|avaliar meu|pre.?avaliacao|avaliacao|quanto vale meu|dar na troca|dar como entrada|colocar na troca|colocar como entrada)/)?.[0] || "unknown"),
-          current_msg_extraction: { marca: currentResult.marca || "(nenhuma)", modelo: currentResult.modelo || "(nenhum)", ano: currentResult.ano || "(nenhum)" },
-          history_fallback: { marca: !currentResult.marca && fMarca ? fMarca : "(não usado)", modelo: !currentResult.modelo && fModelo ? fModelo : "(não usado)", ano: !currentResult.ano && fAno ? fAno : "(não usado)" },
-          final: { marca: fMarca || "(nenhuma)", modelo: fModelo || "(nenhum)", ano: fAno || "(nenhum)" },
+          current_msg_extraction: { marca: currentResult.marca || "(nenhuma)", modelo: currentResult.modelo || "(nenhum)", versao: currentResult.versao || "(nenhuma)", ano: currentResult.ano || "(nenhum)" },
+          history_fallback: {
+            marca: !currentResult.marca && fMarca ? fMarca : "(não usado)",
+            modelo: !currentResult.modelo && fModelo ? fModelo : "(não usado)",
+            versao: !currentResult.versao && fVersao ? fVersao : "(não usado)",
+            ano: !currentResult.ano && fAno ? fAno : "(não usado)",
+          },
+          final: { marca: fMarca || "(nenhuma)", modelo: fModelo || "(nenhum)", versao: fVersao || "(nenhuma)", ano: fAno || "(nenhum)" },
           user_text: latestUserText.slice(0, 150),
           timestamp: Date.now(),
         });
@@ -1736,6 +1767,7 @@ Deno.serve(async (req) => {
           const fipeArgs: Record<string, any> = {};
           if (fMarca) fipeArgs.marca = fMarca;
           if (fModelo) fipeArgs.modelo = fModelo;
+          if (fVersao) fipeArgs.versao = fVersao;
           if (fAno) fipeArgs.ano = fAno;
 
           console.log(`[FipeIntercept] FIPE request detected — calling fipe_query DIRECTLY: ${JSON.stringify(fipeArgs)}`);
