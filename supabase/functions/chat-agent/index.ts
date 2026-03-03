@@ -32,8 +32,7 @@ function sanitizeLLMOutput(content: string): string {
   text = text.replace(/^.*HANDOFF_COMERCIAL.*$/gmi, "");
   // Remove other common tool artifact patterns
   text = text.replace(/^.*\b(TOOL_CALL|FUNCTION_CALL|ACTION_OUTPUT)[:\s].*$/gmi, "");
-  // Remove redundant "Como posso te chamar?" when it appears at the end and name is already known
-  text = text.replace(/\n*como posso te chamar\??\s*$/gi, "");
+  // Keep closing questions intact (e.g., "Como posso te chamar?") on first contact
   // Clean up excessive newlines left behind
   text = text.replace(/\n{3,}/g, "\n\n").trim();
   return text;
