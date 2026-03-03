@@ -1977,7 +1977,7 @@ Deno.serve(async (req) => {
       // CRITICAL: Do NOT force when user is contesting, reacting to, or selecting from previous response.
       const vehicleMentionPattern = /(audi|toyota|honda|hyundai|chevrolet|fiat|ford|bmw|mercedes|nissan|renault|jeep|haval|gwm|peugeot|citroen|mitsubishi|kia|subaru|volvo|porsche|land rover|jaguar|ram|dodge|caoa|chery|byd|onix|hb20|corolla|civic|creta|tracker|nivus|kicks|polo|virtus|compass|renegade|hilux|s10|ranger|amarok|toro|strada|saveiro|cruze|cobalt|prisma|argo|mobi|kwid|gol|fit|city|sentra|jetta|tucson|sportage|duster|captur|ecosport|bronco|equinox|trailblazer|jolion|territory|q\s?\d|a\s?\d|x\s?\d|serie\s?\d|classe\s?[a-e]|suv|sedan|hatch|picape|caminhonete|camionete)/i;
       const priceAvailabilityPattern = /(tem |temos|disponivel|disponível|estoque|qual valor|quanto custa|qual preço|qual preco|em qual|faixa de preço|faixa de preco|até \d|ate \d)/i;
-      const photoFallbackPattern = /(foto|imagem|image|photo|manda foto|envia foto|pode enviar|enviar fotos|ver foto|ver imagem|mostra foto|mostra imagem|fotos)/i;
+      const photoFallbackPattern = /(manda foto|envia foto|pode enviar|enviar fotos|ver foto|ver imagem|mostra foto|mostra imagem|quero foto|quero ver|me manda|me envia)/i;
 
       // Detect contestation/reaction patterns to BLOCK the fallback
       const fallbackContestationPattern = /\b(uma hora|outra hora|voce fala|voce disse|voce falou|me mandou|contradiz|ta errado|incorreto|errada|errado|confusao|confusa|confuso|insistencia|denovo|de novo|nao entendi|afinal)\b/i;
@@ -2174,6 +2174,20 @@ ${toolResultsContext.join("\n\n")}`;
     }
 
     let finalContent = sanitizeLLMOutput(rawContent);
+
+    // FALLBACK: if LLM returned empty response, provide a sensible default
+    if (!finalContent.trim()) {
+      console.warn("[Conversational] LLM returned EMPTY response — applying fallback");
+      debugTrace.push({ type: "empty_response_fallback", model, timestamp: Date.now() });
+
+      // Check if there were image attachments — the empty response is likely due to multimodal issues
+      if (imageBase64Parts.length > 0) {
+        finalContent = "Recebi sua foto! Vou analisar aqui. Me dá um momento que já te retorno.";
+      } else {
+        finalContent = "Desculpa, não consegui processar sua mensagem agora. Pode repetir?";
+      }
+    }
+
     finalContent = dedupeRepeatedParagraphs(finalContent);
     finalContent = removeRedundantPhotoOfferWhenPhotosPresent(finalContent);
 
