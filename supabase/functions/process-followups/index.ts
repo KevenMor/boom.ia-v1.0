@@ -291,6 +291,32 @@ Deno.serve(async (req: Request) => {
         continue;
       }
 
+      // Check if a human agent is assigned to this conversation in Chatwoot
+      try {
+        const baseUrlCheck = cfg.chatwoot_url.replace(/\/+$/, "");
+        const convCheckUrl = `${baseUrlCheck}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${item.chatwoot_conversation_id}`;
+        const convResp = await fetch(convCheckUrl, {
+          headers: { "Content-Type": "application/json", api_access_token: cfg.chatwoot_api_token },
+        });
+        if (convResp.ok) {
+          const convData = await convResp.json();
+          const assignee = convData?.meta?.assignee || convData?.assignee;
+          if (assignee && assignee.id) {
+            console.log(`[FollowUp] Human agent assigned (${assignee.name || assignee.id}) to conv ${item.chatwoot_conversation_id}, cancelling follow-up`);
+            await supabase.from("follow_up_queue").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", item.id);
+            // Also cancel any future follow-ups for this conversation
+            await supabase.rpc("cancel_pending_followups", {
+              p_agent_id: agent.id,
+              p_conversation_id: item.conversation_id,
+            });
+            continue;
+          }
+        }
+      } catch (e) {
+        console.warn(`[FollowUp] Could not check Chatwoot assignee (non-blocking):`, e);
+        // Continue with follow-up if API check fails
+      }
+
       // Generate follow-up message via LLM
       const tenantSlug = agent.tenants?.slug || null;
       const followUpMsg = await generateFollowUpMessage(
