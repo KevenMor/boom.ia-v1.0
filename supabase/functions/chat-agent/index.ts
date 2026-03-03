@@ -1794,52 +1794,42 @@ Deno.serve(async (req) => {
         } // close else (provider loaded successfully)
       } // close else (dispatcherProviderId exists)
 
-      // ===== PHOTO REQUEST FALLBACK =====
-      // If user asked for photos but dispatcher didn't call inventory, force a query
-      // so the conversational LLM gets photo URLs instead of inventing them
+      // ===== VEHICLE MENTION FALLBACK (ANTI-HALLUCINATION SAFETY NET) =====
+      // If user mentions ANY vehicle brand/model/category/price OR asks about availability
+      // but the dispatcher didn't call inventory_query, FORCE the call.
+      // This prevents the conversational agent from hallucinating stock info.
+      const vehicleMentionPattern = /(audi|toyota|honda|hyundai|chevrolet|fiat|ford|bmw|mercedes|nissan|renault|jeep|haval|gwm|peugeot|citroen|mitsubishi|kia|subaru|volvo|porsche|land rover|jaguar|ram|dodge|caoa|chery|byd|onix|hb20|corolla|civic|creta|tracker|nivus|kicks|polo|virtus|compass|renegade|hilux|s10|ranger|amarok|toro|strada|saveiro|cruze|cobalt|prisma|argo|mobi|kwid|gol|fit|city|sentra|jetta|tucson|sportage|duster|captur|ecosport|bronco|equinox|trailblazer|jolion|territory|q\s?\d|a\s?\d|x\s?\d|serie\s?\d|classe\s?[a-e]|suv|sedan|hatch|picape|caminhonete|camionete)/i;
+      const priceAvailabilityPattern = /(tem |temos|disponivel|disponível|estoque|qual valor|quanto custa|qual preço|qual preco|em qual|faixa de preço|faixa de preco|até \d|ate \d)/i;
       const photoFallbackPattern = /(foto|imagem|image|photo|manda foto|envia foto|pode enviar|enviar fotos|ver foto|ver imagem|mostra foto|mostra imagem|fotos)/i;
+
+      const userMentionsVehicle = vehicleMentionPattern.test(latestUserText || "");
+      const userAsksAboutAvailability = priceAvailabilityPattern.test(latestUserText || "");
       const userAskedForPhotos = photoFallbackPattern.test(latestUserText || "");
-      const hasInventoryTool = agentTools.some(t => t.tool_type === "inventory_query");
       const dispatcherAlreadyQueriedInventory = toolResultsContext.some(r => r.includes('"total"'));
+      const hasInventoryToolForFallback = agentTools.some(t => t.tool_type === "inventory_query");
 
-      if (userAskedForPhotos && hasInventoryTool && !dispatcherAlreadyQueriedInventory) {
-        console.log("[PhotoFallback] User asked for photos but dispatcher didn't query inventory — forcing query");
-        debugTrace.push({ type: "photo_fallback_triggered", user_text: (latestUserText || "").slice(0, 120), timestamp: Date.now() });
+      const shouldForceFallback = hasInventoryToolForFallback && !dispatcherAlreadyQueriedInventory && (userMentionsVehicle || userAsksAboutAvailability || userAskedForPhotos);
 
-        // Extract vehicle context from recent conversation to build filters
+      if (shouldForceFallback) {
+        const fallbackReason = userMentionsVehicle ? "vehicle_mention" : userAsksAboutAvailability ? "availability_question" : "photo_request";
+        console.log(`[VehicleFallback] Dispatcher did NOT call inventory but user ${fallbackReason} detected — FORCING inventory_query`);
+        debugTrace.push({ type: "vehicle_fallback_triggered", reason: fallbackReason, user_text: (latestUserText || "").slice(0, 120), timestamp: Date.now() });
+
         const inventoryTool = agentTools.find(t => t.tool_type === "inventory_query")!;
-        // Look at the last few assistant messages for vehicle names/context
-        const recentMessages = fullMessages.slice(-8);
-        const recentContext = recentMessages.map((m: any) => m.content || "").join(" ");
 
-        // Try to extract brand/model from recent conversation using common patterns
-        const brandPatterns = /(chevrolet|toyota|honda|hyundai|volkswagen|fiat|ford|bmw|mercedes|audi|nissan|renault|jeep|haval|gwm|peugeot|citroen|mitsubishi|kia|subaru|volvo|porsche|land rover|jaguar)/i;
-        const brandMatch = recentContext.match(brandPatterns);
-        // Try to find model — look for capitalized words near price/year mentions
-        const modelPatterns = /(onix|hb20|corolla|civic|creta|tracker|t-cross|tcross|nivus|kicks|polo|virtus|compass|renegade|hilux|s10|ranger|amarok|toro|strada|saveiro|cruze|cobalt|prisma|argo|mobi|kwid|gol|fit|city|sentra|jetta|tucson|sportage|hr-v|hrv|cr-v|crv|rav4|duster|captur|ecosport|bronco|equinox|trailblazer|jolion|territory|c\s?180|c\s?200|c\s?250|c\s?300|e\s?200|e\s?300|e\s?350|gla\s?\d*|glb\s?\d*|glc\s?\d*|gle\s?\d*|gls\s?\d*|cla\s?\d*|cls\s?\d*|classe\s?[a-e]|amg|sprinter|a\s?\d{1,3}\b|q\s?\d{1,2}\b|x\s?\d{1,2}\b|serie\s?\d|320i|330i|520i|530i|cayenne|macan|panamera|defender|discovery|evoque)/i;
-        const modelMatch = recentContext.match(modelPatterns);
-
-        // Also check if transmission was mentioned
-        const transmissionMatch = recentContext.match(/(autom[aá]tic|manual)/i);
-
-        const fallbackArgs: Record<string, string> = {};
-        if (brandMatch) fallbackArgs.marca = brandMatch[1];
-        if (modelMatch) fallbackArgs.modelo = modelMatch[1];
-        if (transmissionMatch) {
-          fallbackArgs.cambio = transmissionMatch[1].toLowerCase().startsWith("autom") ? "automático" : "manual";
-        }
-
-        console.log(`[PhotoFallback] Extracted filters: ${JSON.stringify(fallbackArgs)}`);
-        debugTrace.push({ type: "photo_fallback_filters", filters: fallbackArgs, timestamp: Date.now() });
+        // Build fallback args from user text + conversation context
+        const fallbackArgs = buildFallbackInventoryArgs(latestUserText || "", messages);
+        console.log(`[VehicleFallback] Extracted filters: ${JSON.stringify(fallbackArgs)}`);
+        debugTrace.push({ type: "vehicle_fallback_filters", filters: fallbackArgs, timestamp: Date.now() });
 
         if (Object.keys(fallbackArgs).length > 0) {
           try {
-            const photoResult = await executeTool(inventoryTool, fallbackArgs, supabase, agent_id, latestUserText);
-            toolResultsContext.push(`[Resultado da ferramenta "consultar_estoque"]: ${photoResult}`);
-            console.log(`[PhotoFallback] Inventory query returned results`);
-            debugTrace.push({ type: "photo_fallback_result", result_length: photoResult.length, timestamp: Date.now() });
+            const fallbackResult = await executeTool(inventoryTool, fallbackArgs, supabase, agent_id, latestUserText);
+            toolResultsContext.push(`[Resultado da ferramenta "consultar_estoque"]: ${fallbackResult}`);
+            console.log(`[VehicleFallback] Inventory query returned results`);
+            debugTrace.push({ type: "vehicle_fallback_result", result_length: fallbackResult.length, timestamp: Date.now() });
           } catch (e: any) {
-            console.error("[PhotoFallback] Error:", e.message);
+            console.error("[VehicleFallback] Error:", e.message);
           }
         }
       }
