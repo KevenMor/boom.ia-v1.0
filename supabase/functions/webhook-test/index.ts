@@ -287,6 +287,11 @@ function parseChatwootPayload(body: Record<string, unknown>) {
         extension: a.extension ?? null,
       }));
 
+    // Extract assignee (human agent assigned to conversation)
+    const assignee = (conversationMeta.assignee || conversation.assignee || null) as Record<string, unknown> | null;
+    const assigneeId = assignee ? Number(assignee.id ?? 0) : null;
+    const assigneeName = assignee ? (assignee.name as string) || null : null;
+
     return {
       isChatwoot: true,
       message: (body.content as string) || "",
@@ -298,9 +303,11 @@ function parseChatwootPayload(body: Record<string, unknown>) {
       chatwootContactId: Number(contactMeta.id ?? sender.id ?? 0) || null,
       channel: (conversation.channel as string) || "chatwoot",
       attachments,
+      assigneeId,
+      assigneeName,
     };
   }
-  return { isChatwoot: false, message: "", eventMessageId: null as string | null, externalUserId: "", contactName: null as string | null, contactAvatarUrl: null as string | null, chatwootConversationId: null, chatwootContactId: null as number | null, channel: "", attachments: [] as ChatwootAttachment[] };
+  return { isChatwoot: false, message: "", eventMessageId: null as string | null, externalUserId: "", contactName: null as string | null, contactAvatarUrl: null as string | null, chatwootConversationId: null, chatwootContactId: null as number | null, channel: "", attachments: [] as ChatwootAttachment[], assigneeId: null as number | null, assigneeName: null as string | null };
 }
 
 // ---------- Webhook idempotency (anti-duplicate retries) ----------
@@ -569,6 +576,11 @@ Deno.serve(async (req: Request) => {
       }));
       console.log("[DEBUG] Chatwoot conversation.source_id:", conversation.source_id);
       console.log("[DEBUG] Chatwoot conversation.channel:", conversation.channel);
+      // Log assignee info
+      const metaAssignee = (meta.assignee || {}) as Record<string, unknown>;
+      const convAssignee = (conversation.assignee || {}) as Record<string, unknown>;
+      console.log("[DEBUG] Chatwoot meta.assignee:", JSON.stringify(metaAssignee));
+      console.log("[DEBUG] Chatwoot conversation.assignee:", JSON.stringify(convAssignee));
     }
 
     const url = new URL(req.url);
@@ -615,6 +627,15 @@ Deno.serve(async (req: Request) => {
     let contactAvatarUrl: string | null = null;
 
     if (chatwoot.isChatwoot) {
+      // ---- Guard: if a human agent is assigned, AI must NOT respond ----
+      if (chatwoot.assigneeId) {
+        console.log(`[Webhook] Human agent assigned (id=${chatwoot.assigneeId}, name=${chatwoot.assigneeName}), AI will NOT respond`);
+        return new Response(
+          JSON.stringify({ status: "ignored", reason: `Human agent assigned: ${chatwoot.assigneeName || chatwoot.assigneeId}` }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       userMessage = chatwoot.message;
       externalUserId = chatwoot.externalUserId;
       channel = chatwoot.channel;
