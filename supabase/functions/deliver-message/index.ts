@@ -322,15 +322,15 @@ Deno.serve(async (req: Request) => {
         if (greetingText) {
           console.log(`[Deliver] Sending LLM greeting: "${greetingText.substring(0, 80)}..."`);
           await sendChatwootTextMessage(msgUrl, cfg.chatwoot_api_token, greetingText);
-          await new Promise((r) => setTimeout(r, 1500));
+          await new Promise((r) => setTimeout(r, 2000));
         }
 
         // 2) Send the video
         console.log(`[Deliver] Sending welcome video: ${welcome_video_url}`);
         const videoOk = await sendChatwootMediaMessage(msgUrl, cfg.chatwoot_api_token, welcome_video_url, "video/mp4", "");
         console.log(`[Deliver] Welcome video: ${videoOk ? "OK" : "FAIL"}`);
-        // Wait longer for video to be fully delivered/processed by Chatwoot before sending name question
-        await new Promise((r) => setTimeout(r, videoOk ? 6000 : 2000));
+        // Wait 8s for Chatwoot to fully process and deliver video to WhatsApp
+        await new Promise((r) => setTimeout(r, videoOk ? 8000 : 2000));
 
         // 3) Ask for the client's name
         const nameQuestion = cfg.welcome_name_question || "Como posso te chamar?";
