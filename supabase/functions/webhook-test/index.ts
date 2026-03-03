@@ -544,8 +544,13 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // DEBUG: log raw Chatwoot payload for phone extraction analysis
+    // DEBUG: log raw Chatwoot payload for analysis
     if (body.event === "message_created") {
+      // Log FULL raw payload (truncated to 3000 chars for safety)
+      const rawPayload = JSON.stringify(body);
+      console.log("[DEBUG] RAW WEBHOOK PAYLOAD:", rawPayload.slice(0, 3000));
+      if (rawPayload.length > 3000) console.log("[DEBUG] RAW PAYLOAD TRUNCATED, total:", rawPayload.length, "chars");
+
       const sender = (body.sender || {}) as Record<string, unknown>;
       const conversation = (body.conversation || {}) as Record<string, unknown>;
       const contactInConv = (conversation.contact || {}) as Record<string, unknown>;
@@ -557,11 +562,7 @@ Deno.serve(async (req: Request) => {
         name: sender.name,
         id: sender.id,
       }));
-      console.log("[DEBUG] Chatwoot conversation.contact:", JSON.stringify({
-        phone_number: contactInConv.phone_number,
-        identifier: contactInConv.identifier,
-        id: contactInConv.id,
-      }));
+      console.log("[DEBUG] Chatwoot conversation.contact:", JSON.stringify(contactInConv));
       console.log("[DEBUG] Chatwoot conversation.meta.sender:", JSON.stringify({
         phone_number: metaSender.phone_number,
         id: metaSender.id,
