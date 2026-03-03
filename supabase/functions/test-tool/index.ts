@@ -164,6 +164,107 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "calendar_query": {
+        const cloudUrl = Deno.env.get("SUPABASE_URL") || "";
+        const cloudKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+
+        // Resolve tenant_id from the tool itself
+        const calendarArgs: Record<string, any> = { ...args };
+        if (tool.tenant_id) calendarArgs.tenant_id = tool.tenant_id;
+
+        const action = calendarArgs.action || "check_availability";
+
+        if (action === "check_availability") {
+          // Query calendars + events for the tenant
+          const date = calendarArgs.date || new Date().toISOString().slice(0, 10);
+          const daysAhead = calendarArgs.days_ahead || 3;
+
+          // Get calendars for this tenant
+          const { data: calendars, error: calErr } = await supabase
+            .from("calendars")
+            .select("*")
+            .eq("tenant_id", calendarArgs.tenant_id)
+            .limit(10);
+
+          if (calErr) {
+            result = { error: "Failed to fetch calendars", detail: calErr.message };
+            break;
+          }
+
+          if (!calendars || calendars.length === 0) {
+            result = { error: "No calendars found for this tenant", tenant_id: calendarArgs.tenant_id };
+            break;
+          }
+
+          // Get events in the date range
+          const startDate = new Date(date);
+          const endDate = new Date(startDate);
+          endDate.setDate(endDate.getDate() + daysAhead);
+
+          const calendarIds = calendars.map((c: any) => c.id);
+          const { data: events, error: evErr } = await supabase
+            .from("calendar_events")
+            .select("*")
+            .in("calendar_id", calendarIds)
+            .gte("start_at", startDate.toISOString())
+            .lte("start_at", endDate.toISOString())
+            .order("start_at", { ascending: true });
+
+          result = {
+            action: "check_availability",
+            calendars: calendars.map((c: any) => ({ id: c.id, name: c.name })),
+            existing_events: events || [],
+            date_range: { from: startDate.toISOString().slice(0, 10), to: endDate.toISOString().slice(0, 10) },
+            note: evErr ? `Warning: ${evErr.message}` : undefined,
+          };
+        } else if (action === "criar" || action === "create") {
+          const title = calendarArgs.title;
+          const startAt = calendarArgs.start_at;
+          const durationMin = calendarArgs.duration_minutes || 60;
+
+          if (!title || !startAt) {
+            result = { error: "Missing required fields: title, start_at" };
+            break;
+          }
+
+          // Find the first calendar for this tenant
+          const { data: cals } = await supabase
+            .from("calendars")
+            .select("id")
+            .eq("tenant_id", calendarArgs.tenant_id)
+            .limit(1);
+
+          const calendarId = calendarArgs.calendar_id || cals?.[0]?.id;
+          if (!calendarId) {
+            result = { error: "No calendar found for this tenant" };
+            break;
+          }
+
+          const startDt = new Date(startAt);
+          const endDt = new Date(startDt.getTime() + durationMin * 60000);
+
+          const { data: created, error: insErr } = await supabase
+            .from("calendar_events")
+            .insert({
+              calendar_id: calendarId,
+              title,
+              start_at: startDt.toISOString(),
+              end_at: endDt.toISOString(),
+            })
+            .select()
+            .single();
+
+          if (insErr) {
+            result = { error: "Failed to create event", detail: insErr.message };
+          } else {
+            result = { action: "created", event: created };
+          }
+        } else {
+          result = { error: `Unknown calendar action: ${action}. Use 'check_availability' or 'criar'.` };
+        }
+        break;
+      }
+
       default:
         result = { error: `Unknown tool type: ${tool.tool_type}` };
     }
