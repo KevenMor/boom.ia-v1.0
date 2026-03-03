@@ -296,6 +296,27 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // ---------- Detect first interaction (welcome flow) ----------
+    const isFirstInteraction = conversationMessages.length === 0;
+    let welcomeVideoUrl: string | null = null;
+
+    if (isFirstInteraction) {
+      // Load agent config to check for welcome video
+      try {
+        const { data: agentData } = await supabase
+          .from("agents")
+          .select("config")
+          .eq("id", agent_id)
+          .maybeSingle();
+
+        const agentCfg = (agentData?.config || {}) as Record<string, any>;
+        welcomeVideoUrl = agentCfg.welcome_video_url || null;
+        console.log(`[ProcessQueue] First interaction detected. Welcome video: ${welcomeVideoUrl ? "YES" : "NO"}`);
+      } catch (e: any) {
+        console.warn("[ProcessQueue] Failed to load agent config for welcome flow:", e.message);
+      }
+    }
+
     // ---------- Call chat-agent ----------
     const messages = [...conversationMessages, { role: "user", content: finalMessage }];
     console.log(`[ProcessQueue] Calling chat-agent with ${messages.length} messages, ${(attachments || []).length} attachment(s)`);
@@ -321,6 +342,7 @@ Deno.serve(async (req: Request) => {
       chatwoot_conversation_id,
       response_text: result.fullContent,
       response_parts: result.responseParts,
+      ...(welcomeVideoUrl ? { welcome_video_url: welcomeVideoUrl } : {}),
     }, cloudKey);
 
     return new Response(

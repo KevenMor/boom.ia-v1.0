@@ -6,6 +6,47 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+// ---------- Media helpers ----------
+async function sendChatwootMediaMessage(
+  url: string,
+  apiToken: string,
+  mediaUrl: string,
+  contentType: string = "video/mp4",
+  caption?: string
+): Promise<boolean> {
+  try {
+    const mediaResp = await fetch(mediaUrl);
+    if (!mediaResp.ok) {
+      console.error(`[Deliver] Media download failed ${mediaResp.status}: ${mediaUrl}`);
+      return false;
+    }
+
+    const mediaBlob = await mediaResp.blob();
+    const parsedUrl = new URL(mediaUrl);
+    const filename = parsedUrl.pathname.split("/").pop() || "media.mp4";
+    const formData = new FormData();
+    formData.append("content", caption || "");
+    formData.append("message_type", "outgoing");
+    formData.append("private", "false");
+    formData.append("attachments[]", new Blob([await mediaBlob.arrayBuffer()], { type: contentType }), filename);
+
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { api_access_token: apiToken },
+      body: formData,
+    });
+
+    if (!resp.ok) {
+      console.error(`[Deliver] Media msg error ${resp.status}:`, await resp.text());
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error(`[Deliver] Media msg error:`, e);
+    return false;
+  }
+}
+
 // ---------- Image helpers ----------
 function extractImagesFromMarkdown(text: string): { textOnly: string; imageUrls: string[] } {
   const imageRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/g;
@@ -234,6 +275,7 @@ Deno.serve(async (req: Request) => {
       chatwoot_conversation_id,
       response_text,
       response_parts,
+      welcome_video_url,
     } = await req.json();
 
     const nexusUrl = Deno.env.get("NEXUS_DB_URL");
@@ -263,6 +305,17 @@ Deno.serve(async (req: Request) => {
 
     const cfg = (agent.config || {}) as Record<string, any>;
     const hasChatwootConfig = !!(cfg.chatwoot_url && cfg.chatwoot_api_token && cfg.chatwoot_account_id);
+
+    // ---------- Send welcome video (if first interaction) ----------
+    if (welcome_video_url && chatwoot_conversation_id && hasChatwootConfig) {
+      const baseUrl = cfg.chatwoot_url.replace(/\/+$/, "");
+      const msgUrl = `${baseUrl}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${chatwoot_conversation_id}/messages`;
+      console.log(`[Deliver] Sending welcome video: ${welcome_video_url}`);
+      const videoOk = await sendChatwootMediaMessage(msgUrl, cfg.chatwoot_api_token, welcome_video_url, "video/mp4", "");
+      console.log(`[Deliver] Welcome video: ${videoOk ? "OK" : "FAIL"}`);
+      // Small delay so video arrives before text
+      if (videoOk) await new Promise((r) => setTimeout(r, 2000));
+    }
 
     // ---------- Send to Chatwoot ----------
     if (chatwoot_conversation_id && hasChatwootConfig) {
