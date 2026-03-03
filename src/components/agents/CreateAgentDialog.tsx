@@ -57,6 +57,10 @@ export function CreateAgentDialog({ open, onOpenChange, defaultTenantId }: Props
 
   const onSubmit = async (data: FormData) => {
     try {
+      // Generate webhook_token client-side to avoid dependency on pgcrypto extension
+      const tokenBytes = crypto.getRandomValues(new Uint8Array(32));
+      const webhookToken = Array.from(tokenBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+
       await create.mutateAsync({
         name: data.name,
         description: data.description || null,
@@ -66,6 +70,7 @@ export function CreateAgentDialog({ open, onOpenChange, defaultTenantId }: Props
         system_prompt: data.system_prompt || null,
         temperature: data.temperature,
         avatar_url: avatarUrl,
+        webhook_token: webhookToken,
         config: { top_p: data.top_p, top_k: data.top_k, read_delay_ms: Math.round(readDelay * 1000), typing_delay_ms: Math.round(typingDelay * 1000), block_gap_ms: Math.round(blockGap * 1000) },
       });
       toast.success(`Agente "${data.name}" criado`);
