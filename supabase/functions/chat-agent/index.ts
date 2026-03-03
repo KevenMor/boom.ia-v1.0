@@ -1636,6 +1636,75 @@ Deno.serve(async (req) => {
     // ===== PHASE 1: TOOL DISPATCHER =====
     const toolResultsContext: string[] = [];
 
+    // ===== PRE-DISPATCHER: FIPE INTERCEPT =====
+    // When user explicitly asks about FIPE / appraisal / "meu carro" value,
+    // call fipe_query DIRECTLY and flag to block inventory_query in dispatcher.
+    let fipeIntercepted = false;
+    const normalizedUserForFipe = latestUserText.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const isFipeExplicitRequest = /(fipe|tabela fipe|valor da fipe|preco fipe|valor fipe)/.test(normalizedUserForFipe);
+    const isAppraisalRequest = /(meu carro|meu veiculo|tenho um|tenho uma|quero avaliar|avaliar meu|pre.?avaliacao|avaliacao|quanto vale meu|meu .{2,25} vale|dar na troca|dar como entrada|colocar na troca|colocar como entrada)/.test(normalizedUserForFipe);
+
+    if ((isFipeExplicitRequest || isAppraisalRequest) && openaiTools && openaiTools.length > 0) {
+      const fipeTool = agentTools.find(t => t.tool_type === "fipe_query");
+      if (fipeTool) {
+        // Extract brand/model/year from the LATEST user message + recent context
+        const knownBrandsIntercept = ["chevrolet", "toyota", "honda", "hyundai", "volkswagen", "fiat", "ford", "jeep", "nissan", "renault", "mitsubishi", "kia", "peugeot", "citroen", "bmw", "mercedes", "audi", "volvo", "subaru", "suzuki", "ram", "dodge", "caoa", "chery", "byd", "gwm", "land rover", "porsche"];
+        const knownModelsIntercept = ["cruze", "onix", "tracker", "spin", "cobalt", "prisma", "s10", "corolla", "civic", "hb20", "creta", "tucson", "compass", "renegade", "polo", "virtus", "gol", "hilux", "ranger", "toro", "argo", "mobi", "kicks", "nivus", "t-cross", "tcross", "fit", "city", "hr-v", "hrv", "duster", "captur", "sentra", "jetta", "amarok", "strada", "saveiro", "kwid", "sportage", "ecosport", "bronco", "equinox", "trailblazer", "jolion", "territory", "q3", "q5", "q7", "a3", "a4", "c180", "c200", "c300", "gla", "glc", "gle", "x1", "x3", "x5"];
+
+        // Scan latest user text + recent messages for vehicle data
+        const textsToScan = [
+          normalizedUserForFipe,
+          ...messages.slice(-6).map((m: any) => String(m.content || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")),
+        ].join(" ");
+
+        let fMarca = "";
+        let fModelo = "";
+        let fAno = 0;
+
+        for (const brand of knownBrandsIntercept) {
+          if (textsToScan.includes(brand)) { fMarca = brand; break; }
+        }
+        for (const model of knownModelsIntercept) {
+          if (textsToScan.includes(model)) { fModelo = model; break; }
+        }
+        const yearMatch = textsToScan.match(/\b(19[89]\d|20[0-2]\d)\b/);
+        if (yearMatch) fAno = parseInt(yearMatch[1]);
+
+        if (fMarca || fModelo) {
+          const fipeArgs: Record<string, any> = {};
+          if (fMarca) fipeArgs.marca = fMarca;
+          if (fModelo) fipeArgs.modelo = fModelo;
+          if (fAno) fipeArgs.ano = fAno;
+
+          console.log(`[FipeIntercept] FIPE request detected — calling fipe_query DIRECTLY: ${JSON.stringify(fipeArgs)}`);
+          debugTrace.push({ type: "fipe_intercept", reason: isFipeExplicitRequest ? "explicit_fipe_mention" : "appraisal_context", args: fipeArgs, timestamp: Date.now() });
+
+          try {
+            const fipeResult = await executeTool(fipeTool, fipeArgs, supabase, agent_id, latestUserText);
+            toolResultsContext.push(`[Resultado da ferramenta "consultar_fipe"]: ${fipeResult}`);
+            fipeIntercepted = true;
+            console.log(`[FipeIntercept] FIPE result received (${fipeResult.length} chars)`);
+            debugTrace.push({ type: "fipe_intercept_result", result_length: fipeResult.length, timestamp: Date.now() });
+
+            // Save to memory
+            if (convId) {
+              try {
+                await supabase.rpc("save_message", {
+                  p_agent_id: agent_id, p_conversation_id: convId, p_role: "tool",
+                  p_content: fipeResult, p_model: null, p_tokens_input: 0, p_tokens_output: 0,
+                  p_latency_ms: null, p_metadata: null,
+                });
+              } catch {}
+            }
+          } catch (e: any) {
+            console.error("[FipeIntercept] Error:", e.message);
+          }
+        } else {
+          console.log(`[FipeIntercept] FIPE context detected but no brand/model found in text`);
+        }
+      }
+    }
+
     if (openaiTools && openaiTools.length > 0) {
       // Priority: agent-level config > tenant-level settings (legacy fallback)
       const dispatcherProviderId = agentConfig.dispatcher_provider_id || (agent.tenants?.settings as any)?.dispatcher_provider_id;
@@ -1803,6 +1872,29 @@ Deno.serve(async (req) => {
               let toolResult: string;
               if (matchedTool) {
                 const isInventoryTool = matchedTool.tool_type === "inventory_query";
+                const isFipeTool = matchedTool.tool_type === "fipe_query";
+
+                // Block inventory_query when FIPE was already intercepted (appraisal context)
+                if (isInventoryTool && fipeIntercepted) {
+                  console.log(`[Dispatcher] BLOCKING inventory_query — FIPE was already intercepted for appraisal context`);
+                  debugTrace.push({ type: "dispatcher_tool_skipped", tool: toolName, reason: "fipe_intercepted_blocks_inventory", timestamp: Date.now() });
+                  currentDispatchMessages.push({
+                    role: "tool", tool_call_id: toolCall.id,
+                    content: JSON.stringify({ skipped: true, reason: "User asked about FIPE/appraisal for THEIR car, not dealer stock." }),
+                  });
+                  continue;
+                }
+
+                // Block duplicate fipe_query if already intercepted
+                if (isFipeTool && fipeIntercepted) {
+                  console.log(`[Dispatcher] BLOCKING duplicate fipe_query — already intercepted`);
+                  currentDispatchMessages.push({
+                    role: "tool", tool_call_id: toolCall.id,
+                    content: JSON.stringify({ skipped: true, reason: "FIPE already queried in intercept phase." }),
+                  });
+                  continue;
+                }
+
                 if (isInventoryTool) {
                   // === SKIP IF PHOTOS ALREADY SENT FOR THIS VEHICLE ===
                   // Check if assistant already sent photos of this specific vehicle in history
