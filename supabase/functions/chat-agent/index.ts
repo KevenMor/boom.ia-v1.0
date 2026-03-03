@@ -241,6 +241,15 @@ function removePreviouslySentPhotoBlocks(content: string, historyMessages: Array
   return { content: next, removedCount };
 }
 
+function buildRecentUserContextText(conversationMessages: any[], maxMessages = 4): string {
+  return (conversationMessages || [])
+    .filter((m: any) => m?.role === "user" && typeof m?.content === "string")
+    .slice(-maxMessages)
+    .map((m: any) => String(m.content || "").trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
 function buildFallbackInventoryArgs(userText: string, conversationMessages?: any[]): Record<string, any> {
   // Try to extract the vehicle model/brand from conversation context first
   // The user might say "gostei do corola, fotos?" — we need to find "COROLLA" from assistant's previous messages
@@ -265,6 +274,8 @@ function buildFallbackInventoryArgs(userText: string, conversationMessages?: any
     "imagem", "imagens", "detalhe", "detalhes", "informacao", "informacoes", "manda", "envia",
     "enviar", "ver", "me", "dele", "dela", "por", "favor", "boa", "opcao", "e", "o", "a",
     "gostei", "queria", "interessei", "gosto", "legal", "show", "otimo", "bom",
+    "que", "qual", "quais", "ai", "aqui", "disponivel", "disponiveis", "disponibilidade", "estoque",
+    "carro", "carros", "veiculo", "veiculos", "temos", "tinha",
   ]);
 
   const tokens = normalized
@@ -279,8 +290,13 @@ function buildFallbackInventoryArgs(userText: string, conversationMessages?: any
 
   const args: Record<string, any> = {};
   if (yearMatch) args.year = Number(yearMatch[0]);
-  if (tokens.length > 0) args.search = tokens.slice(0, 4).join(" ");
-  else args.search = normalized.trim().slice(0, 80);
+  if (tokens.length > 0) {
+    args.search = tokens.slice(0, 4).join(" ");
+  } else {
+    const weakSearchPattern = /^(disponivel( no estoque)?|em estoque|no estoque|estoque|disponibilidade|carro|veiculo|tem)$/i;
+    const raw = normalized.trim().slice(0, 80);
+    if (raw && !weakSearchPattern.test(raw)) args.search = raw;
+  }
 
   return args;
 }
@@ -322,7 +338,7 @@ function extractVehicleFromContext(userText: string, conversationMessages: any[]
 
   for (let idx = 0; idx < conversationMessages.length; idx++) {
     const msg = conversationMessages[idx];
-    if (msg.role !== "assistant") continue;
+    if (!msg || (msg.role !== "assistant" && msg.role !== "user")) continue;
 
     const rawContent = String(msg.content || "");
     const normalizedContent = rawContent
@@ -350,25 +366,35 @@ function extractVehicleFromContext(userText: string, conversationMessages: any[]
       while ((m = pattern.exec(normalizedContent)) !== null) {
         const model = (m[1] || "").trim();
         if (!model) continue;
-        // Skip if the first word of the "model" is a common Portuguese word
         const firstWord = model.split(/\s+/)[0].toLowerCase();
         if (notModelWords.has(firstWord)) continue;
         const full = `${brand} ${model}`.trim();
         vehicleMentions.push({ brand, model, full, sourceIndex: idx });
+      }
+
+      // Brand-only mention fallback (e.g. "tem audi?")
+      if (new RegExp(`\\b${escapeRegExp(brand)}\\b`, "i").test(normalizedContent)) {
+        vehicleMentions.push({ brand, model: "", full: brand, sourceIndex: idx });
       }
     }
   }
 
   if (!vehicleMentions.length) return null;
 
+  const mentionToArgs = (mention: VehicleMention) => {
+    const modelTokens = (mention.model || "").split(/\s+/).filter(t => t.length >= 1).slice(0, 3).join(" ");
+    const searchTerm = (modelTokens || mention.model || mention.brand).trim();
+    const args: Record<string, any> = { marca: mention.brand };
+    if (searchTerm) args.search = searchTerm;
+    return args;
+  };
+
   // If user answered only with a polite affirmative, assume latest discussed vehicle
   if (isAffirmativeOnly || isGenericPhotoRequest) {
     const latestMention = vehicleMentions[vehicleMentions.length - 1];
-    // Use up to 2 meaningful model tokens (e.g. "C 180" not just "C")
-    const modelTokens = latestMention.model.split(/\s+/).filter(t => t.length >= 1).slice(0, 3).join(" ");
-    const searchTerm = modelTokens || latestMention.model;
-    console.log(`[extractVehicleFromContext] ${isGenericPhotoRequest ? "Generic photo request" : "Affirmative"} → using latest vehicle: ${latestMention.full} → search: ${searchTerm}`);
-    return { marca: latestMention.brand, search: searchTerm };
+    const args = mentionToArgs(latestMention);
+    console.log(`[extractVehicleFromContext] ${isGenericPhotoRequest ? "Generic photo request" : "Affirmative"} → using latest vehicle: ${latestMention.full} → args: ${JSON.stringify(args)}`);
+    return args;
   }
 
   const userTokens = normalizedUser
@@ -379,10 +405,9 @@ function extractVehicleFromContext(userText: string, conversationMessages: any[]
   // fall back to the most recently discussed vehicle
   if (userTokens.length === 0) {
     const latestMention = vehicleMentions[vehicleMentions.length - 1];
-    const modelTokens = latestMention.model.split(/\s+/).filter(t => t.length >= 1).slice(0, 3).join(" ");
-    const searchTerm = modelTokens || latestMention.model;
-    console.log(`[extractVehicleFromContext] No useful tokens → using latest vehicle: ${latestMention.full} → search: ${searchTerm}`);
-    return { marca: latestMention.brand, search: searchTerm };
+    const args = mentionToArgs(latestMention);
+    console.log(`[extractVehicleFromContext] No useful tokens → using latest vehicle: ${latestMention.full} → args: ${JSON.stringify(args)}`);
+    return args;
   }
 
   let bestMatch: VehicleMention | null = null;
@@ -408,19 +433,17 @@ function extractVehicleFromContext(userText: string, conversationMessages: any[]
   }
 
   if (bestMatch && bestScore >= 2) {
-    const modelTokens = bestMatch.model.split(/\s+/).filter(t => t.length >= 1).slice(0, 3).join(" ");
-    return { marca: bestMatch.brand, search: modelTokens || bestMatch.model };
+    return mentionToArgs(bestMatch);
   }
 
-  // Final fallback: if user tokens didn't match any vehicle well, 
+  // Final fallback: if user tokens didn't match any vehicle well,
   // and the message contains photo/detail keywords, use the most recent vehicle
   const hasPhotoKeyword = /(foto|imagem|image|detalhe|ver|mostrar|enviar)/i.test(normalizedUser);
   if (hasPhotoKeyword && vehicleMentions.length > 0) {
     const latestMention = vehicleMentions[vehicleMentions.length - 1];
-    const modelTokens = latestMention.model.split(/\s+/).filter(t => t.length >= 1).slice(0, 3).join(" ");
-    const searchTerm = modelTokens || latestMention.model;
-    console.log(`[extractVehicleFromContext] Photo keyword fallback → using latest vehicle: ${latestMention.full} → search: ${searchTerm}`);
-    return { marca: latestMention.brand, search: searchTerm };
+    const args = mentionToArgs(latestMention);
+    console.log(`[extractVehicleFromContext] Photo keyword fallback → using latest vehicle: ${latestMention.full} → args: ${JSON.stringify(args)}`);
+    return args;
   }
 
   return null;
@@ -1738,9 +1761,11 @@ Deno.serve(async (req) => {
                   );
 
                   const userHasExplicitVehicleMention = /(audi|toyota|honda|hyundai|chevrolet|fiat|ford|bmw|mercedes|nissan|renault|jeep|haval|gwm|peugeot|citroen|mitsubishi|kia|subaru|volvo|porsche|onix|hb20|corolla|civic|creta|tracker|nivus|kicks|polo|virtus|compass|renegade|hilux|s10|ranger|amarok|toro|strada|saveiro|q\s?\d|a\s?\d|x\s?\d|c\s?\d{2,3}|gl[abces]?\s?\d{2,3})/i.test(latestUserText || "");
+                  let skipWeakInventoryCall = false;
 
                   if (genericSearchPattern.test(normalizedSearchArg) || (userHasExplicitVehicleMention && !hasSpecificVehicleSignalInArgs)) {
-                    const correctedArgs = buildFallbackInventoryArgs(latestUserText || "", messages);
+                    const recentUserContext = buildRecentUserContextText(messages, 5);
+                    const correctedArgs = buildFallbackInventoryArgs(`${recentUserContext} ${latestUserText || ""}`.trim(), messages);
                     if (correctedArgs && Object.keys(correctedArgs).length > 0) {
                       console.warn(`[Dispatcher] Sanitizing weak inventory args. Original=${JSON.stringify(toolArgs)} Corrected=${JSON.stringify(correctedArgs)}`);
                       debugTrace.push({
@@ -1753,7 +1778,26 @@ Deno.serve(async (req) => {
                         timestamp: Date.now(),
                       });
                       toolArgs = correctedArgs;
+                    } else if (genericSearchPattern.test(normalizedSearchArg)) {
+                      console.warn(`[Dispatcher] Skipping weak generic inventory args without recoverable context. Original=${JSON.stringify(toolArgs)}`);
+                      debugTrace.push({
+                        type: "dispatcher_tool_skipped",
+                        tool: toolName,
+                        reason: "weak_generic_inventory_args_no_context",
+                        args: toolArgs,
+                        timestamp: Date.now(),
+                      });
+                      skipWeakInventoryCall = true;
                     }
+                  }
+
+                  if (skipWeakInventoryCall) {
+                    currentDispatchMessages.push({
+                      role: "tool",
+                      tool_call_id: toolCall.id,
+                      content: JSON.stringify({ skipped: true, reason: "Weak generic inventory args without recoverable vehicle context" }),
+                    });
+                    continue;
                   }
 
                   const hasTipoVeiculo = !!(toolArgs?.tipo_veiculo || toolArgs?.vehicle_type);
@@ -1862,8 +1906,9 @@ Deno.serve(async (req) => {
 
         const inventoryTool = agentTools.find(t => t.tool_type === "inventory_query")!;
 
-        // Build fallback args from user text + conversation context
-        const fallbackArgs = buildFallbackInventoryArgs(latestUserText || "", messages);
+        // Build fallback args from latest + recent user context
+        const recentUserContext = buildRecentUserContextText(messages, 5);
+        const fallbackArgs = buildFallbackInventoryArgs(`${recentUserContext} ${latestUserText || ""}`.trim(), messages);
         console.log(`[VehicleFallback] Extracted filters: ${JSON.stringify(fallbackArgs)}`);
         debugTrace.push({ type: "vehicle_fallback_filters", filters: fallbackArgs, timestamp: Date.now() });
 
