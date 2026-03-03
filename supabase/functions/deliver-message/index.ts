@@ -305,6 +305,7 @@ Deno.serve(async (req: Request) => {
 
     const cfg = (agent.config || {}) as Record<string, any>;
     const hasChatwootConfig = !!(cfg.chatwoot_url && cfg.chatwoot_api_token && cfg.chatwoot_account_id);
+    console.log(`[Deliver] Payload welcome_video_url: ${welcome_video_url ? "YES" : "NO"}`);
 
     // ---------- Send welcome video (if first interaction) ----------
     if (welcome_video_url && chatwoot_conversation_id && hasChatwootConfig) {
