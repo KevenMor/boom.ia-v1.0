@@ -130,18 +130,21 @@ export function DebugBlock({ debug, edgeLogs }: DebugBlockProps) {
                       <div className="pl-2">
                         Marca: <span className={ext.current_msg_extraction?.marca !== "(nenhuma)" ? "text-green-400" : "text-red-400"}>{ext.current_msg_extraction?.marca}</span>{" | "}
                         Modelo: <span className={ext.current_msg_extraction?.modelo !== "(nenhum)" ? "text-green-400" : "text-red-400"}>{ext.current_msg_extraction?.modelo}</span>{" | "}
+                        Versão: <span className={ext.current_msg_extraction?.versao !== "(nenhuma)" ? "text-green-400" : "text-red-400"}>{ext.current_msg_extraction?.versao ?? "(nenhuma)"}</span>{" | "}
                         Ano: <span className={ext.current_msg_extraction?.ano !== "(nenhum)" ? "text-green-400" : "text-red-400"}>{String(ext.current_msg_extraction?.ano)}</span>
                       </div>
                       <div className="text-amber-300 font-semibold text-[10px] mt-1">📜 Fallback do histórico:</div>
                       <div className="pl-2">
                         Marca: <span className={ext.history_fallback?.marca !== "(não usado)" ? "text-yellow-400" : "text-[#8696a0]"}>{ext.history_fallback?.marca}</span>{" | "}
                         Modelo: <span className={ext.history_fallback?.modelo !== "(não usado)" ? "text-yellow-400" : "text-[#8696a0]"}>{ext.history_fallback?.modelo}</span>{" | "}
+                        Versão: <span className={ext.history_fallback?.versao !== "(não usado)" ? "text-yellow-400" : "text-[#8696a0]"}>{ext.history_fallback?.versao ?? "(não usado)"}</span>{" | "}
                         Ano: <span className={ext.history_fallback?.ano !== "(não usado)" ? "text-yellow-400" : "text-[#8696a0]"}>{String(ext.history_fallback?.ano)}</span>
                       </div>
                       <div className="text-amber-300 font-semibold text-[10px] mt-1 border-t border-[#2a3942] pt-1">✅ Resultado final:</div>
                       <div className="pl-2">
                         Marca: <span className="text-[#e9edef] font-semibold">{ext.final?.marca}</span>{" | "}
                         Modelo: <span className="text-[#e9edef] font-semibold">{ext.final?.modelo}</span>{" | "}
+                        Versão: <span className="text-[#e9edef] font-semibold">{ext.final?.versao ?? "(nenhuma)"}</span>{" | "}
                         Ano: <span className="text-[#e9edef] font-semibold">{String(ext.final?.ano)}</span>
                       </div>
                     </div>
