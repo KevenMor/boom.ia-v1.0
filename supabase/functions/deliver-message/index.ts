@@ -329,11 +329,37 @@ Deno.serve(async (req: Request) => {
         // ===== WELCOME FLOW: LLM greeting → video → "Como posso te chamar?" =====
         console.log(`[Deliver] Welcome flow active`);
 
-        // 1) Send LLM-generated greeting (responds naturally to client + intro)
-        const greetingText = (response_text || "").trim();
-        if (greetingText) {
-          console.log(`[Deliver] Sending LLM greeting: "${greetingText.substring(0, 80)}..."`);
-          await sendChatwootTextMessage(msgUrl, cfg.chatwoot_api_token, greetingText);
+        // 1) Send LLM-generated greeting using response_parts (split) when available
+        const greetingParts: string[] = Array.isArray(response_parts) && response_parts.length > 0
+          ? response_parts.filter((p: string) => p?.trim())
+          : (response_text || "").trim() ? [(response_text || "").trim()] : [];
+
+        if (greetingParts.length > 0) {
+          console.log(`[Deliver] Sending LLM greeting in ${greetingParts.length} part(s)`);
+          for (let i = 0; i < greetingParts.length; i++) {
+            const part = greetingParts[i].trim();
+            if (!part) continue;
+
+            const { textOnly, imageUrls } = extractImagesFromMarkdown(part);
+
+            // Send text
+            if (textOnly.trim()) {
+              const ok = await sendChatwootTextMessage(msgUrl, cfg.chatwoot_api_token, textOnly.trim());
+              console.log(`[Deliver] Welcome part ${i + 1}/${greetingParts.length} text: ${ok ? "OK" : "FAIL"}`);
+            }
+
+            // Send images
+            for (let j = 0; j < imageUrls.length; j++) {
+              const ok = await sendChatwootImageMessage(msgUrl, cfg.chatwoot_api_token, imageUrls[j], "");
+              console.log(`[Deliver] Welcome part ${i + 1} image ${j + 1}: ${ok ? "OK" : "FAIL"}`);
+            }
+
+            // Delay between parts (2s humanized)
+            if (i < greetingParts.length - 1) {
+              await new Promise((r) => setTimeout(r, applyJitter(2000)));
+            }
+          }
+          // Final delay before video
           await new Promise((r) => setTimeout(r, 2000));
         }
 
