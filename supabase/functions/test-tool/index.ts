@@ -288,12 +288,13 @@ Deno.serve(async (req) => {
             .from("calendar_events")
             .insert({
               calendar_id: calendarId,
+              tenant_id: calendarArgs.tenant_id,
               title,
               start_at: startDt.toISOString(),
               end_at: endDt.toISOString(),
             })
             .select()
-            .single();
+            .maybeSingle();
 
           if (insErr) {
             result = { error: "Failed to create event", detail: insErr.message };
