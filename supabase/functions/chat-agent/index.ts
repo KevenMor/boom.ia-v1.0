@@ -2206,8 +2206,11 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
 
     // Inject missing photos: if tool results contain vehicles with photos, ensure they appear in content
     // BUT NOT when user sent images (appraisal flow — they sent THEIR car photos, don't inject dealer photos)
+    // AND NOT when the conversation is about trade-in/appraisal (user talking about THEIR car)
     const isAppraisalPhotoContext = imageBase64Parts.length > 0 && !(latestUserText || "").trim();
-    if (toolResultsContext.length > 0 && !isAppraisalPhotoContext) {
+    const isTradeInContext = /(troca|trocar|negocio|negócio|dar na troca|meu carro|tenho um|avalia|pré-avalia|pre-avalia|quanto vale o meu|dar como entrada|colocar na negociação|aceita|aceitam)/i.test(latestUserText || "");
+    const hasFipeResult = toolResultsContext.some(ctx => /fipe|tabela_fipe|valor_fipe|preco_medio/i.test(ctx));
+    if (toolResultsContext.length > 0 && !isAppraisalPhotoContext && !isTradeInContext) {
       try {
         for (const ctx of toolResultsContext) {
           const parsed = JSON.parse(ctx.replace(/^\[Resultado da ferramenta "[^"]+"\]: /, ""));
@@ -2219,7 +2222,7 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
       } catch (e: any) {
         console.warn("[PostProcess] Could not extract vehicles for photo injection:", e?.message);
       }
-    } else if (!isAppraisalPhotoContext && toolResultsContext.length === 0 && agent?.tenant_id) {
+    } else if (!isAppraisalPhotoContext && !isTradeInContext && toolResultsContext.length === 0 && agent?.tenant_id) {
       const explicitPhotoRequest = /(foto|fotos|imagem|imagens|manda|envia|nao me enviou|não me enviou|cad[eê] as fotos|me envia)/i.test(latestUserText || "");
       const shouldForcePhotoRecovery = !hasMarkdownImages(finalContent) && (!!photoCommandLine || explicitPhotoRequest);
 
