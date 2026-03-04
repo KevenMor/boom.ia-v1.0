@@ -1294,7 +1294,7 @@ Deno.serve(async (req) => {
     let convId = conversation_id;
     if (!convId) {
       try {
-        const { data, error } = await supabase.rpc("create_conversation", {
+        const { data, error } = await supabaseAdmin.rpc("create_conversation", {
           p_agent_id: agent_id,
           p_channel: "sandbox",
         });
@@ -1311,7 +1311,7 @@ Deno.serve(async (req) => {
     // For media messages, we defer persistence until after transcription/image notes are appended
     if (convId && lastUserMsg?.role === "user" && !hasIncomingAttachments) {
       try {
-        const { data: savedUserMsg, error: saveUserErr } = await supabase.rpc("save_message", {
+        const { data: savedUserMsg, error: saveUserErr } = await supabaseAdmin.rpc("save_message", {
           p_agent_id: agent_id,
           p_conversation_id: convId,
           p_role: "user",
@@ -1537,7 +1537,7 @@ Deno.serve(async (req) => {
       }
 
       try {
-        const { data: savedUserMsg, error: saveUserErr } = await supabase.rpc("save_message", {
+        const { data: savedUserMsg, error: saveUserErr } = await supabaseAdmin.rpc("save_message", {
           p_agent_id: agent_id,
           p_conversation_id: convId,
           p_role: "user",
@@ -1636,7 +1636,7 @@ Deno.serve(async (req) => {
           if (convId && fullContent) {
             const latency = Date.now() - startTime;
             try {
-              await supabase.rpc("save_message", {
+              await supabaseAdmin.rpc("save_message", {
                 p_agent_id: agent_id,
                 p_conversation_id: convId,
                 p_role: "assistant",
@@ -1910,7 +1910,7 @@ Deno.serve(async (req) => {
               // Save tool result to memory
               if (convId) {
                 try {
-                  await supabase.rpc("save_message", {
+                  await supabaseAdmin.rpc("save_message", {
                     p_agent_id: agent_id,
                     p_conversation_id: convId,
                     p_role: "tool",
@@ -2420,7 +2420,7 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
       const latency = Date.now() - startTime;
       try {
         for (let i = 0; i < messageParts.length; i++) {
-          await supabase.rpc("save_message", {
+          await supabaseAdmin.rpc("save_message", {
             p_agent_id: agent_id, p_conversation_id: convId,
             p_role: "assistant", p_content: messageParts[i], p_model: model,
             p_latency_ms: i === 0 ? latency : null,
