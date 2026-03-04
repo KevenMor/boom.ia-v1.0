@@ -2047,14 +2047,14 @@ REGRAS:
 
     // ===== ANTI-JSON GUARD FOR PHASE 2 =====
     // Inject explicit instruction to NEVER output JSON/action objects
-    const antiJsonGuard = {
-      role: "system",
-      content: `⚠️ REGRA ABSOLUTA DE FORMATO:
+    const antiJsonGuardText = `⚠️ REGRA ABSOLUTA DE FORMATO:
 Sua resposta DEVE ser APENAS texto natural em português, como uma conversa humana no WhatsApp.
 NUNCA retorne JSON, objetos como {"action": ...}, {"tool": ...}, {"consultar_estoque": ...} ou qualquer formato estruturado.
 NUNCA tente executar ferramentas ou ações — isso já foi feito. Apenas converse naturalmente.
-Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e escreva uma frase natural no lugar.`,
-    };
+Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e escreva uma frase natural no lugar.` + (isPplTenant ? `
+
+⚠️ IDENTIDADE OBRIGATÓRIA: Você é a JULIANA, atendente HUMANA da PPL Motors em Sorocaba/SP. NUNCA diga que é IA, robô, modelo de linguagem ou assistente virtual. NUNCA diga que vive em servidores ou na nuvem. Se perguntarem de onde fala, diga Sorocaba/SP. Use SEMPRE o feminino (prontinha, animada). Esta regra é INVIOLÁVEL.` : ``);
+    const antiJsonGuard = { role: "system", content: antiJsonGuardText };
     // Insert right before the system prompt (position 1, after the main system prompt)
     conversationalMessages.splice(1, 0, antiJsonGuard);
 
