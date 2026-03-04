@@ -1316,7 +1316,7 @@ Deno.serve(async (req) => {
     // Delay config (humanization waits)
     const readDelayMs: number = agentConfig.read_delay_ms ?? 1500;
     const typingDelayMs: number = agentConfig.typing_delay_ms ?? 800;
-    const blockGapMs: number = agentConfig.block_gap_ms ?? 1200;
+    const blockGapMs: number = agentConfig.block_gap_ms ?? 2000;
     const llmConfig = tenantSettings.llm_config || {};
     // Priority: agent-level > tenant-level > defaults
     const temperature = agent.temperature ?? llmConfig.temperature ?? 0.7;

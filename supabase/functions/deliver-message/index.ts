@@ -254,7 +254,7 @@ async function replyToChatwoot(
     // 3) Inter-split delay — use configured block_gap_ms only (no hardcoded 2s base)
     const isLastPart = i === parts.length - 1;
     if (!isLastPart && hasTimeBudget()) {
-      const gapMs = humanization.blockGapMs > 0 ? applyJitter(humanization.blockGapMs) : 1000;
+      const gapMs = humanization.blockGapMs > 0 ? applyJitter(humanization.blockGapMs) : 2000;
       console.log(`[Deliver] Inter-split delay (after part ${i + 1}): ${gapMs}ms`);
       await safeDelay(gapMs);
     }
