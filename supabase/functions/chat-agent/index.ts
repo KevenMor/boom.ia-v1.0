@@ -2078,17 +2078,28 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
       }
     }
 
-    // Call the agent's configured LLM in STREAMING mode — NO tools passed (dispatcher already handled them)
-    // CRITICAL FIX: Gemini 3 preview models silently drop "system" role messages via OpenAI-compatible API.
-    // Convert "system" → "developer" role for Gemini models (Google's recommended role for system instructions).
-    const finalConversationalMessages = isGemini
-      ? conversationalMessages.map((msg: any) => ({
-          ...msg,
-          role: msg.role === "system" ? "developer" : msg.role,
-        }))
-      : conversationalMessages;
+    // Call the agent's configured LLM — NO tools passed (dispatcher already handled them)
+    // CRITICAL FIX: Gemini 3 preview models silently drop "system" AND "developer" role messages
+    // via OpenAI-compatible API (prompt tokens ~120 for a 32K prompt = ignored).
+    // Workaround: Merge ALL system messages into a single "user" message at the start,
+    // followed by a brief "assistant" acknowledgment, so Gemini processes the instructions.
+    let finalConversationalMessages: any[];
+    if (isGemini) {
+      const systemMsgs = conversationalMessages.filter((m: any) => m.role === "system");
+      const nonSystemMsgs = conversationalMessages.filter((m: any) => m.role !== "system");
+      const mergedSystemContent = systemMsgs.map((m: any) => m.content).join("\n\n---\n\n");
 
-    console.log(`[Conversational] Calling ${provider.name}, model: ${model}, url: ${baseUrl}, messages: ${finalConversationalMessages.length}, system_as_developer: ${isGemini}`);
+      finalConversationalMessages = [
+        { role: "user", content: `[INSTRUÇÕES DO SISTEMA — SIGA RIGOROSAMENTE]\n\n${mergedSystemContent}\n\n[FIM DAS INSTRUÇÕES — Responda como a persona descrita acima]` },
+        { role: "assistant", content: "Entendido. Vou seguir todas as instruções acima rigorosamente, mantendo a persona e as regras definidas." },
+        ...nonSystemMsgs,
+      ];
+      console.log(`[Conversational] Gemini system-as-user workaround: merged ${systemMsgs.length} system msgs (${mergedSystemContent.length} chars) into user+ack pair`);
+    } else {
+      finalConversationalMessages = conversationalMessages;
+    }
+
+    console.log(`[Conversational] Calling ${provider.name}, model: ${model}, url: ${baseUrl}, messages: ${finalConversationalMessages.length}`);
 
     const convResp = await fetch(baseUrl, {
       method: "POST",
