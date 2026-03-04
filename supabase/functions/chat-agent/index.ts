@@ -1297,6 +1297,9 @@ Deno.serve(async (req) => {
         const { data, error } = await supabaseAdmin.rpc("create_conversation", {
           p_agent_id: agent_id,
           p_channel: "sandbox",
+          p_external_user_id: null,
+          p_contact_name: null,
+          p_contact_avatar_url: null,
         });
         if (error) {
           console.error("[CreateConv] RPC error:", error.message, error.details, error.hint, error.code);
