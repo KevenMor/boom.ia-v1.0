@@ -468,7 +468,7 @@ export default function AgentSandbox() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-4rem)]">
+    <div className="flex h-full">
       {/* Sidebar - Conversation History */}
       <div
         className={`border-r border-border bg-card transition-all duration-200 ${
