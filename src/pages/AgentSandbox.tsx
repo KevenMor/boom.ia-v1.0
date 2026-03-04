@@ -622,7 +622,7 @@ export default function AgentSandbox() {
               <Plus className="h-5 w-5" />
             </Button>
             {messages.length > 0 && (
-              <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground hover:text-destructive" onClick={() => setMessages([])}>
+              <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground hover:text-destructive" onClick={() => { setMessages([]); setConversationId(null); }}>
                 <Trash2 className="h-5 w-5" />
               </Button>
             )}
