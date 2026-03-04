@@ -11,6 +11,12 @@ import {
   DISPATCHER_PROMPT as PPL_DISPATCHER,
   FOLLOWUP_PROMPT as PPL_FOLLOWUP,
 } from "./ppl-motors.ts";
+import {
+  SYSTEM_PROMPT as IVM_SYSTEM,
+  COMMUNICATION_RULES as IVM_COMM_RULES,
+  DISPATCHER_PROMPT as IVM_DISPATCHER,
+  FOLLOWUP_PROMPT as IVM_FOLLOWUP,
+} from "./instituto-vicentim-maekawa.ts";
 
 /**
  * Configuração de prompt por tenant.
@@ -49,6 +55,14 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     followupPrompt: PPL_FOLLOWUP,
     version: "v1.9.0",
     description: "Juliana — SDR PPL Motors (Concessionária Sorocaba/SP)",
+  },
+  "instituto-vicentim-maekawa": {
+    systemPrompt: IVM_SYSTEM,
+    communicationRules: IVM_COMM_RULES,
+    dispatcherPrompt: IVM_DISPATCHER,
+    followupPrompt: IVM_FOLLOWUP,
+    version: "v1.0.0",
+    description: "Mariana — Recepcionista Instituto Vicentim Maekawa (Odontologia Sorocaba/SP)",
   },
 };
 
