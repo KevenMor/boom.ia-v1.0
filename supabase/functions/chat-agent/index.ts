@@ -867,7 +867,6 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
               end_at: endDate.toISOString(),
               all_day: false,
               color: "primary",
-              metadata: { created_by: "ai_agent", agent_id: agentId },
             })
             .select()
             .single();
