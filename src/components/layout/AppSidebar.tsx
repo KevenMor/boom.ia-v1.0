@@ -155,7 +155,7 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
   return (
     <div className="flex h-full flex-col">
       {/* Logo header */}
-      <div className="flex h-16 items-center gap-3 border-b border-white/10 px-4">
+      <div className="flex h-14 items-center gap-3 border-b border-white/10 px-4">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl overflow-hidden">
           <img src={boomLogo} alt="Boom IA" className="h-9 w-9 object-cover" />
         </div>
