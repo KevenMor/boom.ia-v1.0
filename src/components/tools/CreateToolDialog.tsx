@@ -1,7 +1,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -11,10 +11,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useCreateTool } from "@/hooks/useTools";
 import { useTenants } from "@/hooks/useTenants";
+import { useAgents } from "@/hooks/useAgents";
+import { nexusDb } from "@/integrations/supabase/nexus-client";
 import { toast } from "sonner";
-import { Database, Globe, Server, Search, Car, MapPin, DollarSign, CalendarDays } from "lucide-react";
+import { Database, Globe, Server, Search, Car, MapPin, DollarSign, CalendarDays, Link } from "lucide-react";
 import type { ToolType } from "@/types/database";
 
 const TOOL_TYPE_META: Record<ToolType, { label: string; icon: any; description: string }> = {
@@ -45,7 +48,10 @@ interface Props { open: boolean; onOpenChange: (o: boolean) => void; }
 export function CreateToolDialog({ open, onOpenChange }: Props) {
   const create = useCreateTool();
   const { data: tenants } = useTenants();
+  const { data: agents } = useAgents();
   const [toolType, setToolType] = useState<ToolType>("api_rest");
+  const [selectedTenantId, setSelectedTenantId] = useState<string>("");
+  const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
 
   const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -56,6 +62,22 @@ export function CreateToolDialog({ open, onOpenChange }: Props) {
       execution_json: "{}",
     },
   });
+
+  // Filter agents by selected tenant
+  const filteredAgents = agents?.filter((a) =>
+    selectedTenantId ? a.tenant_id === selectedTenantId : true
+  ) ?? [];
+
+  // Reset agent selection when tenant changes
+  useEffect(() => {
+    setSelectedAgentIds([]);
+  }, [selectedTenantId]);
+
+  const toggleAgent = (agentId: string) => {
+    setSelectedAgentIds((prev) =>
+      prev.includes(agentId) ? prev.filter((id) => id !== agentId) : [...prev, agentId]
+    );
+  };
 
   const onSubmit = async (data: FormData) => {
     let functionDef: any = {};
@@ -77,7 +99,7 @@ export function CreateToolDialog({ open, onOpenChange }: Props) {
     }
 
     try {
-      await create.mutateAsync({
+      const newTool = await create.mutateAsync({
         name: data.name,
         description: data.description,
         type: data.tool_type,
@@ -87,8 +109,30 @@ export function CreateToolDialog({ open, onOpenChange }: Props) {
         function_def: functionDef,
         execution_config: executionConfig,
       });
-      toast.success(`Tool "${data.name}" criada`);
+
+      // Auto-link tool to selected agents via agent_tools junction table
+      if (selectedAgentIds.length > 0 && newTool?.id) {
+        const links = selectedAgentIds.map((agentId) => ({
+          agent_id: agentId,
+          tool_id: newTool.id,
+        }));
+        const { error: linkError } = await nexusDb.from("agent_tools").insert(links);
+        if (linkError) {
+          console.error("[CreateTool] agent_tools link error:", linkError);
+          toast.warning(`Tool criada, mas falha ao vincular a ${selectedAgentIds.length} agente(s): ${linkError.message}`);
+        } else {
+          toast.success(`Tool "${data.name}" criada e vinculada a ${selectedAgentIds.length} agente(s)`);
+        }
+      } else {
+        toast.success(`Tool "${data.name}" criada`);
+        if (selectedAgentIds.length === 0) {
+          toast.info("⚠️ Nenhum agente selecionado — vincule manualmente na edição do agente para ativar a tool.");
+        }
+      }
+
       reset();
+      setSelectedAgentIds([]);
+      setSelectedTenantId("");
       onOpenChange(false);
     } catch (err: any) {
       toast.error("Erro: " + (err.message ?? ""));
@@ -144,7 +188,11 @@ export function CreateToolDialog({ open, onOpenChange }: Props) {
             </div>
             <div className="space-y-2">
               <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Tenant</Label>
-              <Select onValueChange={(v) => setValue("tenant_id", v === "global" ? "" : v)}>
+              <Select onValueChange={(v) => {
+                const val = v === "global" ? "" : v;
+                setValue("tenant_id", val);
+                setSelectedTenantId(val);
+              }}>
                 <SelectTrigger className="h-9 bg-background"><SelectValue placeholder="Global" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="global">🌐 Global (todos)</SelectItem>
@@ -154,6 +202,42 @@ export function CreateToolDialog({ open, onOpenChange }: Props) {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          {/* Agent Linking */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Link className="h-3.5 w-3.5 text-primary" />
+              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Vincular a Agente(s)
+              </Label>
+            </div>
+            {filteredAgents.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">
+                {selectedTenantId ? "Nenhum agente encontrado para este tenant" : "Selecione um tenant para filtrar agentes"}
+              </p>
+            ) : (
+              <div className="rounded-lg border border-border bg-background p-2 space-y-1 max-h-32 overflow-y-auto">
+                {filteredAgents.map((agent) => (
+                  <label
+                    key={agent.id}
+                    className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/50 cursor-pointer text-sm"
+                  >
+                    <Checkbox
+                      checked={selectedAgentIds.includes(agent.id)}
+                      onCheckedChange={() => toggleAgent(agent.id)}
+                    />
+                    <span className="text-foreground">{agent.name}</span>
+                    <span className="text-muted-foreground text-[10px] ml-auto">{agent.status}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+            {selectedAgentIds.length > 0 && (
+              <p className="text-[10px] text-primary">
+                ✓ {selectedAgentIds.length} agente(s) será(ão) vinculado(s) automaticamente
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -194,7 +278,9 @@ export function CreateToolDialog({ open, onOpenChange }: Props) {
 
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button type="submit" disabled={create.isPending}>{create.isPending ? "Criando..." : "Criar Tool"}</Button>
+            <Button type="submit" disabled={create.isPending}>
+              {create.isPending ? "Criando..." : `Criar Tool${selectedAgentIds.length > 0 ? ` + Vincular (${selectedAgentIds.length})` : ""}`}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
