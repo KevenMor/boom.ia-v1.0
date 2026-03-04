@@ -953,7 +953,7 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
           periodo: `${fromDate.toISOString().split("T")[0]} a ${toDate.toISOString().split("T")[0]}`,
           horarios_disponiveis: availableSlots,
           compromissos_existentes: busySlots.length,
-          _hint: "Apresente os horários disponíveis de forma organizada. Pergunte qual dia e horário o cliente prefere. Quando ele escolher, use a ação 'criar'/'agendar' para confirmar.",
+          _hint: "ESTRATÉGIA SDR DE AGENDAMENTO: NÃO liste todos os horários. Pergunte se o cliente prefere manhã ou tarde. Depois ofereça EXATAMENTE 2 horários INTERCALADOS (não consecutivos) do período escolhido. Ex: manhã → 09:00 e 11:00. Tarde → 14:00 e 16:00. Se o cliente não puder, sugira proativamente o próximo dia útil com 2 horários intercalados. Quando ele escolher, use a ação 'criar' para confirmar e informe o endereço da loja.",
         });
       }
 
@@ -1697,8 +1697,17 @@ Deno.serve(async (req) => {
           });
         } else {
 
+        // Inject current Brasilia datetime into dispatcher system prompt
+        const nowBrasilia = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+        const todayISO = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }); // YYYY-MM-DD
+        const tomorrowDate = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+        tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+        const tomorrowISO = tomorrowDate.toISOString().split("T")[0];
+        const tomorrowWeekday = tomorrowDate.toLocaleDateString("pt-BR", { weekday: "long", timeZone: "America/Sao_Paulo" });
+        const dateContext = `\n\n═══════════════════════════════════════════════\nCONTEXTO TEMPORAL (OBRIGATÓRIO — USE ESTAS DATAS)\n═══════════════════════════════════════════════\nAgora: ${nowBrasilia} (Horário de Brasília)\nHoje: ${todayISO}\nAmanhã: ${tomorrowISO} (${tomorrowWeekday})\n\nQUANDO o cliente disser "amanhã", use a data ${tomorrowISO}.\nQUANDO o cliente disser "hoje", use a data ${todayISO}.\nSEMPRE passe a data no formato YYYY-MM-DD no campo "date" da ferramenta.\nNUNCA invente datas. Use SOMENTE as datas calculadas acima.`;
+
         const dispatcherMessages = [
-          { role: "system", content: dispatcherSystemPrompt },
+          { role: "system", content: dispatcherSystemPrompt + dateContext },
           ...messages,
         ];
 

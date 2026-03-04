@@ -67,7 +67,15 @@ export function buildSystemPrompt(
   const base = config?.systemPrompt || agentSystemPrompt || "You are a helpful AI assistant.";
   const commRules = (hasInventoryTool && config?.communicationRules) ? "\n\n" + config.communicationRules : "";
   const greeting = "\n\n" + BASE_GREETING;
-  return base + commRules + greeting;
+
+  // Inject current Brasilia datetime so the model knows "hoje" and "amanhã"
+  const now = new Date();
+  const brasiliaFormatter = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+  const nowStr = brasiliaFormatter.format(now);
+  const todayISO = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(now);
+  const dateContext = `\n\n[CONTEXTO TEMPORAL] Agora: ${nowStr} (Brasília). Hoje: ${todayISO}. Use estas datas como referência ao falar de "hoje", "amanhã", dias da semana, etc.`;
+
+  return base + commRules + greeting + dateContext;
 }
 
 /**
