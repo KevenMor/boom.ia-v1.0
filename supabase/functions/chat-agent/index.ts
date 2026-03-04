@@ -2079,14 +2079,23 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
     }
 
     // Call the agent's configured LLM in STREAMING mode — NO tools passed (dispatcher already handled them)
-    console.log(`[Conversational] Calling ${provider.name}, model: ${model}, url: ${baseUrl}`);
+    // CRITICAL FIX: Gemini 3 preview models silently drop "system" role messages via OpenAI-compatible API.
+    // Convert "system" → "developer" role for Gemini models (Google's recommended role for system instructions).
+    const finalConversationalMessages = isGemini
+      ? conversationalMessages.map((msg: any) => ({
+          ...msg,
+          role: msg.role === "system" ? "developer" : msg.role,
+        }))
+      : conversationalMessages;
+
+    console.log(`[Conversational] Calling ${provider.name}, model: ${model}, url: ${baseUrl}, messages: ${finalConversationalMessages.length}, system_as_developer: ${isGemini}`);
 
     const convResp = await fetch(baseUrl, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model,
-        messages: conversationalMessages,
+        messages: finalConversationalMessages,
         ...llmParams,
         // NO tools — the conversational LLM just talks
         stream: false, // We post-process for splitting
