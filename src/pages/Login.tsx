@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import boomLogo from "@/assets/boom-ia-logo.png";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -49,7 +50,7 @@ export default function Login() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
           >
-            <h2 className="text-3xl font-bold text-white">Nexus AI</h2>
+            <h2 className="text-3xl font-bold text-white">Boom IA</h2>
             <p className="mt-3 max-w-lg text-gray-300 text-sm leading-relaxed">
               Plataforma inteligente de gestão de agentes conversacionais.
               Automatize atendimentos com IA de forma simples e eficiente.
@@ -68,8 +69,8 @@ export default function Login() {
         >
           {/* Logo */}
           <div className="text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary font-sans text-lg font-extrabold text-primary-foreground shadow-lg shadow-primary/20">
-              N
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl overflow-hidden">
+              <img src={boomLogo} alt="Boom IA" className="h-12 w-12 object-contain" />
             </div>
             <p className="text-sm text-muted-foreground">
               Faça login para acessar sua conta
@@ -139,7 +140,7 @@ export default function Login() {
           </form>
 
           <p className="mt-8 text-center text-xs text-muted-foreground">
-            Nexus AI Platform v1.0
+            Boom IA Platform v1.0
           </p>
         </motion.div>
       </div>
