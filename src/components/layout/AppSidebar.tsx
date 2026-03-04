@@ -238,10 +238,10 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
 
       {/* User footer */}
       {!collapsed && (
-        <div className="border-t border-white/10 p-3">
+      <div className="border-t border-white/10 px-3 py-2.5">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex w-full items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-white/10">
+              <button className="flex w-full items-center gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-white/10">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent text-[11px] font-bold text-white">
                   {user?.email?.slice(0, 2).toUpperCase() ?? "AD"}
                 </div>
