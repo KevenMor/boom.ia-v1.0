@@ -839,7 +839,7 @@ Deno.serve(async (req: Request) => {
 
     // ---- ASYNC PATH: Chatwoot messages go through queue ----
     if (chatwoot.isChatwoot) {
-      const debounceMs = Number(cfg.message_debounce_ms) || 15000;
+      const debounceMs = Number(cfg.message_debounce_ms) || 3000;
       let bufferCreatedAt: string | null = null;
 
       if (debounceMs > 0) {
@@ -935,7 +935,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // ---- SYNC PATH: Non-Chatwoot webhooks (API calls, sandbox fallback) ----
-    const debounceMs = Number(cfg.message_debounce_ms) || 15000;
+    const debounceMs = Number(cfg.message_debounce_ms) || 3000;
 
     if (debounceMs > 0) {
       console.log(`[Debounce] Buffering message, window: ${debounceMs}ms`);
