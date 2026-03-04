@@ -1,13 +1,14 @@
 import { Zap, Clock, Wrench, MessageSquare } from "lucide-react";
 import { StatCard } from "./StatCard";
-import type { UsageEvent } from "@/hooks/useUsageMetrics";
+import type { UsageDailySummary, UsageEvent } from "@/hooks/useUsageMetrics";
 
 interface Props {
   events: UsageEvent[];
+  dailySummary?: UsageDailySummary[];
   loading?: boolean;
 }
 
-export function UsageStatsRow({ events, loading }: Props) {
+export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
   if (loading) {
     return (
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -30,25 +31,30 @@ export function UsageStatsRow({ events, loading }: Props) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   };
 
+  const normalizeSummaryDay = (day: string) => day.slice(0, 10);
+
   const todayEvents = events.filter((e) => getLocalDate(e.created_at) === today);
   const yesterdayEvents = events.filter((e) => getLocalDate(e.created_at) === yesterdayStr);
 
-  // Total tokens today — use total_tokens if available, fallback to prompt + completion
-  const todayTokens = todayEvents.reduce((s, e) => {
-    const t = e.total_tokens || ((e.prompt_tokens || 0) + (e.completion_tokens || 0));
-    return s + t;
-  }, 0);
-  const yesterdayTokens = yesterdayEvents.reduce((s, e) => {
-    const t = e.total_tokens || ((e.prompt_tokens || 0) + (e.completion_tokens || 0));
-    return s + t;
-  }, 0);
-  const tokensDiff = yesterdayTokens > 0 ? (((todayTokens - yesterdayTokens) / yesterdayTokens) * 100).toFixed(0) : null;
+  const todaySummary = dailySummary.filter((d) => normalizeSummaryDay(d.day) === today);
+  const yesterdaySummary = dailySummary.filter((d) => normalizeSummaryDay(d.day) === yesterdayStr);
 
-  // Debug: log a sample event to verify field names
-  if (todayEvents.length > 0) {
-    console.log("[UsageStatsRow] sample event:", JSON.stringify(todayEvents[0]));
-    console.log("[UsageStatsRow] todayEvents count:", todayEvents.length, "todayTokens:", todayTokens);
-  }
+  // Total tokens today — prefer daily summary, fallback to events
+  const todayTokensFromSummary = todaySummary.reduce((s, d) => s + (d.sum_tokens || 0), 0);
+  const yesterdayTokensFromSummary = yesterdaySummary.reduce((s, d) => s + (d.sum_tokens || 0), 0);
+
+  const todayTokensFromEvents = todayEvents.reduce((s, e) => {
+    const t = e.total_tokens || ((e.prompt_tokens || 0) + (e.completion_tokens || 0));
+    return s + t;
+  }, 0);
+  const yesterdayTokensFromEvents = yesterdayEvents.reduce((s, e) => {
+    const t = e.total_tokens || ((e.prompt_tokens || 0) + (e.completion_tokens || 0));
+    return s + t;
+  }, 0);
+
+  const todayTokens = todayTokensFromSummary > 0 ? todayTokensFromSummary : todayTokensFromEvents;
+  const yesterdayTokens = yesterdayTokensFromSummary > 0 ? yesterdayTokensFromSummary : yesterdayTokensFromEvents;
+  const tokensDiff = yesterdayTokens > 0 ? (((todayTokens - yesterdayTokens) / yesterdayTokens) * 100).toFixed(0) : null;
 
   // Avg latency today (conversational only)
   const convEvents = todayEvents.filter((e) => e.phase === "conversational" && e.latency_ms);
@@ -60,8 +66,10 @@ export function UsageStatsRow({ events, loading }: Props) {
     ? Math.round(yesterdayConv.reduce((s, e) => s + (e.latency_ms || 0), 0) / yesterdayConv.length)
     : 0;
 
-  // Tool calls today
-  const todayToolCalls = todayEvents.reduce((s, e) => s + (e.tool_calls_count || 0), 0);
+  // Tool calls today — prefer daily summary, fallback to events
+  const todayToolCallsFromSummary = todaySummary.reduce((s, d) => s + (d.sum_tool_calls || 0), 0);
+  const todayToolCallsFromEvents = todayEvents.reduce((s, e) => s + (e.tool_calls_count || 0), 0);
+  const todayToolCalls = todayToolCallsFromSummary > 0 ? todayToolCallsFromSummary : todayToolCallsFromEvents;
 
   // Total requests today
   const todayRequests = todayEvents.length;
@@ -110,3 +118,4 @@ export function UsageStatsRow({ events, loading }: Props) {
     </div>
   );
 }
+

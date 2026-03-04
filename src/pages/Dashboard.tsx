@@ -36,7 +36,7 @@ export default function Dashboard() {
       </div>
 
       {/* Row 0: Usage Stats */}
-      <UsageStatsRow events={recentEvents ?? []} loading={loadingEvents} />
+      <UsageStatsRow events={recentEvents ?? []} dailySummary={dailySummary ?? []} loading={loadingEvents} />
 
       {/* Row 1: Token Chart (wider) + Model Breakdown */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
