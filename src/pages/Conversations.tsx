@@ -545,6 +545,9 @@ export default function Conversations() {
                           {msgs?.filter((msg) => {
                             // Hide internal system prompts (follow-up instructions, etc.)
                             if (msg.role === "user" && msg.content?.startsWith("[SISTEMA INTERNO")) return false;
+                            // Hide tool-injected JSON messages (inventory results, tool outputs, etc.)
+                            if (msg.role === "user" && msg.content?.trim().startsWith("{") && (msg.content.includes('"_hint"') || msg.content.includes('"vehicles"') || msg.content.includes('"total"'))) return false;
+                            if (msg.role === "user" && msg.content?.trim().startsWith("{") && msg.content.includes('"tool_results"')) return false;
                             return true;
                           }).map((msg) => {
                             const isUser = msg.role === "user";
