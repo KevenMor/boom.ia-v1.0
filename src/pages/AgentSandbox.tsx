@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { ArrowLeft, Send, Loader2, Plus, Clock, Trash2, CheckCheck, Bug, Paperclip, Mic, Camera } from "lucide-react";
+import { ArrowLeft, Send, Loader2, Plus, Clock, Trash2, CheckCheck, Bug, Paperclip, Mic, Camera, AlertTriangle } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { DebugBlock, type EdgeLog } from "@/components/sandbox/DebugBlock";
 import { AudioRecorder } from "@/components/sandbox/AudioRecorder";
@@ -8,6 +8,16 @@ import { AttachmentPreview, classifyFile, type AttachmentFile } from "@/componen
 import { extractVideos, VideoPlayer, AudioPlayer, UserMediaPreview, type UserAttachmentMeta } from "@/components/sandbox/MediaBubble";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useAgents } from "@/hooks/useAgents";
 import { nexusDb } from "@/integrations/supabase/nexus-client";
 import { toast } from "sonner";
@@ -39,15 +49,17 @@ function extractImages(content: string): { text: string; images: string[] } {
   const mdImgRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/gi;
   let match;
   while ((match = mdImgRegex.exec(content)) !== null) {
-    if (match[1] && !images.includes(match[1])) images.push(match[1]);
+    const url = match[1];
+    if (url && !images.includes(url) && isValidImageUrl(url)) images.push(url);
   }
   const bareImgRegex = /(?<!\()(https?:\/\/[^\s"'<>]+\.(?:jpg|jpeg|png|gif|webp)[^\s"'<>]*)/gi;
   while ((match = bareImgRegex.exec(content)) !== null) {
-    if (!images.includes(match[1] || match[0])) images.push(match[1] || match[0]);
+    const url = match[1] || match[0];
+    if (!images.includes(url) && isValidImageUrl(url)) images.push(url);
   }
   const photoUrlRegex = /https?:\/\/[^\s"'<>]+\/fotos\/[^\s"'<>]+/gi;
   while ((match = photoUrlRegex.exec(content)) !== null) {
-    if (!images.includes(match[0])) images.push(match[0]);
+    if (!images.includes(match[0]) && isValidImageUrl(match[0])) images.push(match[0]);
   }
   let text = content;
   text = text.replace(/!\[.*?\]\(https?:\/\/[^\s)]+\)/gi, "");
@@ -55,6 +67,20 @@ function extractImages(content: string): { text: string; images: string[] } {
   images.forEach((url) => { text = text.split(url).join(""); });
   text = text.replace(/\n{3,}/g, "\n\n").trim();
   return { text, images };
+}
+
+// Validate that a URL looks like a real image URL (not a markdown artifact or broken link)
+function isValidImageUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    // Must have a proper hostname (not just a TLD or empty)
+    if (!u.hostname || u.hostname.length < 3) return false;
+    // Filter out URLs that are just punctuation artifacts
+    if (/^[)\]}>.,;:!?]+/.test(u.pathname.slice(-5))) return false;
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // Convert File to base64 data URL
@@ -84,6 +110,7 @@ export default function AgentSandbox() {
   const [pendingDebug, setPendingDebug] = useState<DebugEntry[] | null>(null);
   const [attachments, setAttachments] = useState<AttachmentFile[]>([]);
   const [isRecording, setIsRecording] = useState(false);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -418,19 +445,21 @@ export default function AgentSandbox() {
               </div>
             )}
 
-            {/* Assistant images */}
+            {/* Assistant images - filter and validate */}
             {images.length > 0 && (
               <div className={`${images.length > 1 ? "grid grid-cols-2 gap-1" : ""} mb-1 -mx-1 -mt-0.5`}>
                 {images.map((url, imgIdx) => (
-                  <a key={imgIdx} href={url} target="_blank" rel="noopener noreferrer">
+                  <a key={imgIdx} href={url} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-md">
                     <img
                       src={url}
                       alt="Foto"
+                      loading="lazy"
                       className="rounded-md w-full max-h-64 object-cover cursor-pointer hover:opacity-90 transition-opacity"
                       onError={(e) => {
                         const el = e.target as HTMLImageElement;
-                        el.style.display = "none";
-                        if (el.parentElement) el.parentElement.style.display = "none";
+                        // Hide the entire anchor wrapper (grid cell)
+                        const anchor = el.closest("a");
+                        if (anchor) anchor.style.display = "none";
                       }}
                     />
                   </a>
@@ -518,7 +547,7 @@ export default function AgentSandbox() {
       <div className="flex flex-1 flex-col bg-background">
         {/* Header */}
         <div className="flex items-center gap-3 bg-card border-b border-border px-4 py-2.5">
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground md:hidden" onClick={() => navigate("/agents")}>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground md:hidden" onClick={() => messages.length > 0 ? setShowExitConfirm(true) : navigate("/agents")}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <Button
@@ -563,7 +592,7 @@ export default function AgentSandbox() {
                 <Trash2 className="h-5 w-5" />
               </Button>
             )}
-            <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground" onClick={() => navigate("/agents")}>
+            <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground" onClick={() => messages.length > 0 ? setShowExitConfirm(true) : navigate("/agents")}>
               <ArrowLeft className="h-5 w-5" />
             </Button>
           </div>
@@ -706,6 +735,22 @@ export default function AgentSandbox() {
           )}
         </div>
       </div>
+
+      {/* Exit Confirmation Dialog */}
+      <AlertDialog open={showExitConfirm} onOpenChange={setShowExitConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sair da conversa?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Você tem uma conversa em andamento. Deseja realmente sair? A conversa ficará salva no histórico.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => navigate("/agents")}>Sair</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
