@@ -494,6 +494,15 @@ B) STOCK INQUIRY (customer asking about DEALERSHIP vehicles to BUY)
    → Call: consultar_estoque
    Keywords: "tem?", "disponível?", "estoque", "quero comprar", "quanto custa", 
    "opções de", "o que vocês têm", "vi no site", "vi no pátio", "me interesso por"
+
+B2) PHOTO REQUEST (customer asking for photos of a vehicle — even one already discussed)
+   → Call: consultar_estoque
+   Keywords: "fotos", "foto", "imagens", "manda foto", "envia foto", "pode enviar", 
+   "nao me enviou", "não enviou as fotos", "cadê as fotos", "me envia a foto",
+   "gostaria sim" (in response to "quer fotos?"), "sim por favor", "pode sim", "quero sim",
+   "manda", "pode me enviar", "me envia", "ainda não recebi"
+   → Extract the vehicle brand/model from conversation history. If the customer previously discussed a specific vehicle, use that brand/model.
+   → This is CRITICAL: if a customer asks for photos, you MUST call consultar_estoque so the system can attach the real photos.
    
 C) BOTH (customer wants to buy AND trade)
    → Call BOTH consultar_fipe AND consultar_estoque
@@ -525,6 +534,16 @@ CALL consultar_estoque:
 - "vi uma A3 no pátio, quanto custa?" → consultar_estoque(marca="Audi", modelo="A3")
 - "tem algo até 200 mil?" → consultar_estoque(faixa_preco="até 200000")
 - "quero ver um sedan" → consultar_estoque(modelo="sedan")
+
+CALL consultar_estoque (PHOTO REQUESTS — CRITICAL):
+- "manda as fotos" → consultar_estoque(marca/modelo from conversation history)
+- "pode me enviar as fotos?" → consultar_estoque(marca/modelo from history)
+- "nao me enviou as fotos" → consultar_estoque(marca/modelo from history)
+- "gostaria sim, por favor" (after being offered photos) → consultar_estoque(marca/modelo from history)
+- "sim" / "quero sim" / "pode sim" (after photo offer) → consultar_estoque(marca/modelo from history)
+- "cadê as fotos?" → consultar_estoque(marca/modelo from history)
+- "me envia a porra da foto" → consultar_estoque(marca/modelo from history)
+NOTE: For photo requests, ALWAYS look at conversation history to find which vehicle was being discussed and extract its brand/model.
 
 CALL consultar_fipe:
 - "tenho um Cruze 2020, quanto vale?" → consultar_fipe(marca="Chevrolet", modelo="Cruze", ano=2020)
@@ -574,7 +593,7 @@ CRITICAL RULES
 1. WHEN IN DOUBT → CALL THE TOOL. A redundant call is 1000x better than missing one.
 2. If customer mentions a brand/model for PURCHASE → ALWAYS call consultar_estoque.
 3. If customer mentions THEIR vehicle for trade/appraisal → ALWAYS call consultar_fipe.
-4. CONTESTATION/CORRECTION messages (complaining about previous answer) → NO_TOOLS_NEEDED.
+4. CONTESTATION/CORRECTION messages (complaining about previous answer but NOT about photos) → NO_TOOLS_NEEDED.
 5. CONFIRMATION messages ("é isso mesmo?", "correto?") → NO_TOOLS_NEEDED.
 6. If first message has a vehicle reference → CALL THE TOOL immediately (don't wait for name).
 7. Use conversation HISTORY only to resolve pronouns or find vehicle data for fipe_query.
@@ -589,7 +608,14 @@ CRITICAL RULES
 - The conversational model will handle asking the customer for their vehicle details.
 - NEVER guess, infer, or invent vehicle parameters. If the info is not explicitly in the conversation, DO NOT call the tool.
 - The examples in this prompt (Cruze 2020, Civic 2019, HB20 2021) are JUST examples of FORMAT. NEVER use them as default values when the customer hasn't provided their car details.
-- If only 1 or 2 of the 3 required fields (marca, modelo, ano) are present, DO NOT fill in the missing ones — return NO_TOOLS_NEEDED and let the conversational model ask for the missing info.`;
+- If only 1 or 2 of the 3 required fields (marca, modelo, ano) are present, DO NOT fill in the missing ones — return NO_TOOLS_NEEDED and let the conversational model ask for the missing info.
+
+13. ⚠️ PHOTO REQUESTS (HIGHEST PRIORITY — NEVER SKIP):
+- If the customer asks for photos, images, or confirms they want photos → ALWAYS call consultar_estoque.
+- This includes: "manda fotos", "envia fotos", "pode enviar", "gostaria sim", "sim por favor", "quero sim", "nao me enviou as fotos", "cadê as fotos", "me envia a foto", "ainda não recebi".
+- Extract the vehicle brand/model from conversation HISTORY (the vehicle they were discussing).
+- A photo request is NEVER "NO_TOOLS_NEEDED". The system needs the inventory data to attach real photos.
+- Even if you already called consultar_estoque earlier in the conversation for the same vehicle, call it AGAIN for photo requests. The photos are extracted from the tool result.`;
 
 /**
  * Prompt de follow-up automático específico para PPL Motors.
