@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAgents } from "@/hooks/useAgents";
 import { nexusDb } from "@/integrations/supabase/nexus-client";
+import { cloudClient } from "@/integrations/supabase/cloud-client";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -111,6 +112,7 @@ export default function AgentSandbox() {
   const [attachments, setAttachments] = useState<AttachmentFile[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [isDeletingConversation, setIsDeletingConversation] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -188,6 +190,29 @@ export default function AgentSandbox() {
     setMessages([]);
     setConversationId(null);
     setShowHistory(false);
+  };
+
+  const handleDeleteConversation = async () => {
+    if (!conversationId || !agentId) {
+      startNewConversation();
+      return;
+    }
+
+    setIsDeletingConversation(true);
+    try {
+      const { data, error } = await cloudClient.functions.invoke("clear-conversations", {
+        body: { conversation_ids: [conversationId], agent_id: agentId },
+      });
+      if (error) throw error;
+
+      toast.success(`Conversa excluída (${data?.deleted_messages ?? 0} mensagens removidas)`);
+      startNewConversation();
+      await loadConversations();
+    } catch (e: any) {
+      toast.error("Erro ao excluir conversa: " + (e?.message || "erro desconhecido"));
+    } finally {
+      setIsDeletingConversation(false);
+    }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -622,8 +647,15 @@ export default function AgentSandbox() {
               <Plus className="h-5 w-5" />
             </Button>
             {messages.length > 0 && (
-              <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground hover:text-destructive" onClick={() => { setMessages([]); setConversationId(null); }}>
-                <Trash2 className="h-5 w-5" />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 text-muted-foreground hover:text-foreground hover:text-destructive"
+                onClick={handleDeleteConversation}
+                disabled={isDeletingConversation}
+                title={conversationId ? "Excluir conversa do histórico" : "Limpar conversa atual"}
+              >
+                {isDeletingConversation ? <Loader2 className="h-5 w-5 animate-spin" /> : <Trash2 className="h-5 w-5" />}
               </Button>
             )}
             <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground" onClick={() => messages.length > 0 ? setShowExitConfirm(true) : navigate("/agents")}>
