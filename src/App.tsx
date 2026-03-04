@@ -29,7 +29,7 @@ import NotFound from "@/pages/NotFound";
 const queryClient = new QueryClient();
 
 const App = () => (
-  <ThemeProvider attribute="class" defaultTheme="dark" storageKey="nexus-theme">
+  <ThemeProvider attribute="class" defaultTheme="dark" storageKey="boomia-theme">
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />

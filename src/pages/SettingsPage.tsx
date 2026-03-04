@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
-const STORAGE_KEY = "nexus_platform_settings";
+const STORAGE_KEY = "boomia_platform_settings";
 
 interface PlatformSettings {
   platform_name: string;

@@ -29,7 +29,7 @@ function getTitle(pathname: string): string {
   for (const [route, title] of Object.entries(routeTitles)) {
     if (pathname.startsWith(route)) return title;
   }
-  return "Nexus AI";
+  return "Boom IA";
 }
 
 export function AppHeader() {

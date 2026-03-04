@@ -31,7 +31,7 @@ export default function Dashboard() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <p className="text-xs text-muted-foreground">Dashboards → Nexus AI</p>
+        <p className="text-xs text-muted-foreground">Dashboards → Boom IA</p>
         <h1 className="text-xl font-bold">Painel</h1>
       </div>
 
