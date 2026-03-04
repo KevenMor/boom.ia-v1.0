@@ -2127,6 +2127,7 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
     const convChoice = convResult.choices?.[0];
     const convUsage = convResult.usage;
     const rawContent = convChoice?.message?.content || "";
+    const photoCommandLine = (rawContent.match(/^.*ENVIAR_FOTOS?_VEICULOS?[:\s]+(.+)$/im)?.[1] || "").trim();
 
     // Add Gemini raw response to debug trace so it's visible in sandbox
     debugTrace.push({
@@ -2217,6 +2218,49 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
         }
       } catch (e: any) {
         console.warn("[PostProcess] Could not extract vehicles for photo injection:", e?.message);
+      }
+    } else if (!isAppraisalPhotoContext && toolResultsContext.length === 0 && photoCommandLine && agent?.tenant_id) {
+      // Fallback: Gemini asked to send photos, but dispatcher called no tools (NO_TOOLS_NEEDED).
+      // Recover vehicle(s) from inventory so we can append real image URLs.
+      try {
+        const idFromCommand = photoCommandLine.match(/\bid:\s*([0-9a-f-]{36})\b/i)?.[1] || null;
+        const refText = photoCommandLine.replace(/\|\s*id:\s*[0-9a-f-]{36}.*/i, "").trim();
+
+        let fallbackQuery = supabase
+          .from("inventory")
+          .select("*")
+          .eq("tenant_id", agent.tenant_id)
+          .eq("status", "available");
+
+        if (idFromCommand) {
+          fallbackQuery = fallbackQuery.eq("id", idFromCommand).limit(1);
+        } else {
+          const normalizedRef = refText.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          const tokens = normalizedRef.split(/\s+/).filter((t: string) => t.length >= 3).slice(0, 5);
+          if (tokens.length > 0) {
+            const orParts = tokens.flatMap((t: string) => [
+              `brand.ilike.%${t}%`,
+              `model.ilike.%${t}%`,
+              `version.ilike.%${t}%`,
+              `description.ilike.%${t}%`,
+            ]);
+            fallbackQuery = fallbackQuery.or(orParts.join(","));
+          }
+          fallbackQuery = fallbackQuery.limit(3);
+        }
+
+        const { data: fallbackVehicles, error: fallbackErr } = await fallbackQuery;
+        if (fallbackErr) {
+          console.warn("[PostProcess] Photo fallback inventory query failed:", fallbackErr.message);
+        } else if (fallbackVehicles && fallbackVehicles.length > 0) {
+          finalContent = appendMissingVehiclePhotos(finalContent, fallbackVehicles, latestUserText || refText, true);
+          console.log(`[PostProcess] Photo fallback applied from command, vehicles=${fallbackVehicles.length}`);
+          debugTrace.push({ type: "photo_fallback_from_command", vehicles: fallbackVehicles.length, has_id: !!idFromCommand, timestamp: Date.now() });
+        } else {
+          console.warn(`[PostProcess] Photo fallback found no vehicles for command: ${photoCommandLine}`);
+        }
+      } catch (e: any) {
+        console.warn("[PostProcess] Photo fallback error:", e?.message);
       }
     } else if (isAppraisalPhotoContext && toolResultsContext.length > 0) {
       console.log(`[PostProcess] Skipping photo injection — appraisal context (user sent image, no text)`);
