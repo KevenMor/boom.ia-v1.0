@@ -1202,6 +1202,39 @@ Deno.serve(async (req) => {
       console.warn("[Tools] fipe_query missing from agent_tools; injected virtual consultar_fipe for PPL tenant");
     }
 
+    // SAFETY NET: Ensure calendar_query tool is always available for PPL tenant (scheduling/appointments)
+    const hasCalendarToolLinked = agentTools.some((t) => t.tool_type === "calendar_query");
+
+    if (isPplTenant && !hasCalendarToolLinked) {
+      const virtualCalendarTool: ToolDef = {
+        id: "virtual-calendar-query-tool",
+        name: "consultar_agenda",
+        description: "Consulta horários disponíveis na agenda e realiza agendamentos de visitas e test drives.",
+        tool_type: "calendar_query",
+        function_def: {
+          name: "consultar_agenda",
+          description: "Consulta horários disponíveis na agenda e realiza agendamentos. Use 'check_availability' para ver horários livres e 'criar' para agendar.",
+          parameters: {
+            type: "object",
+            properties: {
+              action: { type: "string", description: "Ação: 'check_availability' para consultar horários ou 'criar' para agendar", enum: ["check_availability", "criar"] },
+              date: { type: "string", description: "Data para consulta (formato YYYY-MM-DD, padrão: hoje)" },
+              days_ahead: { type: "integer", description: "Quantos dias consultar a partir da data (padrão: 3)" },
+              title: { type: "string", description: "Título do agendamento (ex: 'Visita - João')" },
+              start_at: { type: "string", description: "Data e hora do agendamento (formato ISO 8601, ex: '2025-03-15T10:00:00')" },
+              duration_minutes: { type: "integer", description: "Duração em minutos (padrão: 60)" },
+            },
+            required: ["action"],
+          },
+        },
+        execution_config: {},
+        endpoint: null,
+        auth_config: {},
+      };
+      agentTools.push(virtualCalendarTool);
+      console.warn("[Tools] calendar_query missing from agent_tools; injected virtual consultar_agenda for PPL tenant");
+    }
+
     console.log(`[Tools] Loaded ${agentTools.length} tool(s): ${agentTools.map((t) => `${t.name}:${t.tool_type}`).join(", ")}`);
 
 
