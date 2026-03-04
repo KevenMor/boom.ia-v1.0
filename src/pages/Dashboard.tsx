@@ -35,53 +35,49 @@ export default function Dashboard() {
         <h1 className="text-xl font-bold">Painel</h1>
       </div>
 
-      {/* Row 0: Usage Stats (tokens, latency, tool calls, requests) */}
+      {/* Row 0: Usage Stats */}
       <UsageStatsRow events={recentEvents ?? []} loading={loadingEvents} />
 
-      {/* Row 1: Token Usage Chart + Provider Tokens + Model Breakdown */}
+      {/* Row 1: Token Chart (wider) + Model Breakdown */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <div className="lg:col-span-5">
+        <div className="lg:col-span-8">
           <TokenUsageChart data={dailySummary ?? []} loading={loadingDaily} />
         </div>
         <div className="lg:col-span-4">
-          <ProviderTokensCard data={providerTokens ?? []} loading={loadingProviderTokens} />
-        </div>
-        <div className="lg:col-span-3">
           <ModelBreakdown data={dailySummary ?? []} loading={loadingDaily} />
         </div>
       </div>
 
-      {/* Row 2: Latency Chart + Sprint Progress + Activity */}
+      {/* Row 2: Latency (wider) + Provider Tokens */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <div className="lg:col-span-7">
+        <div className="lg:col-span-8">
           <LatencyChart data={dailySummary ?? []} loading={loadingDaily} />
         </div>
-        <div className="flex flex-col gap-4 lg:col-span-5">
-          <SprintProgress
-            activeAgents={activeAgents}
-            pausedAgents={pausedAgents}
-            totalAgents={totalAgents}
-            loading={loadingAgents}
-          />
-          <ActivityFeed />
+        <div className="lg:col-span-4">
+          <ProviderTokensCard data={providerTokens ?? []} loading={loadingProviderTokens} />
         </div>
       </div>
 
-      {/* Row 3: Conversation Growth + Deployments + Feature Adoption */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <div className="lg:col-span-5">
-          <RevenueChart />
-        </div>
-        <div className="lg:col-span-3">
-          <RecentDeployments tenants={tenants ?? []} loading={loadingTenants} />
-        </div>
-        <div className="lg:col-span-4">
-          <FeatureAdoption
-            agents={totalAgents}
-            providers={providers?.length ?? 0}
-            tenants={activeTenants}
-          />
-        </div>
+      {/* Row 3: Conversation Growth + Agents + Feature Adoption */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <RevenueChart />
+        <SprintProgress
+          activeAgents={activeAgents}
+          pausedAgents={pausedAgents}
+          totalAgents={totalAgents}
+          loading={loadingAgents}
+        />
+        <FeatureAdoption
+          agents={totalAgents}
+          providers={providers?.length ?? 0}
+          tenants={activeTenants}
+        />
+      </div>
+
+      {/* Row 4: Activity + Recent Tenants */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <ActivityFeed />
+        <RecentDeployments tenants={tenants ?? []} loading={loadingTenants} />
       </div>
     </div>
   );
