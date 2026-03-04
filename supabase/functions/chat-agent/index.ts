@@ -1699,7 +1699,14 @@ Deno.serve(async (req) => {
         // User selecting one option that was already presented in previous assistant message(s)
         const isSelectingPreviousOption = isUserSelectingPreviousOption(latestUserText || "");
 
-        if (isContestationMsg || isConfirmationQuestion || isReactingToPreviousResponse || isSelectingPreviousOption) {
+        // OVERRIDE: If the message mentions scheduling/agenda topics, ALWAYS dispatch to tools
+        // so the agent has real calendar data instead of hallucinating confirmations
+        const schedulingKeywords = /\b(agend|horario|horário|visita|test.?drive|marcar|marcad|reserv|cancelar|desmarcar|reagend|confirma|agendar)\b/i;
+        const mentionsScheduling = schedulingKeywords.test(normalizedLatestUser);
+
+        const shouldSkip = (isContestationMsg || isConfirmationQuestion || isReactingToPreviousResponse || isSelectingPreviousOption) && !mentionsScheduling;
+
+        if (shouldSkip) {
           console.log(`[Dispatcher] Skip detected (contestation/confirmation/reaction/selection): "${latestUserText.slice(0, 80)}"`);
           debugTrace.push({
             type: "dispatcher_skip",
@@ -1714,6 +1721,9 @@ Deno.serve(async (req) => {
             timestamp: Date.now(),
           });
         } else {
+          if (mentionsScheduling && !shouldSkip) {
+            console.log(`[Dispatcher] Scheduling context detected — forcing dispatch despite skip signals: "${latestUserText.slice(0, 80)}"`);
+          }
 
         // Inject current Brasilia datetime into dispatcher system prompt
         const nowBrasilia = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
