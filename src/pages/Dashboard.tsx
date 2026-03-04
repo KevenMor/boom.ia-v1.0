@@ -1,3 +1,4 @@
+import React from "react";
 import { useTenants } from "@/hooks/useTenants";
 import { useAgents } from "@/hooks/useAgents";
 import { useProviders } from "@/hooks/useProviders";
@@ -14,7 +15,7 @@ import { LatencyChart } from "@/components/dashboard/LatencyChart";
 import { ModelBreakdown } from "@/components/dashboard/ModelBreakdown";
 import { ProviderTokensCard } from "@/components/dashboard/ProviderTokensCard";
 
-export default function Dashboard() {
+const Dashboard = React.forwardRef<HTMLDivElement>(function Dashboard(_props, ref) {
   const { data: tenants, isLoading: loadingTenants } = useTenants();
   const { data: agents, isLoading: loadingAgents } = useAgents();
   const { data: providers, isLoading: loadingProviders } = useProviders();
@@ -81,4 +82,6 @@ export default function Dashboard() {
       </div>
     </div>
   );
-}
+});
+
+export default Dashboard;
