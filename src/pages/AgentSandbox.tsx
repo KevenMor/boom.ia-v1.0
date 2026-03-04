@@ -448,22 +448,31 @@ export default function AgentSandbox() {
             {/* Assistant images - filter and validate */}
             {images.length > 0 && (
               <div className={`${images.length > 1 ? "grid grid-cols-2 gap-1" : ""} mb-1 -mx-1 -mt-0.5`}>
-                {images.map((url, imgIdx) => (
-                  <a key={imgIdx} href={url} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-md">
-                    <img
-                      src={url}
-                      alt="Foto"
-                      loading="lazy"
-                      className="rounded-md w-full max-h-64 object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                      onError={(e) => {
-                        const el = e.target as HTMLImageElement;
-                        // Hide the entire anchor wrapper (grid cell)
-                        const anchor = el.closest("a");
-                        if (anchor) anchor.style.display = "none";
-                      }}
-                    />
-                  </a>
-                ))}
+                {images.map((url, imgIdx) => {
+                  // If odd number of images, last one spans full width
+                  const isLastOdd = images.length > 1 && images.length % 2 !== 0 && imgIdx === images.length - 1;
+                  return (
+                    <a
+                      key={imgIdx}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`block overflow-hidden rounded-md ${isLastOdd ? "col-span-2" : ""}`}
+                    >
+                      <img
+                        src={url}
+                        alt="Foto"
+                        loading="lazy"
+                        className={`rounded-md w-full object-cover cursor-pointer hover:opacity-90 transition-opacity ${isLastOdd ? "max-h-48" : "max-h-64"}`}
+                        onError={(e) => {
+                          const el = e.target as HTMLImageElement;
+                          const anchor = el.closest("a");
+                          if (anchor) anchor.style.display = "none";
+                        }}
+                      />
+                    </a>
+                  );
+                })}
               </div>
             )}
 
