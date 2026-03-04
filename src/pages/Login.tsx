@@ -69,8 +69,8 @@ export default function Login() {
         >
           {/* Logo */}
           <div className="text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl overflow-hidden">
-              <img src={boomLogoDark} alt="Boom IA" className="h-12 w-12 object-contain" />
+            <div className="mx-auto mb-6 flex h-24 w-48 items-center justify-center">
+              <img src={boomLogoDark} alt="Boom IA" className="h-full w-full object-contain" />
             </div>
             <p className="text-sm text-muted-foreground">
               Faça login para acessar sua conta
