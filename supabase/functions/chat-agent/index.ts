@@ -26,6 +26,23 @@ async function decrypt(encoded: string, secret: string): Promise<string> {
 // Remove tool-call artifacts that LLMs sometimes leak into content
 function sanitizeLLMOutput(content: string): string {
   let text = content;
+
+  // CRITICAL: Detect when the ENTIRE response is a JSON action object (Gemini hallucination)
+  // e.g.: { "action": "marcar_agendamento", "action_input": "{...}" }
+  const trimmed = text.trim();
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      // If it's a JSON action/tool object, it's not user-facing text
+      if (parsed.action || parsed.action_input || parsed.tool || parsed.function || parsed.consultar_estoque || parsed.query) {
+        console.warn("[Sanitize] Detected full-JSON action object response — stripping entirely");
+        return "";  // Will trigger the empty response fallback which uses the dispatcher hint
+      }
+    } catch {
+      // Not valid JSON, continue with normal sanitization
+    }
+  }
+
   // Remove lines like "ENVIAR_FOTOS_VEICULO: ...", "ENVIAR_FOTO: ...", etc.
   text = text.replace(/^.*ENVIAR_FOTOS?_VEICULOS?[:\s].*$/gmi, "");
   // Remove HANDOFF_COMERCIAL command lines (should not be visible to client)
@@ -34,9 +51,7 @@ function sanitizeLLMOutput(content: string): string {
   text = text.replace(/^.*\b(TOOL_CALL|FUNCTION_CALL|ACTION_OUTPUT)[:\s].*$/gmi, "");
 
   // Remove leaked JSON blocks (tool calls, action objects, query objects)
-  // Matches standalone JSON-like blocks: { "key": "value" } or { "action": ... }
   text = text.replace(/^\s*\{[\s\S]*?"(action|action_input|modelo|marca|tool|function|query|search|consultar_estoque)"[\s\S]*?\}\s*$/gmi, "");
-  // Also catch inline JSON artifacts within paragraphs
   text = text.replace(/\{\s*"(action|action_input|modelo|marca|tool_name|function_name|consultar_estoque)"[^}]*\}/gi, "");
 
   // Remove "Vou verificar/consultar no sistema" + JSON blocks (LLM thinking out loud)
@@ -953,7 +968,7 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
           periodo: `${fromDate.toISOString().split("T")[0]} a ${toDate.toISOString().split("T")[0]}`,
           horarios_disponiveis: availableSlots,
           compromissos_existentes: busySlots.length,
-          _hint: "ESTRATÉGIA SDR DE AGENDAMENTO: NÃO liste todos os horários. Pergunte se o cliente prefere manhã ou tarde. Depois ofereça EXATAMENTE 2 horários INTERCALADOS (não consecutivos) do período escolhido. Ex: manhã → 09:00 e 11:00. Tarde → 14:00 e 16:00. Se o cliente não puder, sugira proativamente o próximo dia útil com 2 horários intercalados. Quando ele escolher, use a ação 'criar' para confirmar e informe o endereço da loja.",
+          _hint: "ESTRATÉGIA SDR DE AGENDAMENTO: NÃO liste todos os horários. Pergunte se o cliente prefere manhã ou tarde. Depois ofereça EXATAMENTE 2 horários INTERCALADOS (não consecutivos) do período escolhido. Ex: manhã → 09:00 e 11:00. Tarde → 14:00 e 16:00. Se o cliente não puder, sugira proativamente o próximo dia útil com 2 horários intercalados. Quando o cliente ESCOLHER um horário específico, o dispatcher DEVE chamar consultar_agenda(action='criar') para confirmar — NÃO apenas falar que está confirmado. O agendamento só é real quando a ferramenta criar o evento.",
         });
       }
 
@@ -2004,7 +2019,8 @@ REGRAS:
 3. NÃO copie o texto literalmente — adapte ao seu estilo conversacional.
 4. NÃO mencione "sistema", "orientação", "sugestão" ou qualquer referência técnica interna.
 5. NÃO invente dados, preços ou disponibilidade que não estejam no histórico da conversa.
-6. NÃO use comandos técnicos como ENVIAR_FOTOS, TOOL_CALL, etc.`;
+6. NÃO use comandos técnicos como ENVIAR_FOTOS, TOOL_CALL, etc.
+7. NÃO retorne JSON, objetos de ação, ou qualquer formato estruturado. Responda SOMENTE com texto natural.`;
 
       const lastUserIdx = conversationalMessages.map((m: any) => m.role).lastIndexOf("user");
       if (lastUserIdx > 0) {
@@ -2015,6 +2031,19 @@ REGRAS:
       console.log(`[Conversational] Injected dispatcher hint as guidance (${dispatcherHint.length} chars)`);
       debugTrace.push({ type: "dispatcher_hint_injected", hint_length: dispatcherHint.length, timestamp: Date.now() });
     }
+
+    // ===== ANTI-JSON GUARD FOR PHASE 2 =====
+    // Inject explicit instruction to NEVER output JSON/action objects
+    const antiJsonGuard = {
+      role: "system",
+      content: `⚠️ REGRA ABSOLUTA DE FORMATO:
+Sua resposta DEVE ser APENAS texto natural em português, como uma conversa humana no WhatsApp.
+NUNCA retorne JSON, objetos como {"action": ...}, {"tool": ...}, {"consultar_estoque": ...} ou qualquer formato estruturado.
+NUNCA tente executar ferramentas ou ações — isso já foi feito. Apenas converse naturalmente.
+Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e escreva uma frase natural no lugar.`,
+    };
+    // Insert right before the system prompt (position 1, after the main system prompt)
+    conversationalMessages.splice(1, 0, antiJsonGuard);
 
     // Inject image attachments as multimodal content in the last user message
     if (imageBase64Parts.length > 0) {
@@ -2108,10 +2137,13 @@ REGRAS:
     // FALLBACK: if LLM returned empty response, provide a sensible default
     if (!finalContent.trim()) {
       console.warn("[Conversational] LLM returned EMPTY response — applying fallback");
-      debugTrace.push({ type: "empty_response_fallback", model, timestamp: Date.now() });
+      debugTrace.push({ type: "empty_response_fallback", model, has_dispatcher_hint: !!dispatcherHint, timestamp: Date.now() });
 
-      // Check if there were image attachments — the empty response is likely due to multimodal issues
-      if (imageBase64Parts.length > 0) {
+      if (dispatcherHint) {
+        // Use the dispatcher's hint as the basis — it already has the right intent
+        finalContent = dispatcherHint;
+        console.log(`[Conversational] Using dispatcher hint as fallback (${dispatcherHint.length} chars)`);
+      } else if (imageBase64Parts.length > 0) {
         finalContent = "Recebi sua foto! Vou analisar aqui. Me dá um momento que já te retorno.";
       } else {
         finalContent = "Desculpa, não consegui processar sua mensagem agora. Pode repetir?";
