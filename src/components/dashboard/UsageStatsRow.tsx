@@ -18,11 +18,20 @@ export function UsageStatsRow({ events, loading }: Props) {
     );
   }
 
-  // Today's events
-  const today = new Date().toISOString().slice(0, 10);
-  const todayEvents = events.filter((e) => e.created_at?.slice(0, 10) === today);
-  const yesterdayStr = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-  const yesterdayEvents = events.filter((e) => e.created_at?.slice(0, 10) === yesterdayStr);
+  // Use local date (not UTC) to match the user's timezone (e.g. BRT)
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const yesterday = new Date(now.getTime() - 86400000);
+  const yesterdayStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, "0")}-${String(yesterday.getDate()).padStart(2, "0")}`;
+
+  // Convert event created_at to local date for comparison
+  const getLocalDate = (iso: string) => {
+    const d = new Date(iso);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+
+  const todayEvents = events.filter((e) => getLocalDate(e.created_at) === today);
+  const yesterdayEvents = events.filter((e) => getLocalDate(e.created_at) === yesterdayStr);
 
   // Total tokens today
   const todayTokens = todayEvents.reduce((s, e) => s + (e.total_tokens || 0), 0);

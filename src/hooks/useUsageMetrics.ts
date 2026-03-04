@@ -48,15 +48,19 @@ export function useUsageDailySummary() {
   });
 }
 
-export function useRecentUsageEvents(limit = 50) {
+export function useRecentUsageEvents(limit = 200) {
   return useQuery({
     queryKey: ["usage-events-recent", limit],
     queryFn: async () => {
+      // Fetch events from last 2 days to ensure we capture all of "today" in any timezone
+      const twoDaysAgo = new Date();
+      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
       const { data, error } = await nexusDb
         .from("usage_events")
         .select("*")
+        .gte("created_at", twoDaysAgo.toISOString())
         .order("created_at", { ascending: false })
-        .limit(limit);
+        .limit(1000);
       if (error) throw error;
       return (data ?? []) as UsageEvent[];
     },
