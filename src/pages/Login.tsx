@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import boomLogo from "@/assets/boom-ia-logo.png";
+import boomLogoDark from "@/assets/boom-ia-logo-dark.png";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -70,7 +70,7 @@ export default function Login() {
           {/* Logo */}
           <div className="text-center">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl overflow-hidden">
-              <img src={boomLogo} alt="Boom IA" className="h-12 w-12 object-contain" />
+              <img src={boomLogoDark} alt="Boom IA" className="h-12 w-12 object-contain" />
             </div>
             <p className="text-sm text-muted-foreground">
               Faça login para acessar sua conta
