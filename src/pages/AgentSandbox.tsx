@@ -1,10 +1,12 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { ArrowLeft, Send, Loader2, Plus, Clock, MessageSquare, Trash2, Phone, Video, MoreVertical, Smile, Paperclip, Mic, Check, CheckCheck, Bug, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowLeft, Send, Loader2, Plus, Clock, Trash2, CheckCheck, Bug, Paperclip, Mic, Camera } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { DebugBlock, type EdgeLog } from "@/components/sandbox/DebugBlock";
+import { AudioRecorder } from "@/components/sandbox/AudioRecorder";
+import { AttachmentPreview, classifyFile, type AttachmentFile } from "@/components/sandbox/AttachmentPreview";
+import { extractVideos, VideoPlayer, AudioPlayer, UserMediaPreview, type UserAttachmentMeta } from "@/components/sandbox/MediaBubble";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAgents } from "@/hooks/useAgents";
 import { nexusDb } from "@/integrations/supabase/nexus-client";
@@ -12,7 +14,14 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 
 type DebugEntry = { type: string; [key: string]: any };
-type Msg = { role: "user" | "assistant"; content: string; timestamp?: Date; debug?: DebugEntry[]; edgeLogs?: EdgeLog[] };
+type Msg = {
+  role: "user" | "assistant";
+  content: string;
+  timestamp?: Date;
+  debug?: DebugEntry[];
+  edgeLogs?: EdgeLog[];
+  userAttachments?: UserAttachmentMeta[];
+};
 type Conversation = {
   id: string;
   channel: string;
@@ -27,39 +36,35 @@ const MSG_SPLIT = "<<MSG_SPLIT>>";
 // Extract image URLs from message content
 function extractImages(content: string): { text: string; images: string[] } {
   const images: string[] = [];
-  
-  // Match markdown image syntax ![...](url)
   const mdImgRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/gi;
   let match;
   while ((match = mdImgRegex.exec(content)) !== null) {
     if (match[1] && !images.includes(match[1])) images.push(match[1]);
   }
-
-  // Match bare image URLs
   const bareImgRegex = /(?<!\()(https?:\/\/[^\s"'<>]+\.(?:jpg|jpeg|png|gif|webp)[^\s"'<>]*)/gi;
   while ((match = bareImgRegex.exec(content)) !== null) {
     if (!images.includes(match[1] || match[0])) images.push(match[1] || match[0]);
   }
-
-  // Also detect photo_url patterns from tool output
   const photoUrlRegex = /https?:\/\/[^\s"'<>]+\/fotos\/[^\s"'<>]+/gi;
   while ((match = photoUrlRegex.exec(content)) !== null) {
     if (!images.includes(match[0])) images.push(match[0]);
   }
-
-  // Clean text: remove image markdown, bare URLs already captured, and tool artifacts
   let text = content;
-  // Remove markdown images
-  text = text.replace(/!\[.*?\]\(https?:\/\/[^\s)]+\)/gi, '');
-  // Remove tool artifact lines like "ENVIAR_FOTOS_VEICULO: ..."
-  text = text.replace(/^.*?ENVIAR_FOTOS?_VEICULOS?.*$/gmi, '');
-  // Remove orphan image URLs
-  images.forEach(url => {
-    text = text.split(url).join('');
-  });
-  text = text.replace(/\n{3,}/g, '\n\n').trim();
-
+  text = text.replace(/!\[.*?\]\(https?:\/\/[^\s)]+\)/gi, "");
+  text = text.replace(/^.*?ENVIAR_FOTOS?_VEICULOS?.*$/gmi, "");
+  images.forEach((url) => { text = text.split(url).join(""); });
+  text = text.replace(/\n{3,}/g, "\n\n").trim();
   return { text, images };
+}
+
+// Convert File to base64 data URL
+async function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 export default function AgentSandbox() {
@@ -77,8 +82,11 @@ export default function AgentSandbox() {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [showDebug, setShowDebug] = useState(true);
   const [pendingDebug, setPendingDebug] = useState<DebugEntry[] | null>(null);
+  const [attachments, setAttachments] = useState<AttachmentFile[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -130,13 +138,81 @@ export default function AgentSandbox() {
     setShowHistory(false);
   };
 
-  const send = async () => {
-    const text = input.trim();
-    if (!text || isLoading || !agentId) return;
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    const newAtts = Array.from(files).map(classifyFile);
+    setAttachments((prev) => [...prev, ...newAtts]);
+    e.target.value = "";
+  };
 
-    const userMsg: Msg = { role: "user", content: text, timestamp: new Date() };
+  const removeAttachment = (idx: number) => {
+    setAttachments((prev) => {
+      const att = prev[idx];
+      if (att.preview) URL.revokeObjectURL(att.preview);
+      return prev.filter((_, i) => i !== idx);
+    });
+  };
+
+  const handleAudioSend = async (blob: Blob, durationSec: number) => {
+    setIsRecording(false);
+    const dataUrl = await fileToDataUrl(new File([blob], "audio.webm", { type: blob.type }));
+    const audioAtt: AttachmentFile = {
+      file: new File([blob], "audio.webm", { type: blob.type }),
+      type: "audio",
+    };
+    // Send immediately as a message
+    await sendMessage("", [{ ...audioAtt, preview: undefined }], [{ type: "audio", dataUrl, fileName: "audio.webm" }]);
+  };
+
+  const sendMessage = async (
+    text: string,
+    atts: AttachmentFile[] = [],
+    preBuiltMeta?: UserAttachmentMeta[]
+  ) => {
+    if ((!text && atts.length === 0) || isLoading || !agentId) return;
+
+    // Build attachment metadata for display & API
+    const userAttachmentsMeta: UserAttachmentMeta[] = preBuiltMeta || [];
+    const apiAttachments: Array<{ file_type: string; data_url: string; file_size?: number }> = [];
+
+    if (!preBuiltMeta) {
+      for (const att of atts) {
+        const dataUrl = await fileToDataUrl(att.file);
+        userAttachmentsMeta.push({
+          type: att.type,
+          dataUrl,
+          fileName: att.file.name,
+        });
+        apiAttachments.push({
+          file_type: att.type === "video" ? "file" : att.type,
+          data_url: dataUrl,
+          file_size: att.file.size,
+        });
+      }
+    } else {
+      for (const meta of preBuiltMeta) {
+        apiAttachments.push({
+          file_type: meta.type === "video" ? "file" : meta.type,
+          data_url: meta.dataUrl,
+          file_size: 0,
+        });
+      }
+    }
+
+    const displayContent = text || (userAttachmentsMeta.length > 0
+      ? userAttachmentsMeta.map((a) => `[${a.type === "image" ? "📷 Imagem" : a.type === "video" ? "🎬 Vídeo" : a.type === "audio" ? "🎤 Áudio" : "📄 " + a.fileName}]`).join(" ")
+      : "");
+
+    const userMsg: Msg = {
+      role: "user",
+      content: displayContent,
+      timestamp: new Date(),
+      userAttachments: userAttachmentsMeta.length > 0 ? userAttachmentsMeta : undefined,
+    };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
+    setAttachments([]);
     setIsLoading(true);
 
     let debugData: DebugEntry[] | null = null;
@@ -148,6 +224,15 @@ export default function AgentSandbox() {
       const { data: { session } } = await nexusDb.auth.getSession();
       const token = session?.access_token;
 
+      const body: any = {
+        agent_id: agentId,
+        messages: allMessages.map((m) => ({ role: m.role, content: m.content })),
+        conversation_id: conversationId,
+      };
+      if (apiAttachments.length > 0) {
+        body.attachments = apiAttachments;
+      }
+
       const resp = await fetch(CHAT_URL, {
         method: "POST",
         headers: {
@@ -155,11 +240,7 @@ export default function AgentSandbox() {
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           ...(token ? { "x-nexus-auth": `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({
-          agent_id: agentId,
-          messages: allMessages.map((m) => ({ role: m.role, content: m.content })),
-          conversation_id: conversationId,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!resp.ok) {
@@ -198,14 +279,12 @@ export default function AgentSandbox() {
               continue;
             }
 
-            // Capture debug trace
             if (parsed.debug) {
               debugData = parsed.debug;
               setPendingDebug(parsed.debug);
               continue;
             }
 
-            // Capture edge function logs
             if (parsed.edge_logs) {
               edgeLogsData = parsed.edge_logs;
               continue;
@@ -213,18 +292,15 @@ export default function AgentSandbox() {
 
             const content = parsed.choices?.[0]?.delta?.content as string | undefined;
             if (content) {
-              // Check for split marker — start a new bubble
               if (content.includes(MSG_SPLIT)) {
                 const segments = content.split(MSG_SPLIT);
                 for (let si = 0; si < segments.length; si++) {
                   if (si > 0) {
-                    // Add a NEW empty assistant bubble; subsequent chunks append to it
                     setMessages((prev) => [
                       ...prev,
                       { role: "assistant", content: segments[si] || "", timestamp: new Date() },
                     ]);
                   } else if (segments[si]) {
-                    // Append leftover text before the split to current bubble
                     setMessages((prev) => {
                       const last = prev[prev.length - 1];
                       if (last?.role === "assistant") {
@@ -238,7 +314,6 @@ export default function AgentSandbox() {
                 }
                 hasAssistantContent = true;
               } else {
-                // Normal chunk: append to the LAST assistant bubble using functional state
                 hasAssistantContent = true;
                 setMessages((prev) => {
                   const last = prev[prev.length - 1];
@@ -270,6 +345,8 @@ export default function AgentSandbox() {
     }
   };
 
+  const send = () => sendMessage(input.trim(), attachments);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -278,6 +355,115 @@ export default function AgentSandbox() {
   };
 
   const agentInitial = agent?.name?.charAt(0)?.toUpperCase() || "A";
+
+  // Render a single message bubble
+  const renderBubble = (msg: Msg, i: number) => {
+    const isUser = msg.role === "user";
+    const hasUserMedia = isUser && msg.userAttachments && msg.userAttachments.length > 0;
+
+    // For assistant messages, extract images + videos
+    let text = msg.content;
+    let images: string[] = [];
+    let videoUrls: string[] = [];
+
+    if (!isUser) {
+      const imgResult = extractImages(msg.content);
+      text = imgResult.text;
+      images = imgResult.images;
+      const vidResult = extractVideos(text);
+      text = vidResult.text;
+      videoUrls = vidResult.videoUrls;
+    }
+
+    // Detect audio transcription in user messages
+    const isAudioTranscription = isUser && msg.content.includes("[Áudio do cliente");
+
+    const time = msg.timestamp ? format(msg.timestamp, "HH:mm") : "";
+
+    return (
+      <div key={i}>
+        {/* Debug block */}
+        {!isUser && (msg.debug || msg.edgeLogs) && showDebug && (
+          <div className="flex justify-start mb-1">
+            <DebugBlock debug={msg.debug || []} edgeLogs={msg.edgeLogs} />
+          </div>
+        )}
+        <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-1`}>
+          <div
+            className={`relative max-w-[85%] md:max-w-[65%] rounded-lg px-3 py-1.5 shadow-sm ${
+              isUser ? "bg-[#005c4b] text-[#e9edef]" : "bg-[#202c33] text-[#e9edef]"
+            }`}
+            style={{
+              borderTopLeftRadius: !isUser ? 0 : undefined,
+              borderTopRightRadius: isUser ? 0 : undefined,
+            }}
+          >
+            {/* User media attachments */}
+            {hasUserMedia && (
+              <div className="space-y-1 mb-1 -mx-1 -mt-0.5">
+                {msg.userAttachments!.map((att, j) => (
+                  <UserMediaPreview key={j} attachment={att} />
+                ))}
+              </div>
+            )}
+
+            {/* Assistant videos */}
+            {videoUrls.length > 0 && (
+              <div className="space-y-1 mb-1 -mx-1 -mt-0.5">
+                {videoUrls.map((url, j) => (
+                  <VideoPlayer key={j} src={url} />
+                ))}
+              </div>
+            )}
+
+            {/* Assistant images */}
+            {images.length > 0 && (
+              <div className={`${images.length > 1 ? "grid grid-cols-2 gap-1" : ""} mb-1 -mx-1 -mt-0.5`}>
+                {images.map((url, imgIdx) => (
+                  <a key={imgIdx} href={url} target="_blank" rel="noopener noreferrer">
+                    <img
+                      src={url}
+                      alt="Foto"
+                      className="rounded-md w-full max-h-64 object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                      onError={(e) => {
+                        const el = e.target as HTMLImageElement;
+                        el.style.display = "none";
+                        if (el.parentElement) el.parentElement.style.display = "none";
+                      }}
+                    />
+                  </a>
+                ))}
+              </div>
+            )}
+
+            {/* Text content */}
+            {text.trim() && (
+              !isUser ? (
+                <div className="prose prose-sm prose-invert max-w-none [&>p]:my-0.5 [&>p]:leading-relaxed text-[13px]">
+                  <ReactMarkdown>{text}</ReactMarkdown>
+                </div>
+              ) : isAudioTranscription ? (
+                <div className="flex items-center gap-2">
+                  <Mic className="h-4 w-4 text-[#00a884] shrink-0" />
+                  <p className="whitespace-pre-wrap text-[13px] leading-relaxed italic">{text}</p>
+                </div>
+              ) : !hasUserMedia ? (
+                <p className="whitespace-pre-wrap text-[13px] leading-relaxed">{text}</p>
+              ) : text !== msg.userAttachments?.map((a) => `[${a.type === "image" ? "📷 Imagem" : a.type === "video" ? "🎬 Vídeo" : a.type === "audio" ? "🎤 Áudio" : "📄 " + a.fileName}]`).join(" ") ? (
+                <p className="whitespace-pre-wrap text-[13px] leading-relaxed">{text}</p>
+              ) : null
+            )}
+
+            {/* Timestamp + read receipts */}
+            <div className="flex items-center gap-1 justify-end -mb-0.5 mt-0.5">
+              <span className="text-[10px] text-[#8696a0] leading-none">{time}</span>
+              {isUser && <CheckCheck className="h-3 w-3 text-[#53bdeb]" />}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="flex h-[calc(100vh-4rem)]">
@@ -341,12 +527,11 @@ export default function AgentSandbox() {
           >
             <Clock className="h-4 w-4" />
           </Button>
-          
-          {/* Avatar */}
+
           <div className="h-10 w-10 rounded-full bg-[#00a884] flex items-center justify-center text-white text-lg font-medium cursor-pointer">
             {agentInitial}
           </div>
-          
+
           <div className="flex-1 min-w-0">
             <h2 className="text-[#e9edef] text-base font-normal">{agent?.name ?? "Agent"}</h2>
             <p className="text-[#8696a0] text-xs">
@@ -355,9 +540,9 @@ export default function AgentSandbox() {
           </div>
 
           <div className="flex items-center gap-1">
-            <Button 
-              variant="ghost" 
-              size="icon" 
+            <Button
+              variant="ghost"
+              size="icon"
               className={`h-9 w-9 ${showDebug ? "text-[#00a884]" : "text-[#8696a0]"} hover:text-white`}
               onClick={() => setShowDebug(!showDebug)}
               title="Debug mode"
@@ -378,8 +563,8 @@ export default function AgentSandbox() {
           </div>
         </div>
 
-        {/* Chat Messages - WhatsApp wallpaper style */}
-        <div 
+        {/* Chat Messages */}
+        <div
           className="flex-1 overflow-y-auto px-4 md:px-16 lg:px-24"
           style={{
             backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cg fill-opacity='0.03'%3E%3Cpath fill='%23ffffff' d='M20 20h10v10H20zM50 10h10v10H50zM80 30h10v10H80zM110 20h10v10h-10zM140 10h10v10h-10zM170 30h10v10h-10zM30 60h10v10H30zM60 50h10v10H60zM90 70h10v10H90zM120 60h10v10h-10zM150 50h10v10h-10zM180 70h10v10h-10zM10 100h10v10H10zM40 90h10v10H40zM70 110h10v10H70zM100 100h10v10h-10zM130 90h10v10h-10zM160 110h10v10h-10zM20 140h10v10H20zM50 130h10v10H50zM80 150h10v10H80zM110 140h10v10h-10zM140 130h10v10h-10zM170 150h10v10h-10zM30 180h10v10H30zM60 170h10v10H60zM90 190h10v10H90zM120 180h10v10h-10zM150 170h10v10h-10zM180 190h10v10h-10z'/%3E%3C/g%3E%3C/svg%3E")`,
@@ -403,75 +588,8 @@ export default function AgentSandbox() {
           )}
 
           <div className="space-y-1 py-4">
-            {messages.map((msg, i) => {
-              const { text, images } = msg.role === "assistant" 
-                ? extractImages(msg.content)
-                : { text: msg.content, images: [] };
-              const time = msg.timestamp ? format(msg.timestamp, "HH:mm") : "";
+            {messages.map((msg, i) => renderBubble(msg, i))}
 
-              return (
-                <div key={i}>
-                  {/* Debug block before assistant response */}
-                  {msg.role === "assistant" && (msg.debug || msg.edgeLogs) && showDebug && (
-                    <div className="flex justify-start mb-1">
-                      <DebugBlock debug={msg.debug || []} edgeLogs={msg.edgeLogs} />
-                    </div>
-                  )}
-                  <div className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} mb-1`}>
-                    <div
-                      className={`relative max-w-[85%] md:max-w-[65%] rounded-lg px-3 py-1.5 shadow-sm ${
-                        msg.role === "user"
-                          ? "bg-[#005c4b] text-[#e9edef]"
-                          : "bg-[#202c33] text-[#e9edef]"
-                      }`}
-                      style={{
-                        borderTopLeftRadius: msg.role === "assistant" ? 0 : undefined,
-                        borderTopRightRadius: msg.role === "user" ? 0 : undefined,
-                      }}
-                    >
-                    {/* Images */}
-                    {images.length > 0 && (
-                      <div className={`${images.length > 1 ? 'grid grid-cols-2 gap-1' : ''} mb-1 -mx-1 -mt-0.5`}>
-                        {images.map((url, imgIdx) => (
-                          <a key={imgIdx} href={url} target="_blank" rel="noopener noreferrer">
-                            <img
-                              src={url}
-                              alt="Foto do veículo"
-                              className="rounded-md w-full max-h-64 object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                              onError={(e) => {
-                                const el = e.target as HTMLImageElement;
-                                // Hide broken images and their parent link
-                                el.style.display = 'none';
-                                if (el.parentElement) el.parentElement.style.display = 'none';
-                              }}
-                            />
-                          </a>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Text content */}
-                    {msg.role === "assistant" ? (
-                      <div className="prose prose-sm prose-invert max-w-none [&>p]:my-0.5 [&>p]:leading-relaxed text-[13px]">
-                        <ReactMarkdown>{text}</ReactMarkdown>
-                      </div>
-                    ) : (
-                      <p className="whitespace-pre-wrap text-[13px] leading-relaxed">{text}</p>
-                    )}
-
-                    {/* Timestamp + read receipts */}
-                    <div className={`flex items-center gap-1 justify-end -mb-0.5 mt-0.5`}>
-                      <span className="text-[10px] text-[#8696a0] leading-none">{time}</span>
-                      {msg.role === "user" && (
-                        <CheckCheck className="h-3 w-3 text-[#53bdeb]" />
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              );
-            })}
-            
             {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
               <div className="flex justify-start mb-1">
                 <div className="bg-[#202c33] rounded-lg px-4 py-2.5 shadow-sm" style={{ borderTopLeftRadius: 0 }}>
@@ -487,31 +605,97 @@ export default function AgentSandbox() {
           </div>
         </div>
 
+        {/* Attachment Preview */}
+        <AttachmentPreview attachments={attachments} onRemove={removeAttachment} />
+
         {/* WhatsApp-style Input */}
         <div className="bg-[#202c33] px-3 py-2 flex items-end gap-2">
-          <div className="flex-1 flex items-end bg-[#2a3942] rounded-3xl px-4 py-1">
-            <input
-              ref={inputRef}
-              type="text"
-              placeholder="Mensagem"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              className="flex-1 bg-transparent text-[#e9edef] text-sm py-2 outline-none placeholder:text-[#8696a0]"
-              disabled={isLoading}
-            />
-          </div>
-          <button
-            onClick={send}
-            disabled={!input.trim() || isLoading}
-            className="h-10 w-10 rounded-full bg-[#00a884] flex items-center justify-center text-white hover:bg-[#06cf9c] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-          >
-            {isLoading ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Send className="h-5 w-5" />
-            )}
-          </button>
+          {isRecording ? (
+            <div className="flex-1">
+              <AudioRecorder
+                isRecording={isRecording}
+                onStartRecording={() => setIsRecording(true)}
+                onSend={handleAudioSend}
+                onCancel={() => setIsRecording(false)}
+              />
+            </div>
+          ) : (
+            <>
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+
+              {/* Attachment button */}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="h-10 w-10 rounded-full flex items-center justify-center text-[#8696a0] hover:text-white transition-colors shrink-0"
+                disabled={isLoading}
+              >
+                <Paperclip className="h-5 w-5" />
+              </button>
+
+              {/* Camera button (image capture on mobile) */}
+              <button
+                onClick={() => {
+                  const input = document.createElement("input");
+                  input.type = "file";
+                  input.accept = "image/*";
+                  input.capture = "environment";
+                  input.onchange = (e) => {
+                    const files = (e.target as HTMLInputElement).files;
+                    if (files) {
+                      const newAtts = Array.from(files).map(classifyFile);
+                      setAttachments((prev) => [...prev, ...newAtts]);
+                    }
+                  };
+                  input.click();
+                }}
+                className="h-10 w-10 rounded-full flex items-center justify-center text-[#8696a0] hover:text-white transition-colors shrink-0 md:hidden"
+                disabled={isLoading}
+              >
+                <Camera className="h-5 w-5" />
+              </button>
+
+              {/* Text input */}
+              <div className="flex-1 flex items-end bg-[#2a3942] rounded-3xl px-4 py-1">
+                <input
+                  ref={inputRef}
+                  type="text"
+                  placeholder="Mensagem"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  className="flex-1 bg-transparent text-[#e9edef] text-sm py-2 outline-none placeholder:text-[#8696a0]"
+                  disabled={isLoading}
+                />
+              </div>
+
+              {/* Send or Mic button */}
+              {input.trim() || attachments.length > 0 ? (
+                <button
+                  onClick={send}
+                  disabled={isLoading}
+                  className="h-10 w-10 rounded-full bg-[#00a884] flex items-center justify-center text-white hover:bg-[#06cf9c] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                >
+                  {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+                </button>
+              ) : (
+                <button
+                  onClick={() => setIsRecording(true)}
+                  disabled={isLoading}
+                  className="h-10 w-10 rounded-full flex items-center justify-center text-[#8696a0] hover:text-white transition-colors shrink-0"
+                >
+                  <Mic className="h-5 w-5" />
+                </button>
+              )}
+            </>
+          )}
         </div>
       </div>
     </div>
