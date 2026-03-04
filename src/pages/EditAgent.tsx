@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Bot, Save, Loader2 } from "lucide-react";
+import { ArrowLeft, Bot, Save, Loader2, Wrench, Plus, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAgents, useUpdateAgent } from "@/hooks/useAgents";
 import { useTenants } from "@/hooks/useTenants";
 import { useProviders } from "@/hooks/useProviders";
+import { useTools } from "@/hooks/useTools";
+import { nexusDb } from "@/integrations/supabase/nexus-client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { getModelsForProvider } from "@/lib/provider-models";
 import { ChatwootConfigSection } from "@/components/agents/ChatwootConfigSection";
@@ -48,8 +51,52 @@ export default function EditAgent() {
   const { data: agents, isLoading } = useAgents();
   const { data: tenants } = useTenants();
   const { data: providers } = useProviders();
+  const { data: allTools } = useTools();
+  const queryClient = useQueryClient();
 
   const agent = agents?.find((a) => a.id === agentId) ?? null;
+
+  // Fetch linked tool IDs for this agent
+  const { data: linkedToolIds, refetch: refetchLinks } = useQuery({
+    queryKey: ["agent_tools", agentId],
+    queryFn: async () => {
+      if (!agentId) return [];
+      const { data, error } = await nexusDb.from("agent_tools").select("tool_id").eq("agent_id", agentId);
+      if (error) throw error;
+      return (data ?? []).map((r: any) => r.tool_id as string);
+    },
+    enabled: !!agentId,
+  });
+
+  // Tools available for this agent's tenant (or global)
+  const availableTools = allTools?.filter((t) =>
+    !t.tenant_id || t.tenant_id === agent?.tenant_id
+  ) ?? [];
+
+  const linkedTools = availableTools.filter((t) => linkedToolIds?.includes(t.id));
+  const unlinkableTools = availableTools.filter((t) => !linkedToolIds?.includes(t.id));
+
+  const linkTool = async (toolId: string) => {
+    if (!agentId) return;
+    const { error } = await nexusDb.from("agent_tools").insert({ agent_id: agentId, tool_id: toolId });
+    if (error) {
+      toast.error("Erro ao vincular: " + error.message);
+    } else {
+      toast.success("Tool vinculada");
+      refetchLinks();
+    }
+  };
+
+  const unlinkTool = async (toolId: string) => {
+    if (!agentId) return;
+    const { error } = await nexusDb.from("agent_tools").delete().eq("agent_id", agentId).eq("tool_id", toolId);
+    if (error) {
+      toast.error("Erro ao desvincular: " + error.message);
+    } else {
+      toast.success("Tool desvinculada");
+      refetchLinks();
+    }
+  };
 
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [temp, setTemp] = useState(0.7);
@@ -431,6 +478,65 @@ export default function EditAgent() {
             quietEnd={followupQuietEnd} setQuietEnd={setFollowupQuietEnd}
             followupPrompt={followupPrompt} setFollowupPrompt={setFollowupPrompt}
           />
+        </div>
+
+        {/* Tools */}
+        <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+          <div className="flex items-center gap-2">
+            <Wrench className="h-5 w-5 text-primary" />
+            <h3 className="text-base font-semibold text-foreground">Tools Vinculadas</h3>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Tools vinculadas são carregadas pelo Dispatcher (Phase 1) para function calling.
+          </p>
+
+          {/* Linked tools */}
+          {linkedTools.length === 0 ? (
+            <p className="text-sm text-muted-foreground italic">Nenhuma tool vinculada a este agente.</p>
+          ) : (
+            <div className="space-y-1">
+              {linkedTools.map((tool) => (
+                <div key={tool.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-sm font-mono">{tool.name}</span>
+                    <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{tool.tool_type}</span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                    onClick={() => unlinkTool(tool.id)}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add tool */}
+          {unlinkableTools.length > 0 && (
+            <div className="space-y-2">
+              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Adicionar Tool</Label>
+              <div className="flex gap-2 flex-wrap">
+                {unlinkableTools.map((tool) => (
+                  <Button
+                    key={tool.id}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    onClick={() => linkTool(tool.id)}
+                  >
+                    <Plus className="h-3 w-3" />
+                    {tool.name}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
