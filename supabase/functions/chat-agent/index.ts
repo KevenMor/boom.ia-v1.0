@@ -669,10 +669,12 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         if (!data?.length) return JSON.stringify({ message: "Nenhum veículo encontrado com esses filtros" });
 
         // Determine if user explicitly asked for PHOTOS/IMAGES (not just "quero ver" which means "want to see options")
-        const photoRequestPattern = /(foto|imagem|image|photo|manda foto|envia foto|pode enviar|enviar fotos|ver foto|ver imagem|mostra foto|mostra imagem)/i;
+        const photoRequestPattern = /(foto|imagem|image|photo|manda foto|envia foto|pode enviar|enviar fotos|ver foto|ver imagem|mostra foto|mostra imagem|gostaria|quero sim|sim,?\s*por favor|pode sim|manda|envia|claro|com certeza)/i;
         const isPhotoRequest = photoRequestPattern.test(userText || "");
-        // Only show photos when user explicitly asks for photos AND it's a specific vehicle query (few results)
+        // Show photos when user asks (including implicit confirmations) AND it's a specific vehicle query (few results)
         const isSpecificWithPhotos = isPhotoRequest && data.length <= 3;
+        // ALWAYS include photo data when ≤3 vehicles so appendMissingVehiclePhotos can inject them post-LLM
+        const includePhotosInData = data.length <= 3;
 
         return JSON.stringify({
           total: data.length,
@@ -680,8 +682,8 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
             ? "Envie TODAS as fotos do array 'photos' usando ![foto](URL). Antes das fotos, escreva UMA frase curta e VARIADA (NUNCA repita 'Aqui estão as fotos'). Use variações como: 'Dá uma olhada!', 'Olha só como ela está!', 'Veja que linda!', 'Tá aqui pra você conferir!'. PROIBIDO inventar atributos, acabamento, materiais ou equipamentos que não estejam explicitamente nos campos do veículo. NÃO faça pergunta de fechamento nesta mensagem — deixe o cliente reagir às fotos primeiro."
             : `Apresente os ${data.length} veículos de forma NATURAL, como um vendedor experiente no WhatsApp. REGRAS ANTI-REPETIÇÃO: 1) NÃO repita o nome completo do carro se já mencionou antes — use apelidos curtos ("o Nivus", "o Haval", "esse aqui"). 2) Varie a estrutura das frases — cada parágrafo deve soar diferente. 3) NÃO use a mesma abertura para todos os carros. 4) Destaque algo ÚNICO de cada um (um é mais econômico, outro tem mais espaço, etc). 5) Finalize com UMA pergunta natural tipo "Algum te chamou atenção?". NÃO use listas numeradas. NÃO inclua fotos. NÃO repita dados que o cliente já sabe.`,
           vehicles: data.map((v: any) => {
-            if (!isSpecificWithPhotos) {
-              // Listing mode: compact, no photos to keep context small
+            if (!includePhotosInData) {
+              // Listing mode (>3 results): compact, no photos to keep context small
               return {
                 id: v.id,
                 brand: v.brand,

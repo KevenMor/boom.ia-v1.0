@@ -140,7 +140,7 @@ export default function EditAgent() {
       setReadDelay(((cfg as any).read_delay_ms ?? 1500) / 1000);
       setTypingDelay(((cfg as any).typing_delay_ms ?? 800) / 1000);
       setBlockGap(((cfg as any).block_gap_ms ?? 2000) / 1000);
-      setDebounceMs(((cfg as any).message_debounce_ms ?? 15000) / 1000);
+      setDebounceMs(((cfg as any).message_debounce_ms ?? 3000) / 1000);
       setDispatcherPrompt((cfg as any).dispatcher_prompt ?? "");
       setDispatcherProviderId((cfg as any).dispatcher_provider_id ?? "");
       setChatwootUrl((cfg as any).chatwoot_url ?? "");

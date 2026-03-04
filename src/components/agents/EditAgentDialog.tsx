@@ -83,7 +83,7 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
       setReadDelay(((cfg as any).read_delay_ms ?? 1500) / 1000);
       setTypingDelay(((cfg as any).typing_delay_ms ?? 800) / 1000);
       setBlockGap(((cfg as any).block_gap_ms ?? 2000) / 1000);
-      setDebounceMs(((cfg as any).message_debounce_ms ?? 15000) / 1000);
+      setDebounceMs(((cfg as any).message_debounce_ms ?? 3000) / 1000);
       setDispatcherProviderId((cfg as any).dispatcher_provider_id ?? "");
       setChatwootUrl((cfg as any).chatwoot_url ?? "");
       setChatwootApiToken((cfg as any).chatwoot_api_token ?? "");
