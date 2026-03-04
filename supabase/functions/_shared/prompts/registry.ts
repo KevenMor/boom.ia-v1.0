@@ -39,7 +39,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     communicationRules: PPL_COMM_RULES,
     dispatcherPrompt: PPL_DISPATCHER,
     followupPrompt: PPL_FOLLOWUP,
-    version: "v1.8.3",
+    version: "v1.9.0",
     description: "Juliana — SDR PPL Motors (Concessionária Sorocaba/SP)",
   },
   "ppl-motors": {
@@ -47,7 +47,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     communicationRules: PPL_COMM_RULES,
     dispatcherPrompt: PPL_DISPATCHER,
     followupPrompt: PPL_FOLLOWUP,
-    version: "v1.8.3",
+    version: "v1.9.0",
     description: "Juliana — SDR PPL Motors (Concessionária Sorocaba/SP)",
   },
 };
