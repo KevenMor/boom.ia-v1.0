@@ -25,7 +25,7 @@ async function sendChatwootMediaMessage(
     const parsedUrl = new URL(mediaUrl);
     const filename = parsedUrl.pathname.split("/").pop() || "media.mp4";
     const formData = new FormData();
-    formData.append("content", caption || "");
+    if (caption && caption.trim()) formData.append("content", caption.trim());
     formData.append("message_type", "outgoing");
     formData.append("private", "false");
     formData.append("attachments[]", new Blob([await mediaBlob.arrayBuffer()], { type: contentType }), filename);
@@ -105,7 +105,7 @@ async function sendChatwootImageMessage(
     const imgBlob = await imgResp.blob();
     const filename = parsedUrl.pathname.split("/").pop() || "image.jpg";
     const formData = new FormData();
-    formData.append("content", caption || "");
+    if (caption && caption.trim()) formData.append("content", caption.trim());
     formData.append("message_type", "outgoing");
     formData.append("private", "false");
     formData.append("attachments[]", imgBlob, filename);
