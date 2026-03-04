@@ -969,11 +969,43 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
           }
         }
 
+        // Build dynamic SDR hint with REAL slot examples from the data
+        let sdrExamples = "";
+        if (availableSlots.length > 0) {
+          const firstDay = availableSlots[0];
+          const daySlots = firstDay.horarios;
+          const morningSlots = daySlots.filter((s: string) => parseInt(s) < 12);
+          const afternoonSlots = daySlots.filter((s: string) => parseInt(s) >= 12);
+          
+          // Pick 2 intercalated slots for each period from REAL availability
+          const pickIntercalated = (slots: string[]) => {
+            if (slots.length <= 1) return slots;
+            if (slots.length === 2) return slots;
+            // Pick first and one from the middle/end (skip at least 1)
+            const first = slots[0];
+            const secondIdx = Math.min(2, slots.length - 1);
+            return [first, slots[secondIdx]];
+          };
+          
+          if (morningSlots.length >= 2) {
+            const picked = pickIntercalated(morningSlots);
+            sdrExamples += ` Se manhã → ofereça ${picked[0]} e ${picked[1]}.`;
+          } else if (morningSlots.length === 1) {
+            sdrExamples += ` Se manhã → ofereça ${morningSlots[0]}.`;
+          }
+          if (afternoonSlots.length >= 2) {
+            const picked = pickIntercalated(afternoonSlots);
+            sdrExamples += ` Se tarde → ofereça ${picked[0]} e ${picked[1]}.`;
+          } else if (afternoonSlots.length === 1) {
+            sdrExamples += ` Se tarde → ofereça ${afternoonSlots[0]}.`;
+          }
+        }
+
         return JSON.stringify({
           periodo: `${fromDate.toISOString().split("T")[0]} a ${toDate.toISOString().split("T")[0]}`,
           horarios_disponiveis: availableSlots,
           compromissos_existentes: busySlots.length,
-          _hint: "ESTRATÉGIA SDR DE AGENDAMENTO: NÃO liste todos os horários. Pergunte se o cliente prefere manhã ou tarde. Depois ofereça EXATAMENTE 2 horários INTERCALADOS (não consecutivos) do período escolhido. Ex: manhã → 09:00 e 11:00. Tarde → 14:00 e 16:00. Se o cliente não puder, sugira proativamente o próximo dia útil com 2 horários intercalados. Quando o cliente ESCOLHER um horário específico, o dispatcher DEVE chamar consultar_agenda(action='criar') para confirmar — NÃO apenas falar que está confirmado. O agendamento só é real quando a ferramenta criar o evento.",
+          _hint: `ESTRATÉGIA SDR DE AGENDAMENTO: NÃO liste todos os horários. Pergunte se o cliente prefere manhã ou tarde. Depois ofereça EXATAMENTE 2 horários INTERCALADOS (não consecutivos) do período escolhido baseado nos horários REAIS disponíveis acima.${sdrExamples} NUNCA use sempre os mesmos horários — varie conforme a disponibilidade real. Se o cliente não puder, sugira proativamente o próximo dia útil com 2 horários intercalados DIFERENTES dos já oferecidos. Quando o cliente ESCOLHER um horário específico, o dispatcher DEVE chamar consultar_agenda(action='criar') para confirmar — NÃO apenas falar que está confirmado. O agendamento só é real quando a ferramenta criar o evento.`,
         });
       }
 
@@ -2209,8 +2241,9 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
     // AND NOT when the conversation is about trade-in/appraisal (user talking about THEIR car)
     const isAppraisalPhotoContext = imageBase64Parts.length > 0 && !(latestUserText || "").trim();
     const isTradeInContext = /(troca|trocar|negocio|negócio|dar na troca|meu carro|tenho um|avalia|pré-avalia|pre-avalia|quanto vale o meu|dar como entrada|colocar na negociação|aceita|aceitam)/i.test(latestUserText || "");
+    const isSchedulingContext = /(agend|reagend|remar|horario|horário|visita|test.?drive|marcar|remarcar|quero ir|posso ir|vou aí|vou ai|chegar na loja|estacionamento|endere[cç]o|como chego)/i.test(latestUserText || "");
     const hasFipeResult = toolResultsContext.some(ctx => /fipe|tabela_fipe|valor_fipe|preco_medio/i.test(ctx));
-    if (toolResultsContext.length > 0 && !isAppraisalPhotoContext && !isTradeInContext) {
+    if (toolResultsContext.length > 0 && !isAppraisalPhotoContext && !isTradeInContext && !isSchedulingContext) {
       try {
         for (const ctx of toolResultsContext) {
           const parsed = JSON.parse(ctx.replace(/^\[Resultado da ferramenta "[^"]+"\]: /, ""));
@@ -2222,7 +2255,7 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
       } catch (e: any) {
         console.warn("[PostProcess] Could not extract vehicles for photo injection:", e?.message);
       }
-    } else if (!isAppraisalPhotoContext && !isTradeInContext && toolResultsContext.length === 0 && agent?.tenant_id) {
+    } else if (!isAppraisalPhotoContext && !isTradeInContext && !isSchedulingContext && toolResultsContext.length === 0 && agent?.tenant_id) {
       const explicitPhotoRequest = /(foto|fotos|imagem|imagens|manda|envia|nao me enviou|não me enviou|cad[eê] as fotos|me envia)/i.test(latestUserText || "");
       const shouldForcePhotoRecovery = !hasMarkdownImages(finalContent) && (!!photoCommandLine || explicitPhotoRequest);
 
