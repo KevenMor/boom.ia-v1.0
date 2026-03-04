@@ -33,10 +33,22 @@ export function UsageStatsRow({ events, loading }: Props) {
   const todayEvents = events.filter((e) => getLocalDate(e.created_at) === today);
   const yesterdayEvents = events.filter((e) => getLocalDate(e.created_at) === yesterdayStr);
 
-  // Total tokens today
-  const todayTokens = todayEvents.reduce((s, e) => s + (e.total_tokens || 0), 0);
-  const yesterdayTokens = yesterdayEvents.reduce((s, e) => s + (e.total_tokens || 0), 0);
+  // Total tokens today — use total_tokens if available, fallback to prompt + completion
+  const todayTokens = todayEvents.reduce((s, e) => {
+    const t = e.total_tokens || ((e.prompt_tokens || 0) + (e.completion_tokens || 0));
+    return s + t;
+  }, 0);
+  const yesterdayTokens = yesterdayEvents.reduce((s, e) => {
+    const t = e.total_tokens || ((e.prompt_tokens || 0) + (e.completion_tokens || 0));
+    return s + t;
+  }, 0);
   const tokensDiff = yesterdayTokens > 0 ? (((todayTokens - yesterdayTokens) / yesterdayTokens) * 100).toFixed(0) : null;
+
+  // Debug: log a sample event to verify field names
+  if (todayEvents.length > 0) {
+    console.log("[UsageStatsRow] sample event:", JSON.stringify(todayEvents[0]));
+    console.log("[UsageStatsRow] todayEvents count:", todayEvents.length, "todayTokens:", todayTokens);
+  }
 
   // Avg latency today (conversational only)
   const convEvents = todayEvents.filter((e) => e.phase === "conversational" && e.latency_ms);
