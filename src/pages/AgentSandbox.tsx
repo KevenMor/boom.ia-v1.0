@@ -106,7 +106,7 @@ export default function AgentSandbox() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
-  const [showDebug, setShowDebug] = useState(true);
+  const [showDebug, setShowDebug] = useState(false);
   const [pendingDebug, setPendingDebug] = useState<DebugEntry[] | null>(null);
   const [attachments, setAttachments] = useState<AttachmentFile[]>([]);
   const [isRecording, setIsRecording] = useState(false);
@@ -134,6 +134,29 @@ export default function AgentSandbox() {
     loadConversations();
   }, [loadConversations]);
 
+  // Sanitize message content to remove leaked JSON dispatcher data
+  const sanitizeContent = (content: string): string => {
+    if (!content) return content;
+    // Remove lines that start with JSON-like patterns (dispatcher hints)
+    let cleaned = content
+      .replace(/^\s*\{["\s]*total[":].*$/gm, "")
+      .replace(/^\s*\{["\s]*id[":].*$/gm, "")
+      .replace(/^\s*\[?\{["\s]*id[":].*$/gm, "");
+    // If content is entirely JSON (starts with { or [), discard it
+    const trimmed = cleaned.trim();
+    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+      try { JSON.parse(trimmed); return ""; } catch {}
+    }
+    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+      try { JSON.parse(trimmed); return ""; } catch {}
+    }
+    // Remove large JSON blocks embedded in text
+    cleaned = cleaned.replace(/\{"total":\d+.*?"vehicles":\[.*?\]\}/gs, "");
+    cleaned = cleaned.replace(/\{"id":"[a-f0-9-]+".*?\}/g, "");
+    cleaned = cleaned.replace(/\n{3,}/g, "\n\n").trim();
+    return cleaned;
+  };
+
   const loadConversation = async (convId: string) => {
     if (!agentId) return;
     setLoadingHistory(true);
@@ -144,11 +167,13 @@ export default function AgentSandbox() {
       });
       if (error) throw error;
       setMessages(
-        (data as any[]).map((m) => ({
-          role: m.role as "user" | "assistant",
-          content: m.content,
-          timestamp: new Date(m.created_at),
-        }))
+        (data as any[])
+          .map((m) => ({
+            role: m.role as "user" | "assistant",
+            content: m.role === "assistant" ? sanitizeContent(m.content) : m.content,
+            timestamp: new Date(m.created_at),
+          }))
+          .filter((m) => m.content.trim() !== "")
       );
       setConversationId(convId);
       setShowHistory(false);
