@@ -2219,48 +2219,82 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
       } catch (e: any) {
         console.warn("[PostProcess] Could not extract vehicles for photo injection:", e?.message);
       }
-    } else if (!isAppraisalPhotoContext && toolResultsContext.length === 0 && photoCommandLine && agent?.tenant_id) {
-      // Fallback: Gemini asked to send photos, but dispatcher called no tools (NO_TOOLS_NEEDED).
-      // Recover vehicle(s) from inventory so we can append real image URLs.
-      try {
-        const idFromCommand = photoCommandLine.match(/\bid:\s*([0-9a-f-]{36})\b/i)?.[1] || null;
-        const refText = photoCommandLine.replace(/\|\s*id:\s*[0-9a-f-]{36}.*/i, "").trim();
+    } else if (!isAppraisalPhotoContext && toolResultsContext.length === 0 && agent?.tenant_id) {
+      const explicitPhotoRequest = /(foto|fotos|imagem|imagens|manda|envia|nao me enviou|não me enviou|cad[eê] as fotos|me envia)/i.test(latestUserText || "");
+      const shouldForcePhotoRecovery = !hasMarkdownImages(finalContent) && (!!photoCommandLine || explicitPhotoRequest);
 
-        let fallbackQuery = supabase
-          .from("inventory")
-          .select("*")
-          .eq("tenant_id", agent.tenant_id)
-          .eq("status", "available");
+      if (shouldForcePhotoRecovery) {
+        // Fallback: user asked for photos, but dispatcher called no tools (NO_TOOLS_NEEDED).
+        // Recover likely vehicle(s) from inventory using command ID or recent conversation context.
+        try {
+          const idFromCommand = photoCommandLine.match(/\bid:\s*([0-9a-f-]{36})\b/i)?.[1] || null;
+          const contextWindow = [
+            photoCommandLine,
+            latestUserText,
+            ...(sanitizedMessages || []).slice(-8).map((m: any) => String(m?.content || "")),
+          ].join(" ");
+          const normalizedContext = contextWindow
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, " ");
 
-        if (idFromCommand) {
-          fallbackQuery = fallbackQuery.eq("id", idFromCommand).limit(1);
-        } else {
-          const normalizedRef = refText.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-          const tokens = normalizedRef.split(/\s+/).filter((t: string) => t.length >= 3).slice(0, 5);
-          if (tokens.length > 0) {
-            const orParts = tokens.flatMap((t: string) => [
-              `brand.ilike.%${t}%`,
-              `model.ilike.%${t}%`,
-              `version.ilike.%${t}%`,
-              `description.ilike.%${t}%`,
-            ]);
-            fallbackQuery = fallbackQuery.or(orParts.join(","));
+          let fallbackVehicles: any[] = [];
+
+          if (idFromCommand) {
+            const { data, error } = await supabase
+              .from("inventory")
+              .select("*")
+              .eq("tenant_id", agent.tenant_id)
+              .eq("status", "available")
+              .eq("id", idFromCommand)
+              .limit(1);
+            if (error) {
+              console.warn("[PostProcess] Photo fallback by id failed:", error.message);
+            } else {
+              fallbackVehicles = data || [];
+            }
+          } else {
+            const { data: pool, error: poolErr } = await supabase
+              .from("inventory")
+              .select("*")
+              .eq("tenant_id", agent.tenant_id)
+              .eq("status", "available")
+              .limit(120);
+
+            if (poolErr) {
+              console.warn("[PostProcess] Photo fallback inventory pool failed:", poolErr.message);
+            } else if (pool && pool.length > 0) {
+              const scoreVehicle = (v: any) => {
+                let score = 0;
+                const hay = `${v?.brand || ""} ${v?.model || ""} ${v?.version || ""}`
+                  .toLowerCase()
+                  .normalize("NFD")
+                  .replace(/[\u0300-\u036f]/g, " ");
+                const tokens = hay.split(/\s+/).filter((t: string) => t.length >= 3);
+                score += tokens.reduce((acc: number, token: string) => acc + (normalizedContext.includes(token) ? 1 : 0), 0);
+                if (v?.year && normalizedContext.includes(String(v.year))) score += 3;
+                return score;
+              };
+
+              const ranked = [...pool]
+                .map((v: any) => ({ v, score: scoreVehicle(v) }))
+                .filter((x: any) => x.score > 0)
+                .sort((a: any, b: any) => b.score - a.score);
+
+              fallbackVehicles = ranked.slice(0, 3).map((x: any) => x.v);
+            }
           }
-          fallbackQuery = fallbackQuery.limit(3);
-        }
 
-        const { data: fallbackVehicles, error: fallbackErr } = await fallbackQuery;
-        if (fallbackErr) {
-          console.warn("[PostProcess] Photo fallback inventory query failed:", fallbackErr.message);
-        } else if (fallbackVehicles && fallbackVehicles.length > 0) {
-          finalContent = appendMissingVehiclePhotos(finalContent, fallbackVehicles, latestUserText || refText, true);
-          console.log(`[PostProcess] Photo fallback applied from command, vehicles=${fallbackVehicles.length}`);
-          debugTrace.push({ type: "photo_fallback_from_command", vehicles: fallbackVehicles.length, has_id: !!idFromCommand, timestamp: Date.now() });
-        } else {
-          console.warn(`[PostProcess] Photo fallback found no vehicles for command: ${photoCommandLine}`);
+          if (fallbackVehicles.length > 0) {
+            finalContent = appendMissingVehiclePhotos(finalContent, fallbackVehicles, latestUserText || contextWindow, true);
+            console.log(`[PostProcess] Photo fallback applied from context, vehicles=${fallbackVehicles.length}, by_id=${!!idFromCommand}`);
+            debugTrace.push({ type: "photo_fallback_from_context", vehicles: fallbackVehicles.length, has_id: !!idFromCommand, explicit_photo_request: explicitPhotoRequest, timestamp: Date.now() });
+          } else {
+            console.warn(`[PostProcess] Photo fallback found no candidate vehicles (request='${latestUserText}')`);
+          }
+        } catch (e: any) {
+          console.warn("[PostProcess] Photo fallback error:", e?.message);
         }
-      } catch (e: any) {
-        console.warn("[PostProcess] Photo fallback error:", e?.message);
       }
     } else if (isAppraisalPhotoContext && toolResultsContext.length > 0) {
       console.log(`[PostProcess] Skipping photo injection — appraisal context (user sent image, no text)`);
