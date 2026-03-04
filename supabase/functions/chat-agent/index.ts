@@ -2369,6 +2369,15 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
       }
     }
 
+    // Strip ALL bold/italic markdown formatting from final content (client must see plain text only)
+    if (finalContent) {
+      // Remove **bold** → bold, *italic* → italic (but NOT image markdown ![...](url))
+      finalContent = finalContent.replace(/\*\*(.+?)\*\*/g, '$1');  // **bold** → bold
+      finalContent = finalContent.replace(/(?<!!)\*([^*\n]+?)\*/g, '$1');  // *italic* → italic (not ![img])
+      finalContent = finalContent.replace(/__(.+?)__/g, '$1');  // __bold__ → bold
+      finalContent = finalContent.replace(/(?<!_)_([^_\n]+?)_(?!_)/g, '$1');  // _italic_ → italic
+    }
+
     // Save to memory — split into separate messages to match WhatsApp delivery
     const messageParts = splitIntoMessages(finalContent);
     if (convId && finalContent) {
