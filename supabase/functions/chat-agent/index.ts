@@ -1298,9 +1298,15 @@ Deno.serve(async (req) => {
           p_agent_id: agent_id,
           p_channel: "sandbox",
         });
-        if (!error && data) convId = data;
-      } catch (e) {
-        console.warn("Could not create conversation:", e);
+        if (error) {
+          console.error("[CreateConv] RPC error:", error.message, error.details, error.hint, error.code);
+        }
+        if (!error && data) {
+          convId = data;
+          console.log("[CreateConv] OK, convId:", convId);
+        }
+      } catch (e: any) {
+        console.error("[CreateConv] EXCEPTION:", e?.message || e);
       }
     }
 
