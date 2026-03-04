@@ -211,43 +211,45 @@ async function replyToChatwoot(
 
     const { textOnly, imageUrls } = extractImagesFromMarkdown(part);
 
-    // 2) Typing indicator + delay
-    if (textOnly.trim() && humanization.typingDelayMs > 0 && hasTimeBudget()) {
-      await setChatwootTyping(chatwootUrl, apiToken, accountId, conversationId, "on");
-      const typingDelay = applyJitter(humanization.typingDelayMs);
-      console.log(`[Deliver] Typing delay (part ${i + 1}): ${typingDelay}ms`);
-      await safeDelay(typingDelay);
-    }
+    // If this part has images, send them WITHOUT any text (no caption, no separate text message).
+    // The next text-only part will naturally follow as its own message.
+    if (imageUrls.length > 0) {
+      // If there's meaningful text (not just a short intro), send it BEFORE images
+      if (textOnly.trim() && textOnly.trim().length > 60) {
+        if (humanization.typingDelayMs > 0 && hasTimeBudget()) {
+          await setChatwootTyping(chatwootUrl, apiToken, accountId, conversationId, "on");
+          const typingDelay = applyJitter(humanization.typingDelayMs);
+          await safeDelay(typingDelay);
+        }
+        await sendChatwootTextMessage(msgUrl, apiToken, textOnly.trim());
+        if (humanization.typingDelayMs > 0) {
+          setChatwootTyping(chatwootUrl, apiToken, accountId, conversationId, "off").catch(() => {});
+        }
+        // Small gap before images
+        await safeDelay(applyJitter(1500));
+      }
+      // Send images without caption — clean delivery
+      for (let j = 0; j < imageUrls.length; j++) {
+        const ok = await sendChatwootImageMessage(msgUrl, apiToken, imageUrls[j], "");
+        console.log(`[Deliver] Part ${i + 1} image ${j + 1}/${imageUrls.length}: ${ok ? "OK" : "FAIL"}`);
+      }
+    } else if (textOnly.trim()) {
+      // Pure text part
+      // 2) Typing indicator + delay
+      if (humanization.typingDelayMs > 0 && hasTimeBudget()) {
+        await setChatwootTyping(chatwootUrl, apiToken, accountId, conversationId, "on");
+        const typingDelay = applyJitter(humanization.typingDelayMs);
+        console.log(`[Deliver] Typing delay (part ${i + 1}): ${typingDelay}ms`);
+        await safeDelay(typingDelay);
+      }
 
-    // Send text
-    if (textOnly.trim()) {
       const ok = await sendChatwootTextMessage(msgUrl, apiToken, textOnly.trim());
       console.log(`[Deliver] Part ${i + 1} text: ${ok ? "OK" : "FAIL"}`);
       if (humanization.typingDelayMs > 0) {
-        // Fire-and-forget typing off (don't wait for round-trip)
         setChatwootTyping(chatwootUrl, apiToken, accountId, conversationId, "off").catch(() => {});
       }
-    }
-
-    // Send images
-    for (let j = 0; j < imageUrls.length; j++) {
-      const ok = await sendChatwootImageMessage(msgUrl, apiToken, imageUrls[j], "");
-      console.log(`[Deliver] Part ${i + 1} image ${j + 1}/${imageUrls.length}: ${ok ? "OK" : "FAIL"}`);
-    }
-
-    // Photo delivery delay
-    if (imageUrls.length > 0) {
-      const nextPartIndex = i + 1;
-      const hasMoreAfter = nextPartIndex < parts.length && parts.slice(nextPartIndex).some((p) => p?.trim());
-      if (hasMoreAfter && hasTimeBudget()) {
-        const photoDelay = Math.min(5000, Math.max(2000, imageUrls.length * 1500));
-        console.log(`[Deliver] Photo delay: ${photoDelay}ms`);
-        await safeDelay(photoDelay);
-      }
-    }
-
-    // No text/images fallback
-    if (!textOnly.trim() && imageUrls.length === 0) {
+    } else {
+      // Fallback
       await sendChatwootTextMessage(msgUrl, apiToken, part.trim());
     }
 
