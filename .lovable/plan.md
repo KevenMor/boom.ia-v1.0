@@ -1,55 +1,48 @@
 
 
-## Diagnóstico
+## Problem Analysis
 
-Analisando os logs e o código, identifiquei **duas causas** do problema:
+**What happened**: The client asked "Muito bonitas, vocês aceitam meu carro no negócio?" — a generic question asking IF the dealership accepts trade-ins. The client never mentioned what car they own (no brand, model, or year). However, the Dispatcher hallucinated "Chevrolet Cruze Premier 2020" and called `consultar_fipe` with those parameters, causing the agent to present a FIPE valuation for a car the client never mentioned. This destroys credibility.
 
-### Causa 1: Welcome Flow ignora `response_parts`
+**Root cause**: The Dispatcher prompt (in `ppl-motors.ts`) tells it to "extract marca, modelo, ano from conversation (can be in history)" for `consultar_fipe`. When the client says "meu carro no negócio", the keywords "carro" + "negócio" match APPRAISAL/TRADE-IN intent. But since no car details exist in the conversation, the LLM hallucinates them — likely influenced by the "Cruze 2020" examples in the prompt itself.
 
-A interação capturada entrou no **welcome flow** (primeira mensagem do cliente). No `deliver-message`, o welcome flow envia `response_text` (texto completo concatenado) como **uma única mensagem** na linha 336:
-
-```typescript
-// Linha 336 — envia TUDO junto
-await sendChatwootTextMessage(msgUrl, cfg.chatwoot_api_token, greetingText);
-```
-
-O `response_parts` (4 partes geradas pelo chat-agent) é completamente ignorado. Por isso no WhatsApp chegou um bloco único.
-
-### Causa 2: Welcome flow não deveria ter ativado neste caso
-
-O cliente já mencionou um veículo específico ("Audi A3") na primeira mensagem — logo a IA respondeu com detalhes do estoque + apresentação. O welcome flow foi acionado porque `conversationMessages.length === 0`, mas neste caso o conteúdo era muito extenso para ser enviado como "greeting" + vídeo. O prompt de sistema injetado pediu para ser "breve (2-3 frases)" mas a IA ignorou porque detectou intenção de estoque.
+**Missing safeguard**: There is no rule telling the Dispatcher to return `NO_TOOLS_NEEDED` when the client mentions trade-in interest but hasn't provided their vehicle details. The system prompt should explicitly state: if marca+modelo+ano are not available, do NOT call `consultar_fipe`.
 
 ---
 
-## Plano de Correção
+## Plan
 
-### 1. Welcome flow usar `response_parts` em vez de `response_text`
+### 1. Add anti-hallucination rule to Dispatcher prompt (`ppl-motors.ts`)
 
-No `deliver-message/index.ts`, alterar o welcome flow para enviar cada parte separada com delays humanizados, idêntico ao fluxo normal:
+In the `DISPATCHER_PROMPT`, add a critical rule in the "CRITICAL RULES" section:
 
 ```
-// Antes: sendChatwootTextMessage(msgUrl, token, greetingText)  ← tudo junto
-// Depois: iterar response_parts com delay entre cada parte
+RULE 12 (ANTI-HALLUCINATION — HIGHEST PRIORITY):
+- NEVER call consultar_fipe unless the customer has EXPLICITLY stated the marca, modelo AND ano of THEIR vehicle in the conversation history.
+- If the customer asks generically about trade-ins ("aceitam meu carro?", "vocês pegam carro na troca?", "posso dar meu carro?") WITHOUT specifying what car they have → return NO_TOOLS_NEEDED.
+- The conversational model will handle asking the customer for their vehicle details.
+- NEVER guess, infer, or invent vehicle parameters. If the info is not explicitly in the conversation, DO NOT call the tool.
+- The examples in this prompt (Cruze 2020, Civic 2019, HB20 2021) are JUST examples. NEVER use them as default values.
 ```
 
-Concretamente:
-- Usar `response_parts` (se disponível) em vez de `response_text` para o greeting
-- Iterar cada parte com `sendChatwootTextMessage` + delay de 2s entre partes
-- Manter a sequência: **partes do greeting → vídeo → pergunta do nome**
+### 2. Add a "generic trade-in" example to NO_TOOLS_NEEDED section
 
-### 2. Garantir split correto no fluxo normal também
+Add explicit examples to the `NO_TOOLS_NEEDED` list:
 
-Verificar que o `replyToChatwoot` do fluxo normal continua funcionando corretamente (já funciona conforme código — o problema era específico do welcome flow).
+```
+- "vocês aceitam meu carro?" (generic trade-in question, no car details given)
+- "aceitam carro na troca?" (generic)
+- "posso dar meu carro como entrada?" (no marca/modelo/ano specified)
+```
+
+### 3. Update the System Prompt trade-in section (`ppl-motors.ts`)
+
+In section "8) Troca com pré-avaliação", add instruction for when the client asks generically about trade-ins without giving car details — the agent should confirm they accept trade-ins and then ask for the vehicle info (marca, modelo, ano, km, fotos).
+
+This ensures the conversational model (Phase 2) knows how to handle the case where no tool was called because the client didn't provide details.
 
 ---
 
-### Mudanças nos arquivos
-
-| Arquivo | Mudança |
-|---------|---------|
-| `supabase/functions/deliver-message/index.ts` | Welcome flow: iterar `response_parts` com delays em vez de enviar `response_text` como bloco único |
-
-### Resultado esperado
-
-Cada bolha do Chat ao Vivo corresponderá a uma bolha separada no WhatsApp, tanto no welcome flow quanto no fluxo normal.
+### Files to modify
+- `supabase/functions/_shared/prompts/ppl-motors.ts` — Dispatcher prompt + System prompt
 
