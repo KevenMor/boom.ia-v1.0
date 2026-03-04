@@ -224,7 +224,8 @@ async function replyToChatwoot(
       const ok = await sendChatwootTextMessage(msgUrl, apiToken, textOnly.trim());
       console.log(`[Deliver] Part ${i + 1} text: ${ok ? "OK" : "FAIL"}`);
       if (humanization.typingDelayMs > 0) {
-        await setChatwootTyping(chatwootUrl, apiToken, accountId, conversationId, "off");
+        // Fire-and-forget typing off (don't wait for round-trip)
+        setChatwootTyping(chatwootUrl, apiToken, accountId, conversationId, "off").catch(() => {});
       }
     }
 
@@ -250,14 +251,12 @@ async function replyToChatwoot(
       await sendChatwootTextMessage(msgUrl, apiToken, part.trim());
     }
 
-    // 3) Inter-split delay (2s minimum for natural feel) + configurable block gap
+    // 3) Inter-split delay — use configured block_gap_ms only (no hardcoded 2s base)
     const isLastPart = i === parts.length - 1;
     if (!isLastPart && hasTimeBudget()) {
-      const baseDelay = 2000; // 2s fixed between splits
-      const extraGap = humanization.blockGapMs > 0 ? applyJitter(humanization.blockGapMs) : 0;
-      const totalGap = Math.max(baseDelay, extraGap);
-      console.log(`[Deliver] Inter-split delay (after part ${i + 1}): ${totalGap}ms`);
-      await safeDelay(totalGap);
+      const gapMs = humanization.blockGapMs > 0 ? applyJitter(humanization.blockGapMs) : 1000;
+      console.log(`[Deliver] Inter-split delay (after part ${i + 1}): ${gapMs}ms`);
+      await safeDelay(gapMs);
     }
   }
 }
