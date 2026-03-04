@@ -390,8 +390,10 @@ export default function AgentSandbox() {
         )}
         <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-1`}>
           <div
-            className={`relative max-w-[85%] md:max-w-[65%] rounded-lg px-3 py-1.5 shadow-sm ${
-              isUser ? "bg-[#005c4b] text-[#e9edef]" : "bg-[#202c33] text-[#e9edef]"
+            className={`relative max-w-[85%] md:max-w-[65%] rounded-xl px-3 py-1.5 shadow-sm ${
+              isUser
+                ? "bg-primary text-primary-foreground shadow-primary/20"
+                : "bg-card border border-border text-foreground"
             }`}
             style={{
               borderTopLeftRadius: !isUser ? 0 : undefined,
@@ -439,12 +441,12 @@ export default function AgentSandbox() {
             {/* Text content */}
             {text.trim() && (
               !isUser ? (
-                <div className="prose prose-sm prose-invert max-w-none [&>p]:my-0.5 [&>p]:leading-relaxed text-[13px]">
+                <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:my-0.5 [&>p]:leading-relaxed text-[13px]">
                   <ReactMarkdown>{text}</ReactMarkdown>
                 </div>
               ) : isAudioTranscription ? (
                 <div className="flex items-center gap-2">
-                  <Mic className="h-4 w-4 text-[#00a884] shrink-0" />
+                  <Mic className="h-4 w-4 text-primary-foreground/70 shrink-0" />
                   <p className="whitespace-pre-wrap text-[13px] leading-relaxed italic">{text}</p>
                 </div>
               ) : !hasUserMedia ? (
@@ -456,8 +458,8 @@ export default function AgentSandbox() {
 
             {/* Timestamp + read receipts */}
             <div className="flex items-center gap-1 justify-end -mb-0.5 mt-0.5">
-              <span className="text-[10px] text-[#8696a0] leading-none">{time}</span>
-              {isUser && <CheckCheck className="h-3 w-3 text-[#53bdeb]" />}
+              <span className={`text-[10px] leading-none ${isUser ? "text-primary-foreground/60" : "text-muted-foreground"}`}>{time}</span>
+              {isUser && <CheckCheck className="h-3 w-3 text-primary-foreground/70" />}
             </div>
           </div>
         </div>
@@ -469,13 +471,13 @@ export default function AgentSandbox() {
     <div className="flex h-[calc(100vh-4rem)]">
       {/* Sidebar - Conversation History */}
       <div
-        className={`border-r border-border bg-[#111b21] transition-all duration-200 ${
+        className={`border-r border-border bg-card transition-all duration-200 ${
           showHistory ? "w-72" : "w-0 overflow-hidden"
         }`}
       >
-        <div className="flex items-center justify-between p-3 border-b border-[#2a3942]">
-          <span className="text-xs font-medium text-[#8696a0]">Conversas</span>
-          <Button variant="ghost" size="icon" className="h-7 w-7 text-[#8696a0] hover:text-white" onClick={startNewConversation}>
+        <div className="flex items-center justify-between p-3 border-b border-border">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Conversas</span>
+          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={startNewConversation}>
             <Plus className="h-3.5 w-3.5" />
           </Button>
         </div>
@@ -485,23 +487,23 @@ export default function AgentSandbox() {
               <button
                 key={conv.id}
                 onClick={() => loadConversation(conv.id)}
-                className={`w-full text-left px-4 py-3 text-xs transition-colors hover:bg-[#2a3942] border-b border-[#2a3942]/50 ${
-                  conversationId === conv.id ? "bg-[#2a3942]" : ""
+                className={`w-full text-left px-4 py-3 text-xs transition-colors hover:bg-accent border-b border-border/50 ${
+                  conversationId === conv.id ? "bg-accent" : ""
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-[#00a884] flex items-center justify-center text-white text-sm font-medium shrink-0">
+                  <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-medium shrink-0">
                     {agentInitial}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-center">
-                      <span className="text-white text-sm truncate">{agent?.name || "Agent"}</span>
-                      <span className="text-[#8696a0] text-[10px]">
+                      <span className="text-foreground text-sm truncate">{agent?.name || "Agent"}</span>
+                      <span className="text-muted-foreground text-[10px]">
                         {format(new Date(conv.started_at), "HH:mm")}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1 text-[#8696a0]">
-                      <CheckCheck className="h-3 w-3 text-[#53bdeb] shrink-0" />
+                    <div className="flex items-center gap-1 text-muted-foreground">
+                      <CheckCheck className="h-3 w-3 text-primary shrink-0" />
                       <span className="truncate">{conv.message_count} mensagens</span>
                     </div>
                   </div>
@@ -513,51 +515,55 @@ export default function AgentSandbox() {
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex flex-1 flex-col bg-[#0b141a]">
-        {/* WhatsApp-style Header */}
-        <div className="flex items-center gap-3 bg-[#202c33] px-4 py-2">
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-[#8696a0] hover:text-white md:hidden" onClick={() => navigate("/agents")}>
+      <div className="flex flex-1 flex-col bg-background">
+        {/* Header */}
+        <div className="flex items-center gap-3 bg-card border-b border-border px-4 py-2.5">
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground md:hidden" onClick={() => navigate("/agents")}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className={`h-8 w-8 text-[#8696a0] hover:text-white ${showHistory ? "text-[#00a884]" : ""}`}
+            className={`h-8 w-8 ${showHistory ? "text-primary" : "text-muted-foreground"} hover:text-foreground`}
             onClick={() => setShowHistory(!showHistory)}
           >
             <Clock className="h-4 w-4" />
           </Button>
 
-          <div className="h-10 w-10 rounded-full bg-[#00a884] flex items-center justify-center text-white text-lg font-medium cursor-pointer">
+          <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-primary-foreground text-lg font-semibold shadow-md shadow-primary/20">
             {agentInitial}
           </div>
 
           <div className="flex-1 min-w-0">
-            <h2 className="text-[#e9edef] text-base font-normal">{agent?.name ?? "Agent"}</h2>
-            <p className="text-[#8696a0] text-xs">
-              {isLoading ? "digitando..." : "online"}
+            <h2 className="text-foreground text-base font-medium">{agent?.name ?? "Agent"}</h2>
+            <p className="text-xs">
+              {isLoading ? (
+                <span className="text-primary animate-pulse">digitando...</span>
+              ) : (
+                <span className="text-emerald-500 dark:text-emerald-400">● online</span>
+              )}
             </p>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5">
             <Button
               variant="ghost"
               size="icon"
-              className={`h-9 w-9 ${showDebug ? "text-[#00a884]" : "text-[#8696a0]"} hover:text-white`}
+              className={`h-9 w-9 ${showDebug ? "text-primary bg-primary/10" : "text-muted-foreground"} hover:text-foreground`}
               onClick={() => setShowDebug(!showDebug)}
               title="Debug mode"
             >
               <Bug className="h-5 w-5" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-9 w-9 text-[#8696a0] hover:text-white" onClick={startNewConversation}>
+            <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground" onClick={startNewConversation}>
               <Plus className="h-5 w-5" />
             </Button>
             {messages.length > 0 && (
-              <Button variant="ghost" size="icon" className="h-9 w-9 text-[#8696a0] hover:text-white" onClick={() => setMessages([])}>
+              <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground hover:text-destructive" onClick={() => setMessages([])}>
                 <Trash2 className="h-5 w-5" />
               </Button>
             )}
-            <Button variant="ghost" size="icon" className="h-9 w-9 text-[#8696a0] hover:text-white" onClick={() => navigate("/agents")}>
+            <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground" onClick={() => navigate("/agents")}>
               <ArrowLeft className="h-5 w-5" />
             </Button>
           </div>
@@ -567,36 +573,38 @@ export default function AgentSandbox() {
         <div
           className="flex-1 overflow-y-auto px-4 md:px-16 lg:px-24"
           style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cg fill-opacity='0.03'%3E%3Cpath fill='%23ffffff' d='M20 20h10v10H20zM50 10h10v10H50zM80 30h10v10H80zM110 20h10v10h-10zM140 10h10v10h-10zM170 30h10v10h-10zM30 60h10v10H30zM60 50h10v10H60zM90 70h10v10H90zM120 60h10v10h-10zM150 50h10v10h-10zM180 70h10v10h-10zM10 100h10v10H10zM40 90h10v10H40zM70 110h10v10H70zM100 100h10v10h-10zM130 90h10v10h-10zM160 110h10v10h-10zM20 140h10v10H20zM50 130h10v10H50zM80 150h10v10H80zM110 140h10v10h-10zM140 130h10v10h-10zM170 150h10v10h-10zM30 180h10v10H30zM60 170h10v10H60zM90 190h10v10H90zM120 180h10v10h-10zM150 170h10v10h-10zM180 190h10v10h-10z'/%3E%3C/g%3E%3C/svg%3E")`,
-            backgroundColor: "#0b141a",
+            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%239C92AC' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
           }}
         >
           {loadingHistory && (
             <div className="flex items-center justify-center py-20">
-              <Loader2 className="h-6 w-6 animate-spin text-[#8696a0]" />
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
             </div>
           )}
 
           {!loadingHistory && messages.length === 0 && (
             <div className="flex h-full items-center justify-center py-20">
-              <div className="bg-[#182229] rounded-lg px-4 py-2 text-center max-w-sm">
-                <p className="text-[#8696a0] text-xs">
-                  🔒 As mensagens neste sandbox são para teste. Envie uma mensagem para começar.
+              <div className="bg-card/80 backdrop-blur-sm border border-border rounded-xl px-6 py-4 text-center max-w-sm shadow-lg">
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
+                  <Send className="h-5 w-5 text-primary" />
+                </div>
+                <p className="text-muted-foreground text-sm">
+                  Sandbox de teste. Envie uma mensagem para começar a conversa.
                 </p>
               </div>
             </div>
           )}
 
-          <div className="space-y-1 py-4">
+          <div className="space-y-1.5 py-4">
             {messages.map((msg, i) => renderBubble(msg, i))}
 
             {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
               <div className="flex justify-start mb-1">
-                <div className="bg-[#202c33] rounded-lg px-4 py-2.5 shadow-sm" style={{ borderTopLeftRadius: 0 }}>
-                  <div className="flex items-center gap-1">
-                    <span className="w-2 h-2 bg-[#8696a0] rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <span className="w-2 h-2 bg-[#8696a0] rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <span className="w-2 h-2 bg-[#8696a0] rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                <div className="bg-card border border-border rounded-xl px-4 py-3 shadow-sm" style={{ borderTopLeftRadius: 0 }}>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="w-2 h-2 bg-primary/70 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
                   </div>
                 </div>
               </div>
@@ -608,8 +616,8 @@ export default function AgentSandbox() {
         {/* Attachment Preview */}
         <AttachmentPreview attachments={attachments} onRemove={removeAttachment} />
 
-        {/* WhatsApp-style Input */}
-        <div className="bg-[#202c33] px-3 py-2 flex items-end gap-2">
+        {/* Input Bar */}
+        <div className="bg-card border-t border-border px-3 py-2.5 flex items-end gap-2">
           {isRecording ? (
             <div className="flex-1">
               <AudioRecorder
@@ -634,7 +642,7 @@ export default function AgentSandbox() {
               {/* Attachment button */}
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="h-10 w-10 rounded-full flex items-center justify-center text-[#8696a0] hover:text-white transition-colors shrink-0"
+                className="h-10 w-10 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors shrink-0"
                 disabled={isLoading}
               >
                 <Paperclip className="h-5 w-5" />
@@ -656,14 +664,14 @@ export default function AgentSandbox() {
                   };
                   input.click();
                 }}
-                className="h-10 w-10 rounded-full flex items-center justify-center text-[#8696a0] hover:text-white transition-colors shrink-0 md:hidden"
+                className="h-10 w-10 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors shrink-0 md:hidden"
                 disabled={isLoading}
               >
                 <Camera className="h-5 w-5" />
               </button>
 
               {/* Text input */}
-              <div className="flex-1 flex items-end bg-[#2a3942] rounded-3xl px-4 py-1">
+              <div className="flex-1 flex items-end bg-muted/50 border border-border rounded-2xl px-4 py-1 focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 transition-all">
                 <input
                   ref={inputRef}
                   type="text"
@@ -671,7 +679,7 @@ export default function AgentSandbox() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  className="flex-1 bg-transparent text-[#e9edef] text-sm py-2 outline-none placeholder:text-[#8696a0]"
+                  className="flex-1 bg-transparent text-foreground text-sm py-2 outline-none placeholder:text-muted-foreground"
                   disabled={isLoading}
                 />
               </div>
@@ -681,7 +689,7 @@ export default function AgentSandbox() {
                 <button
                   onClick={send}
                   disabled={isLoading}
-                  className="h-10 w-10 rounded-full bg-[#00a884] flex items-center justify-center text-white hover:bg-[#06cf9c] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                  className="h-10 w-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 shadow-md shadow-primary/25"
                 >
                   {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
                 </button>
@@ -689,7 +697,7 @@ export default function AgentSandbox() {
                 <button
                   onClick={() => setIsRecording(true)}
                   disabled={isLoading}
-                  className="h-10 w-10 rounded-full flex items-center justify-center text-[#8696a0] hover:text-white transition-colors shrink-0"
+                  className="h-10 w-10 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors shrink-0"
                 >
                   <Mic className="h-5 w-5" />
                 </button>
