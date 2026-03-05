@@ -1396,13 +1396,15 @@ Quando o cliente ESCOLHER, o dispatcher DEVE chamar consultar_agenda(action='cri
         const eventType = args.event_type || "custom";
         let message = args.message || execCfg.template || "Notificação do sistema";
 
+        console.log(`[SendNotification] Config: channel=${channel}, execCfg keys=${Object.keys(execCfg).join(",")}`);
+
         // Template variable replacement
         if (args.cliente) message = message.replace(/\{\{cliente\}\}/g, args.cliente);
         if (args.horario) message = message.replace(/\{\{horario\}\}/g, args.horario);
         if (args.motivo) message = message.replace(/\{\{motivo\}\}/g, args.motivo);
 
         if (channel === "chatwoot_message") {
-          // Send as a private note in the current Chatwoot conversation
+          // Load agent's Chatwoot config
           const { data: agCfgRow2 } = await supabase
             .from("agents")
             .select("config")
@@ -1413,7 +1415,18 @@ Quando o cliente ESCOLHER, o dispatcher DEVE chamar consultar_agenda(action='cri
           const cwToken2 = cfg2.chatwoot_api_token;
           const cwAccountId2 = cfg2.chatwoot_account_id;
 
-          if (cwUrl2 && cwToken2 && cwAccountId2) {
+          if (!cwUrl2 || !cwToken2 || !cwAccountId2) {
+            console.error(`[SendNotification] Missing Chatwoot config: url=${!!cwUrl2}, token=${!!cwToken2}, accountId=${!!cwAccountId2}`);
+            return JSON.stringify({ error: "Chatwoot não configurado no agente", status: "falha" });
+          }
+
+          // Determine target conversation: prefer group conversation_id from tool config, fallback to current conversation
+          const targetCwConvId = execCfg.conversation_id || execCfg.chatwoot_conversation_id || execCfg.group_conversation_id;
+
+          let cwCid: string | null = targetCwConvId || null;
+
+          if (!cwCid) {
+            // Fallback: use the most recent Chatwoot conversation for this agent
             const { data: convRows2 } = await supabase
               .from("conversations")
               .select("chatwoot_conversation_id")
@@ -1421,22 +1434,34 @@ Quando o cliente ESCOLHER, o dispatcher DEVE chamar consultar_agenda(action='cri
               .not("chatwoot_conversation_id", "is", null)
               .order("started_at", { ascending: false })
               .limit(1);
-
-            const cwCid = convRows2?.[0]?.chatwoot_conversation_id;
-            if (cwCid) {
-              const noteUrl = `${cwUrl2.replace(/\/+$/, "")}/api/v1/accounts/${cwAccountId2}/conversations/${cwCid}/messages`;
-              const noteResp = await fetch(noteUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", api_access_token: cwToken2 },
-                body: JSON.stringify({
-                  content: `📋 [${eventType.toUpperCase()}] ${message}`,
-                  message_type: "activity",
-                  private: true,
-                }),
-              });
-              console.log(`[SendNotification] Chatwoot note sent: ${noteResp.status}`);
-            }
+            cwCid = convRows2?.[0]?.chatwoot_conversation_id || null;
           }
+
+          if (!cwCid) {
+            console.error(`[SendNotification] No target Chatwoot conversation found`);
+            return JSON.stringify({ error: "Nenhuma conversa Chatwoot encontrada", status: "falha" });
+          }
+
+          console.log(`[SendNotification] Sending to Chatwoot conv ${cwCid} (from config: ${!!targetCwConvId})`);
+
+          const noteUrl = `${cwUrl2.replace(/\/+$/, "")}/api/v1/accounts/${cwAccountId2}/conversations/${cwCid}/messages`;
+          const noteResp = await fetch(noteUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", api_access_token: cwToken2 },
+            body: JSON.stringify({
+              content: `📋 [${eventType.toUpperCase()}] ${message}`,
+              message_type: "outgoing",
+              private: false,
+            }),
+          });
+
+          if (!noteResp.ok) {
+            const errBody = await noteResp.text().catch(() => "");
+            console.error(`[SendNotification] Chatwoot API error: ${noteResp.status} ${errBody}`);
+            return JSON.stringify({ error: `Chatwoot error: ${noteResp.status}`, status: "falha" });
+          }
+
+          console.log(`[SendNotification] Chatwoot message sent: ${noteResp.status} to conv ${cwCid}`);
         } else if (channel === "webhook" && execCfg.webhook_url) {
           // Fire a webhook
           const webhookResp = await fetch(execCfg.webhook_url, {
@@ -1445,6 +1470,13 @@ Quando o cliente ESCOLHER, o dispatcher DEVE chamar consultar_agenda(action='cri
             body: JSON.stringify({ event_type: eventType, message, agent_id: agentId, timestamp: new Date().toISOString() }),
           });
           console.log(`[SendNotification] Webhook fired: ${webhookResp.status}`);
+          if (!webhookResp.ok) {
+            const errBody = await webhookResp.text().catch(() => "");
+            console.error(`[SendNotification] Webhook error: ${webhookResp.status} ${errBody}`);
+          }
+        } else {
+          console.error(`[SendNotification] Unknown channel '${channel}' or missing config`);
+          return JSON.stringify({ error: `Canal desconhecido: ${channel}`, status: "falha" });
         }
 
         return JSON.stringify({
@@ -1513,18 +1545,21 @@ const BUILTIN_SCHEMAS: Record<string, { description: string; parameters: any }> 
     },
   },
   calendar_query: {
-    description: "Consulta horários disponíveis na agenda e realiza agendamentos. Use 'check_availability' para ver horários livres e 'criar' para agendar.",
+    description: "Consulta horários disponíveis na agenda e realiza agendamentos. Use 'check_availability' para ver horários livres e 'criar' para agendar. Ao criar, SEMPRE inclua telefone_cliente e veiculo_interesse quando disponíveis na conversa.",
     parameters: {
       type: "object",
       properties: {
-        action: { type: "string", description: "Ação: 'check_availability' para consultar horários, 'criar' ou 'agendar' para criar agendamento" },
+        action: { type: "string", description: "Ação: 'check_availability' para consultar horários, 'criar' ou 'agendar' para criar agendamento, 'cancelar' para cancelar" },
         date: { type: "string", description: "Data inicial para busca (formato YYYY-MM-DD). Padrão: hoje" },
         days_ahead: { type: "integer", description: "Quantos dias à frente consultar (padrão: 7)" },
-        title: { type: "string", description: "Título do agendamento (ex: 'Visita - João Silva')" },
+        title: { type: "string", description: "Título do agendamento no formato 'Nome — Veículo' (ex: 'João Silva — Cruze 2020')" },
         description: { type: "string", description: "Descrição/observações do agendamento" },
         start_at: { type: "string", description: "Data e hora do agendamento (formato ISO 8601, ex: '2025-03-15T10:00:00')" },
         duration_minutes: { type: "integer", description: "Duração em minutos (padrão: 60)" },
         calendar_id: { type: "string", description: "ID da agenda específica (opcional, usa a primeira agenda ativa se não informado)" },
+        telefone_cliente: { type: "string", description: "Telefone do cliente (extraído do external_user_id ou conversa)" },
+        veiculo_interesse: { type: "string", description: "Veículo de interesse do cliente (ex: 'Chevrolet Cruze 2020')" },
+        client_name: { type: "string", description: "Nome do cliente para cancelamentos" },
       },
       required: ["action"],
     },
@@ -2305,8 +2340,13 @@ Deno.serve(async (req) => {
         const tomorrowWeekday = tomorrowDate.toLocaleDateString("pt-BR", { weekday: "long", timeZone: "America/Sao_Paulo" });
         const dateContext = `\n\n═══════════════════════════════════════════════\nCONTEXTO TEMPORAL (OBRIGATÓRIO — USE ESTAS DATAS)\n═══════════════════════════════════════════════\nAgora: ${nowBrasilia} (Horário de Brasília)\nHoje: ${todayISO}\nAmanhã: ${tomorrowISO} (${tomorrowWeekday})\n\nQUANDO o cliente disser "amanhã", use a data ${tomorrowISO}.\nQUANDO o cliente disser "hoje", use a data ${todayISO}.\nSEMPRE passe a data no formato YYYY-MM-DD no campo "date" da ferramenta.\nNUNCA invente datas. Use SOMENTE as datas calculadas acima.`;
 
+        // Inject client phone into dispatcher so it can populate telefone_cliente
+        const phoneContext = external_user_id
+          ? `\n\n[TELEFONE DO CLIENTE] ${external_user_id} — use como telefone_cliente ao agendar.`
+          : "";
+
         const dispatcherMessages = [
-          { role: "system", content: dispatcherSystemPrompt + dateContext },
+          { role: "system", content: dispatcherSystemPrompt + dateContext + phoneContext },
           ...sanitizedMessages,
         ];
 
