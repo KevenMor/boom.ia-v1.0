@@ -88,28 +88,60 @@ async function sendChatwootImageMessage(
   imageUrl: string,
   caption?: string
 ): Promise<boolean> {
+  return sendChatwootImagesBatch(url, apiToken, [imageUrl], caption);
+}
+
+// Batch image sender: downloads all images in parallel, sends in a SINGLE POST with multiple attachments[]
+async function sendChatwootImagesBatch(
+  url: string,
+  apiToken: string,
+  imageUrls: string[],
+  caption?: string
+): Promise<boolean> {
+  if (!imageUrls.length) return true;
   try {
-    const parsedUrl = new URL(imageUrl);
-    const imgResp = await fetch(imageUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Referer": `${parsedUrl.protocol}//${parsedUrl.host}/`,
-        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-      },
-    });
-    if (!imgResp.ok) {
-      console.error(`[Deliver] Image download failed ${imgResp.status}: ${imageUrl}`);
-      return await sendChatwootTextMessage(url, apiToken, imageUrl);
+    // Download all images in parallel
+    const downloads = await Promise.allSettled(
+      imageUrls.map(async (imageUrl) => {
+        const parsedUrl = new URL(imageUrl);
+        const imgResp = await fetch(imageUrl, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": `${parsedUrl.protocol}//${parsedUrl.host}/`,
+            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+          },
+        });
+        if (!imgResp.ok) {
+          console.error(`[Deliver] Image download failed ${imgResp.status}: ${imageUrl}`);
+          return null;
+        }
+        const blob = await imgResp.blob();
+        const filename = parsedUrl.pathname.split("/").pop() || "image.jpg";
+        return { blob, filename };
+      })
+    );
+
+    const successfulDownloads = downloads
+      .filter((d): d is PromiseFulfilledResult<{ blob: Blob; filename: string } | null> => d.status === "fulfilled")
+      .map(d => d.value)
+      .filter((d): d is { blob: Blob; filename: string } => d !== null);
+
+    if (successfulDownloads.length === 0) {
+      console.error("[Deliver] All image downloads failed, sending URLs as text fallback");
+      for (const u of imageUrls) await sendChatwootTextMessage(url, apiToken, u);
+      return false;
     }
 
-    const imgBlob = await imgResp.blob();
-    const filename = parsedUrl.pathname.split("/").pop() || "image.jpg";
+    // Build single FormData with ALL images
     const formData = new FormData();
     if (caption && caption.trim()) formData.append("content", caption.trim());
     formData.append("message_type", "outgoing");
     formData.append("private", "false");
-    formData.append("attachments[]", imgBlob, filename);
+    for (const { blob, filename } of successfulDownloads) {
+      formData.append("attachments[]", blob, filename);
+    }
 
+    console.log(`[Deliver] Sending ${successfulDownloads.length} image(s) in single batch POST`);
     const resp = await fetch(url, {
       method: "POST",
       headers: { api_access_token: apiToken },
@@ -117,13 +149,15 @@ async function sendChatwootImageMessage(
     });
 
     if (!resp.ok) {
-      console.error(`[Deliver] Image msg error ${resp.status}:`, await resp.text());
+      console.error(`[Deliver] Batch image msg error ${resp.status}:`, await resp.text());
       return false;
     }
     return true;
   } catch (e) {
-    console.error(`[Deliver] Image msg error:`, e);
-    try { await sendChatwootTextMessage(url, apiToken, imageUrl); } catch { /* ignore */ }
+    console.error(`[Deliver] Batch image msg error:`, e);
+    for (const u of imageUrls) {
+      try { await sendChatwootTextMessage(url, apiToken, u); } catch { /* ignore */ }
+    }
     return false;
   }
 }
@@ -228,11 +262,9 @@ async function replyToChatwoot(
         // Small gap before images
         await safeDelay(applyJitter(1500));
       }
-      // Send images without caption — clean delivery
-      for (let j = 0; j < imageUrls.length; j++) {
-        const ok = await sendChatwootImageMessage(msgUrl, apiToken, imageUrls[j], "");
-        console.log(`[Deliver] Part ${i + 1} image ${j + 1}/${imageUrls.length}: ${ok ? "OK" : "FAIL"}`);
-      }
+      // Send ALL images in a single batch POST (parallel download + single request)
+      const ok = await sendChatwootImagesBatch(msgUrl, apiToken, imageUrls, "");
+      console.log(`[Deliver] Part ${i + 1} batch ${imageUrls.length} image(s): ${ok ? "OK" : "FAIL"}`);
     } else if (textOnly.trim()) {
       // Pure text part
       // 2) Typing indicator + delay
