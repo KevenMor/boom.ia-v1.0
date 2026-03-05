@@ -308,25 +308,19 @@ Deno.serve(async (req) => {
       }
 
       case "chatwoot_assign": {
-        // Requires agent_id or conversation_id in args
-        const agentId = args?.agent_id;
-        const conversationId = args?.conversation_id; // chatwoot_conversation_id (numeric)
+        const conversationId = args?.conversation_id; // chatwoot conversation id (numeric)
         const reason = args?.reason || "escalation";
 
-        if (!agentId) {
-          result = { error: "agent_id é obrigatório para testar chatwoot_assign" };
-          break;
-        }
-
-        // Read config with rules support
+        // Read assignee/team from args first, then fallback to execution_config
         const execCfg = (tool.execution_config || {}) as Record<string, any>;
         const rules = Array.isArray(execCfg.rules) ? execCfg.rules : [];
 
-        let assigneeId = execCfg.assignee_id;
-        let teamId = execCfg.team_id;
+        let assigneeId = args?.assignee_id ?? execCfg.assignee_id;
+        let teamId = args?.team_id ?? execCfg.team_id;
         let matchedRule = "";
 
-        if (rules.length > 0) {
+        // Rule matching (only if no explicit assignee_id in args)
+        if (!args?.assignee_id && rules.length > 0) {
           const reasonNorm = reason.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
           let bestScore = 0;
           for (const rule of rules) {
@@ -341,7 +335,22 @@ Deno.serve(async (req) => {
               matchedRule = rule.label;
             }
           }
-          console.log(`[TestTool][ChatwootAssign] Matched rule: "${matchedRule}" (score ${bestScore}) for reason: "${reason}"`);
+        }
+
+        // Find the agent linked to this tool via agent_tools
+        let agentId = args?.agent_id;
+        if (!agentId) {
+          const { data: linkRows } = await supabase
+            .from("agent_tools")
+            .select("agent_id")
+            .eq("tool_id", tool.id)
+            .limit(1);
+          agentId = linkRows?.[0]?.agent_id;
+        }
+
+        if (!agentId) {
+          result = { error: "Nenhum agente vinculado a esta tool. Vincule a tool a um agente com Chatwoot configurado." };
+          break;
         }
 
         // Load agent's Chatwoot config
@@ -356,14 +365,13 @@ Deno.serve(async (req) => {
         const cwAccountId = agCfg.chatwoot_account_id;
 
         if (!cwUrl || !cwToken || !cwAccountId) {
-          result = { error: "Chatwoot não configurado neste agente", agent_id: agentId };
+          result = { error: "Chatwoot não configurado neste agente", agent_id: agentId, config_found: Object.keys(agCfg) };
           break;
         }
 
         // Determine conversation ID
         let cwConvId = conversationId;
         if (!cwConvId) {
-          // Find the most recent chatwoot conversation for this agent
           const { data: cwConvRows } = await supabase
             .from("conversations")
             .select("chatwoot_conversation_id")
@@ -375,7 +383,7 @@ Deno.serve(async (req) => {
         }
 
         if (!cwConvId) {
-          result = { error: "Nenhuma conversa Chatwoot encontrada", agent_id: agentId };
+          result = { error: "conversation_id é obrigatório" };
           break;
         }
 
@@ -385,7 +393,7 @@ Deno.serve(async (req) => {
         if (assigneeId) assignBody.assignee_id = Number(assigneeId);
         if (teamId) assignBody.team_id = Number(teamId);
 
-        console.log(`[TestTool][ChatwootAssign] Conv ${cwConvId}, reason: ${reason}, body:`, assignBody);
+        console.log(`[TestTool][ChatwootAssign] URL: ${assignUrl}, body:`, assignBody);
         const assignResp = await fetch(assignUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json", api_access_token: cwToken },
@@ -394,8 +402,7 @@ Deno.serve(async (req) => {
 
         const assignRespText = await assignResp.text();
         if (!assignResp.ok) {
-          console.warn(`[TestTool][ChatwootAssign] Failed: ${assignResp.status}`, assignRespText);
-          result = { error: `Falha na atribuição: ${assignResp.status}`, detail: assignRespText };
+          result = { error: `Falha na atribuição: ${assignResp.status}`, detail: assignRespText, url: assignUrl };
         } else {
           let parsedResp: any;
           try { parsedResp = JSON.parse(assignRespText); } catch { parsedResp = assignRespText; }
@@ -405,7 +412,6 @@ Deno.serve(async (req) => {
             assignee_id: assigneeId || null,
             team_id: teamId || null,
             matched_rule: matchedRule || null,
-            reason,
             chatwoot_response: parsedResp,
           };
         }
