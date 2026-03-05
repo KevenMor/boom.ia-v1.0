@@ -326,10 +326,12 @@ BOOKING CONFIRMATION DETECTION (CRITICAL — action="criar"):
 CANCELLATION / RESCHEDULING DETECTION (CRITICAL):
 - Keywords: "cancelar", "desmarcar", "remarcar", "reagendar", "nao vou poder", "nao consigo ir", "tive um imprevisto", "preciso mudar", "trocar o horario", "mudar a data", "adiar"
 - If the patient wants to CANCEL or RESCHEDULE an existing appointment:
-  → Call: consultar_agenda(action="cancelar", start_at="YYYY-MM-DDTHH:00:00") or consultar_agenda(action="cancelar", titulo="[patient name]")
-  → Extract the appointment date/time from conversation history (the previously confirmed booking).
+  → ALWAYS extract the EXACT date+time of the existing booking from the assistant's previous messages in the conversation history.
+  → Look for confirmed bookings like "confirmado para dia 05/03, as 14:00" and extract start_at="2026-03-05T14:00:00".
+  → Call: consultar_agenda(action="cancelar", start_at="[exact booked time]", client_name="[patient name]")
+  → NEVER pass only the title/name without start_at — this can match wrong events!
 - If the patient wants to RESCHEDULE (cancel + rebook):
-  → First call: consultar_agenda(action="cancelar", ...) to cancel the old one.
+  → First call: consultar_agenda(action="cancelar", start_at="[exact booked time]", client_name="[name]") to cancel the old one.
   → The conversational model will then handle asking for the new time and calling action="criar".
 - CRITICAL: "remarcar" = cancelar + novo agendamento. ALWAYS cancel first.
 
