@@ -1862,14 +1862,19 @@ Deno.serve(async (req) => {
     // Phase 1: Tool Dispatcher (cheap LLM good at tool calling) decides which tools to use
     // Phase 2: Conversational LLM (agent's configured model) generates response with tool data as context
 
-    // Sanitize history: replace photo URLs with markers so LLM doesn't reproduce old photos
-    const sanitizedMessages = messages.map((m: any) => {
-      if (m.role === "assistant" && m.content && /!\[.*?\]\(https?:\/\//.test(m.content)) {
-        const cleaned = m.content.replace(/!\[.*?\]\((https?:\/\/[^\s)]+)\)/gi, "[foto já enviada anteriormente]");
-        return { ...m, content: cleaned };
-      }
-      return m;
-    });
+    // Sanitize history: 
+    // 1) Remove "tool" role messages from history — they cause 400 errors when sent without
+    //    their preceding assistant message with tool_calls (which is not persisted).
+    // 2) Replace photo URLs with markers so LLM doesn't reproduce old photos.
+    const sanitizedMessages = messages
+      .filter((m: any) => m.role !== "tool")
+      .map((m: any) => {
+        if (m.role === "assistant" && m.content && /!\[.*?\]\(https?:\/\//.test(m.content)) {
+          const cleaned = m.content.replace(/!\[.*?\]\((https?:\/\/[^\s)]+)\)/gi, "[foto já enviada anteriormente]");
+          return { ...m, content: cleaned };
+        }
+        return m;
+      });
 
     // Inject client phone context if available (for calendar booking)
     const clientPhoneContext = external_user_id
