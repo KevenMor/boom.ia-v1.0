@@ -218,9 +218,29 @@ export function EditToolDialog({ tool, open, onOpenChange }: Props) {
                 </Select>
               </div>
               <div className="space-y-2">
+                <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Conversation ID (grupo destino)</Label>
+                <Input
+                  type="number"
+                  placeholder="Ex: 123"
+                  defaultValue={(tool?.execution_config as any)?.conversation_id ?? ""}
+                  className="h-9 bg-background font-mono text-sm"
+                  onChange={(e) => {
+                    try {
+                      const cur = JSON.parse((document.querySelector('[name="execution_json"]') as HTMLTextAreaElement)?.value || "{}");
+                      cur.conversation_id = e.target.value ? Number(e.target.value) : null;
+                      setValue("execution_json", JSON.stringify(cur, null, 2));
+                    } catch {
+                      setValue("execution_json", JSON.stringify({ conversation_id: e.target.value ? Number(e.target.value) : null }, null, 2));
+                    }
+                  }}
+                />
+                <p className="text-[10px] text-muted-foreground">ID da conversa/grupo no Chatwoot onde as notificações serão enviadas</p>
+              </div>
+              <div className="space-y-2">
                 <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Template</Label>
                 <Input
                   defaultValue={(tool?.execution_config as any)?.template ?? ""}
+                  placeholder="Novo agendamento: {{cliente}} às {{horario}}"
                   className="h-9 bg-background text-sm"
                   onChange={(e) => {
                     try {
@@ -232,6 +252,7 @@ export function EditToolDialog({ tool, open, onOpenChange }: Props) {
                     }
                   }}
                 />
+                <p className="text-[10px] text-muted-foreground">Variáveis: {"{{cliente}}"}, {"{{horario}}"}, {"{{motivo}}"}</p>
               </div>
             </div>
           )}
