@@ -875,6 +875,135 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
       }
 
       case "calendar_query": {
+        // --- Helper: post-calendar-action (notify + assign) ---
+        async function postCalendarAction(
+          supabaseClient: any, agentIdLocal: string, ctx: { convId?: string; externalUserId?: string } | undefined,
+          eventType: "agendamento" | "cancelamento" | "remarcacao",
+          eventSummary: string
+        ) {
+          try {
+            const { data: agentToolRows } = await supabaseClient
+              .from("agent_tools")
+              .select("tool_id, tools(id, tool_type, execution_config)")
+              .eq("agent_id", agentIdLocal);
+
+            const assignToolRow = agentToolRows?.find((at: any) => at.tools?.tool_type === "chatwoot_assign");
+            const notifyToolRow = agentToolRows?.find((at: any) => at.tools?.tool_type === "send_notification");
+
+            const { data: agCfg } = await supabaseClient.from("agents").select("config").eq("id", agentIdLocal).single();
+            const c = (agCfg?.config || {}) as Record<string, any>;
+            const cwUrl = c.chatwoot_url;
+            const cwToken = c.chatwoot_api_token;
+            const cwAccId = c.chatwoot_account_id;
+
+            if (!cwUrl || !cwToken || !cwAccId) {
+              console.warn(`[Calendar→Post] Missing Chatwoot config`);
+              return;
+            }
+
+            // --- Find Chatwoot conversation ID (4-level lookup) ---
+            let cwConvId: string | null = null;
+            const cId = ctx?.convId;
+            const extId = ctx?.externalUserId;
+            console.log(`[Calendar→Post] Lookup CW conv: convId=${cId}, extUser=${extId}`);
+
+            if (cId) {
+              const { data: ex } = await supabaseClient.from("conversations").select("chatwoot_conversation_id").eq("id", cId).not("chatwoot_conversation_id", "is", null).maybeSingle();
+              cwConvId = ex?.chatwoot_conversation_id || null;
+              if (cwConvId) console.log(`[Calendar→Post] Found CW conv ${cwConvId} via convId`);
+            }
+            if (!cwConvId && extId) {
+              const { data: byUser } = await supabaseClient.from("conversations").select("chatwoot_conversation_id").eq("agent_id", agentIdLocal).eq("external_user_id", extId).not("chatwoot_conversation_id", "is", null).order("started_at", { ascending: false }).limit(1);
+              cwConvId = byUser?.[0]?.chatwoot_conversation_id || null;
+              if (cwConvId) console.log(`[Calendar→Post] Found CW conv ${cwConvId} via ext user`);
+            }
+            if (!cwConvId) {
+              const { data: rows } = await supabaseClient.from("conversations").select("chatwoot_conversation_id, id, external_user_id").eq("agent_id", agentIdLocal).not("chatwoot_conversation_id", "is", null).order("started_at", { ascending: false }).limit(3);
+              console.log(`[Calendar→Post] Fallback: ${rows?.length || 0} convs`, JSON.stringify(rows?.map((r: any) => ({ id: r.id, cw: r.chatwoot_conversation_id, ext: r.external_user_id }))));
+              cwConvId = rows?.[0]?.chatwoot_conversation_id || null;
+            }
+            if (!cwConvId && extId) {
+              try {
+                const phone = extId.replace(/\D/g, "");
+                const sUrl = `${cwUrl.replace(/\/+$/, "")}/api/v1/accounts/${cwAccId}/contacts/search?q=${phone}&include_contacts=true`;
+                console.log(`[Calendar→Post] Searching CW API for: ${phone}`);
+                const sResp = await fetch(sUrl, { headers: { api_access_token: cwToken } });
+                if (sResp.ok) {
+                  const sData = await sResp.json();
+                  const contacts = sData.payload || [];
+                  if (contacts.length > 0) {
+                    const cResp = await fetch(`${cwUrl.replace(/\/+$/, "")}/api/v1/accounts/${cwAccId}/contacts/${contacts[0].id}/conversations`, { headers: { api_access_token: cwToken } });
+                    if (cResp.ok) {
+                      const cData = await cResp.json();
+                      const convs = cData.payload || [];
+                      const openConv = convs.find((cv: any) => cv.status === "open") || convs[0];
+                      if (openConv) { cwConvId = String(openConv.id); console.log(`[Calendar→Post] Found CW conv ${cwConvId} via API`); }
+                    }
+                  }
+                }
+              } catch (e) { console.warn("[Calendar→Post] CW API search failed:", e); }
+            }
+
+            // --- Assignment (only for agendamento/remarcacao) ---
+            if (eventType !== "cancelamento" && assignToolRow?.tools && cwConvId) {
+              const execCfg = (assignToolRow.tools.execution_config || {}) as Record<string, any>;
+              let assigneeId = execCfg.assignee_id;
+              let teamId = execCfg.team_id;
+              const rules = Array.isArray(execCfg.rules) ? execCfg.rules : [];
+              if (rules.length > 0) {
+                for (const rule of rules) {
+                  const rLabel = (rule.label || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                  if (rLabel && rLabel.includes("agend")) {
+                    if (rule.assignee_id) assigneeId = rule.assignee_id;
+                    if (rule.team_id) teamId = rule.team_id;
+                    console.log(`[Calendar→Assign] Matched rule "${rule.label}"`);
+                    break;
+                  }
+                }
+              }
+              const assignBody: Record<string, any> = {};
+              if (assigneeId) assignBody.assignee_id = Number(assigneeId);
+              if (teamId) assignBody.team_id = Number(teamId);
+              console.log(`[Calendar→Assign] Conv ${cwConvId}:`, JSON.stringify(assignBody));
+              const aResp = await fetch(`${cwUrl.replace(/\/+$/, "")}/api/v1/accounts/${cwAccId}/conversations/${cwConvId}/assignments`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", api_access_token: cwToken },
+                body: JSON.stringify(assignBody),
+              });
+              console.log(`[Calendar→Assign] Status: ${aResp.status}`);
+              if (!aResp.ok) console.warn(`[Calendar→Assign] Error:`, await aResp.text().catch(() => ""));
+
+              // Cancel follow-ups
+              if (cId) {
+                try { await supabaseClient.rpc("cancel_pending_followups", { p_agent_id: agentIdLocal, p_conversation_id: cId }); console.log(`[Calendar→Assign] Cancelled follow-ups`); } catch {}
+              }
+            }
+
+            // --- Notification (always) ---
+            if (notifyToolRow?.tools) {
+              const nCfg = (notifyToolRow.tools.execution_config || {}) as Record<string, any>;
+              const targetCwCid = nCfg.conversation_id || nCfg.chatwoot_conversation_id || nCfg.group_conversation_id;
+              if (targetCwCid) {
+                const emoji = eventType === "cancelamento" ? "❌" : eventType === "remarcacao" ? "🔄" : "📋";
+                const label = eventType === "cancelamento" ? "CANCELAMENTO" : eventType === "remarcacao" ? "REMARCAÇÃO" : "AGENDAMENTO";
+                const msg = `${emoji} [${label}] ${eventSummary}`;
+                console.log(`[Calendar→Notify] Sending to CW conv ${targetCwCid}: ${msg.slice(0, 100)}`);
+                const nResp = await fetch(`${cwUrl.replace(/\/+$/, "")}/api/v1/accounts/${cwAccId}/conversations/${targetCwCid}/messages`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", api_access_token: cwToken },
+                  body: JSON.stringify({ content: msg, message_type: "outgoing", private: false }),
+                });
+                console.log(`[Calendar→Notify] Status: ${nResp.status}`);
+                if (!nResp.ok) console.warn(`[Calendar→Notify] Error:`, await nResp.text().catch(() => ""));
+              } else {
+                console.warn(`[Calendar→Notify] No conversation_id in tool config`);
+              }
+            }
+          } catch (e) {
+            console.warn("[Calendar→Post] Error (non-blocking):", e);
+          }
+        }
+
         // Query calendar availability and create appointments
         const { data: agentData } = await supabase
           .from("agents")
@@ -954,6 +1083,11 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
 
             if (deleteError) return JSON.stringify({ error: deleteError.message });
             console.log(`[CalendarCancel] Deleted event (broad) ${targetEvent.id}: ${targetEvent.title} at ${targetEvent.start_at}`);
+            
+            // Post-cancel: notify
+            const cancelSummary = `${targetEvent.title}\n📅 ${new Date(targetEvent.start_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}\n❌ Cancelado pela IA`;
+            await postCalendarAction(supabase, agentId, context, "cancelamento", cancelSummary);
+
             return JSON.stringify({
               status: "cancelado",
               evento_cancelado: {
@@ -978,6 +1112,10 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
           if (deleteError) return JSON.stringify({ error: deleteError.message });
 
           console.log(`[CalendarCancel] Deleted event ${targetEvent.id}: ${targetEvent.title} at ${targetEvent.start_at}`);
+
+          // Post-cancel: notify
+          const cancelSummary2 = `${targetEvent.title}\n📅 ${new Date(targetEvent.start_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}\n❌ Cancelado pela IA`;
+          await postCalendarAction(supabase, agentId, context, "cancelamento", cancelSummary2);
 
           return JSON.stringify({
             status: "cancelado",
@@ -1064,196 +1202,9 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
 
           if (createError) return JSON.stringify({ error: createError.message });
 
-          // --- Post-booking: trigger chatwoot_assign + send_notification ---
-          try {
-            const { data: assignTools } = await supabase
-              .from("agent_tools")
-              .select("tool_id, tools(id, tool_type, execution_config)")
-              .eq("agent_id", agentId);
-            
-            const assignTool = assignTools?.find((at: any) => at.tools?.tool_type === "chatwoot_assign");
-            const notifyTool = assignTools?.find((at: any) => at.tools?.tool_type === "send_notification");
-
-            // Load agent's Chatwoot config (shared by assign + notify)
-            const { data: agentFull } = await supabase
-              .from("agents")
-              .select("config")
-              .eq("id", agentId)
-              .single();
-            const cfg = (agentFull?.config || {}) as Record<string, any>;
-            const chatwootUrl = cfg.chatwoot_url;
-            const chatwootToken = cfg.chatwoot_api_token;
-            const chatwootAccountId = cfg.chatwoot_account_id;
-            const chatwootInboxId = cfg.chatwoot_inbox_id;
-
-            // --- Find current Chatwoot conversation ID ---
-            let chatwootConvId: string | null = null;
-            const ctxConvId = context?.convId;
-            const ctxExtUserId = context?.externalUserId;
-            console.log(`[Calendar→Post] Looking up CW conv: convId=${ctxConvId}, extUser=${ctxExtUserId}, agent=${agentId}`);
-
-            if (ctxConvId) {
-              const { data: exactConv } = await supabase
-                .from("conversations")
-                .select("chatwoot_conversation_id")
-                .eq("id", ctxConvId)
-                .not("chatwoot_conversation_id", "is", null)
-                .maybeSingle();
-              chatwootConvId = exactConv?.chatwoot_conversation_id || null;
-              if (chatwootConvId) console.log(`[Calendar→Post] Found CW conv ${chatwootConvId} via exact convId`);
-              else console.log(`[Calendar→Post] No CW conv found for convId ${ctxConvId}`);
-            }
-
-            if (!chatwootConvId && ctxExtUserId) {
-              const { data: convByUser } = await supabase
-                .from("conversations")
-                .select("chatwoot_conversation_id")
-                .eq("agent_id", agentId)
-                .eq("external_user_id", ctxExtUserId)
-                .not("chatwoot_conversation_id", "is", null)
-                .order("started_at", { ascending: false })
-                .limit(1);
-              chatwootConvId = convByUser?.[0]?.chatwoot_conversation_id || null;
-              if (chatwootConvId) console.log(`[Calendar→Post] Found CW conv ${chatwootConvId} via external_user_id`);
-            }
-
-            if (!chatwootConvId) {
-              // Fallback: most recent conv with CW ID for this agent
-              const { data: convRows } = await supabase
-                .from("conversations")
-                .select("chatwoot_conversation_id, id, external_user_id")
-                .eq("agent_id", agentId)
-                .not("chatwoot_conversation_id", "is", null)
-                .order("started_at", { ascending: false })
-                .limit(3);
-              console.log(`[Calendar→Post] Fallback search found ${convRows?.length || 0} convs:`, JSON.stringify(convRows?.map((c: any) => ({ id: c.id, cw: c.chatwoot_conversation_id, ext: c.external_user_id }))));
-              chatwootConvId = convRows?.[0]?.chatwoot_conversation_id || null;
-            }
-
-            // Level 4 fallback: search Chatwoot API directly by phone number
-            if (!chatwootConvId && ctxExtUserId && chatwootUrl && chatwootToken && chatwootAccountId) {
-              try {
-                const phone = ctxExtUserId.replace(/\D/g, "");
-                const searchUrl = `${chatwootUrl.replace(/\/+$/, "")}/api/v1/accounts/${chatwootAccountId}/contacts/search?q=${phone}&include_contacts=true`;
-                console.log(`[Calendar→Post] Searching Chatwoot API for contact: ${phone}`);
-                const searchResp = await fetch(searchUrl, {
-                  headers: { api_access_token: chatwootToken },
-                });
-                if (searchResp.ok) {
-                  const searchData = await searchResp.json();
-                  const contacts = searchData.payload || [];
-                  if (contacts.length > 0) {
-                    const contactId = contacts[0].id;
-                    // Get conversations for this contact
-                    const convsUrl = `${chatwootUrl.replace(/\/+$/, "")}/api/v1/accounts/${chatwootAccountId}/contacts/${contactId}/conversations`;
-                    const convsResp = await fetch(convsUrl, {
-                      headers: { api_access_token: chatwootToken },
-                    });
-                    if (convsResp.ok) {
-                      const convsData = await convsResp.json();
-                      const convs = convsData.payload || [];
-                      // Find most recent open conversation
-                      const openConv = convs.find((c: any) => c.status === "open") || convs[0];
-                      if (openConv) {
-                        chatwootConvId = String(openConv.id);
-                        console.log(`[Calendar→Post] Found CW conv ${chatwootConvId} via Chatwoot API (contact ${contactId})`);
-                      }
-                    }
-                  }
-                }
-              } catch (e) {
-                console.warn("[Calendar→Post] Chatwoot API search failed:", e);
-              }
-            }
-
-            // --- Execute Chatwoot Assignment ---
-            if (assignTool?.tools && chatwootConvId && chatwootUrl && chatwootToken && chatwootAccountId) {
-              const execConfig = (assignTool.tools.execution_config || {}) as Record<string, any>;
-              const rules = Array.isArray(execConfig.rules) ? execConfig.rules : [];
-              let assigneeId = execConfig.assignee_id;
-              let teamId = execConfig.team_id;
-
-              if (rules.length > 0) {
-                const reason = "agendamento_realizado";
-                for (const rule of rules) {
-                  const ruleLabel = (rule.label || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                  if (ruleLabel && (reason.includes(ruleLabel) || ruleLabel.includes("agend"))) {
-                    if (rule.assignee_id) assigneeId = rule.assignee_id;
-                    if (rule.team_id) teamId = rule.team_id;
-                    console.log(`[Calendar→Assign] Matched rule "${rule.label}" → assignee=${assigneeId}, team=${teamId}`);
-                    break;
-                  }
-                }
-              }
-
-              const baseUrlClean = chatwootUrl.replace(/\/+$/, "");
-              const assignUrl = `${baseUrlClean}/api/v1/accounts/${chatwootAccountId}/conversations/${chatwootConvId}/assignments`;
-              const assignBody: Record<string, any> = {};
-              if (assigneeId) assignBody.assignee_id = Number(assigneeId);
-              if (teamId) assignBody.team_id = Number(teamId);
-
-              console.log(`[Calendar→Assign] Assigning conv ${chatwootConvId}:`, JSON.stringify(assignBody));
-              const assignResp = await fetch(assignUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", api_access_token: chatwootToken },
-                body: JSON.stringify(assignBody),
-              });
-              console.log(`[Calendar→Assign] Status: ${assignResp.status}`);
-              if (!assignResp.ok) {
-                const errBody = await assignResp.text().catch(() => "");
-                console.warn(`[Calendar→Assign] Error: ${errBody}`);
-              }
-
-              // Cancel follow-ups
-              try {
-                if (ctxConvId) {
-                  await supabase.rpc("cancel_pending_followups", {
-                    p_agent_id: agentId,
-                    p_conversation_id: ctxConvId,
-                  });
-                  console.log(`[Calendar→Assign] Cancelled follow-ups for conv ${ctxConvId}`);
-                }
-              } catch (e) {
-                console.warn("[Calendar→Assign] Could not cancel follow-ups:", e);
-              }
-            } else if (!chatwootConvId) {
-              console.warn(`[Calendar→Post] No Chatwoot conversation found — skipping assign + notify`);
-            } else if (!assignTool?.tools) {
-              console.log(`[Calendar→Post] No chatwoot_assign tool linked to agent ${agentId}`);
-            }
-
-            // --- Execute Send Notification ---
-            if (notifyTool?.tools && chatwootUrl && chatwootToken && chatwootAccountId) {
-              const notifyExecCfg = (notifyTool.tools.execution_config || {}) as Record<string, any>;
-              const targetNotifyCwConvId = notifyExecCfg.conversation_id || notifyExecCfg.chatwoot_conversation_id || notifyExecCfg.group_conversation_id;
-
-              if (targetNotifyCwConvId) {
-                const bookingMsg = `📋 [AGENDAMENTO] ${title}\n📅 ${new Date(startAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}\n📞 ${clientPhone || "N/A"}\n🚗 Interesse: ${vehicleInterest || "Não informado"}\n✅ Agendado automaticamente pela IA`;
-                const noteUrl = `${chatwootUrl.replace(/\/+$/, "")}/api/v1/accounts/${chatwootAccountId}/conversations/${targetNotifyCwConvId}/messages`;
-                console.log(`[Calendar→Notify] Sending notification to CW conv ${targetNotifyCwConvId}`);
-                const noteResp = await fetch(noteUrl, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", api_access_token: chatwootToken },
-                  body: JSON.stringify({
-                    content: bookingMsg,
-                    message_type: "outgoing",
-                    private: false,
-                  }),
-                });
-                console.log(`[Calendar→Notify] Status: ${noteResp.status}`);
-                if (!noteResp.ok) {
-                  const errBody = await noteResp.text().catch(() => "");
-                  console.warn(`[Calendar→Notify] Error: ${errBody}`);
-                }
-              } else {
-                console.warn(`[Calendar→Notify] No target conversation_id in send_notification tool config`);
-              }
-            } else if (!notifyTool?.tools) {
-              console.log(`[Calendar→Post] No send_notification tool linked to agent ${agentId}`);
-            }
-          } catch (e) {
-            console.warn("[Calendar] Post-booking error (non-blocking):", e);
-          }
+          // --- Post-booking: trigger assign + notify via helper ---
+          const bookingSummary = `${title}\n📅 ${new Date(startAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}\n📞 ${clientPhone || "N/A"}\n🚗 Interesse: ${vehicleInterest || "Não informado"}\n✅ Agendado automaticamente pela IA`;
+          await postCalendarAction(supabase, agentId, context, "agendamento", bookingSummary);
 
           return JSON.stringify({
             status: "agendado",
