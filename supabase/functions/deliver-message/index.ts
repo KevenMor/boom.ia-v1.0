@@ -228,15 +228,20 @@ function consolidateImageParts(parts: string[]): ConsolidatedPart[] {
     const { textOnly, imageUrls } = extractImagesFromMarkdown(part);
 
     if (textOnly.trim().length > 60 && imageUrls.length > 0) {
-      // Part mista: flush imagens anteriores, envia texto, acumula imagens desta part
+      // Part mista com texto longo: flush imagens anteriores, envia texto, acumula imagens desta part
       flushImages();
       result.push({ type: 'text', content: textOnly.trim() });
       pendingImages.push(...imageUrls);
     } else if (imageUrls.length > 0) {
-      // Part só de imagens — acumula
+      // Part com imagens (pode ter texto curto <= 60 chars que é suprimido) — acumula
       pendingImages.push(...imageUrls);
     } else if (textOnly.trim()) {
-      // Part só de texto — flush imagens pendentes, depois envia texto
+      // Part só de texto
+      if (pendingImages.length > 0 && textOnly.trim().length <= 60) {
+        // Texto curto entre blocos de imagens (ex: "Juliana:", "Confira:") — suprimir
+        console.log(`[Deliver] Suppressing short text between images: "${textOnly.trim().substring(0, 40)}"`);
+        continue;
+      }
       flushImages();
       result.push({ type: 'text', content: textOnly.trim() });
     }
