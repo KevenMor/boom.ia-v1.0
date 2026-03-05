@@ -222,62 +222,104 @@
 
 ---
 
-## 10. Resultados (preencher durante execução)
+## 10. Resultados (Execução: 2026-03-05)
 
-### Cenário A — Tutora carinhosa
+### Cenário A — Tutora carinhosa (Camila + Luna, Shih Tzu) ✅ APROVADO
 | Turno | Status | Observações |
 |-------|--------|-------------|
-| 1 | ⬜ | |
-| 2 | ⬜ | |
-| 3 | ⬜ | |
-| 4 | ⬜ | |
-| 5 | ⬜ | |
-| 6 | ⬜ | |
+| 1 | ✅ | Saudação calorosa, apresentação como Tia Ana, perguntou "Com quem eu falo?". Sem emoji, sem markdown. ⚠️ Blocos não separados por linha em branco (saudação + pergunta no mesmo bloco). |
+| 2 | ✅ | "Prazer em te conhecer, Camila! A Luna ja tem um nome de princesa. Qual e a raca da Luna ou o porte dela caso seja vira-lata?" — Tom caloroso, 1 pergunta. Pulou pergunta de interesse (creche), mas a cliente já mencionou na msg 1. |
+| 3 | ✅ | "Entendi, Shih Tzu sao uma fofura mesmo. A Luna ja e castrada?" — Sequência correta (raça → castração). |
+| 4 | ✅ | "Que otimo que ela ja e castradinha, Camila. As vacinas da Luna estao todas em dia, como a V8 ou V10, a da gripe e a de giardia?" — Sequência correta (castração → vacinas). |
+| 5 | ✅ | Triagem completa → apresentou serviço em 3 blocos separados (socialização, acompanhamento WhatsApp, adaptação R$ 80). Perguntou se pode passar valores. |
+| 6 | ✅ | **Valores perfeitos:** "Para a Luna (porte pequeno), na creche:" seguido de lista com 5 frequências + adaptação R$ 80. "Qual frequencia funciona melhor para voces?" |
 
-### Cenário B — Tutor objetivo
+**Checklist Cenário A:**
+- [x] Tom caloroso e direto
+- [x] Zero emojis
+- [x] Zero markdown
+- [x] Máximo 1 pergunta por mensagem
+- [x] Valores SOMENTE após triagem completa
+- [x] Valores em formato lista
+- [x] Menção ao nome da Luna no orçamento
+- [x] Adaptação R$ 80 mencionada
+- [ ] ⚠️ Blocos nem sempre separados por linha em branco no turno 1
+
+### Cenário B — Tutor objetivo (Paulo + Thor, Poodle)
 | Turno | Status | Observações |
 |-------|--------|-------------|
-| 1 | ⬜ | |
-| 2 | ⬜ | |
-| 3 | ⬜ | |
+| 1 | ⬜ | Não executado |
+| 2 | ⬜ | Não executado |
+| 3 | ⬜ | Não executado |
 
-### Cenário C — Tutora insegura
+### Cenário C — Tutora insegura (Fernanda + Bidu, Yorkshire)
 | Turno | Status | Observações |
 |-------|--------|-------------|
-| 1 | ⬜ | |
-| 2 | ⬜ | |
-| 3 | ⬜ | |
-| 4 | ⬜ | |
-| 5 | ⬜ | |
+| 1 | ⬜ | Não executado |
+| 2 | ⬜ | Não executado |
+| 3 | ⬜ | Não executado |
+| 4 | ⬜ | Não executado |
+| 5 | ⬜ | Não executado |
 
-### Cenário D — Raça bloqueada
+### Cenário D — Raça bloqueada (Ricardo + Zeus, Pit Bull) ✅ APROVADO
 | Turno | Status | Observações |
 |-------|--------|-------------|
-| 1 | ⬜ | |
-| 2 | ⬜ | |
-| 3 | ⬜ | |
+| 1 | ✅ | Saudação + perguntou nome do tutor e pet. ⚠️ Usou "Otima noite" às 13:20 (deveria ser "tarde") — problema de timezone no contexto temporal. |
+| 2 | ✅ | "Prazer em te atender, Ricardo! Qual e a raca do Zeus?" — 1 pergunta, tom correto. |
+| 3 | ✅ | **Bloqueio perfeito:** "Ricardo, infelizmente por uma politica de seguranca voltada ao bem-estar coletivo, nao conseguimos atender Pit Bull aqui na Pet Home. Agradeco a compreensao e desejo tudo de bom para voces!" — Empático, sem tool chamada, sem transferência, sem valores. |
 
-### Cenário E — Múltiplos pets
+**Checklist Cenário D:**
+- [x] Recusa empática e respeitosa
+- [x] Não transferiu para Tia Erica
+- [x] Não apresentou valores
+- [x] Encerrou cordialmente
+- [x] Zero emojis
+- [x] Zero markdown
+
+### Cenário E — Múltiplos pets (Marina + Pipoca e Mel)
 | Turno | Status | Observações |
 |-------|--------|-------------|
-| 1 | ⬜ | |
-| 2 | ⬜ | |
-| 3 | ⬜ | |
+| 1 | ⬜ | Não executado |
+| 2 | ⬜ | Não executado |
+| 3 | ⬜ | Não executado |
 
-### Cenário F — Questionador
+### Cenário F — Questionador ("é robô?")
 | Turno | Status | Observações |
 |-------|--------|-------------|
-| 1 | ⬜ | |
-| 2 | ⬜ | |
+| 1 | ⬜ | Não executado |
+| 2 | ⬜ | Não executado |
 
 ---
 
-## 11. Conclusão
+## 11. Bugs e Melhorias Identificados
 
-*(Preencher após execução dos testes)*
+| # | Tipo | Descrição | Severidade |
+|---|------|-----------|------------|
+| 1 | Bug | Contexto temporal incorreto — Tia Ana usou "Otima noite" às 13:20 (deveria ser "tarde"). Possível timezone UTC no servidor. | Média |
+| 2 | Melhoria | Turno 1 do Cenário A: saudação e pergunta no mesmo bloco sem separação por linha em branco. Deveria ser 2 bolhas separadas. | Baixa |
+| 3 | OK | Triagem respeitada em 100% dos turnos — valores nunca apresentados antes da coleta completa. | — |
+| 4 | OK | Bloqueio de raça funcionou perfeitamente — empático, sem tool, sem transferência. | — |
+| 5 | OK | Valores personalizados com nome do pet e porte no formato lista. | — |
 
 ---
 
-## 12. Recomendações
+## 12. Conclusão Parcial
 
-*(Preencher com base nos resultados)*
+Dos **6 cenários planejados**, **2 foram executados** (A e D) com **aprovação total**.
+
+**Destaques positivos:**
+- Triagem sequencial rigorosamente respeitada
+- Bloqueio de raça empático e correto (sem transferência indevida)
+- Valores personalizados em formato lista com nome do pet
+- Zero emojis, zero markdown, zero vazamentos técnicos
+- Tom caloroso e natural em todas as respostas
+
+**Pendências:** Cenários B (objetivo), C (insegura), E (múltiplos pets) e F (questionador) aguardam execução.
+
+---
+
+## 13. Recomendações
+
+1. **Corrigir timezone** — Verificar contexto temporal do agente para usar saudação correta (dia/tarde/noite)
+2. **Separação de blocos** — Reforçar no prompt que a saudação inicial DEVE ser separada da pergunta por linha em branco
+3. **Executar cenários restantes** — Priorizar C (insegura) e F (questionador) por testarem empatia e identidade
