@@ -3218,7 +3218,7 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
                 .filter(Boolean)
                 .slice(-3);
               const briefSummary = summaryLines.join(" | ") || "Sem resumo disponível";
-              const extUser = context?.externalUserId || "N/A";
+              const extUser = external_user_id || "N/A";
               
               // Try to extract client name from conversation
               let clientName = "Não identificado";
