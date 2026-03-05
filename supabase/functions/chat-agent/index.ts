@@ -1505,16 +1505,31 @@ const BUILTIN_SCHEMAS: Record<string, { description: string; parameters: any }> 
 };
 
 // ---------- convert tools to OpenAI format ----------
+// Sanitize tool names to match OpenAI's pattern: ^[a-zA-Z0-9_-]+$
+function sanitizeToolName(name: string): string {
+  return name
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // remove accents (ã→a, é→e, ç→c)
+    .replace(/[^a-zA-Z0-9_-]/g, "_") // replace invalid chars with underscore
+    .replace(/_+/g, "_") // collapse multiple underscores
+    .replace(/^_|_$/g, ""); // trim leading/trailing underscores
+}
+
 function toolsToOpenAI(tools: ToolDef[]) {
   return tools.map((t) => {
     const builtin = BUILTIN_SCHEMAS[t.tool_type];
     const hasValidParams = t.function_def?.parameters && t.function_def.parameters.type === "object"
       && t.function_def.parameters.properties && Object.keys(t.function_def.parameters.properties).length > 0;
 
+    const rawName = t.function_def?.name || t.name;
+    const safeName = sanitizeToolName(rawName);
+    if (safeName !== rawName) {
+      console.warn(`[Tools] Sanitized tool name: "${rawName}" → "${safeName}"`);
+    }
+
     return {
       type: "function" as const,
       function: {
-        name: t.function_def?.name || t.name,
+        name: safeName,
         description: (hasValidParams ? t.function_def?.description : null) || builtin?.description || t.description || t.name,
         parameters: hasValidParams
           ? t.function_def.parameters
@@ -1523,7 +1538,6 @@ function toolsToOpenAI(tools: ToolDef[]) {
     };
   });
 }
-
 // ---------- usage event helper ----------
 async function recordUsageEvent(
   supabaseAdmin: any,
@@ -2339,7 +2353,7 @@ Deno.serve(async (req) => {
               } catch { /* empty args */ }
 
               const matchedTool = agentTools.find(
-                (t) => (t.function_def?.name || t.name) === toolName
+                (t) => sanitizeToolName(t.function_def?.name || t.name) === toolName
               );
 
               let toolResult: string;
