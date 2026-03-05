@@ -1064,24 +1064,115 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
 
           if (createError) return JSON.stringify({ error: createError.message });
 
-          // --- Post-booking: trigger chatwoot_assign tool if available ---
+          // --- Post-booking: trigger chatwoot_assign + send_notification ---
           try {
-            // Check if agent has a chatwoot_assign tool linked
             const { data: assignTools } = await supabase
               .from("agent_tools")
               .select("tool_id, tools(id, tool_type, execution_config)")
               .eq("agent_id", agentId);
             
             const assignTool = assignTools?.find((at: any) => at.tools?.tool_type === "chatwoot_assign");
-            if (assignTool?.tools) {
+            const notifyTool = assignTools?.find((at: any) => at.tools?.tool_type === "send_notification");
+
+            // Load agent's Chatwoot config (shared by assign + notify)
+            const { data: agentFull } = await supabase
+              .from("agents")
+              .select("config")
+              .eq("id", agentId)
+              .single();
+            const cfg = (agentFull?.config || {}) as Record<string, any>;
+            const chatwootUrl = cfg.chatwoot_url;
+            const chatwootToken = cfg.chatwoot_api_token;
+            const chatwootAccountId = cfg.chatwoot_account_id;
+            const chatwootInboxId = cfg.chatwoot_inbox_id;
+
+            // --- Find current Chatwoot conversation ID ---
+            let chatwootConvId: string | null = null;
+            const ctxConvId = context?.convId;
+            const ctxExtUserId = context?.externalUserId;
+            console.log(`[Calendar→Post] Looking up CW conv: convId=${ctxConvId}, extUser=${ctxExtUserId}, agent=${agentId}`);
+
+            if (ctxConvId) {
+              const { data: exactConv } = await supabase
+                .from("conversations")
+                .select("chatwoot_conversation_id")
+                .eq("id", ctxConvId)
+                .not("chatwoot_conversation_id", "is", null)
+                .maybeSingle();
+              chatwootConvId = exactConv?.chatwoot_conversation_id || null;
+              if (chatwootConvId) console.log(`[Calendar→Post] Found CW conv ${chatwootConvId} via exact convId`);
+              else console.log(`[Calendar→Post] No CW conv found for convId ${ctxConvId}`);
+            }
+
+            if (!chatwootConvId && ctxExtUserId) {
+              const { data: convByUser } = await supabase
+                .from("conversations")
+                .select("chatwoot_conversation_id")
+                .eq("agent_id", agentId)
+                .eq("external_user_id", ctxExtUserId)
+                .not("chatwoot_conversation_id", "is", null)
+                .order("started_at", { ascending: false })
+                .limit(1);
+              chatwootConvId = convByUser?.[0]?.chatwoot_conversation_id || null;
+              if (chatwootConvId) console.log(`[Calendar→Post] Found CW conv ${chatwootConvId} via external_user_id`);
+            }
+
+            if (!chatwootConvId) {
+              // Fallback: most recent conv with CW ID for this agent
+              const { data: convRows } = await supabase
+                .from("conversations")
+                .select("chatwoot_conversation_id, id, external_user_id")
+                .eq("agent_id", agentId)
+                .not("chatwoot_conversation_id", "is", null)
+                .order("started_at", { ascending: false })
+                .limit(3);
+              console.log(`[Calendar→Post] Fallback search found ${convRows?.length || 0} convs:`, JSON.stringify(convRows?.map((c: any) => ({ id: c.id, cw: c.chatwoot_conversation_id, ext: c.external_user_id }))));
+              chatwootConvId = convRows?.[0]?.chatwoot_conversation_id || null;
+            }
+
+            // Level 4 fallback: search Chatwoot API directly by phone number
+            if (!chatwootConvId && ctxExtUserId && chatwootUrl && chatwootToken && chatwootAccountId) {
+              try {
+                const phone = ctxExtUserId.replace(/\D/g, "");
+                const searchUrl = `${chatwootUrl.replace(/\/+$/, "")}/api/v1/accounts/${chatwootAccountId}/contacts/search?q=${phone}&include_contacts=true`;
+                console.log(`[Calendar→Post] Searching Chatwoot API for contact: ${phone}`);
+                const searchResp = await fetch(searchUrl, {
+                  headers: { api_access_token: chatwootToken },
+                });
+                if (searchResp.ok) {
+                  const searchData = await searchResp.json();
+                  const contacts = searchData.payload || [];
+                  if (contacts.length > 0) {
+                    const contactId = contacts[0].id;
+                    // Get conversations for this contact
+                    const convsUrl = `${chatwootUrl.replace(/\/+$/, "")}/api/v1/accounts/${chatwootAccountId}/contacts/${contactId}/conversations`;
+                    const convsResp = await fetch(convsUrl, {
+                      headers: { api_access_token: chatwootToken },
+                    });
+                    if (convsResp.ok) {
+                      const convsData = await convsResp.json();
+                      const convs = convsData.payload || [];
+                      // Find most recent open conversation
+                      const openConv = convs.find((c: any) => c.status === "open") || convs[0];
+                      if (openConv) {
+                        chatwootConvId = String(openConv.id);
+                        console.log(`[Calendar→Post] Found CW conv ${chatwootConvId} via Chatwoot API (contact ${contactId})`);
+                      }
+                    }
+                  }
+                }
+              } catch (e) {
+                console.warn("[Calendar→Post] Chatwoot API search failed:", e);
+              }
+            }
+
+            // --- Execute Chatwoot Assignment ---
+            if (assignTool?.tools && chatwootConvId && chatwootUrl && chatwootToken && chatwootAccountId) {
               const execConfig = (assignTool.tools.execution_config || {}) as Record<string, any>;
-              
-              // Resolve assignee using rules if available, fallback to default
               const rules = Array.isArray(execConfig.rules) ? execConfig.rules : [];
               let assigneeId = execConfig.assignee_id;
               let teamId = execConfig.team_id;
 
-              // Try rule matching with "agendamento" reason
               if (rules.length > 0) {
                 const reason = "agendamento_realizado";
                 for (const rule of rules) {
@@ -1089,111 +1180,79 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
                   if (ruleLabel && (reason.includes(ruleLabel) || ruleLabel.includes("agend"))) {
                     if (rule.assignee_id) assigneeId = rule.assignee_id;
                     if (rule.team_id) teamId = rule.team_id;
-                    console.log(`[Calendar→ChatwootAssign] Matched rule "${rule.label}" → assignee=${assigneeId}, team=${teamId}`);
+                    console.log(`[Calendar→Assign] Matched rule "${rule.label}" → assignee=${assigneeId}, team=${teamId}`);
                     break;
                   }
                 }
               }
-              
-              // Load agent's Chatwoot config
-              const { data: agentFull } = await supabase
-                .from("agents")
-                .select("config")
-                .eq("id", agentId)
-                .single();
-              const cfg = (agentFull?.config || {}) as Record<string, any>;
-              const chatwootUrl = cfg.chatwoot_url;
-              const chatwootToken = cfg.chatwoot_api_token;
-              const chatwootAccountId = cfg.chatwoot_account_id;
 
-              if (!chatwootUrl || !chatwootToken || !chatwootAccountId) {
-                console.warn(`[Calendar→ChatwootAssign] Missing Chatwoot config: url=${!!chatwootUrl}, token=${!!chatwootToken}, accountId=${!!chatwootAccountId}`);
-              } else {
-                // Find the current conversation's Chatwoot ID using convId or external_user_id
-                let chatwootConvId: string | null = null;
-                const ctxConvId = context?.convId;
-                const ctxExtUserId = context?.externalUserId;
+              const baseUrlClean = chatwootUrl.replace(/\/+$/, "");
+              const assignUrl = `${baseUrlClean}/api/v1/accounts/${chatwootAccountId}/conversations/${chatwootConvId}/assignments`;
+              const assignBody: Record<string, any> = {};
+              if (assigneeId) assignBody.assignee_id = Number(assigneeId);
+              if (teamId) assignBody.team_id = Number(teamId);
 
-                if (ctxConvId) {
-                  // Best: use the exact conversation ID
-                  const { data: exactConv } = await supabase
-                    .from("conversations")
-                    .select("chatwoot_conversation_id")
-                    .eq("id", ctxConvId)
-                    .not("chatwoot_conversation_id", "is", null)
-                    .maybeSingle();
-                  chatwootConvId = exactConv?.chatwoot_conversation_id || null;
-                  if (chatwootConvId) console.log(`[Calendar→ChatwootAssign] Found CW conv ${chatwootConvId} via exact convId ${ctxConvId}`);
-                }
-
-                if (!chatwootConvId && ctxExtUserId) {
-                  // Fallback: find by external_user_id (most recent)
-                  const { data: convByUser } = await supabase
-                    .from("conversations")
-                    .select("chatwoot_conversation_id")
-                    .eq("agent_id", agentId)
-                    .eq("external_user_id", ctxExtUserId)
-                    .not("chatwoot_conversation_id", "is", null)
-                    .order("started_at", { ascending: false })
-                    .limit(1);
-                  chatwootConvId = convByUser?.[0]?.chatwoot_conversation_id || null;
-                  if (chatwootConvId) console.log(`[Calendar→ChatwootAssign] Found CW conv ${chatwootConvId} via external_user_id ${ctxExtUserId}`);
-                }
-
-                if (!chatwootConvId) {
-                  // Last fallback: most recent conversation
-                  const { data: convRows } = await supabase
-                    .from("conversations")
-                    .select("chatwoot_conversation_id, id")
-                    .eq("agent_id", agentId)
-                    .not("chatwoot_conversation_id", "is", null)
-                    .order("started_at", { ascending: false })
-                    .limit(1);
-                  chatwootConvId = convRows?.[0]?.chatwoot_conversation_id || null;
-                  if (chatwootConvId) console.log(`[Calendar→ChatwootAssign] Using fallback most-recent CW conv ${chatwootConvId}`);
-                }
-
-                if (chatwootConvId) {
-                  const baseUrlClean = chatwootUrl.replace(/\/+$/, "");
-                  const assignUrl = `${baseUrlClean}/api/v1/accounts/${chatwootAccountId}/conversations/${chatwootConvId}/assignments`;
-                  const assignBody: Record<string, any> = {};
-                  if (assigneeId) assignBody.assignee_id = assigneeId;
-                  if (teamId) assignBody.team_id = teamId;
-
-                  console.log(`[Calendar→ChatwootAssign] Assigning conv ${chatwootConvId}:`, JSON.stringify(assignBody));
-                  const assignResp = await fetch(assignUrl, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json", api_access_token: chatwootToken },
-                    body: JSON.stringify(assignBody),
-                  });
-                  console.log(`[Calendar→ChatwootAssign] Status: ${assignResp.status}`);
-                  if (!assignResp.ok) {
-                    const errBody = await assignResp.text().catch(() => "");
-                    console.warn(`[Calendar→ChatwootAssign] Error: ${errBody}`);
-                  }
-
-                  // Cancel follow-ups
-                  try {
-                    const cancelConvId = ctxConvId || null;
-                    if (cancelConvId) {
-                      await supabase.rpc("cancel_pending_followups", {
-                        p_agent_id: agentId,
-                        p_conversation_id: cancelConvId,
-                      });
-                      console.log(`[Calendar→ChatwootAssign] Cancelled follow-ups for conv ${cancelConvId}`);
-                    }
-                  } catch (e) {
-                    console.warn("[Calendar→ChatwootAssign] Could not cancel follow-ups:", e);
-                  }
-                } else {
-                  console.warn(`[Calendar→ChatwootAssign] No Chatwoot conversation found for agent ${agentId}`);
-                }
+              console.log(`[Calendar→Assign] Assigning conv ${chatwootConvId}:`, JSON.stringify(assignBody));
+              const assignResp = await fetch(assignUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", api_access_token: chatwootToken },
+                body: JSON.stringify(assignBody),
+              });
+              console.log(`[Calendar→Assign] Status: ${assignResp.status}`);
+              if (!assignResp.ok) {
+                const errBody = await assignResp.text().catch(() => "");
+                console.warn(`[Calendar→Assign] Error: ${errBody}`);
               }
-            } else {
-              console.log(`[Calendar→ChatwootAssign] No chatwoot_assign tool linked to agent ${agentId}`);
+
+              // Cancel follow-ups
+              try {
+                if (ctxConvId) {
+                  await supabase.rpc("cancel_pending_followups", {
+                    p_agent_id: agentId,
+                    p_conversation_id: ctxConvId,
+                  });
+                  console.log(`[Calendar→Assign] Cancelled follow-ups for conv ${ctxConvId}`);
+                }
+              } catch (e) {
+                console.warn("[Calendar→Assign] Could not cancel follow-ups:", e);
+              }
+            } else if (!chatwootConvId) {
+              console.warn(`[Calendar→Post] No Chatwoot conversation found — skipping assign + notify`);
+            } else if (!assignTool?.tools) {
+              console.log(`[Calendar→Post] No chatwoot_assign tool linked to agent ${agentId}`);
+            }
+
+            // --- Execute Send Notification ---
+            if (notifyTool?.tools && chatwootUrl && chatwootToken && chatwootAccountId) {
+              const notifyExecCfg = (notifyTool.tools.execution_config || {}) as Record<string, any>;
+              const targetNotifyCwConvId = notifyExecCfg.conversation_id || notifyExecCfg.chatwoot_conversation_id || notifyExecCfg.group_conversation_id;
+
+              if (targetNotifyCwConvId) {
+                const bookingMsg = `📋 [AGENDAMENTO] ${title}\n📅 ${new Date(startAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}\n📞 ${clientPhone || "N/A"}\n🚗 Interesse: ${vehicleInterest || "Não informado"}\n✅ Agendado automaticamente pela IA`;
+                const noteUrl = `${chatwootUrl.replace(/\/+$/, "")}/api/v1/accounts/${chatwootAccountId}/conversations/${targetNotifyCwConvId}/messages`;
+                console.log(`[Calendar→Notify] Sending notification to CW conv ${targetNotifyCwConvId}`);
+                const noteResp = await fetch(noteUrl, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", api_access_token: chatwootToken },
+                  body: JSON.stringify({
+                    content: bookingMsg,
+                    message_type: "outgoing",
+                    private: false,
+                  }),
+                });
+                console.log(`[Calendar→Notify] Status: ${noteResp.status}`);
+                if (!noteResp.ok) {
+                  const errBody = await noteResp.text().catch(() => "");
+                  console.warn(`[Calendar→Notify] Error: ${errBody}`);
+                }
+              } else {
+                console.warn(`[Calendar→Notify] No target conversation_id in send_notification tool config`);
+              }
+            } else if (!notifyTool?.tools) {
+              console.log(`[Calendar→Post] No send_notification tool linked to agent ${agentId}`);
             }
           } catch (e) {
-            console.warn("[Calendar] Post-booking assignment error (non-blocking):", e);
+            console.warn("[Calendar] Post-booking error (non-blocking):", e);
           }
 
           return JSON.stringify({
@@ -1637,20 +1696,20 @@ const BUILTIN_SCHEMAS: Record<string, { description: string; parameters: any }> 
     },
   },
   calendar_query: {
-    description: "Consulta horários disponíveis na agenda e realiza agendamentos. Use 'check_availability' para ver horários livres e 'criar' para agendar. Ao criar, SEMPRE inclua telefone_cliente e veiculo_interesse quando disponíveis na conversa.",
+    description: "Consulta horários disponíveis na agenda e realiza agendamentos. Use 'check_availability' para ver horários livres e 'criar' para agendar. ATENÇÃO: 'veiculo_interesse' é o veículo que o cliente QUER COMPRAR do nosso estoque, NÃO o veículo que ele já possui ou quer dar como entrada/troca. Se o cliente quer avaliar o carro DELE para troca, isso é consulta FIPE, não veículo de interesse.",
     parameters: {
       type: "object",
       properties: {
         action: { type: "string", description: "Ação: 'check_availability' para consultar horários, 'criar' ou 'agendar' para criar agendamento, 'cancelar' para cancelar" },
         date: { type: "string", description: "Data inicial para busca (formato YYYY-MM-DD). Padrão: hoje" },
         days_ahead: { type: "integer", description: "Quantos dias à frente consultar (padrão: 7)" },
-        title: { type: "string", description: "Título do agendamento no formato 'Nome — Veículo' (ex: 'João Silva — Cruze 2020')" },
+        title: { type: "string", description: "Título do agendamento no formato 'Visita - Nome' (ex: 'Visita - João Silva')" },
         description: { type: "string", description: "Descrição/observações do agendamento" },
         start_at: { type: "string", description: "Data e hora do agendamento (formato ISO 8601, ex: '2025-03-15T10:00:00')" },
         duration_minutes: { type: "integer", description: "Duração em minutos (padrão: 60)" },
         calendar_id: { type: "string", description: "ID da agenda específica (opcional, usa a primeira agenda ativa se não informado)" },
         telefone_cliente: { type: "string", description: "Telefone do cliente (extraído do external_user_id ou conversa)" },
-        veiculo_interesse: { type: "string", description: "Veículo de interesse do cliente (ex: 'Chevrolet Cruze 2020')" },
+        veiculo_interesse: { type: "string", description: "SOMENTE o veículo que o cliente QUER COMPRAR do nosso estoque (ex: 'Haval H6 2024'). NÃO coloque aqui o veículo que o cliente JÁ TEM ou quer dar como entrada/troca. Se não souber qual veículo do estoque ele quer, deixe vazio." },
         client_name: { type: "string", description: "Nome do cliente para cancelamentos" },
       },
       required: ["action"],
@@ -1890,10 +1949,10 @@ Deno.serve(async (req) => {
         : "Consulta horários disponíveis na agenda e realiza agendamentos de visitas e test drives.";
       const titleDescription = isIvmTenant
         ? "Título do agendamento: nome do paciente + motivo (ex: 'Carolina — Avaliação Implante')"
-        : "Título do agendamento: nome do cliente + veículo de interesse (ex: 'Keven — Audi A3 Sedan 2020')";
+        : "Título do agendamento no formato 'Visita - Nome' (ex: 'Visita - Keven')";
       const extraFieldDesc = isIvmTenant
         ? "Motivo da consulta ou tratamento de interesse (ex: 'Implante dentário', 'Clareamento')"
-        : "Veículo de interesse do cliente ou veículo de troca (ex: 'Audi A3 Sedan 2020')";
+        : "SOMENTE o veículo que o cliente QUER COMPRAR do estoque (ex: 'Haval H6 2024'). NÃO coloque o carro que o cliente já tem ou quer dar como entrada. Se não souber, deixe vazio.";
 
       const virtualCalendarTool: ToolDef = {
         id: "virtual-calendar-query-tool",
