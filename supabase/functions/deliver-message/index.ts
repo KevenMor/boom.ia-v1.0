@@ -88,78 +88,56 @@ async function sendChatwootImageMessage(
   imageUrl: string,
   caption?: string
 ): Promise<boolean> {
-  return sendChatwootImagesBatch(url, apiToken, [imageUrl], caption);
+  return sendChatwootImagesSequential(url, apiToken, [imageUrl]);
 }
 
-// Batch image sender: downloads all images in parallel, sends in a SINGLE POST with multiple attachments[]
-async function sendChatwootImagesBatch(
+// Send images one by one (no caption) to avoid size limits
+async function sendChatwootImagesSequential(
   url: string,
   apiToken: string,
-  imageUrls: string[],
-  caption?: string
+  imageUrls: string[]
 ): Promise<boolean> {
   if (!imageUrls.length) return true;
-  try {
-    // Download all images in parallel
-    const downloads = await Promise.allSettled(
-      imageUrls.map(async (imageUrl) => {
-        const parsedUrl = new URL(imageUrl);
-        const imgResp = await fetch(imageUrl, {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Referer": `${parsedUrl.protocol}//${parsedUrl.host}/`,
-            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-          },
-        });
-        if (!imgResp.ok) {
-          console.error(`[Deliver] Image download failed ${imgResp.status}: ${imageUrl}`);
-          return null;
-        }
-        const blob = await imgResp.blob();
-        const filename = parsedUrl.pathname.split("/").pop() || "image.jpg";
-        return { blob, filename };
-      })
-    );
-
-    const successfulDownloads = downloads
-      .filter((d): d is PromiseFulfilledResult<{ blob: Blob; filename: string } | null> => d.status === "fulfilled")
-      .map(d => d.value)
-      .filter((d): d is { blob: Blob; filename: string } => d !== null);
-
-    if (successfulDownloads.length === 0) {
-      console.error("[Deliver] All image downloads failed, sending URLs as text fallback");
-      for (const u of imageUrls) await sendChatwootTextMessage(url, apiToken, u);
-      return false;
-    }
-
-    // Build single FormData with ALL images
-    const formData = new FormData();
-    if (caption && caption.trim()) formData.append("content", caption.trim());
-    formData.append("message_type", "outgoing");
-    formData.append("private", "false");
-    for (const { blob, filename } of successfulDownloads) {
+  let allOk = true;
+  for (const imageUrl of imageUrls) {
+    try {
+      const parsedUrl = new URL(imageUrl);
+      const imgResp = await fetch(imageUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Referer": `${parsedUrl.protocol}//${parsedUrl.host}/`,
+          "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        },
+      });
+      if (!imgResp.ok) {
+        console.error(`[Deliver] Image download failed ${imgResp.status}: ${imageUrl}`);
+        await sendChatwootTextMessage(url, apiToken, imageUrl);
+        allOk = false;
+        continue;
+      }
+      const blob = await imgResp.blob();
+      const filename = parsedUrl.pathname.split("/").pop() || "image.jpg";
+      const formData = new FormData();
+      formData.append("message_type", "outgoing");
+      formData.append("private", "false");
       formData.append("attachments[]", blob, filename);
-    }
 
-    console.log(`[Deliver] Sending ${successfulDownloads.length} image(s) in single batch POST`);
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: { api_access_token: apiToken },
-      body: formData,
-    });
-
-    if (!resp.ok) {
-      console.error(`[Deliver] Batch image msg error ${resp.status}:`, await resp.text());
-      return false;
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { api_access_token: apiToken },
+        body: formData,
+      });
+      if (!resp.ok) {
+        console.error(`[Deliver] Image msg error ${resp.status}:`, await resp.text());
+        allOk = false;
+      }
+    } catch (e) {
+      console.error(`[Deliver] Image send error:`, e);
+      try { await sendChatwootTextMessage(url, apiToken, imageUrl); } catch { /* ignore */ }
+      allOk = false;
     }
-    return true;
-  } catch (e) {
-    console.error(`[Deliver] Batch image msg error:`, e);
-    for (const u of imageUrls) {
-      try { await sendChatwootTextMessage(url, apiToken, u); } catch { /* ignore */ }
-    }
-    return false;
   }
+  return allOk;
 }
 
 // ---------- Typing indicator ----------
@@ -296,21 +274,12 @@ async function replyToChatwoot(
     const block = consolidated[i];
 
     if (block.type === 'images' && block.imageUrls?.length) {
-      // Enviar todas as imagens — dividir em chunks se exceder MAX_IMAGES_PER_BATCH
+      // Enviar imagens uma por uma sem legenda
       const urls = block.imageUrls;
-      if (urls.length <= MAX_IMAGES_PER_BATCH) {
-        const ok = await sendChatwootImagesBatch(msgUrl, apiToken, urls, "");
-        console.log(`[Deliver] Block ${i + 1} batch ${urls.length} image(s): ${ok ? "OK" : "FAIL"}`);
-      } else {
-        for (let j = 0; j < urls.length; j += MAX_IMAGES_PER_BATCH) {
-          const chunk = urls.slice(j, j + MAX_IMAGES_PER_BATCH);
-          const ok = await sendChatwootImagesBatch(msgUrl, apiToken, chunk, "");
-          console.log(`[Deliver] Block ${i + 1} chunk ${Math.floor(j / MAX_IMAGES_PER_BATCH) + 1}: ${chunk.length} image(s) ${ok ? "OK" : "FAIL"}`);
-          if (j + MAX_IMAGES_PER_BATCH < urls.length && hasTimeBudget()) {
-            await safeDelay(applyJitter(1000)); // jitter aplicado, consistente com o restante
-          }
-        }
-      }
+      console.log(`[Deliver] Block ${i + 1}: sending ${urls.length} image(s) sequentially (no caption)`);
+      const ok = await sendChatwootImagesSequential(msgUrl, apiToken, urls);
+      console.log(`[Deliver] Block ${i + 1} images: ${ok ? "ALL OK" : "SOME FAILED"}`);
+    
     } else if (block.type === 'text' && block.content) {
       if (humanization.typingDelayMs > 0 && hasTimeBudget()) {
         await setChatwootTyping(chatwootUrl, apiToken, accountId, conversationId, "on");
