@@ -50,7 +50,7 @@ export function EditToolDialog({ tool, open, onOpenChange }: Props) {
   const { data: tenants } = useTenants();
   const [toolType, setToolType] = useState<ToolType>("api_rest");
 
-  const { register, handleSubmit, setValue, reset } = useForm<FormData>({ resolver: zodResolver(schema) });
+  const { register, handleSubmit, setValue, reset, getValues } = useForm<FormData>({ resolver: zodResolver(schema) });
 
   useEffect(() => {
     if (tool) {
@@ -159,9 +159,7 @@ export function EditToolDialog({ tool, open, onOpenChange }: Props) {
                 defaultValue={(tool?.execution_config as any)?.default_url ?? ""}
                 onChange={(e) => {
                   try {
-                    const current = JSON.parse(
-                      (document.querySelector('[name="execution_json"]') as HTMLTextAreaElement)?.value || "{}"
-                    );
+                    const current = JSON.parse(getValues("execution_json") || "{}");
                     current.default_url = e.target.value;
                     setValue("execution_json", JSON.stringify(current, null, 2));
                   } catch {
@@ -203,7 +201,7 @@ export function EditToolDialog({ tool, open, onOpenChange }: Props) {
                 <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Canal</Label>
                 <Select defaultValue={(tool?.execution_config as any)?.channel || "chatwoot_message"} onValueChange={(v) => {
                   try {
-                    const cur = JSON.parse((document.querySelector('[name="execution_json"]') as HTMLTextAreaElement)?.value || "{}");
+                    const cur = JSON.parse(getValues("execution_json") || "{}");
                     cur.channel = v;
                     setValue("execution_json", JSON.stringify(cur, null, 2));
                   } catch {
@@ -226,7 +224,7 @@ export function EditToolDialog({ tool, open, onOpenChange }: Props) {
                   className="h-9 bg-background font-mono text-sm border-border"
                   onChange={(e) => {
                     try {
-                      const cur = JSON.parse((document.querySelector('[name="execution_json"]') as HTMLTextAreaElement)?.value || "{}");
+                      const cur = JSON.parse(getValues("execution_json") || "{}");
                       cur.conversation_id = e.target.value ? Number(e.target.value) : null;
                       setValue("execution_json", JSON.stringify(cur, null, 2));
                     } catch {

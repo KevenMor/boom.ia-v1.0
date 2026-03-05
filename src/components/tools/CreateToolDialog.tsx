@@ -56,7 +56,7 @@ export function CreateToolDialog({ open, onOpenChange }: Props) {
   const [selectedTenantId, setSelectedTenantId] = useState<string>("");
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
 
-  const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, setValue, reset, getValues, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       name: "", description: "", tool_type: "api_rest",
@@ -279,7 +279,7 @@ export function CreateToolDialog({ open, onOpenChange }: Props) {
                   <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Canal</Label>
                   <Select defaultValue="chatwoot_message" onValueChange={(v) => {
                     try {
-                      const cur = JSON.parse((document.querySelector('[name="execution_json"]') as HTMLTextAreaElement)?.value || "{}");
+                      const cur = JSON.parse(getValues("execution_json") || "{}");
                       cur.channel = v;
                       setValue("execution_json", JSON.stringify(cur, null, 2));
                     } catch {
@@ -301,7 +301,7 @@ export function CreateToolDialog({ open, onOpenChange }: Props) {
                     className="h-9 bg-background font-mono text-sm"
                     onChange={(e) => {
                       try {
-                        const cur = JSON.parse((document.querySelector('[name="execution_json"]') as HTMLTextAreaElement)?.value || "{}");
+                        const cur = JSON.parse(getValues("execution_json") || "{}");
                         cur.conversation_id = e.target.value ? Number(e.target.value) : null;
                         setValue("execution_json", JSON.stringify(cur, null, 2));
                       } catch {
