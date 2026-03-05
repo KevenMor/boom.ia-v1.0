@@ -225,23 +225,36 @@ export default function EditTool() {
                   />
                   <p className="text-xs text-muted-foreground">ID da conversa/grupo no Chatwoot onde as notificações serão enviadas</p>
                 </div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-background p-4 space-y-3">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Como funciona</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  O agente IA compõe a mensagem automaticamente com base no contexto da conversa. Não é necessário definir um template fixo.
+                </p>
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium text-muted-foreground">Template da Mensagem</Label>
-                  <Input
-                    defaultValue={(tool.execution_config as any)?.template ?? ""}
-                    placeholder="Novo agendamento: {{cliente}} às {{horario}}"
-                    className="h-11 rounded-lg bg-background border-border text-sm"
-                    onChange={(e) => {
-                      try {
-                        const cur = JSON.parse((document.querySelector('[name="execution_json"]') as HTMLTextAreaElement)?.value || "{}");
-                        cur.template = e.target.value;
-                        setValue("execution_json", JSON.stringify(cur, null, 2));
-                      } catch {
-                        setValue("execution_json", JSON.stringify({ template: e.target.value }, null, 2));
-                      }
-                    }}
-                  />
-                  <p className="text-xs text-muted-foreground">Variáveis disponíveis: {"{{cliente}}"}, {"{{horario}}"}, {"{{motivo}}"}</p>
+                  <p className="text-[11px] font-medium text-foreground">📋 Exemplo — Novo Lead Agendado:</p>
+                  <pre className="text-[10px] text-muted-foreground bg-muted/50 rounded p-2 whitespace-pre-wrap leading-relaxed">
+{`Novo Lead Agendado:
+
+Nome: João Silva
+Telefone: (11) 99999-0000
+Carro de interesse: HB20 2023
+Data agendada: 06/03 às 14:00
+
+Resumo: Cliente se interessou no HB20, falou sobre colocar um Gol 2018 como entrada e financiar o restante.`}
+                  </pre>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-[11px] font-medium text-foreground">🚨 Exemplo — Intervenção Necessária:</p>
+                  <pre className="text-[10px] text-muted-foreground bg-muted/50 rounded p-2 whitespace-pre-wrap leading-relaxed">
+{`Intervenção necessária no atendimento:
+
+Nome: Maria Souza
+Telefone: (21) 98888-1111
+
+Resumo: Cliente tem dúvidas sobre documentação de transferência. Atendimento fora do expediente, foi comunicada que um atendente entrará em contato no primeiro horário.`}
+                  </pre>
                 </div>
               </div>
             </div>
