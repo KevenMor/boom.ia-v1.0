@@ -1305,7 +1305,7 @@ Deno.serve(async (req) => {
               action: { type: "string", description: "Ação: 'check_availability' para consultar horários ou 'criar' para agendar", enum: ["check_availability", "criar"] },
               date: { type: "string", description: "Data para consulta (formato YYYY-MM-DD, padrão: hoje)" },
               days_ahead: { type: "integer", description: "Quantos dias consultar a partir da data (padrão: 3)" },
-              title: { type: "string", description: "Título do agendamento com nome do cliente (ex: 'Keven — Test Drive Audi A3')" },
+              title: { type: "string", description: "Título do agendamento: nome do cliente + veículo de interesse (ex: 'Keven — Audi A3 Sedan 2020')" },
               start_at: { type: "string", description: "Data e hora do agendamento (formato ISO 8601, ex: '2025-03-15T10:00:00')" },
               duration_minutes: { type: "integer", description: "Duração em minutos (padrão: 60)" },
               telefone_cliente: { type: "string", description: "Número de telefone/WhatsApp do cliente (ex: '5515991234567')" },
