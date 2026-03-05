@@ -548,6 +548,15 @@ export default function Conversations() {
                             // Hide tool-injected JSON messages (inventory results, tool outputs, etc.)
                             if (msg.role === "user" && msg.content?.trim().startsWith("{") && (msg.content.includes('"_hint"') || msg.content.includes('"vehicles"') || msg.content.includes('"total"'))) return false;
                             if (msg.role === "user" && msg.content?.trim().startsWith("{") && msg.content.includes('"tool_results"')) return false;
+                            // Hide tool-role messages (dispatcher results with JSON) unless debug is on
+                            if ((msg.role === "tool" || msg.role === "system") && !showDebug) {
+                              const c = (msg.content || "").trim();
+                              // Hide if it looks like JSON tool output (_hint, vehicles, total, action, error, etc.)
+                              if (c.startsWith("{") || c.startsWith("[")) return false;
+                              // Hide internal system injections
+                              if (c.startsWith("[Resultado da ferramenta")) return false;
+                              if (c.startsWith("⚠️")) return false;
+                            }
                             return true;
                           }).map((msg) => {
                             const isUser = msg.role === "user";

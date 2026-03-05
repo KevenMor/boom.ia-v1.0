@@ -207,7 +207,7 @@ function isVehicleMediaOrDetailRequest(text: string): boolean {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
 
-  return /\bfotos?\b|\bimagens?\b|\bdetalhes?\b|\bmais informacoes?\b|\bver\b|\bmostrar\b|\benviar\b/.test(normalized);
+  return /\bfotos?\b|\bimagens?\b|\bdetalhes?\b|\bmais informacoes?\b|\bver\b|\bmostrar\b|\benviar\b|\bmandar\b|\bme\s*mand[ae]r?\b/.test(normalized);
 }
 
 function removeRedundantPhotoOfferWhenPhotosPresent(content: string): string {
@@ -669,9 +669,12 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         if (!data?.length) return JSON.stringify({ message: "Nenhum veículo encontrado com esses filtros" });
 
         // Determine if user EXPLICITLY asked for PHOTOS/IMAGES
-        // STRICT: Only match clear photo intent — NOT generic words like "manda", "envia", "claro"
-        const photoRequestPattern = /\b(fotos?|imagens?|images?|photos?|manda\s*fotos?|envia\s*fotos?|enviar\s*fotos?|ver\s*fotos?|ver\s*imagens?|mostra\s*fotos?|mostra\s*imagens?|quero\s*ver\s*fotos?|me\s*envia|me\s*manda|galeria)\b/i;
-        const isPhotoRequest = photoRequestPattern.test(userText || "");
+        // Covers infinitive forms (mandar, enviar, mostrar) AND conjugations (manda, envia, mostra)
+        // Also covers contextual requests like "me manda da X tambem" (implying photos from context)
+        const photoRequestPattern = /\b(fotos?|imagens?|images?|photos?|mand[ae]r?\s*fotos?|envia(?:r)?\s*fotos?|ver\s*fotos?|ver\s*imagens?|mostra(?:r)?\s*fotos?|mostra(?:r)?\s*imagens?|quero\s*ver\s*fotos?|me\s*envia(?:r)?|me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?|galeria)\b/i;
+        // CONTEXTUAL: "me manda/mandar da X tambem" after photos were just sent implies more photos
+        const contextualPhotoPattern = /\b(me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?|me\s*envia(?:r)?|pode\s*me\s*envia(?:r)?)\b.*\b(tamb[eé]m|tb|tbm|tamb[eé]n)\b/i;
+        const isPhotoRequest = photoRequestPattern.test(userText || "") || contextualPhotoPattern.test(userText || "");
         // Show photos ONLY when user explicitly asks AND it's a specific vehicle query (few results)
         const isSpecificWithPhotos = isPhotoRequest && data.length <= 3;
         // Include photo data ONLY when user asked for photos — NOT by default
@@ -2254,7 +2257,9 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
     const isSchedulingContext = /(agend|reagend|remar|horario|horário|visita|test.?drive|marcar|remarcar|quero ir|posso ir|vou aí|vou ai|chegar na loja|estacionamento|endere[cç]o|como chego)/i.test(latestUserText || "");
     const hasFipeResult = toolResultsContext.some(ctx => /fipe|tabela_fipe|valor_fipe|preco_medio/i.test(ctx));
     // PHOTO INJECTION: Only inject photos when user EXPLICITLY asked for them
-    const userExplicitlyAskedPhotos = /\b(fotos?|imagens?|photos?|manda\s*fotos?|envia\s*fotos?|ver\s*fotos?|mostra\s*fotos?|me\s*envia|me\s*manda|galeria)\b/i.test(latestUserText || "");
+    // Must match the same expanded regex from inventory_query to be consistent
+    const userExplicitlyAskedPhotos = /\b(fotos?|imagens?|photos?|mand[ae]r?\s*fotos?|envia(?:r)?\s*fotos?|ver\s*fotos?|mostra(?:r)?\s*fotos?|me\s*envia(?:r)?|me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?|galeria)\b/i.test(latestUserText || "")
+      || /\b(me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?|me\s*envia(?:r)?|pode\s*me\s*envia(?:r)?)\b.*\b(tamb[eé]m|tb|tbm|tamb[eé]n)\b/i.test(latestUserText || "");
     if (toolResultsContext.length > 0 && !isAppraisalPhotoContext && !isTradeInContext && !isSchedulingContext && userExplicitlyAskedPhotos) {
       try {
         for (const ctx of toolResultsContext) {
@@ -2268,7 +2273,8 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
         console.warn("[PostProcess] Could not extract vehicles for photo injection:", e?.message);
       }
     } else if (!isAppraisalPhotoContext && !isTradeInContext && !isSchedulingContext && toolResultsContext.length === 0 && agent?.tenant_id) {
-      const explicitPhotoRequest = /(foto|fotos|imagem|imagens|manda|envia|nao me enviou|não me enviou|cad[eê] as fotos|me envia)/i.test(latestUserText || "");
+      const explicitPhotoRequest = /(foto|fotos|imagem|imagens|mand[ae]r?|envia(?:r)?|nao me enviou|não me enviou|cad[eê] as fotos|me envia(?:r)?|me mand[ae]r?|pode me mand[ae]r?)/i.test(latestUserText || "")
+        || /\b(me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?)\b.*\b(tamb[eé]m|tb|tbm)\b/i.test(latestUserText || "");
       const shouldForcePhotoRecovery = !hasMarkdownImages(finalContent) && (!!photoCommandLine || explicitPhotoRequest);
 
       if (shouldForcePhotoRecovery) {
