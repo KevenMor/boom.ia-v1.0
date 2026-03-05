@@ -207,6 +207,25 @@ export default function EditTool() {
                   </Select>
                 </div>
                 <div className="space-y-2">
+                  <Label className="text-sm font-medium text-muted-foreground">Conversation ID (grupo destino)</Label>
+                  <Input
+                    type="number"
+                    placeholder="Ex: 123"
+                    defaultValue={(tool.execution_config as any)?.conversation_id ?? ""}
+                    className="h-11 rounded-lg bg-background border-border font-mono text-sm"
+                    onChange={(e) => {
+                      try {
+                        const cur = JSON.parse((document.querySelector('[name="execution_json"]') as HTMLTextAreaElement)?.value || "{}");
+                        cur.conversation_id = e.target.value ? Number(e.target.value) : null;
+                        setValue("execution_json", JSON.stringify(cur, null, 2));
+                      } catch {
+                        setValue("execution_json", JSON.stringify({ conversation_id: e.target.value ? Number(e.target.value) : null }, null, 2));
+                      }
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">ID da conversa/grupo no Chatwoot onde as notificações serão enviadas</p>
+                </div>
+                <div className="space-y-2">
                   <Label className="text-sm font-medium text-muted-foreground">Template da Mensagem</Label>
                   <Input
                     defaultValue={(tool.execution_config as any)?.template ?? ""}
