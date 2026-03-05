@@ -1,48 +1,70 @@
 
 
-## Problem Analysis
+## Problem: Photo Acceptance ("Quero") Fails at Multiple Layers
 
-**What happened**: The client asked "Muito bonitas, vocês aceitam meu carro no negócio?" — a generic question asking IF the dealership accepts trade-ins. The client never mentioned what car they own (no brand, model, or year). However, the Dispatcher hallucinated "Chevrolet Cruze Premier 2020" and called `consultar_fipe` with those parameters, causing the agent to present a FIPE valuation for a car the client never mentioned. This destroys credibility.
+When the agent offers photos ("Quer que eu te mande fotos do Corolla?") and the client responds "Quero" / "Sim" / "Pode" / "Manda", photos are never delivered. This is a **three-layer failure**:
 
-**Root cause**: The Dispatcher prompt (in `ppl-motors.ts`) tells it to "extract marca, modelo, ano from conversation (can be in history)" for `consultar_fipe`. When the client says "meu carro no negócio", the keywords "carro" + "negócio" match APPRAISAL/TRADE-IN intent. But since no car details exist in the conversation, the LLM hallucinates them — likely influenced by the "Cruze 2020" examples in the prompt itself.
+**Layer 1 — Dispatcher**: May classify "Quero" as `NO_TOOLS_NEEDED` since it lacks explicit photo/vehicle keywords. Even though it receives conversation history, short confirmations are ambiguous without explicit contextual rules.
 
-**Missing safeguard**: There is no rule telling the Dispatcher to return `NO_TOOLS_NEEDED` when the client mentions trade-in interest but hasn't provided their vehicle details. The system prompt should explicitly state: if marca+modelo+ano are not available, do NOT call `consultar_fipe`.
+**Layer 2 — Inventory Handler**: Even if the dispatcher correctly calls `consultar_estoque`, the `isPhotoRequest` check (line 698) only tests `latestUserText` for explicit photo keywords ("fotos", "imagens", etc.). "Quero" matches none, so the photo arrays are **stripped from the tool response** before the conversational LLM sees them.
+
+**Layer 3 — Post-Processing**: `userExplicitlyAskedPhotos` (line 2742) and the Photo Recovery Fallback (line 2757) both use the same explicit keyword regex on `latestUserText`. "Quero" fails all of them.
 
 ---
 
 ## Plan
 
-### 1. Add anti-hallucination rule to Dispatcher prompt (`ppl-motors.ts`)
+### 1. New helper function: `isContextualPhotoAcceptance`
 
-In the `DISPATCHER_PROMPT`, add a critical rule in the "CRITICAL RULES" section:
-
-```
-RULE 12 (ANTI-HALLUCINATION — HIGHEST PRIORITY):
-- NEVER call consultar_fipe unless the customer has EXPLICITLY stated the marca, modelo AND ano of THEIR vehicle in the conversation history.
-- If the customer asks generically about trade-ins ("aceitam meu carro?", "vocês pegam carro na troca?", "posso dar meu carro?") WITHOUT specifying what car they have → return NO_TOOLS_NEEDED.
-- The conversational model will handle asking the customer for their vehicle details.
-- NEVER guess, infer, or invent vehicle parameters. If the info is not explicitly in the conversation, DO NOT call the tool.
-- The examples in this prompt (Cruze 2020, Civic 2019, HB20 2021) are JUST examples. NEVER use them as default values.
-```
-
-### 2. Add a "generic trade-in" example to NO_TOOLS_NEEDED section
-
-Add explicit examples to the `NO_TOOLS_NEEDED` list:
+Add a function in `chat-agent/index.ts` that detects when a short user message is accepting a photo offer from the previous assistant message:
 
 ```
-- "vocês aceitam meu carro?" (generic trade-in question, no car details given)
-- "aceitam carro na troca?" (generic)
-- "posso dar meu carro como entrada?" (no marca/modelo/ano specified)
+function isContextualPhotoAcceptance(userText: string, history: any[]): boolean
 ```
 
-### 3. Update the System Prompt trade-in section (`ppl-motors.ts`)
+- **User text check**: Short confirmation pattern — `quero`, `sim`, `pode`, `manda`, `claro`, `por favor`, `ok`, `bora`, `quero sim`, `pode sim`, `manda sim`, `quero ver`, `aceito`, `com certeza`, `gostaria`
+- **History check**: Last assistant message contains a photo-offer pattern like "quer que eu te mande fotos", "posso enviar fotos", "gostaria de ver fotos", "quer ver fotos"
+- Returns `true` only when BOTH conditions match
 
-In section "8) Troca com pré-avaliação", add instruction for when the client asks generically about trade-ins without giving car details — the agent should confirm they accept trade-ins and then ask for the vehicle info (marca, modelo, ano, km, fotos).
+### 2. Update `isPhotoRequest` in inventory handler (~line 698)
 
-This ensures the conversational model (Phase 2) knows how to handle the case where no tool was called because the client didn't provide details.
+Expand the check to also be true when `isContextualPhotoAcceptance` returns true. This ensures when the dispatcher correctly calls `consultar_estoque`, the photo data is NOT stripped from the response.
+
+### 3. Update `userExplicitlyAskedPhotos` in post-processing (~line 2742)
+
+Same expansion — include `isContextualPhotoAcceptance` so the post-processing photo injection works for contextual acceptances.
+
+### 4. Update `explicitPhotoRequest` in recovery fallback (~line 2757)
+
+Same expansion for the fallback path, ensuring photos can be recovered even if the dispatcher skipped the tool call.
+
+### 5. Update dispatcher prompt (ppl-motors.ts)
+
+Add explicit contextual acceptance examples to the dispatcher's Rule 13 (photo priority):
+
+```
+RULE 13 — CONTEXTUAL ACCEPTANCE:
+When the previous assistant message offered photos and the user responds with
+"Quero", "Sim", "Pode", "Manda", "Claro", "Por favor" → call consultar_estoque
+with the marca/modelo from conversation history. These are photo acceptance responses.
+```
+
+Add corresponding examples to the NO_TOOLS_NEEDED exclusion list to prevent the dispatcher from skipping these.
+
+### 6. Force dispatch override for contextual photo acceptance (~line 2224)
+
+In the `shouldSkip` logic, add a new override similar to `mentionsScheduling`:
+
+```
+const contextualPhotoAccept = isContextualPhotoAcceptance(latestUserText, sanitizedMessages);
+const shouldSkip = (...) && !mentionsScheduling && !contextualPhotoAccept;
+```
+
+This ensures even if "Quero" somehow matches a skip pattern, the system forces dispatch when it detects photo acceptance context.
 
 ---
 
 ### Files to modify
-- `supabase/functions/_shared/prompts/ppl-motors.ts` — Dispatcher prompt + System prompt
+- `supabase/functions/chat-agent/index.ts` — New helper function + 4 integration points (skip logic, inventory handler, post-processing, recovery fallback)
+- `supabase/functions/_shared/prompts/ppl-motors.ts` — Dispatcher prompt Rule 13 update with contextual acceptance examples
 
