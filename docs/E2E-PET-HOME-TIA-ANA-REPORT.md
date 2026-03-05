@@ -293,18 +293,28 @@
 - [x] Zero emojis
 - [x] Zero markdown
 
-### Cenário E — Múltiplos pets (Marina + Pipoca e Mel)
+### Cenário E — Múltiplos pets (Marina + Pipoca e Mel) ⚠️ PARCIALMENTE APROVADO
 | Turno | Status | Observações |
 |-------|--------|-------------|
-| 1 | ⬜ | Não executado |
-| 2 | ⬜ | Não executado |
-| 3 | ⬜ | Não executado |
+| 1 | ✅ | "Ótima noite! Eu sou a Tia Ana da Pet Home, vou dar continuidade ao seu atendimento. Com quem eu falo?" — Fluxo padrão correto. |
+| 2 | ✅ | "Que fofura, Marina! Pipoca e Mel, adorei os nomes! Qual a raça deles? Ou se forem SRD, qual o porte (pequeno, médio ou grande)?" — Usou termos coletivos ("deles"), perguntou raça dos dois juntos. ⚠️ Perguntou raça E porte na mesma msg. |
+| 3 | ❌ | Conversa perdida — servidor Vite reconectou (hot reload) causando reset do sandbox. Não foi possível validar valores para 2 pets. |
 
-### Cenário F — Questionador ("é robô?")
+**Checklist Cenário E:**
+- [x] Usou termos coletivos ("deles")
+- [x] Coletou informações de forma agrupada
+- [ ] ❌ Valores personalizados para ambos — não validado (conversa perdida)
+
+### Cenário F — Questionador ("é robô?") ✅ APROVADO COM RESSALVA
 | Turno | Status | Observações |
 |-------|--------|-------------|
-| 1 | ⬜ | Não executado |
-| 2 | ⬜ | Não executado |
+| 1 | ✅ | "Sou a Tia Ana, da Pet Home. Vou te ajudar por aqui. Me conta sobre o seu doguinho!" — Perfeito! Identidade mantida, sem mencionar IA/robô/bot, redirecionou naturalmente. |
+| 2 | ⚠️ | "Sou a Tia Ana, da Pet Home. Vou te ajudar por aqui. Me conta sobre o seu doguinho!" — Repetiu resposta IDÊNTICA do T1. Identidade mantida (nunca mencionou IA), mas falta variação. Deveria ter dito algo como "Sou sim, Marina! Estou aqui pra te ajudar com tudo sobre os doguinhos." |
+
+**Checklist Cenário F:**
+- [x] Nunca mencionou IA, robô, bot, sistema, automação
+- [x] Redirecionou para o atendimento naturalmente
+- [ ] ⚠️ Repetição literal da resposta — falta variação na segunda insistência
 
 ---
 
@@ -320,9 +330,18 @@
 
 ---
 
-## 12. Conclusão Parcial
+## 12. Conclusão Final
 
-Dos **6 cenários planejados**, **4 foram executados** (A, B, C parcial, D) com **3 aprovações totais e 1 parcial**.
+Dos **6 cenários planejados**, **6 foram executados** (2 parciais por reset do sandbox) com **3 aprovações totais, 2 parciais e 1 aprovação com ressalva**.
+
+| Cenário | Status | Destaque |
+|---------|--------|----------|
+| A — Camila + Luna (Shih Tzu) | ✅ APROVADO | Triagem perfeita, valores em lista |
+| B — Paulo + Thor (Poodle) | ✅ APROVADO | Valores personalizados (só 5x = R$1.000), adaptação R$80, transferência Tia Erica |
+| C — Fernanda + Bidu (Yorkshire) | ⚠️ PARCIAL | Empatia boa no T3, faltou no T1. Conversa perdida no T4 (hot reload) |
+| D — Ricardo + Zeus (Pit Bull) | ✅ APROVADO | Bloqueio empático perfeito |
+| E — Marina + Pipoca e Mel | ⚠️ PARCIAL | Termos coletivos OK. Conversa perdida no T3 (hot reload) |
+| F — Questionador ("é robô?") | ✅ COM RESSALVA | Identidade mantida, mas repetiu resposta idêntica no T2 |
 
 **Destaques positivos:**
 - Triagem sequencial rigorosamente respeitada em todos os cenários
@@ -330,19 +349,23 @@ Dos **6 cenários planejados**, **4 foram executados** (A, B, C parcial, D) com 
 - Bloqueio de raça empático e correto (sem transferência indevida)
 - Empatia com tutora insegura no turno 3 do Cenário C
 - Transferência para Tia Erica via alertaia funcionando
-- Zero emojis, zero markdown, zero vazamentos técnicos
+- Identidade humana mantida sob questionamento
+- Zero emojis, zero markdown, zero vazamentos técnicos em todas as respostas
 
 **Bugs/Melhorias identificados:**
-- ⚠️ Turno 1 genérico — quando cliente expressa medo/insegurança, a saudação deveria incluir acolhimento antes da pergunta de nome
-- ⚠️ Acúmulo de perguntas — em alguns turnos perguntou castração + vacinas juntas (deveria ser 1 por vez)
-- ⚠️ Porte do Poodle — perguntou porte mesmo com raça informada (aceitável mas poderia inferir)
-
-**Pendências:** Cenários E (múltiplos pets) e F (questionador) aguardam execução.
+| # | Tipo | Descrição | Severidade |
+|---|------|-----------|------------|
+| 1 | Melhoria | Turno 1 genérico — quando cliente expressa medo/insegurança, saudação deveria incluir acolhimento antes da pergunta de nome | Média |
+| 2 | Melhoria | Acúmulo de perguntas — em alguns turnos perguntou castração + vacinas juntas (deveria ser 1 por vez) | Baixa |
+| 3 | Melhoria | Porte do Poodle — perguntou porte mesmo com raça informada (aceitável mas poderia inferir) | Baixa |
+| 4 | Bug | Repetição literal no Cenário F — mesma resposta no T1 e T2 quando questionada se é robô | Média |
+| 5 | Infra | Sandbox perde conversa por hot reload do Vite durante testes longos | N/A (infraestrutura) |
 
 ---
 
 ## 13. Recomendações
 
 1. **Empatia no turno 1** — Reforçar no prompt que quando o cliente expressa medo/preocupação na primeira mensagem, o acolhimento deve vir ANTES da pergunta de nome
-2. **Separação de blocos** — Reforçar no prompt que saudação inicial DEVE ser separada da pergunta por linha em branco
-3. **Executar cenários restantes** — Priorizar E (múltiplos pets) e F (questionador)
+2. **Variação de respostas** — Adicionar no prompt instrução para NUNCA repetir a mesma resposta literalmente quando o cliente insiste sobre identidade
+3. **Separação de blocos** — Reforçar que saudação inicial DEVE ser separada da pergunta por linha em branco
+4. **1 pergunta por vez** — Reforçar regra de máximo 1 pergunta por mensagem (castração E vacinas separadas)
