@@ -1213,6 +1213,22 @@ Deno.serve(async (req) => {
       ? createClient(nexusUrl, nexusServiceKey)
       : supabase;
 
+    const saveMessageWithFallback = async (payload: Record<string, any>, logPrefix: string) => {
+      const { data, error } = await supabaseAdmin.rpc("save_message", payload);
+      if (!error) return { data, error: null };
+
+      const errorText = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`;
+      const shouldFallback = Object.prototype.hasOwnProperty.call(payload, "p_metadata")
+        && /metadata|p_metadata|save_message/i.test(errorText);
+
+      if (!shouldFallback) return { data: null, error };
+
+      const { p_metadata, ...legacyPayload } = payload;
+      console.warn(`[${logPrefix}] save_message fallback: retrying without p_metadata`);
+      const { data: fallbackData, error: fallbackError } = await supabaseAdmin.rpc("save_message", legacyPayload);
+      return { data: fallbackData ?? null, error: fallbackError ?? null };
+    };
+
     const { agent_id, messages, conversation_id, attachments, external_user_id } = await req.json();
 
     if (!agent_id || (!messages?.length && !(attachments?.length))) {
@@ -1368,7 +1384,7 @@ Deno.serve(async (req) => {
     // For media messages, we defer persistence until after transcription/image notes are appended
     if (convId && lastUserMsg?.role === "user" && !hasIncomingAttachments) {
       try {
-        const { data: savedUserMsg, error: saveUserErr } = await supabaseAdmin.rpc("save_message", {
+        const { data: savedUserMsg, error: saveUserErr } = await saveMessageWithFallback({
           p_agent_id: agent_id,
           p_conversation_id: convId,
           p_role: "user",
@@ -1378,7 +1394,7 @@ Deno.serve(async (req) => {
           p_tokens_output: 0,
           p_latency_ms: null,
           p_metadata: null,
-        });
+        }, "SaveUser");
         if (saveUserErr) {
           console.error("[SaveUser] FAILED:", saveUserErr.message, saveUserErr.details, saveUserErr.hint);
         } else {
@@ -1594,7 +1610,7 @@ Deno.serve(async (req) => {
       }
 
       try {
-        const { data: savedUserMsg, error: saveUserErr } = await supabaseAdmin.rpc("save_message", {
+        const { data: savedUserMsg, error: saveUserErr } = await saveMessageWithFallback({
           p_agent_id: agent_id,
           p_conversation_id: convId,
           p_role: "user",
@@ -1604,7 +1620,7 @@ Deno.serve(async (req) => {
           p_tokens_output: 0,
           p_latency_ms: null,
           p_metadata: null,
-        });
+        }, "SaveUser][Media");
         if (saveUserErr) {
           console.error("[SaveUser][Media] FAILED:", saveUserErr.message, saveUserErr.details, saveUserErr.hint);
         } else {
@@ -1693,7 +1709,7 @@ Deno.serve(async (req) => {
           if (convId && fullContent) {
             const latency = Date.now() - startTime;
             try {
-              await supabaseAdmin.rpc("save_message", {
+              const { error: saveAssistantErr } = await saveMessageWithFallback({
                 p_agent_id: agent_id,
                 p_conversation_id: convId,
                 p_role: "assistant",
@@ -1703,7 +1719,8 @@ Deno.serve(async (req) => {
                 p_tokens_output: 0,
                 p_latency_ms: latency,
                 p_metadata: null,
-              });
+              }, "SaveAssistant][Stream");
+              if (saveAssistantErr) console.warn("Could not save assistant msg:", saveAssistantErr.message);
             } catch (e: any) { console.warn("Could not save assistant msg:", e); }
           }
         } catch (e) { console.error("stream transform error:", e); }
@@ -1971,17 +1988,18 @@ Deno.serve(async (req) => {
               // Save tool result to memory
               if (convId) {
                 try {
-                  await supabaseAdmin.rpc("save_message", {
-                    p_agent_id: agent_id,
-                    p_conversation_id: convId,
-                    p_role: "tool",
-                    p_content: toolResult,
-                    p_model: null,
-                    p_tokens_input: 0,
-                    p_tokens_output: 0,
-                    p_latency_ms: null,
-                    p_metadata: null,
-                  });
+                    const { error: saveToolErr } = await saveMessageWithFallback({
+                      p_agent_id: agent_id,
+                      p_conversation_id: convId,
+                      p_role: "tool",
+                      p_content: toolResult,
+                      p_model: null,
+                      p_tokens_input: 0,
+                      p_tokens_output: 0,
+                      p_latency_ms: null,
+                      p_metadata: null,
+                    }, "SaveTool");
+                    if (saveToolErr) console.warn("[SaveTool] FAILED:", saveToolErr.message);
                 } catch {}
               }
             }
@@ -2496,12 +2514,16 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
       const latency = Date.now() - startTime;
       try {
         for (let i = 0; i < messageParts.length; i++) {
-          await supabaseAdmin.rpc("save_message", {
-            p_agent_id: agent_id, p_conversation_id: convId,
-            p_role: "assistant", p_content: messageParts[i], p_model: model,
+          const { error: saveAssistantErr } = await saveMessageWithFallback({
+            p_agent_id: agent_id,
+            p_conversation_id: convId,
+            p_role: "assistant",
+            p_content: messageParts[i],
+            p_model: model,
             p_latency_ms: i === 0 ? latency : null,
             p_metadata: i === 0 ? { debug: debugTrace, edge_logs: collectedLogs } : null,
-          });
+          }, "SaveAssistant");
+          if (saveAssistantErr) throw saveAssistantErr;
         }
       } catch (e: any) { console.warn("Could not save assistant msg:", e); }
     }
