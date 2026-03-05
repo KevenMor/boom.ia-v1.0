@@ -838,6 +838,62 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
 
         const action = (args.action || args.acao || "check_availability").toLowerCase();
 
+        if (action === "cancelar" || action === "cancel" || action === "desmarcar") {
+          // Cancel an existing calendar event
+          const eventId = args.event_id || args.evento_id;
+          const title = args.title || args.titulo;
+          const startAt = args.start_at || args.data_hora || args.datetime;
+
+          if (!eventId && !title && !startAt) {
+            return JSON.stringify({ error: "Informe o event_id, título ou data/hora do agendamento a cancelar" });
+          }
+
+          // Find the event to cancel
+          let findQuery = supabase
+            .from("calendar_events")
+            .select("id, title, start_at, end_at, description")
+            .eq("tenant_id", agentData.tenant_id);
+
+          if (eventId) {
+            findQuery = findQuery.eq("id", eventId);
+          } else if (startAt) {
+            // Match by exact start time
+            const startDate = new Date(startAt);
+            findQuery = findQuery.eq("start_at", startDate.toISOString());
+          } else if (title) {
+            findQuery = findQuery.ilike("title", `%${title}%`);
+          }
+
+          const { data: eventsToCancel, error: findError } = await findQuery.limit(5);
+
+          if (findError) return JSON.stringify({ error: findError.message });
+          if (!eventsToCancel?.length) {
+            return JSON.stringify({ error: "Nenhum agendamento encontrado com os dados informados", status: "nao_encontrado" });
+          }
+
+          // If multiple matches, cancel the most recent/closest one
+          const targetEvent = eventsToCancel[0];
+
+          const { error: deleteError } = await supabase
+            .from("calendar_events")
+            .delete()
+            .eq("id", targetEvent.id);
+
+          if (deleteError) return JSON.stringify({ error: deleteError.message });
+
+          console.log(`[CalendarCancel] Deleted event ${targetEvent.id}: ${targetEvent.title} at ${targetEvent.start_at}`);
+
+          return JSON.stringify({
+            status: "cancelado",
+            evento_cancelado: {
+              id: targetEvent.id,
+              titulo: targetEvent.title,
+              inicio: targetEvent.start_at,
+              fim: targetEvent.end_at,
+            },
+          });
+        }
+
         if (action === "create" || action === "agendar" || action === "criar") {
           // Create a new calendar event
           const title = args.title || args.titulo || "Agendamento via IA";
