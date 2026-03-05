@@ -944,17 +944,19 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
               } catch (e) { console.warn("[Calendar→Post] CW API search failed:", e); }
             }
 
-            // --- Assignment (only for agendamento/remarcacao) ---
-            if (eventType !== "cancelamento" && assignToolRow?.tools && cwConvId) {
+            // --- Assignment DISABLED for agendamento/remarcacao ---
+            // Keeping the conversation unassigned so the AI bot continues responding
+            // (e.g. if the client wants to reschedule). Assignment only on cancelamento if needed.
+            if (eventType === "cancelamento" && assignToolRow?.tools && cwConvId) {
               const execCfg = (assignToolRow.tools.execution_config || {}) as Record<string, any>;
               let assigneeId = execCfg.assignee_id;
               const rules = Array.isArray(execCfg.rules) ? execCfg.rules : [];
               if (rules.length > 0) {
                 for (const rule of rules) {
                   const rLabel = (rule.label || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                  if (rLabel && rLabel.includes("agend")) {
+                  if (rLabel && rLabel.includes("cancel")) {
                     if (rule.assignee_id) assigneeId = rule.assignee_id;
-                    console.log(`[Calendar→Assign] Matched rule "${rule.label}"`);
+                    console.log(`[Calendar→Assign] Matched cancel rule "${rule.label}"`);
                     break;
                   }
                 }
@@ -969,7 +971,8 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
               });
               console.log(`[Calendar→Assign] Status: ${aResp.status}`);
               if (!aResp.ok) console.warn(`[Calendar→Assign] Error:`, await aResp.text().catch(() => ""));
-
+            } else if (eventType !== "cancelamento") {
+              console.log(`[Calendar→Assign] Skipped assignment for ${eventType} — keeping bot active`);
             }
 
             // --- Cancel follow-ups (always, for any calendar action) ---
