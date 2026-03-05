@@ -92,6 +92,15 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     version: "v1.0.0",
     description: "Tia Ana — Atendente Pet Home (Hotel e Creche para Cachorros Sorocaba/SP)",
   },
+  "pet-home-tia-erica": {
+    systemPrompt: PH_SYSTEM,
+    communicationRules: PH_COMM_RULES,
+    dispatcherPrompt: PH_DISPATCHER,
+    followupPrompt: PH_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.0.0",
+    description: "Tia Ana — Atendente Pet Home (Hotel e Creche para Cachorros Sorocaba/SP)",
+  },
 };
 
 /**
