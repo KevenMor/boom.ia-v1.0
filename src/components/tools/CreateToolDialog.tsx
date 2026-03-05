@@ -153,7 +153,7 @@ export function CreateToolDialog({ open, onOpenChange }: Props) {
       case "fipe_query": return '{}';
       case "calendar_query": return '{}';
       case "chatwoot_assign": return '{\n  "assignee_id": 15,\n  "team_id": null\n}';
-      case "send_notification": return '{\n  "channel": "chatwoot_message",\n  "template": "Novo agendamento: {{cliente}} às {{horario}}"\n}';
+      case "send_notification": return '{\n  "channel": "chatwoot_message",\n  "conversation_id": 123\n}';
     }
   };
 
@@ -309,26 +309,12 @@ export function CreateToolDialog({ open, onOpenChange }: Props) {
                       }
                     }}
                   />
-                  <p className="text-[10px] text-muted-foreground">ID da conversa/grupo no Chatwoot onde as notificações serão enviadas</p>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Template da Mensagem</Label>
-                  <Input
-                    placeholder="Novo agendamento: {{cliente}} às {{horario}}"
-                    className="h-9 bg-background text-sm"
-                    onChange={(e) => {
-                      try {
-                        const cur = JSON.parse((document.querySelector('[name="execution_json"]') as HTMLTextAreaElement)?.value || "{}");
-                        cur.template = e.target.value;
-                        setValue("execution_json", JSON.stringify(cur, null, 2));
-                      } catch {
-                        setValue("execution_json", JSON.stringify({ template: e.target.value }, null, 2));
-                      }
-                    }}
-                  />
-                  <p className="text-[10px] text-muted-foreground">Variáveis: {"{{cliente}}"}, {"{{horario}}"}, {"{{motivo}}"}</p>
+                  <p className="text-[10px] text-muted-foreground">ID do grupo no Chatwoot onde as notificações serão enviadas</p>
                 </div>
               </div>
+              <p className="text-[10px] text-muted-foreground italic">
+                💡 O agente IA compõe a mensagem automaticamente com base no contexto da conversa (nome, telefone, resumo, etc).
+              </p>
             </div>
           )}
 

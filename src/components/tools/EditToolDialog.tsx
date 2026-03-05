@@ -223,7 +223,7 @@ export function EditToolDialog({ tool, open, onOpenChange }: Props) {
                   type="number"
                   placeholder="Ex: 123"
                   defaultValue={(tool?.execution_config as any)?.conversation_id ?? ""}
-                  className="h-9 bg-background font-mono text-sm"
+                  className="h-9 bg-background font-mono text-sm border-border"
                   onChange={(e) => {
                     try {
                       const cur = JSON.parse((document.querySelector('[name="execution_json"]') as HTMLTextAreaElement)?.value || "{}");
@@ -234,26 +234,11 @@ export function EditToolDialog({ tool, open, onOpenChange }: Props) {
                     }
                   }}
                 />
-                <p className="text-[10px] text-muted-foreground">ID da conversa/grupo no Chatwoot onde as notificações serão enviadas</p>
+                <p className="text-[10px] text-muted-foreground">ID do grupo no Chatwoot onde as notificações serão enviadas</p>
               </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Template</Label>
-                <Input
-                  defaultValue={(tool?.execution_config as any)?.template ?? ""}
-                  placeholder="Novo agendamento: {{cliente}} às {{horario}}"
-                  className="h-9 bg-background text-sm"
-                  onChange={(e) => {
-                    try {
-                      const cur = JSON.parse((document.querySelector('[name="execution_json"]') as HTMLTextAreaElement)?.value || "{}");
-                      cur.template = e.target.value;
-                      setValue("execution_json", JSON.stringify(cur, null, 2));
-                    } catch {
-                      setValue("execution_json", JSON.stringify({ template: e.target.value }, null, 2));
-                    }
-                  }}
-                />
-                <p className="text-[10px] text-muted-foreground">Variáveis: {"{{cliente}}"}, {"{{horario}}"}, {"{{motivo}}"}</p>
-              </div>
+              <p className="text-[10px] text-muted-foreground italic">
+                💡 O agente IA compõe a mensagem automaticamente com base no contexto da conversa (nome, telefone, resumo, etc).
+              </p>
             </div>
           )}
 
