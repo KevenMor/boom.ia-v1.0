@@ -17,6 +17,12 @@ import {
   DISPATCHER_PROMPT as IVM_DISPATCHER,
   FOLLOWUP_PROMPT as IVM_FOLLOWUP,
 } from "./instituto-vicentim-maekawa.ts";
+import {
+  SYSTEM_PROMPT as PH_SYSTEM,
+  COMMUNICATION_RULES as PH_COMM_RULES,
+  DISPATCHER_PROMPT as PH_DISPATCHER,
+  FOLLOWUP_PROMPT as PH_FOLLOWUP,
+} from "./pet-home.ts";
 
 /**
  * Configuração de prompt por tenant.
@@ -76,6 +82,15 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     alwaysInjectCommRules: true,
     version: "v1.2.0",
     description: "Mariana — Recepcionista Instituto Vicentim Maekawa (Odontologia Sorocaba/SP)",
+  },
+  "pet-home": {
+    systemPrompt: PH_SYSTEM,
+    communicationRules: PH_COMM_RULES,
+    dispatcherPrompt: PH_DISPATCHER,
+    followupPrompt: PH_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.0.0",
+    description: "Tia Ana — Atendente Pet Home (Hotel e Creche para Cachorros Sorocaba/SP)",
   },
 };
 
