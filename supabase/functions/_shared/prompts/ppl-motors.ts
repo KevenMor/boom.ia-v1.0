@@ -689,12 +689,16 @@ CALL consultar_agenda:
 - "pode marcar pra sexta às 10h" → consultar_agenda(action="criar", title="Visita - [nome do cliente]", start_at="YYYY-MM-DDT10:00:00")
 - Customer chose a specific time (e.g., "14h", "às 10", "pode ser 15h") → consultar_agenda(action="criar", title="Visita - [nome]", start_at="YYYY-MM-DDTHH:00:00")
 
-CALL consultar_agenda (CANCELLATION/RESCHEDULING):
-- "preciso remarcar" → consultar_agenda(action="cancelar", start_at="YYYY-MM-DDTHH:00:00") [from history]
-- "tive um imprevisto, não vou poder ir" → consultar_agenda(action="cancelar", start_at="YYYY-MM-DDTHH:00:00") [from history]
-- "preciso cancelar meu horário" → consultar_agenda(action="cancelar", titulo="[nome do cliente]")
-- "não consigo ir amanhã" (after confirmed booking) → consultar_agenda(action="cancelar", start_at="...") [the booked time]
-- "quero mudar o horário" → consultar_agenda(action="cancelar", start_at="...") [the booked time]
+CALL consultar_agenda (CANCELLATION/RESCHEDULING — CRITICAL):
+- ALWAYS pass start_at with the EXACT date and time of the existing appointment from the conversation history.
+- Look in the assistant's PREVIOUS messages for the confirmed booking (e.g. "confirmado para amanhã, quinta-feira, dia 05/03, às 14:00").
+- Extract that date+time and pass it as start_at in ISO format.
+- Also pass the client name for extra precision.
+- "preciso remarcar" → consultar_agenda(action="cancelar", start_at="2026-03-05T14:00:00", client_name="Carlos")
+- "tive um imprevisto, não vou poder ir" → consultar_agenda(action="cancelar", start_at="[exact booked time from history]", client_name="[name]")
+- "preciso cancelar meu horário" → consultar_agenda(action="cancelar", start_at="[exact booked time]", client_name="[name]")
+- "quero mudar o horário" → consultar_agenda(action="cancelar", start_at="[exact booked time]", client_name="[name]")
+- NEVER pass only the title without start_at — this can match wrong events!
 
 ═══════════════════════════════════════════════
 SCHEDULING: TWO-STEP FLOW (CRITICAL)
