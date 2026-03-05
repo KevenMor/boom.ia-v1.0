@@ -2237,7 +2237,7 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
     let finalContent = sanitizeLLMOutput(rawContent);
 
     // POST-PROCESSING: Strip emojis for tenants that prohibit them
-    const noEmojiTenants = ["instituto-vicentim-maekawa"];
+    const noEmojiTenants = ["instituto-vicentim-maekawa", "insituto-vicentim-maekawa"];
     if (noEmojiTenants.includes(tenantSlug || "")) {
       const before = finalContent;
       finalContent = stripEmojis(finalContent);

@@ -67,6 +67,16 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     version: "v1.1.0",
     description: "Mariana — Recepcionista Instituto Vicentim Maekawa (Odontologia Sorocaba/SP)",
   },
+  // Typo variant in database — maps to the same config
+  "insituto-vicentim-maekawa": {
+    systemPrompt: IVM_SYSTEM,
+    communicationRules: IVM_COMM_RULES,
+    dispatcherPrompt: IVM_DISPATCHER,
+    followupPrompt: IVM_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.1.0",
+    description: "Mariana — Recepcionista Instituto Vicentim Maekawa (Odontologia Sorocaba/SP)",
+  },
 };
 
 /**
