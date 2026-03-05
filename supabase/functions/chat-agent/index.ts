@@ -1016,6 +1016,76 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
 
           if (createError) return JSON.stringify({ error: createError.message });
 
+          // --- Post-booking: assign human agent in Chatwoot & cancel follow-ups ---
+          try {
+            // Load agent's Chatwoot config
+            const { data: agentFull } = await supabase
+              .from("agents")
+              .select("config")
+              .eq("id", agentId)
+              .single();
+            const cfg = (agentFull?.config || {}) as Record<string, any>;
+            const chatwootUrl = cfg.chatwoot_url;
+            const chatwootToken = cfg.chatwoot_api_token;
+            const chatwootAccountId = cfg.chatwoot_account_id;
+            // Default human agent ID to assign after booking (configurable via agent config)
+            const humanAgentId = cfg.chatwoot_booking_assignee_id || 15;
+
+            if (chatwootUrl && chatwootToken && chatwootAccountId) {
+              // Find chatwoot_conversation_id from conversations table
+              const { data: convRows } = await supabase
+                .from("conversations")
+                .select("chatwoot_conversation_id, id")
+                .eq("agent_id", agentId)
+                .not("chatwoot_conversation_id", "is", null)
+                .order("started_at", { ascending: false })
+                .limit(20);
+
+              // Try to match by conversation_id context (passed via args or the current execution context)
+              let chatwootConvId: number | null = null;
+              if (convRows && convRows.length > 0) {
+                // Use the most recent conversation with a chatwoot_conversation_id
+                chatwootConvId = convRows[0].chatwoot_conversation_id;
+              }
+
+              if (chatwootConvId) {
+                const baseUrlClean = chatwootUrl.replace(/\/+$/, "");
+                const assignUrl = `${baseUrlClean}/api/v1/accounts/${chatwootAccountId}/conversations/${chatwootConvId}/assignments`;
+                
+                console.log(`[Calendar] Assigning human agent ${humanAgentId} to Chatwoot conv ${chatwootConvId}`);
+                const assignResp = await fetch(assignUrl, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", api_access_token: chatwootToken },
+                  body: JSON.stringify({ assignee_id: humanAgentId }),
+                });
+
+                if (assignResp.ok) {
+                  console.log(`[Calendar] Human agent ${humanAgentId} assigned successfully`);
+                } else {
+                  console.warn(`[Calendar] Failed to assign agent: ${assignResp.status}`, await assignResp.text());
+                }
+
+                // Cancel pending follow-ups for this conversation
+                try {
+                  const convIdForCancel = convRows[0]?.id;
+                  if (convIdForCancel) {
+                    await supabase.rpc("cancel_pending_followups", {
+                      p_agent_id: agentId,
+                      p_conversation_id: convIdForCancel,
+                    });
+                    console.log(`[Calendar] Cancelled pending follow-ups for conv ${convIdForCancel}`);
+                  }
+                } catch (e) {
+                  console.warn("[Calendar] Could not cancel follow-ups:", e);
+                }
+              } else {
+                console.warn("[Calendar] No chatwoot_conversation_id found for this agent");
+              }
+            }
+          } catch (e) {
+            console.warn("[Calendar] Post-booking Chatwoot assignment error (non-blocking):", e);
+          }
+
           return JSON.stringify({
             status: "agendado",
             evento: {
@@ -1025,6 +1095,7 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
               fim: newEvent.end_at,
               descricao: newEvent.description,
             },
+            _chatwoot_handover: true,
           });
         }
 
