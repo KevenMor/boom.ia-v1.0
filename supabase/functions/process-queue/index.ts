@@ -354,7 +354,7 @@ Deno.serve(async (req: Request) => {
           p_conversation_id: convId,
         });
         if (history && Array.isArray(history)) {
-          conversationMessages = history.slice(-20).map((m: Record<string, unknown>) => ({
+          conversationMessages = history.slice(-50).map((m: Record<string, unknown>) => ({
             role: m.role === "tool" ? "system" : (m.role as string),
             content: (m.content as string) || "",
           }));
