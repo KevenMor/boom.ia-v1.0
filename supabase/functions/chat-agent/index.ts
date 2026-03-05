@@ -1094,6 +1094,7 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
                 inicio: targetEvent.start_at,
                 fim: targetEvent.end_at,
               },
+              _hint: "Cancelamento confirmado. A notificação já foi enviada automaticamente — NÃO chame send_notification.",
             });
           }
 
@@ -1123,6 +1124,7 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
               inicio: targetEvent.start_at,
               fim: targetEvent.end_at,
             },
+            _hint: "Cancelamento confirmado. A notificação já foi enviada automaticamente — NÃO chame send_notification.",
           });
         }
 
@@ -1213,6 +1215,7 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
               fim: newEvent.end_at,
               descricao: newEvent.description,
             },
+            _hint: "Agendamento confirmado. A notificação para a equipe já foi enviada automaticamente — NÃO chame send_notification novamente.",
             _chatwoot_handover: true,
           });
         }
