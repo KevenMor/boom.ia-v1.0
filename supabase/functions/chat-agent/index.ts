@@ -512,7 +512,7 @@ interface ToolDef {
   auth_config: any;
 }
 
-async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: any, agentId: string, userText?: string): Promise<string> {
+async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: any, agentId: string, userText?: string, history?: any[]): Promise<string> {
   try {
     switch (tool.tool_type) {
       case "sql_query": {
@@ -723,7 +723,7 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         const photoRequestPattern = /\b(fotos?|imagens?|images?|photos?|mand[ae]r?\s*fotos?|envia(?:r)?\s*fotos?|ver\s*fotos?|ver\s*imagens?|mostra(?:r)?\s*fotos?|mostra(?:r)?\s*imagens?|quero\s*ver\s*fotos?|me\s*envia(?:r)?|me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?|galeria)\b/i;
         // CONTEXTUAL: "me manda/mandar da X tambem" after photos were just sent implies more photos
         const contextualPhotoPattern = /\b(me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?|me\s*envia(?:r)?|pode\s*me\s*envia(?:r)?)\b.*\b(tamb[eé]m|tb|tbm|tamb[eé]n)\b/i;
-        const isPhotoRequest = photoRequestPattern.test(userText || "") || contextualPhotoPattern.test(userText || "") || isContextualPhotoAcceptance(userText || "", messages || []);
+        const isPhotoRequest = photoRequestPattern.test(userText || "") || contextualPhotoPattern.test(userText || "") || isContextualPhotoAcceptance(userText || "", history || []);
         // Show photos ONLY when user explicitly asks AND it's a specific vehicle query (few results)
         const isSpecificWithPhotos = isPhotoRequest && data.length <= 3;
         // Include photo data ONLY when user asked for photos — NOT by default
@@ -2396,7 +2396,7 @@ Deno.serve(async (req) => {
 
                 console.log(`[Dispatcher] Executing: ${toolName} (${matchedTool.tool_type}) args:`, JSON.stringify(toolArgs));
                 debugTrace.push({ type: "tool_call", tool: toolName, tool_type: matchedTool.tool_type, args: toolArgs, timestamp: Date.now() });
-                toolResult = await executeTool(matchedTool, toolArgs, supabase, agent_id, latestUserText);
+                toolResult = await executeTool(matchedTool, toolArgs, supabase, agent_id, latestUserText, sanitizedMessages);
 
                 let resultPreview: any = {};
                 try {
