@@ -17,7 +17,7 @@ import { useTenants } from "@/hooks/useTenants";
 import { useAgents } from "@/hooks/useAgents";
 import { nexusDb } from "@/integrations/supabase/nexus-client";
 import { toast } from "sonner";
-import { Database, Globe, Server, Search, Car, MapPin, DollarSign, CalendarDays, Link } from "lucide-react";
+import { Database, Globe, Server, Search, Car, MapPin, DollarSign, CalendarDays, Link, UserCheck, Bell } from "lucide-react";
 import type { ToolType } from "@/types/database";
 
 const TOOL_TYPE_META: Record<ToolType, { label: string; icon: any; description: string }> = {
@@ -29,12 +29,14 @@ const TOOL_TYPE_META: Record<ToolType, { label: string; icon: any; description: 
   nearest_unit: { label: "Unidade Próxima", icon: MapPin, description: "Encontra unidade mais próxima por CEP" },
   fipe_query: { label: "Tabela FIPE", icon: DollarSign, description: "Consulta preço FIPE por marca/modelo/ano" },
   calendar_query: { label: "Agenda", icon: CalendarDays, description: "Consulta e agenda horários no calendário" },
+  chatwoot_assign: { label: "Atribuir Agente", icon: UserCheck, description: "Atribui atendente humano e/ou equipe no Chatwoot" },
+  send_notification: { label: "Notificação", icon: Bell, description: "Envia notificação (mensagem, webhook) em eventos" },
 };
 
 const schema = z.object({
   name: z.string().min(2, "Nome obrigatório (snake_case)"),
   description: z.string().min(3, "Descrição obrigatória para o LLM"),
-  tool_type: z.enum(["sql_query", "web_scraper", "api_rest", "rag_search", "inventory_query", "nearest_unit", "fipe_query", "calendar_query"]),
+  tool_type: z.enum(["sql_query", "web_scraper", "api_rest", "rag_search", "inventory_query", "nearest_unit", "fipe_query", "calendar_query", "chatwoot_assign", "send_notification"]),
   tenant_id: z.string().optional(),
   endpoint: z.string().optional(),
   parameters_json: z.string().optional(),
@@ -149,6 +151,8 @@ export function CreateToolDialog({ open, onOpenChange }: Props) {
       case "nearest_unit": return '{}';
       case "fipe_query": return '{}';
       case "calendar_query": return '{}';
+      case "chatwoot_assign": return '{\n  "assignee_id": 15,\n  "team_id": null\n}';
+      case "send_notification": return '{\n  "channel": "chatwoot_message",\n  "template": "Novo agendamento: {{cliente}} às {{horario}}"\n}';
     }
   };
 
