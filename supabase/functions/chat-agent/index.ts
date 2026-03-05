@@ -948,14 +948,12 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
             if (eventType !== "cancelamento" && assignToolRow?.tools && cwConvId) {
               const execCfg = (assignToolRow.tools.execution_config || {}) as Record<string, any>;
               let assigneeId = execCfg.assignee_id;
-              let teamId = execCfg.team_id;
               const rules = Array.isArray(execCfg.rules) ? execCfg.rules : [];
               if (rules.length > 0) {
                 for (const rule of rules) {
                   const rLabel = (rule.label || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
                   if (rLabel && rLabel.includes("agend")) {
                     if (rule.assignee_id) assigneeId = rule.assignee_id;
-                    if (rule.team_id) teamId = rule.team_id;
                     console.log(`[Calendar→Assign] Matched rule "${rule.label}"`);
                     break;
                   }
@@ -963,7 +961,6 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
               }
               const assignBody: Record<string, any> = {};
               if (assigneeId) assignBody.assignee_id = Number(assigneeId);
-              if (teamId) assignBody.team_id = Number(teamId);
               console.log(`[Calendar→Assign] Conv ${cwConvId}:`, JSON.stringify(assignBody));
               const aResp = await fetch(`${cwUrl.replace(/\/+$/, "")}/api/v1/accounts/${cwAccId}/conversations/${cwConvId}/assignments`, {
                 method: "POST",
@@ -1365,12 +1362,14 @@ Quando o cliente ESCOLHER, o dispatcher DEVE chamar consultar_agenda(action='cri
         const reason = args.reason || "escalation";
         const rules = Array.isArray(execCfg.rules) ? execCfg.rules : [];
 
+        // Direct override via tool arguments (preferred when provided)
+        const directAssignee = args.assignee_id ? Number(args.assignee_id) : null;
+
         // Match rule by reason (fuzzy match on label)
-        let assigneeId = execCfg.assignee_id; // default
-        let teamId = execCfg.team_id; // default
+        let assigneeId = directAssignee ?? execCfg.assignee_id; // default
         let matchedRule = "";
 
-        if (rules.length > 0) {
+        if (!directAssignee && rules.length > 0) {
           const reasonNorm = reason.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
           let bestScore = 0;
           for (const rule of rules) {
@@ -1381,7 +1380,6 @@ Quando o cliente ESCOLHER, o dispatcher DEVE chamar consultar_agenda(action='cri
             if (score > bestScore) {
               bestScore = score;
               assigneeId = rule.assignee_id ?? assigneeId;
-              teamId = rule.team_id ?? teamId;
               matchedRule = rule.label;
             }
           }
@@ -1452,7 +1450,6 @@ Quando o cliente ESCOLHER, o dispatcher DEVE chamar consultar_agenda(action='cri
         const assignUrl = `${baseUrl}/api/v1/accounts/${cwAccountId}/conversations/${cwConvId}/assignments`;
         const assignBody: Record<string, any> = {};
         if (assigneeId) assignBody.assignee_id = Number(assigneeId);
-        if (teamId) assignBody.team_id = Number(teamId);
 
         console.log(`[ChatwootAssign] Conv ${cwConvId}, reason: ${reason}, body:`, assignBody);
         const resp = await fetch(assignUrl, {
@@ -1486,7 +1483,6 @@ Quando o cliente ESCOLHER, o dispatcher DEVE chamar consultar_agenda(action='cri
         return JSON.stringify({
           status: "atribuido",
           assignee_id: assigneeId || null,
-          team_id: teamId || null,
           reason,
           _hint: "Atendente humano foi atribuído à conversa. Informe ao cliente que um especialista irá dar sequência ao atendimento em breve.",
         });
@@ -1667,13 +1663,14 @@ const BUILTIN_SCHEMAS: Record<string, { description: string; parameters: any }> 
     },
   },
   chatwoot_assign: {
-    description: "Atribui a conversa atual a um atendente humano e/ou equipe no Chatwoot. Use quando o cliente solicitar falar com um humano, após agendamentos, ou para escalar o atendimento.",
+    description: "Atribui a conversa atual a um atendente humano no Chatwoot. Preferencialmente envie assignee_id direto no argumento JSON.",
     parameters: {
       type: "object",
       properties: {
+        assignee_id: { type: "integer", description: "ID do atendente humano no Chatwoot (ex: 15). Use este campo como prioridade para atribuição direta." },
         reason: { type: "string", description: "Motivo da atribuição (ex: 'agendamento_realizado', 'solicitacao_cliente', 'escalacao')" },
       },
-      required: ["reason"],
+      required: [],
     },
   },
   send_notification: {
