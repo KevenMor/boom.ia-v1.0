@@ -2,6 +2,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useState, useEffect } from "react";
+import { ChatwootAssignRules } from "./ChatwootAssignRules";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -258,53 +259,13 @@ export function CreateToolDialog({ open, onOpenChange }: Props) {
           )}
 
           {toolType === "chatwoot_assign" && (
-            <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-4">
-              <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                <UserCheck className="h-4 w-4 text-primary" />
-                Configuração de Atribuição
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Assignee ID (Atendente)</Label>
-                  <Input
-                    type="number"
-                    placeholder="15"
-                    className="h-9 bg-background font-mono text-sm"
-                    onChange={(e) => {
-                      try {
-                        const cur = JSON.parse((document.querySelector('[name="execution_json"]') as HTMLTextAreaElement)?.value || "{}");
-                        cur.assignee_id = e.target.value ? Number(e.target.value) : null;
-                        setValue("execution_json", JSON.stringify(cur, null, 2));
-                      } catch {
-                        setValue("execution_json", JSON.stringify({ assignee_id: Number(e.target.value) || null }, null, 2));
-                      }
-                    }}
-                  />
-                  <p className="text-[10px] text-muted-foreground">ID do atendente humano no Chatwoot</p>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Team ID (Equipe)</Label>
-                  <Input
-                    type="number"
-                    placeholder="3"
-                    className="h-9 bg-background font-mono text-sm"
-                    onChange={(e) => {
-                      try {
-                        const cur = JSON.parse((document.querySelector('[name="execution_json"]') as HTMLTextAreaElement)?.value || "{}");
-                        cur.team_id = e.target.value ? Number(e.target.value) : null;
-                        setValue("execution_json", JSON.stringify(cur, null, 2));
-                      } catch {
-                        setValue("execution_json", JSON.stringify({ team_id: Number(e.target.value) || null }, null, 2));
-                      }
-                    }}
-                  />
-                  <p className="text-[10px] text-muted-foreground">ID da equipe no Chatwoot (opcional)</p>
-                </div>
-              </div>
-              <p className="text-[10px] text-muted-foreground italic">
-                💡 O dispatcher chamará esta tool automaticamente após agendamentos ou quando o cliente pedir atendimento humano.
-              </p>
-            </div>
+            <ChatwootAssignRules
+              compact
+              onChange={(rules, defAssignee, defTeam) => {
+                const config: Record<string, any> = { assignee_id: defAssignee, team_id: defTeam, rules };
+                setValue("execution_json", JSON.stringify(config, null, 2));
+              }}
+            />
           )}
 
           {toolType === "send_notification" && (

@@ -1241,11 +1241,33 @@ Quando o cliente ESCOLHER, o dispatcher DEVE chamar consultar_agenda(action='cri
       }
 
       case "chatwoot_assign": {
-        // Read assignee_id and team_id from execution_config
+        // Read config with rules support
         const execCfg = (tool.execution_config || {}) as Record<string, any>;
-        const assigneeId = args.assignee_id || execCfg.assignee_id;
-        const teamId = args.team_id || execCfg.team_id;
         const reason = args.reason || "escalation";
+        const rules = Array.isArray(execCfg.rules) ? execCfg.rules : [];
+
+        // Match rule by reason (fuzzy match on label)
+        let assigneeId = execCfg.assignee_id; // default
+        let teamId = execCfg.team_id; // default
+        let matchedRule = "";
+
+        if (rules.length > 0) {
+          const reasonNorm = reason.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          let bestScore = 0;
+          for (const rule of rules) {
+            if (!rule.label) continue;
+            const labelNorm = rule.label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            const tokens = labelNorm.split(/\s+/).filter((t: string) => t.length >= 3);
+            const score = tokens.reduce((acc: number, tok: string) => acc + (reasonNorm.includes(tok) ? 1 : 0), 0);
+            if (score > bestScore) {
+              bestScore = score;
+              assigneeId = rule.assignee_id ?? assigneeId;
+              teamId = rule.team_id ?? teamId;
+              matchedRule = rule.label;
+            }
+          }
+          console.log(`[ChatwootAssign] Matched rule: "${matchedRule}" (score ${bestScore}) for reason: "${reason}"`);
+        }
 
         // Load agent's Chatwoot config
         const { data: agentCfgRow } = await supabase
