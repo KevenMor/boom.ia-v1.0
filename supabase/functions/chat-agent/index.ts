@@ -1487,11 +1487,36 @@ Quando o cliente ESCOLHER, o dispatcher DEVE chamar consultar_agenda(action='cri
           console.warn("[ChatwootAssign] Cancel follow-ups error:", e);
         }
 
+        // Auto-send notification to team group
+        try {
+          const { data: agToolRows } = await supabase
+            .from("agent_tools")
+            .select("tool_id, tools(id, tool_type, execution_config)")
+            .eq("agent_id", agentId);
+          const notifyRow = agToolRows?.find((at: any) => at.tools?.tool_type === "send_notification");
+          if (notifyRow?.tools) {
+            const nCfg2 = (notifyRow.tools.execution_config || {}) as Record<string, any>;
+            const targetCid = nCfg2.conversation_id || nCfg2.chatwoot_conversation_id || nCfg2.group_conversation_id;
+            if (targetCid) {
+              // Build brief summary from context
+              const extUser = ctxExtUserId2 || "N/A";
+              const notifMsg = `🙋 [LEAD AGUARDANDO ATENDIMENTO HUMANO]\n\nTelefone: ${extUser}\nMotivo: ${reason}\n\nO lead foi atribuído a um agente humano e aguarda atendimento.`;
+              console.log(`[ChatwootAssign→Notify] Sending to CW conv ${targetCid}`);
+              const nResp = await fetch(`${baseUrl}/api/v1/accounts/${cwAccountId}/conversations/${targetCid}/messages`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", api_access_token: cwToken },
+                body: JSON.stringify({ content: notifMsg, message_type: "outgoing", private: false }),
+              });
+              console.log(`[ChatwootAssign→Notify] Status: ${nResp.status}`);
+            }
+          }
+        } catch (e) { console.warn("[ChatwootAssign→Notify] Error:", e); }
+
         return JSON.stringify({
           status: "atribuido",
           assignee_id: assigneeId || null,
           reason,
-          _hint: "Atendente humano foi atribuído à conversa. Informe ao cliente que um especialista irá dar sequência ao atendimento em breve.",
+          _hint: "Atendente humano foi atribuído à conversa. A notificação para a equipe já foi enviada automaticamente — NÃO chame send_notification novamente. Informe ao cliente que um especialista irá dar sequência ao atendimento em breve.",
         });
       }
 
@@ -3144,6 +3169,81 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
       finalContent = finalContent.replace(/(?<!!)\*([^*\n]+?)\*/g, '$1');  // *italic* → italic (not ![img])
       finalContent = finalContent.replace(/__(.+?)__/g, '$1');  // __bold__ → bold
       finalContent = finalContent.replace(/(?<!_)_([^_\n]+?)_(?!_)/g, '$1');  // _italic_ → italic
+    }
+
+    // ===== HANDOFF DETECTION — cancel follow-ups + send notification =====
+    // If raw content contained HANDOFF_COMERCIAL or the LLM mentioned transferring to a human,
+    // proactively cancel follow-ups and send a team notification (safety net for when LLM
+    // uses the legacy text command instead of calling chatwoot_assign + send_notification tools)
+    const handoffDetected = /HANDOFF_COMERCIAL/i.test(rawContent) ||
+      /\b(vou te transferir|vou transferir|vou encaminhar|um (consultor|especialista|vendedor|atendente) (vai|irá) (assumir|continuar|dar sequência)|nosso time (vai|irá) (entrar em contato|continuar))\b/i.test(finalContent);
+    
+    // Only trigger if the dispatcher did NOT already call chatwoot_assign (avoid double action)
+    const dispatcherCalledAssign = debugTrace.some((t: any) => t.type === "tool_result" && t.tool === "chatwoot_assign");
+    
+    if (handoffDetected && !dispatcherCalledAssign && convId && agent_id) {
+      console.log(`[Handoff→Post] Detected handoff in response — cancelling follow-ups + sending notification`);
+      
+      // Cancel follow-ups
+      try {
+        await supabase.rpc("cancel_pending_followups", { p_agent_id: agent_id, p_conversation_id: convId });
+        console.log(`[Handoff→Post] Cancelled follow-ups for conv ${convId}`);
+      } catch (e) { console.warn("[Handoff→Post] Cancel follow-ups error:", e); }
+      
+      // Send notification to team group
+      try {
+        const { data: agentToolRows } = await supabase
+          .from("agent_tools")
+          .select("tool_id, tools(id, tool_type, execution_config)")
+          .eq("agent_id", agent_id);
+        const notifyToolRow = agentToolRows?.find((at: any) => at.tools?.tool_type === "send_notification");
+        
+        if (notifyToolRow?.tools) {
+          const nCfg = (notifyToolRow.tools.execution_config || {}) as Record<string, any>;
+          const targetCwCid = nCfg.conversation_id || nCfg.chatwoot_conversation_id || nCfg.group_conversation_id;
+          
+          if (targetCwCid) {
+            const { data: agCfgH } = await supabase.from("agents").select("config").eq("id", agent_id).single();
+            const cfgH = (agCfgH?.config || {}) as Record<string, any>;
+            const cwUrlH = cfgH.chatwoot_url;
+            const cwTokenH = cfgH.chatwoot_api_token;
+            const cwAccIdH = cfgH.chatwoot_account_id;
+            
+            if (cwUrlH && cwTokenH && cwAccIdH) {
+              // Build a brief summary from the last few messages
+              const recentMsgs = (sanitizedMessages || []).slice(-6);
+              const summaryLines = recentMsgs
+                .filter((m: any) => m.role === "user")
+                .map((m: any) => m.content?.slice(0, 100))
+                .filter(Boolean)
+                .slice(-3);
+              const briefSummary = summaryLines.join(" | ") || "Sem resumo disponível";
+              const extUser = context?.externalUserId || "N/A";
+              
+              // Try to extract client name from conversation
+              let clientName = "Não identificado";
+              for (const m of recentMsgs) {
+                if (m.role === "assistant" && m.content) {
+                  const nameMatch = m.content.match(/(?:prazer|obrigad[oa]),?\s+([A-ZÀ-Ú][a-zà-ú]+)/);
+                  if (nameMatch) { clientName = nameMatch[1]; break; }
+                }
+              }
+              
+              const notifMsg = `🙋 [LEAD AGUARDANDO ATENDIMENTO HUMANO]\n\nCliente: ${clientName}\nTelefone: ${extUser}\nResumo: ${briefSummary}\n\nO lead solicitou atendimento humano e está aguardando.`;
+              
+              console.log(`[Handoff→Notify] Sending to CW conv ${targetCwCid}`);
+              const nResp = await fetch(`${cwUrlH.replace(/\/+$/, "")}/api/v1/accounts/${cwAccIdH}/conversations/${targetCwCid}/messages`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", api_access_token: cwTokenH },
+                body: JSON.stringify({ content: notifMsg, message_type: "outgoing", private: false }),
+              });
+              console.log(`[Handoff→Notify] Status: ${nResp.status}`);
+            }
+          }
+        }
+      } catch (e) { console.warn("[Handoff→Notify] Error (non-blocking):", e); }
+      
+      debugTrace.push({ type: "handoff_post_processing", cancelled_followups: true, notification_sent: true, timestamp: Date.now() });
     }
 
     // Save to memory — split into separate messages to match WhatsApp delivery
