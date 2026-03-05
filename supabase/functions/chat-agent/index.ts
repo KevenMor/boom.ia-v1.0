@@ -2253,7 +2253,7 @@ Deno.serve(async (req) => {
 
         const dispatcherMessages = [
           { role: "system", content: dispatcherSystemPrompt + dateContext },
-          ...messages,
+          ...sanitizedMessages,
         ];
 
         let maxDispatchIterations = 3;
