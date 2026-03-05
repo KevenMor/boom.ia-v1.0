@@ -885,6 +885,7 @@ CRITICAL: Do NOT call enviar_notificacao for scheduling events or handoffs — t
 - If the customer says "tenho um Cruze 2020 pra trocar" → call consultar_fipe normally (Chevrolet is national).
 
 NO_TOOLS_NEEDED:
+- FIRST INTERACTION (no history): ANY message, even with vehicle references → NO_TOOLS_NEEDED (greeting/name flow first — see Rule 6)
 - "oi", "bom dia", "meu nome é João"
 - "voce me mandou apenas um veiculo" (contestation)
 - "então não tem nenhuma audi correto?" (confirmation)
@@ -910,7 +911,13 @@ CRITICAL RULES
 3. If customer mentions THEIR vehicle for trade/appraisal → ALWAYS call consultar_fipe.
 4. CONTESTATION/CORRECTION messages (complaining about previous answer but NOT about photos) → NO_TOOLS_NEEDED.
 5. CONFIRMATION messages ("é isso mesmo?", "correto?") → NO_TOOLS_NEEDED.
-6. If first message has a vehicle reference → CALL THE TOOL immediately (don't wait for name).
+6. ⚠️ FIRST INTERACTION (NO CONVERSATION HISTORY — CRITICAL v2.5.1):
+   - If the conversation history is EMPTY or contains ONLY the current user message (first contact), return NO_TOOLS_NEEDED REGARDLESS of whether the customer mentions a vehicle.
+   - The conversational model MUST handle the greeting + name collection flow FIRST.
+   - The tool call for the vehicle will happen on the NEXT turn, after the customer provides their name.
+   - Example: First message "Oi, vi um Audi A3 no site de vocês" → NO_TOOLS_NEEDED (greeting first).
+   - Example: First message "[Áudio transcrito]: quero saber sobre o A3" → NO_TOOLS_NEEDED (greeting first).
+   - This rule has HIGHER PRIORITY than rules 1, 2, and 13. First contact = greeting + name, ALWAYS.
 7. Use conversation HISTORY only to resolve pronouns or find vehicle data for fipe_query.
 8. Photos during appraisal: call fipe_query ONLY if not called yet in conversation.
 9. NEVER call consultar_estoque when customer is describing THEIR OWN vehicle for appraisal.
