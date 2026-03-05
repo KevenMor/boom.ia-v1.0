@@ -1287,14 +1287,27 @@ Deno.serve(async (req) => {
       console.warn("[Tools] fipe_query missing from agent_tools; injected virtual consultar_fipe for PPL tenant");
     }
 
-    // SAFETY NET: Ensure calendar_query tool is always available for PPL tenant (scheduling/appointments)
+    // SAFETY NET: Ensure calendar_query tool is always available for tenants that need scheduling
     const hasCalendarToolLinked = agentTools.some((t) => t.tool_type === "calendar_query");
+    const isIvmTenant = tenantSlugLoaded === "instituto-vicentim-maekawa" || tenantSlugLoaded === "insituto-vicentim-maekawa";
+    const needsCalendarTool = isPplTenant || isIvmTenant;
 
-    if (isPplTenant && !hasCalendarToolLinked) {
+    if (needsCalendarTool && !hasCalendarToolLinked) {
+      // Build tenant-appropriate descriptions
+      const calendarDescription = isIvmTenant
+        ? "Consulta horários disponíveis na agenda e realiza agendamentos de consultas e avaliações odontológicas."
+        : "Consulta horários disponíveis na agenda e realiza agendamentos de visitas e test drives.";
+      const titleDescription = isIvmTenant
+        ? "Título do agendamento: nome do paciente + motivo (ex: 'Carolina — Avaliação Implante')"
+        : "Título do agendamento: nome do cliente + veículo de interesse (ex: 'Keven — Audi A3 Sedan 2020')";
+      const extraFieldDesc = isIvmTenant
+        ? "Motivo da consulta ou tratamento de interesse (ex: 'Implante dentário', 'Clareamento')"
+        : "Veículo de interesse do cliente ou veículo de troca (ex: 'Audi A3 Sedan 2020')";
+
       const virtualCalendarTool: ToolDef = {
         id: "virtual-calendar-query-tool",
         name: "consultar_agenda",
-        description: "Consulta horários disponíveis na agenda e realiza agendamentos de visitas e test drives.",
+        description: calendarDescription,
         tool_type: "calendar_query",
         function_def: {
           name: "consultar_agenda",
@@ -1305,11 +1318,11 @@ Deno.serve(async (req) => {
               action: { type: "string", description: "Ação: 'check_availability' para consultar horários ou 'criar' para agendar", enum: ["check_availability", "criar"] },
               date: { type: "string", description: "Data para consulta (formato YYYY-MM-DD, padrão: hoje)" },
               days_ahead: { type: "integer", description: "Quantos dias consultar a partir da data (padrão: 3)" },
-              title: { type: "string", description: "Título do agendamento: nome do cliente + veículo de interesse (ex: 'Keven — Audi A3 Sedan 2020')" },
+              title: { type: "string", description: titleDescription },
               start_at: { type: "string", description: "Data e hora do agendamento (formato ISO 8601, ex: '2025-03-15T10:00:00')" },
               duration_minutes: { type: "integer", description: "Duração em minutos (padrão: 60)" },
               telefone_cliente: { type: "string", description: "Número de telefone/WhatsApp do cliente (ex: '5515991234567')" },
-              veiculo_interesse: { type: "string", description: "Veículo de interesse do cliente ou veículo de troca (ex: 'Audi A3 Sedan 2020')" },
+              veiculo_interesse: { type: "string", description: extraFieldDesc },
             },
             required: ["action"],
           },
@@ -1319,7 +1332,7 @@ Deno.serve(async (req) => {
         auth_config: {},
       };
       agentTools.push(virtualCalendarTool);
-      console.warn("[Tools] calendar_query missing from agent_tools; injected virtual consultar_agenda for PPL tenant");
+      console.warn(`[Tools] calendar_query missing from agent_tools; injected virtual consultar_agenda for ${tenantSlugLoaded}`);
     }
 
     console.log(`[Tools] Loaded ${agentTools.length} tool(s): ${agentTools.map((t) => `${t.name}:${t.tool_type}`).join(", ")}`);

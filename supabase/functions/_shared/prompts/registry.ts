@@ -64,7 +64,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: IVM_DISPATCHER,
     followupPrompt: IVM_FOLLOWUP,
     alwaysInjectCommRules: true,
-    version: "v1.1.0",
+    version: "v1.2.0",
     description: "Mariana — Recepcionista Instituto Vicentim Maekawa (Odontologia Sorocaba/SP)",
   },
   // Typo variant in database — maps to the same config
@@ -74,7 +74,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: IVM_DISPATCHER,
     followupPrompt: IVM_FOLLOWUP,
     alwaysInjectCommRules: true,
-    version: "v1.1.0",
+    version: "v1.2.0",
     description: "Mariana — Recepcionista Instituto Vicentim Maekawa (Odontologia Sorocaba/SP)",
   },
 };
