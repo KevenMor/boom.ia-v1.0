@@ -204,6 +204,48 @@ function getHumanizationConfig(cfg: Record<string, any>): HumanizationConfig {
   };
 }
 
+const MAX_IMAGES_PER_BATCH = 10; // Limite do WhatsApp Business API
+
+interface ConsolidatedPart {
+  type: 'text' | 'images';
+  content?: string;
+  imageUrls?: string[];
+}
+
+function consolidateImageParts(parts: string[]): ConsolidatedPart[] {
+  const result: ConsolidatedPart[] = [];
+  let pendingImages: string[] = [];
+
+  const flushImages = () => {
+    if (pendingImages.length > 0) {
+      result.push({ type: 'images', imageUrls: [...pendingImages] });
+      pendingImages = [];
+    }
+  };
+
+  for (const part of parts) {
+    if (!part?.trim()) continue;
+    const { textOnly, imageUrls } = extractImagesFromMarkdown(part);
+
+    if (textOnly.trim().length > 60 && imageUrls.length > 0) {
+      // Part mista: flush imagens anteriores, envia texto, acumula imagens desta part
+      flushImages();
+      result.push({ type: 'text', content: textOnly.trim() });
+      pendingImages.push(...imageUrls);
+    } else if (imageUrls.length > 0) {
+      // Part só de imagens — acumula
+      pendingImages.push(...imageUrls);
+    } else if (textOnly.trim()) {
+      // Part só de texto — flush imagens pendentes, depois envia texto
+      flushImages();
+      result.push({ type: 'text', content: textOnly.trim() });
+    }
+  }
+
+  flushImages(); // flush final de imagens restantes
+  return result;
+}
+
 // ---------- Humanized Chatwoot reply ----------
 async function replyToChatwoot(
   chatwootUrl: string,
@@ -239,57 +281,49 @@ async function replyToChatwoot(
     await safeDelay(readDelay);
   }
 
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i];
-    if (!part || !part.trim()) continue;
+  const consolidated = consolidateImageParts(parts);
+  const totalImages = consolidated
+    .filter(c => c.type === 'images')
+    .reduce((sum, c) => sum + (c.imageUrls?.length || 0), 0);
+  console.log(`[Deliver] Consolidated ${parts.length} parts → ${consolidated.length} blocks (${totalImages} total images)`);
 
-    const { textOnly, imageUrls } = extractImagesFromMarkdown(part);
+  for (let i = 0; i < consolidated.length; i++) {
+    const block = consolidated[i];
 
-    // If this part has images, send them WITHOUT any text (no caption, no separate text message).
-    // The next text-only part will naturally follow as its own message.
-    if (imageUrls.length > 0) {
-      // If there's meaningful text (not just a short intro), send it BEFORE images
-      if (textOnly.trim() && textOnly.trim().length > 60) {
-        if (humanization.typingDelayMs > 0 && hasTimeBudget()) {
-          await setChatwootTyping(chatwootUrl, apiToken, accountId, conversationId, "on");
-          const typingDelay = applyJitter(humanization.typingDelayMs);
-          await safeDelay(typingDelay);
+    if (block.type === 'images' && block.imageUrls?.length) {
+      // Enviar todas as imagens — dividir em chunks se exceder MAX_IMAGES_PER_BATCH
+      const urls = block.imageUrls;
+      if (urls.length <= MAX_IMAGES_PER_BATCH) {
+        const ok = await sendChatwootImagesBatch(msgUrl, apiToken, urls, "");
+        console.log(`[Deliver] Block ${i + 1} batch ${urls.length} image(s): ${ok ? "OK" : "FAIL"}`);
+      } else {
+        for (let j = 0; j < urls.length; j += MAX_IMAGES_PER_BATCH) {
+          const chunk = urls.slice(j, j + MAX_IMAGES_PER_BATCH);
+          const ok = await sendChatwootImagesBatch(msgUrl, apiToken, chunk, "");
+          console.log(`[Deliver] Block ${i + 1} chunk ${Math.floor(j / MAX_IMAGES_PER_BATCH) + 1}: ${chunk.length} image(s) ${ok ? "OK" : "FAIL"}`);
+          if (j + MAX_IMAGES_PER_BATCH < urls.length && hasTimeBudget()) {
+            await safeDelay(applyJitter(1000)); // jitter aplicado, consistente com o restante
+          }
         }
-        await sendChatwootTextMessage(msgUrl, apiToken, textOnly.trim());
-        if (humanization.typingDelayMs > 0) {
-          setChatwootTyping(chatwootUrl, apiToken, accountId, conversationId, "off").catch(() => {});
-        }
-        // Small gap before images
-        await safeDelay(applyJitter(1500));
       }
-      // Send ALL images in a single batch POST (parallel download + single request)
-      const ok = await sendChatwootImagesBatch(msgUrl, apiToken, imageUrls, "");
-      console.log(`[Deliver] Part ${i + 1} batch ${imageUrls.length} image(s): ${ok ? "OK" : "FAIL"}`);
-    } else if (textOnly.trim()) {
-      // Pure text part
-      // 2) Typing indicator + delay
+    } else if (block.type === 'text' && block.content) {
       if (humanization.typingDelayMs > 0 && hasTimeBudget()) {
         await setChatwootTyping(chatwootUrl, apiToken, accountId, conversationId, "on");
         const typingDelay = applyJitter(humanization.typingDelayMs);
-        console.log(`[Deliver] Typing delay (part ${i + 1}): ${typingDelay}ms`);
+        console.log(`[Deliver] Typing delay (block ${i + 1}): ${typingDelay}ms`);
         await safeDelay(typingDelay);
       }
-
-      const ok = await sendChatwootTextMessage(msgUrl, apiToken, textOnly.trim());
-      console.log(`[Deliver] Part ${i + 1} text: ${ok ? "OK" : "FAIL"}`);
+      const ok = await sendChatwootTextMessage(msgUrl, apiToken, block.content);
+      console.log(`[Deliver] Block ${i + 1} text: ${ok ? "OK" : "FAIL"}`);
       if (humanization.typingDelayMs > 0) {
         setChatwootTyping(chatwootUrl, apiToken, accountId, conversationId, "off").catch(() => {});
       }
-    } else {
-      // Fallback
-      await sendChatwootTextMessage(msgUrl, apiToken, part.trim());
     }
 
-    // 3) Inter-split delay — use configured block_gap_ms only (no hardcoded 2s base)
-    const isLastPart = i === parts.length - 1;
-    if (!isLastPart && hasTimeBudget()) {
+    const isLast = i === consolidated.length - 1;
+    if (!isLast && hasTimeBudget()) {
       const gapMs = humanization.blockGapMs > 0 ? applyJitter(humanization.blockGapMs) : 2000;
-      console.log(`[Deliver] Inter-split delay (after part ${i + 1}): ${gapMs}ms`);
+      console.log(`[Deliver] Inter-block delay (after block ${i + 1}): ${gapMs}ms`);
       await safeDelay(gapMs);
     }
   }
