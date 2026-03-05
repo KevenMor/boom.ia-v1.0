@@ -673,12 +673,16 @@ B) STOCK INQUIRY (customer asking about DEALERSHIP vehicles to BUY)
    Keywords: "tem?", "disponível?", "estoque", "quero comprar", "quanto custa", 
    "opções de", "o que vocês têm", "vi no site", "vi no pátio", "me interesso por"
 
-B2) PHOTO REQUEST (customer asking for photos of a vehicle — even one already discussed)
+B2) PHOTO REQUEST OR PHOTO FOLLOW-UP (customer asking for photos, confirming they want photos, OR demanding photos that were promised but not delivered)
    → Call: consultar_estoque
    Keywords: "fotos", "foto", "imagens", "manda foto", "envia foto", "pode enviar", 
    "nao me enviou", "não enviou as fotos", "cadê as fotos", "me envia a foto",
    "gostaria sim" (in response to "quer fotos?"), "sim por favor", "pode sim", "quero sim",
    "manda", "pode me enviar", "me envia", "ainda não recebi"
+   → ALSO includes FOLLOW-UP DEMANDS when photos were offered/promised but not yet received:
+   "cadê?", "cadê", "e aí?", "vai mandar?", "não mandou", "não enviou", "tá demorando",
+   "to esperando", "estou esperando", "e as fotos?", "manda logo", "envia logo"
+   → These short messages ARE photo requests when the previous assistant message offered or promised photos.
    → Extract the vehicle brand/model from conversation history. If the customer previously discussed a specific vehicle, use that brand/model.
    → This is CRITICAL: if a customer asks for photos, you MUST call consultar_estoque so the system can attach the real photos.
    
@@ -740,8 +744,14 @@ CALL consultar_estoque (PHOTO REQUESTS — CRITICAL):
 - "gostaria sim, por favor" (after being offered photos) → consultar_estoque(marca/modelo from history)
 - "sim" / "quero sim" / "pode sim" (after photo offer) → consultar_estoque(marca/modelo from history)
 - "cadê as fotos?" → consultar_estoque(marca/modelo from history)
+- "cadê?" (after photos were offered/promised) → consultar_estoque(marca/modelo from history)
+- "e aí?" (after photos were offered/promised) → consultar_estoque(marca/modelo from history)
+- "vai mandar?" (after photos were offered/promised) → consultar_estoque(marca/modelo from history)
+- "não mandou" (after photos were offered/promised) → consultar_estoque(marca/modelo from history)
+- "e as fotos?" → consultar_estoque(marca/modelo from history)
 - "me envia a porra da foto" → consultar_estoque(marca/modelo from history)
 NOTE: For photo requests, ALWAYS look at conversation history to find which vehicle was being discussed and extract its brand/model.
+⚠️ CRITICAL: Short follow-up messages like "Cadê?", "E aí?", "Vai mandar?" are PHOTO DEMANDS when the assistant previously offered or promised photos. They are NEVER "NO_TOOLS_NEEDED" in that context.
 
 CALL consultar_fipe:
 - "tenho um Cruze 2020, quanto vale?" → consultar_fipe(marca="Chevrolet", modelo="Cruze", ano=2020)
@@ -835,6 +845,10 @@ NO_TOOLS_NEEDED:
 - "aceitam carro na troca?" (generic, no marca/modelo/ano)
 - "posso dar meu carro como entrada?" (no vehicle details specified)
 - "aceita troca?" (generic)
+⚠️ NEVER classify as NO_TOOLS_NEEDED:
+- "Cadê?", "E aí?", "Vai mandar?", "Não mandou", "E as fotos?" when photos were offered/promised → these are PHOTO DEMANDS (see Rule 13)
+- "Quero", "Sim", "Pode", "Manda" when the assistant offered photos → these are PHOTO ACCEPTANCES (see Rule 13)
+- ANY short message after a photo offer/promise → ALWAYS check Rule 13 BEFORE classifying as NO_TOOLS_NEEDED
 
 ═══════════════════════════════════════════════
 CRITICAL RULES
@@ -860,13 +874,18 @@ CRITICAL RULES
 - The examples in this prompt (Cruze 2020, Civic 2019, HB20 2021) are JUST examples of FORMAT. NEVER use them as default values when the customer hasn't provided their car details.
 - If only 1 or 2 of the 3 required fields (marca, modelo, ano) are present, DO NOT fill in the missing ones — return NO_TOOLS_NEEDED and let the conversational model ask for the missing info.
 
-13. ⚠️ PHOTO REQUESTS + CONTEXTUAL ACCEPTANCE (HIGHEST PRIORITY — NEVER SKIP):
+13. ⚠️ PHOTO REQUESTS + CONTEXTUAL ACCEPTANCE + FOLLOW-UP DEMANDS (HIGHEST PRIORITY — NEVER SKIP):
 - If the customer asks for photos, images, or confirms they want photos → ALWAYS call consultar_estoque.
 - This includes: "manda fotos", "envia fotos", "pode enviar", "gostaria sim", "sim por favor", "quero sim", "nao me enviou as fotos", "cadê as fotos", "me envia a foto", "ainda não recebi".
 - ⚠️ CONTEXTUAL ACCEPTANCE (CRITICAL): When the PREVIOUS assistant message offered photos (e.g., "Quer que eu te mande fotos?", "Posso enviar fotos", "Quer ver fotos?") and the customer responds with ANY short confirmation like:
   "Quero", "Sim", "Pode", "Manda", "Claro", "Por favor", "Ok", "Bora", "Com certeza", "Aceito", "Pode mandar", "Pode enviar", "Quero ver", "Show", "Beleza", "Top", "Perfeito"
   → This is a PHOTO ACCEPTANCE. ALWAYS call consultar_estoque with marca/modelo from conversation history.
   → These are NEVER "NO_TOOLS_NEEDED". The customer is explicitly accepting the photo offer.
+- ⚠️ FOLLOW-UP PHOTO DEMANDS (CRITICAL — v2.2.0): When the assistant previously offered or promised to send photos and the customer sends a SHORT follow-up message demanding them, this is ALWAYS a photo request:
+  "Cadê?", "Cadê", "E aí?", "Vai mandar?", "Não mandou", "Não enviou", "Tá demorando", "To esperando", "Estou esperando", "E as fotos?", "Manda logo", "Envia logo", "Ué", "Ué?", "E então?"
+  → The customer is DEMANDING photos that were promised. This is NEVER "NO_TOOLS_NEEDED".
+  → ALWAYS call consultar_estoque with marca/modelo from the conversation history.
+  → HOW TO DETECT: Look at the last 2-3 assistant messages. If ANY of them mentioned sending photos, offering photos, or describing a vehicle with a photo offer → the customer's short message is a photo demand.
 - Extract the vehicle brand/model from conversation HISTORY (the vehicle they were discussing).
 - A photo request is NEVER "NO_TOOLS_NEEDED". The system needs the inventory data to attach real photos.
 - Even if you already called consultar_estoque earlier in the conversation for the same vehicle, call it AGAIN for photo requests. The photos are extracted from the tool result.
