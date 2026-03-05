@@ -841,7 +841,15 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         if (action === "create" || action === "agendar" || action === "criar") {
           // Create a new calendar event
           const title = args.title || args.titulo || "Agendamento via IA";
-          const description = args.description || args.descricao || "";
+          const clientPhone = args.client_phone || args.telefone_cliente || "";
+          const vehicleInterest = args.vehicle_interest || args.veiculo_interesse || "";
+          
+          // Build rich description with client info
+          let descParts: string[] = [];
+          if (args.description || args.descricao) descParts.push(args.description || args.descricao);
+          if (clientPhone) descParts.push(`Telefone: ${clientPhone}`);
+          if (vehicleInterest) descParts.push(`Veículo de interesse: ${vehicleInterest}`);
+          const description = descParts.join("\n") || "";
           const startAt = args.start_at || args.data_hora || args.datetime;
           const durationMin = args.duration_minutes || args.duracao_minutos || 60;
 
@@ -1205,7 +1213,7 @@ Deno.serve(async (req) => {
       ? createClient(nexusUrl, nexusServiceKey)
       : supabase;
 
-    const { agent_id, messages, conversation_id, attachments } = await req.json();
+    const { agent_id, messages, conversation_id, attachments, external_user_id } = await req.json();
 
     if (!agent_id || (!messages?.length && !(attachments?.length))) {
       return new Response(JSON.stringify({ error: "agent_id and messages required" }), {
@@ -1297,9 +1305,11 @@ Deno.serve(async (req) => {
               action: { type: "string", description: "Ação: 'check_availability' para consultar horários ou 'criar' para agendar", enum: ["check_availability", "criar"] },
               date: { type: "string", description: "Data para consulta (formato YYYY-MM-DD, padrão: hoje)" },
               days_ahead: { type: "integer", description: "Quantos dias consultar a partir da data (padrão: 3)" },
-              title: { type: "string", description: "Título do agendamento (ex: 'Visita - João')" },
+              title: { type: "string", description: "Título do agendamento com nome do cliente (ex: 'Keven — Test Drive Audi A3')" },
               start_at: { type: "string", description: "Data e hora do agendamento (formato ISO 8601, ex: '2025-03-15T10:00:00')" },
               duration_minutes: { type: "integer", description: "Duração em minutos (padrão: 60)" },
+              telefone_cliente: { type: "string", description: "Número de telefone/WhatsApp do cliente (ex: '5515991234567')" },
+              veiculo_interesse: { type: "string", description: "Veículo de interesse do cliente ou veículo de troca (ex: 'Audi A3 Sedan 2020')" },
             },
             required: ["action"],
           },
@@ -1705,7 +1715,11 @@ Deno.serve(async (req) => {
       return m;
     });
 
-    const fullMessages = [{ role: "system", content: systemPrompt }, ...sanitizedMessages];
+    // Inject client phone context if available (for calendar booking)
+    const clientPhoneContext = external_user_id
+      ? `\n\n[TELEFONE DO CLIENTE] O número de telefone/WhatsApp do cliente nesta conversa é: ${external_user_id}. Use este número ao agendar visitas (campo telefone_cliente).`
+      : "";
+    const fullMessages = [{ role: "system", content: systemPrompt + clientPhoneContext }, ...sanitizedMessages];
     const latestUserText = String(lastUserMsg?.content || "");
 
     debugTrace.push({ type: "config", model, temperature, top_p, top_k, tools_count: openaiTools?.length || 0, latest_user_text: latestUserText.slice(0, 120) });
