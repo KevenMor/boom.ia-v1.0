@@ -81,6 +81,7 @@ function stripEmojis(content: string): string {
     .replace(/[\u{E0020}-\u{E007F}]/gu, "")  // Tags
     .replace(/  +/g, " ")                     // Clean up double spaces left behind
     .trim();
+}
 
 function dedupeRepeatedParagraphs(content: string): string {
   const parts = content.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
