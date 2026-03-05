@@ -970,10 +970,11 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
               console.log(`[Calendar→Assign] Status: ${aResp.status}`);
               if (!aResp.ok) console.warn(`[Calendar→Assign] Error:`, await aResp.text().catch(() => ""));
 
-              // Cancel follow-ups
-              if (cId) {
-                try { await supabaseClient.rpc("cancel_pending_followups", { p_agent_id: agentIdLocal, p_conversation_id: cId }); console.log(`[Calendar→Assign] Cancelled follow-ups`); } catch {}
-              }
+            }
+
+            // --- Cancel follow-ups (always, for any calendar action) ---
+            if (cId) {
+              try { await supabaseClient.rpc("cancel_pending_followups", { p_agent_id: agentIdLocal, p_conversation_id: cId }); console.log(`[Calendar→Post] Cancelled follow-ups for conv ${cId}`); } catch {}
             }
 
             // --- Notification (always) ---
