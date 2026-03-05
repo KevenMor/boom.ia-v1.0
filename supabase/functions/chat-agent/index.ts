@@ -1107,7 +1107,12 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         }
 
         // Build dynamic SDR hint with REAL slot examples from the data
+        // Also compute per-day summary for fully booked days
+        const totalSlotsAllDays = availableSlots.reduce((acc, d) => acc + d.horarios.length, 0);
+        
         let sdrExamples = "";
+        let fullDayWarning = "";
+        
         if (availableSlots.length > 0) {
           const firstDay = availableSlots[0];
           const daySlots = firstDay.horarios;
@@ -1118,7 +1123,6 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
           const pickIntercalated = (slots: string[]) => {
             if (slots.length <= 1) return slots;
             if (slots.length === 2) return slots;
-            // Pick first and one from the middle/end (skip at least 1)
             const first = slots[0];
             const secondIdx = Math.min(2, slots.length - 1);
             return [first, slots[secondIdx]];
@@ -1128,21 +1132,39 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
             const picked = pickIntercalated(morningSlots);
             sdrExamples += ` Se manhã → ofereça ${picked[0]} e ${picked[1]}.`;
           } else if (morningSlots.length === 1) {
-            sdrExamples += ` Se manhã → ofereça ${morningSlots[0]}.`;
+            sdrExamples += ` Se manhã → o ÚNICO horário disponível é ${morningSlots[0]}.`;
+          } else {
+            sdrExamples += ` Manhã: SEM horários disponíveis — informe ao cliente que a manhã está lotada.`;
           }
           if (afternoonSlots.length >= 2) {
             const picked = pickIntercalated(afternoonSlots);
             sdrExamples += ` Se tarde → ofereça ${picked[0]} e ${picked[1]}.`;
           } else if (afternoonSlots.length === 1) {
-            sdrExamples += ` Se tarde → ofereça ${afternoonSlots[0]}.`;
+            sdrExamples += ` Se tarde → o ÚNICO horário disponível é ${afternoonSlots[0]}.`;
+          } else {
+            sdrExamples += ` Tarde: SEM horários disponíveis — informe ao cliente que a tarde está lotada.`;
           }
+        }
+        
+        // Check if any requested day has ZERO availability
+        if (availableSlots.length === 0) {
+          fullDayWarning = " ATENÇÃO: TODOS os horários no período consultado estão OCUPADOS. Informe ao cliente que não há vaga nesse período e sugira consultar o próximo dia útil disponível.";
         }
 
         return JSON.stringify({
           periodo: `${fromDate.toISOString().split("T")[0]} a ${toDate.toISOString().split("T")[0]}`,
           horarios_disponiveis: availableSlots,
+          total_horarios_livres: totalSlotsAllDays,
           compromissos_existentes: busySlots.length,
-          _hint: `ESTRATÉGIA SDR DE AGENDAMENTO: NÃO liste todos os horários. Pergunte se o cliente prefere manhã ou tarde. Depois ofereça EXATAMENTE 2 horários INTERCALADOS (não consecutivos) do período escolhido baseado nos horários REAIS disponíveis acima.${sdrExamples} NUNCA use sempre os mesmos horários — varie conforme a disponibilidade real. Se o cliente não puder, sugira proativamente o próximo dia útil com 2 horários intercalados DIFERENTES dos já oferecidos. Quando o cliente ESCOLHER um horário específico, o dispatcher DEVE chamar consultar_agenda(action='criar') para confirmar — NÃO apenas falar que está confirmado. O agendamento só é real quando a ferramenta criar o evento.`,
+          _hint: `REGRA ABSOLUTA — SOMENTE HORÁRIOS DISPONÍVEIS: Você pode APENAS sugerir horários que aparecem no array "horarios_disponiveis" acima. Qualquer horário que NÃO está listado ali já está OCUPADO por outro cliente. Sugerir horário ocupado é ERRO GRAVE.${fullDayWarning}
+
+ESTRATÉGIA SDR: NÃO liste todos os horários. Pergunte se prefere manhã ou tarde. Depois ofereça NO MÁXIMO 2 horários INTERCALADOS do período — mas SOMENTE se existirem no array acima.${sdrExamples}
+
+SE UM PERÍODO ESTÁ LOTADO: Informe ao cliente que aquele período está cheio e sugira o outro período ou o próximo dia com vagas.
+SE O DIA INTEIRO ESTÁ LOTADO: Informe "Para o dia X nossa agenda já está completa" e sugira o próximo dia com horários livres (consulte novamente se necessário).
+SE SÓ HÁ 1 HORÁRIO: Ofereça apenas esse. "Tenho um horário disponível às HH:00, funciona pra você?"
+
+Quando o cliente ESCOLHER, o dispatcher DEVE chamar consultar_agenda(action='criar') para confirmar. O agendamento só é real quando a ferramenta criar o evento.`,
         });
       }
 
