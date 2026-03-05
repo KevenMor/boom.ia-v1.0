@@ -136,9 +136,12 @@ function isValidPhotoUrl(url: string): boolean {
     if (!["http:", "https:"].includes(u.protocol)) return false;
     // Must have a path beyond just "/"
     if (u.pathname.length <= 1) return false;
-    // Must look like an image path
-    if (!/\.(jpg|jpeg|png|gif|webp|avif|svg|bmp)/i.test(u.pathname)) return false;
-    return true;
+
+    // Accept explicit image extensions OR common media delivery paths without extension
+    const hasImageExtension = /\.(jpg|jpeg|png|gif|webp|avif|svg|bmp)(?:$|[?#])/i.test(trimmed);
+    const looksLikeMediaPath = /(image|images|foto|fotos|photo|photos|attachment|attachments|active_storage|blob|media|upload|cdn)/i.test(`${u.pathname}${u.search}`);
+
+    return hasImageExtension || looksLikeMediaPath;
   } catch {
     return false;
   }
@@ -229,7 +232,10 @@ function appendMissingVehiclePhotos(content: string, vehicles: any[], userContex
   if (!targetVehicle) return content;
 
   const allPhotos = normalizeVehiclePhotos(targetVehicle);
-  if (!allPhotos.length) return content;
+  if (!allPhotos.length) {
+    console.warn(`[appendMissingVehiclePhotos] Vehicle without valid photos after normalization: id=${targetVehicle?.id || "n/a"} model=${targetVehicle?.model || "n/a"}`);
+    return content;
+  }
 
   // Collect URLs already in the LLM response
   const existingUrls = new Set<string>();
