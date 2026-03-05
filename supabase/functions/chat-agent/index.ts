@@ -2881,16 +2881,78 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
     // followed by a brief "assistant" acknowledgment, so Gemini processes the instructions.
     let finalConversationalMessages: any[];
     if (isGemini) {
-      const systemMsgs = conversationalMessages.filter((m: any) => m.role === "system");
-      const nonSystemMsgs = conversationalMessages.filter((m: any) => m.role !== "system");
+      // CRITICAL FIX: Gemini drops "system" role messages via OpenAI-compatible API.
+      // Workaround: Merge system messages into a "user" + "assistant" pair at the start.
+      // BUT: Tool context and dispatcher hints injected near the last user message must
+      // STAY near the last user message (converted to "user" role) — otherwise Gemini 2.0 Flash
+      // ignores them because they're buried in a 16K+ token block at the start.
+
+      const systemMsgs: any[] = [];
+      const criticalContextMsgs: any[] = []; // These stay near last user msg
+      const nonSystemMsgs: any[] = [];
+
+      for (const m of conversationalMessages) {
+        if (m.role === "system") {
+          // Detect if this is a tool context, dispatcher hint, or photo memory msg
+          const content = String(m.content || "");
+          const isCriticalContext = content.includes("PRIORIDADE MÁXIMA") ||
+            content.includes("PRIORIDADE ALTA") ||
+            content.includes("ORIENTAÇÃO DO SISTEMA") ||
+            content.includes("CONTINUIDADE DE CONTEXTO") ||
+            content.includes("FOTOS JÁ ENVIADAS") ||
+            content.includes("DADOS REAIS OBTIDOS");
+          if (isCriticalContext) {
+            criticalContextMsgs.push(m);
+          } else {
+            systemMsgs.push(m);
+          }
+        } else {
+          nonSystemMsgs.push(m);
+        }
+      }
+
       const mergedSystemContent = systemMsgs.map((m: any) => m.content).join("\n\n---\n\n");
 
       finalConversationalMessages = [
         { role: "user", content: `[INSTRUÇÕES DO SISTEMA — SIGA RIGOROSAMENTE]\n\n${mergedSystemContent}\n\n[FIM DAS INSTRUÇÕES — Responda como a persona descrita acima]` },
         { role: "assistant", content: "Entendido. Vou seguir todas as instruções acima rigorosamente, mantendo a persona e as regras definidas." },
-        ...nonSystemMsgs,
       ];
-      console.log(`[Conversational] Gemini system-as-user workaround: merged ${systemMsgs.length} system msgs (${mergedSystemContent.length} chars) into user+ack pair`);
+
+      // Re-insert non-system messages, injecting critical context as "user" msgs 
+      // right before the last user message to maximize Gemini's attention
+      if (criticalContextMsgs.length > 0) {
+        const lastUserIdx = nonSystemMsgs.map((m: any) => m.role).lastIndexOf("user");
+        if (lastUserIdx > 0) {
+          // Insert critical context as user messages right before last user msg
+          for (let i = 0; i < criticalContextMsgs.length; i++) {
+            const ctxContent = criticalContextMsgs[i].content;
+            nonSystemMsgs.splice(lastUserIdx + i, 0, {
+              role: "user",
+              content: `[CONTEXTO TÉCNICO REAL — LEIA COM ATENÇÃO]\n${ctxContent}\n[FIM DO CONTEXTO — Responda ao cliente usando ESTES DADOS]`,
+            });
+            // Add a brief assistant ack so the conversation alternates properly
+            nonSystemMsgs.splice(lastUserIdx + i + 1, 0, {
+              role: "assistant",
+              content: "Entendido, vou usar esses dados reais na minha resposta.",
+            });
+          }
+        } else {
+          // Fallback: append before all non-system messages
+          for (const ctx of criticalContextMsgs) {
+            finalConversationalMessages.push({
+              role: "user",
+              content: `[CONTEXTO TÉCNICO REAL]\n${ctx.content}`,
+            });
+            finalConversationalMessages.push({
+              role: "assistant",
+              content: "Entendido, vou usar esses dados reais.",
+            });
+          }
+        }
+      }
+
+      finalConversationalMessages.push(...nonSystemMsgs);
+      console.log(`[Conversational] Gemini system-as-user workaround: merged ${systemMsgs.length} system msgs (${mergedSystemContent.length} chars), preserved ${criticalContextMsgs.length} critical context msg(s) near last user msg`);
     } else {
       finalConversationalMessages = conversationalMessages;
     }
