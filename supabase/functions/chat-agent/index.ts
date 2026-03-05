@@ -1955,7 +1955,7 @@ Deno.serve(async (req) => {
               if (matchedTool) {
                 // No regex-based overrides — dispatcher LLM is trusted completely.
 
-                console.log(`[Dispatcher] Executing: ${toolName} (${matchedTool.tool_type})`);
+                console.log(`[Dispatcher] Executing: ${toolName} (${matchedTool.tool_type}) args:`, JSON.stringify(toolArgs));
                 debugTrace.push({ type: "tool_call", tool: toolName, tool_type: matchedTool.tool_type, args: toolArgs, timestamp: Date.now() });
                 toolResult = await executeTool(matchedTool, toolArgs, supabase, agent_id, latestUserText);
 
