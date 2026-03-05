@@ -730,16 +730,30 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         // CONTEXTUAL: "me manda/mandar da X tambem" after photos were just sent implies more photos
         const contextualPhotoPattern = /\b(me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?|me\s*envia(?:r)?|pode\s*me\s*envia(?:r)?)\b.*\b(tamb[eé]m|tb|tbm|tamb[eé]n)\b/i;
         const isPhotoRequest = photoRequestPattern.test(userText || "") || contextualPhotoPattern.test(userText || "") || isContextualPhotoAcceptance(userText || "", history || []);
-        // Show photos ONLY when user explicitly asks AND it's a specific vehicle query (few results)
-        const isSpecificWithPhotos = isPhotoRequest && data.length <= 3;
-        // Include photo data ONLY when user asked for photos — NOT by default
-        const includePhotosInData = isPhotoRequest && data.length <= 3;
+        // Aceite genérico: cliente disse "Sim"/"Quero" etc. MAS não nomeou veículo específico
+        const isGenericAcceptance = isContextualPhotoAcceptance(userText || "", history || [])
+          && !photoRequestPattern.test(userText || "")
+          && !contextualPhotoPattern.test(userText || "")
+          && !brandArg && !modelArg && !(args.search || args.query || args.termo);
+        // Só ativa modo foto se: pedido específico OU aceite genérico com 1 veículo (sem ambiguidade)
+        const isSpecificWithPhotos = isPhotoRequest && data.length <= 3
+          && !(isGenericAcceptance && data.length > 1);
+        // Include photo data ONLY when user asked for photos — NOT when generic acceptance + multiple vehicles
+        const includePhotosInData = isPhotoRequest && data.length <= 3
+          && !(isGenericAcceptance && data.length > 1);
+
+        let _hint: string;
+        if (isGenericAcceptance && data.length > 1) {
+          _hint = `Cliente aceitou ver fotos mas há ${data.length} veículos. PERGUNTE qual prefere ver primeiro. NÃO envie fotos ainda.`;
+        } else if (isSpecificWithPhotos) {
+          _hint = "Envie TODAS as fotos do array 'photos' usando ![foto](URL). Antes das fotos, escreva UMA frase curta e VARIADA (NUNCA repita 'Aqui estão as fotos'). Use variações como: 'Dá uma olhada!', 'Olha só como ela está!', 'Veja que linda!', 'Tá aqui pra você conferir!'. PROIBIDO inventar atributos, acabamento, materiais ou equipamentos que não estejam explicitamente nos campos do veículo. NÃO faça pergunta de fechamento nesta mensagem — deixe o cliente reagir às fotos primeiro.";
+        } else {
+          _hint = `Apresente os ${data.length} veículos de forma NATURAL, como um vendedor experiente no WhatsApp. REGRAS ANTI-REPETIÇÃO: 1) NÃO repita o nome completo do carro se já mencionou antes — use apelidos curtos ("o Nivus", "o Haval", "esse aqui"). 2) Varie a estrutura das frases — cada parágrafo deve soar diferente. 3) NÃO use a mesma abertura para todos os carros. 4) Destaque algo ÚNICO de cada um (um é mais econômico, outro tem mais espaço, etc). 5) Finalize com UMA pergunta natural tipo "Algum te chamou atenção?" ou "Quer ver fotos de algum deles?". NÃO use listas numeradas. NÃO inclua fotos nesta resposta — ESPERE o cliente pedir. NÃO repita dados que o cliente já sabe.`;
+        }
 
           return JSON.stringify({
           total: data.length,
-          _hint: isSpecificWithPhotos
-            ? "Envie TODAS as fotos do array 'photos' usando ![foto](URL). Antes das fotos, escreva UMA frase curta e VARIADA (NUNCA repita 'Aqui estão as fotos'). Use variações como: 'Dá uma olhada!', 'Olha só como ela está!', 'Veja que linda!', 'Tá aqui pra você conferir!'. PROIBIDO inventar atributos, acabamento, materiais ou equipamentos que não estejam explicitamente nos campos do veículo. NÃO faça pergunta de fechamento nesta mensagem — deixe o cliente reagir às fotos primeiro."
-            : `Apresente os ${data.length} veículos de forma NATURAL, como um vendedor experiente no WhatsApp. REGRAS ANTI-REPETIÇÃO: 1) NÃO repita o nome completo do carro se já mencionou antes — use apelidos curtos ("o Nivus", "o Haval", "esse aqui"). 2) Varie a estrutura das frases — cada parágrafo deve soar diferente. 3) NÃO use a mesma abertura para todos os carros. 4) Destaque algo ÚNICO de cada um (um é mais econômico, outro tem mais espaço, etc). 5) Finalize com UMA pergunta natural tipo "Algum te chamou atenção?" ou "Quer ver fotos de algum deles?". NÃO use listas numeradas. NÃO inclua fotos nesta resposta — ESPERE o cliente pedir. NÃO repita dados que o cliente já sabe.`,
+          _hint,
           vehicles: data.map((v: any) => {
             if (!includePhotosInData) {
               // Listing mode (>3 results): compact, no photos to keep context small
@@ -2490,6 +2504,22 @@ Deno.serve(async (req) => {
 
     const userSelectingPreviousOptionForPhase2 = isUserSelectingPreviousOption(latestUserText || "");
 
+    // Build list of vehicles that already had photos sent in this conversation (anti re-offer)
+    const sentPhotoVehicles: string[] = [];
+    const photoMarkerPattern = /\[foto já enviada(?: anteriormente)?\]/i;
+    const vehiclePattern = /\b(Audi|Toyota|Honda|Volkswagen|VW|Chevrolet|Fiat|Hyundai|Kia|Ford|Jeep|Nissan|BMW|Mercedes|Porsche|Renault|Peugeot|Citroën|JAC|Caoa|Chery|Haval|Jetta|Virtus|T-Cross|Nivus|Tracker|Creta|Compass|Renegade)\s+([A-Za-z0-9]+(?:\s+[A-Za-z0-9]+)?)\b/gi;
+    for (const msg of conversationalMessages) {
+      if (msg.role === "assistant" && msg.content && photoMarkerPattern.test(msg.content)) {
+        const beforeMarker = msg.content.split(photoMarkerPattern)[0] || "";
+        let m: RegExpExecArray | null;
+        vehiclePattern.lastIndex = 0;
+        while ((m = vehiclePattern.exec(beforeMarker)) !== null) {
+          const name = `${m[1]} ${m[2]}`.trim();
+          if (name && !sentPhotoVehicles.includes(name)) sentPhotoVehicles.push(name);
+        }
+      }
+    }
+
     // If the customer is selecting an option already presented, force continuity and block contradictions.
     if (userSelectingPreviousOptionForPhase2 && toolResultsContext.length === 0) {
       const continuityMsg = `⚠️ CONTINUIDADE DE CONTEXTO (PRIORIDADE MÁXIMA):
@@ -2566,6 +2596,11 @@ Se "total" >= 1, o veículo ESTÁ DISPONÍVEL.`;
 ${toolResultsContext.join("\n\n")}`;
       }
 
+      // Append photo memory when we have vehicles that already had photos sent (anti re-offer)
+      if (sentPhotoVehicles.length > 0) {
+        toolContextMsg += `\n\n⚠️ FOTOS JÁ ENVIADAS NESTA CONVERSA: ${sentPhotoVehicles.join(", ")}. NÃO ofereça enviar fotos desses veículos novamente — elas já foram entregues ao cliente.`;
+      }
+
       // Insert just before the last user message for maximum LLM attention
       const lastUserIdx = conversationalMessages.map((m: any) => m.role).lastIndexOf("user");
       if (lastUserIdx > 0) {
@@ -2574,6 +2609,16 @@ ${toolResultsContext.join("\n\n")}`;
         conversationalMessages.splice(1, 0, { role: "system", content: toolContextMsg });
       }
       console.log(`[Conversational] Injecting ${toolResultsContext.length} tool result(s) as context (position: before last user msg, empty=${allToolsReturnedEmpty})`);
+    } else if (sentPhotoVehicles.length > 0) {
+      // No tool results this turn, but we have vehicles with photos already sent — inject memory note
+      const photoMemoryNote = `⚠️ FOTOS JÁ ENVIADAS NESTA CONVERSA: ${sentPhotoVehicles.join(", ")}. NÃO ofereça enviar fotos desses veículos novamente — elas já foram entregues ao cliente.`;
+      const lastUserIdx = conversationalMessages.map((m: any) => m.role).lastIndexOf("user");
+      if (lastUserIdx > 0) {
+        conversationalMessages.splice(lastUserIdx, 0, { role: "system", content: photoMemoryNote });
+      } else {
+        conversationalMessages.splice(1, 0, { role: "system", content: photoMemoryNote });
+      }
+      console.log(`[Conversational] Injected photo memory (${sentPhotoVehicles.length} vehicles already had photos sent)`);
     }
 
     // ===== DISPATCHER HINT INJECTION =====

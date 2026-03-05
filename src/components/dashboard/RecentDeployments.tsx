@@ -47,12 +47,12 @@ export function RecentDeployments({ tenants, loading }: RecentDeploymentsProps) 
               <div className={`h-2.5 w-2.5 shrink-0 rounded-full ${cfg.dotColor}`} />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{tenant.name}</p>
-                <p className="text-xs text-muted-foreground">
+                <div className="text-xs text-muted-foreground">
                   <Badge variant="secondary" className="mr-1.5 text-[10px] px-1.5 py-0">
                     {cfg.label}
                   </Badge>
                   → {tenant.slug}
-                </p>
+                </div>
               </div>
               <span className="shrink-0 text-xs text-muted-foreground">
                 {tenant.created_at

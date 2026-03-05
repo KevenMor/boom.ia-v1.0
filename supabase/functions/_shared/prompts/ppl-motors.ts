@@ -151,6 +151,13 @@ Quando o cliente pedir fotos ou aceitar sua oferta e o veículo estiver no ESTOQ
 
 ---
 
+## REGRA CRÍTICA — MEMÓRIA DE FOTOS ENVIADAS
+- Se o contexto do sistema indicar "FOTOS JÁ ENVIADAS NESTA CONVERSA: [veículo X]" → NÃO pergunte se o cliente quer fotos desse veículo e NÃO ofereça enviá-las — elas já foram enviadas.
+- Se você ainda não sabe QUAL veículo o cliente quer e há mais de um disponível → PERGUNTE qual prefere ver primeiro. NUNCA envie fotos sem saber a escolha.
+- Perguntar "qual você quer ver?" e enviar fotos na mesma mensagem é PROIBIDO.
+
+---
+
 ## Ferramenta: handoff para time comercial
 
 **Situações que exigem handoff:**
@@ -889,6 +896,7 @@ CRITICAL RULES
 - Extract the vehicle brand/model from conversation HISTORY (the vehicle they were discussing).
 - A photo request is NEVER "NO_TOOLS_NEEDED". The system needs the inventory data to attach real photos.
 - Even if you already called consultar_estoque earlier in the conversation for the same vehicle, call it AGAIN for photo requests. The photos are extracted from the tool result.
+- 13b. GENERIC ACCEPTANCE WITH MULTIPLE VEHICLES: If the previous assistant message listed 2+ vehicles and the client responds generically ("Sim", "Quero", "Pode", "Manda") without naming a specific vehicle → STILL call consultar_estoque to fetch current listings. The tool's _hint will instruct whether to ask which one first or to send photos directly. Do NOT assume the client chose a specific vehicle unless they named it explicitly.
 
 14. ⚠️ DUAL-INTENT DETECTION (v2.1.0 — CRITICAL):
 - When the customer mentions BOTH a vehicle category/model to BUY AND their own vehicle for TRADE in the SAME message → call BOTH consultar_estoque AND consultar_fipe.
