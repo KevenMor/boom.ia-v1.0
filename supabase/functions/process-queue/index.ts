@@ -58,7 +58,8 @@ async function callChatAgent(
   agentId: string,
   messages: { role: string; content: string }[],
   convId: string | null,
-  attachments?: any[]
+  attachments?: any[],
+  externalUserId?: string | null
 ) {
   const chatAgentUrl = `${cloudUrl}/functions/v1/chat-agent`;
   const MAX_RETRIES = 3;
@@ -73,7 +74,7 @@ async function callChatAgent(
           Authorization: `Bearer ${cloudKey}`,
           "x-nexus-auth": `Bearer ${nexusKey}`,
         },
-        body: JSON.stringify({ agent_id: agentId, messages, conversation_id: convId, attachments }),
+        body: JSON.stringify({ agent_id: agentId, messages, conversation_id: convId, attachments, external_user_id: externalUserId }),
       });
 
       if (!chatResp.ok) {
@@ -403,7 +404,7 @@ Deno.serve(async (req: Request) => {
 
     console.log(`[ProcessQueue] Calling chat-agent with ${messages.length} messages, ${(attachments || []).length} attachment(s)`);
 
-    const result = await callChatAgent(cloudUrl, cloudKey, nexusKey, agent_id, messages, convId, attachments);
+    const result = await callChatAgent(cloudUrl, cloudKey, nexusKey, agent_id, messages, convId, attachments, external_user_id);
 
     if (result.error) {
       // Fallback: save the user message so it at least appears in Chat ao Vivo
