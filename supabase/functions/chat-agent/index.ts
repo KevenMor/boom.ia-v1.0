@@ -62,6 +62,26 @@ function sanitizeLLMOutput(content: string): string {
   return text;
 }
 
+// Strip ALL emoji characters from text (for tenants that prohibit emoji usage)
+function stripEmojis(content: string): string {
+  // Remove emoji Unicode ranges: emoticons, symbols, dingbats, transport, misc, flags, etc.
+  return content
+    .replace(/[\u{1F600}-\u{1F64F}]/gu, "")  // Emoticons
+    .replace(/[\u{1F300}-\u{1F5FF}]/gu, "")  // Misc Symbols and Pictographs
+    .replace(/[\u{1F680}-\u{1F6FF}]/gu, "")  // Transport and Map
+    .replace(/[\u{1F1E0}-\u{1F1FF}]/gu, "")  // Flags
+    .replace(/[\u{2600}-\u{26FF}]/gu, "")    // Misc symbols
+    .replace(/[\u{2700}-\u{27BF}]/gu, "")    // Dingbats
+    .replace(/[\u{FE00}-\u{FE0F}]/gu, "")    // Variation Selectors
+    .replace(/[\u{1F900}-\u{1F9FF}]/gu, "")  // Supplemental Symbols
+    .replace(/[\u{1FA00}-\u{1FA6F}]/gu, "")  // Chess Symbols
+    .replace(/[\u{1FA70}-\u{1FAFF}]/gu, "")  // Symbols Extended-A
+    .replace(/[\u{200D}]/gu, "")             // Zero Width Joiner
+    .replace(/[\u{20E3}]/gu, "")             // Combining Enclosing Keycap
+    .replace(/[\u{E0020}-\u{E007F}]/gu, "")  // Tags
+    .replace(/  +/g, " ")                     // Clean up double spaces left behind
+    .trim();
+
 function dedupeRepeatedParagraphs(content: string): string {
   const parts = content.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
   if (parts.length <= 1) return content;
@@ -2214,6 +2234,16 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
     }
 
     let finalContent = sanitizeLLMOutput(rawContent);
+
+    // POST-PROCESSING: Strip emojis for tenants that prohibit them
+    const noEmojiTenants = ["instituto-vicentim-maekawa"];
+    if (noEmojiTenants.includes(tenantSlug || "")) {
+      const before = finalContent;
+      finalContent = stripEmojis(finalContent);
+      if (before !== finalContent) {
+        console.log("[PostProcess] Stripped emojis from response for tenant:", tenantSlug);
+      }
+    }
 
     // FALLBACK: if LLM returned empty response, provide a sensible default
     if (!finalContent.trim()) {

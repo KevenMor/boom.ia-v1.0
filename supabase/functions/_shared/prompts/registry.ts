@@ -30,6 +30,8 @@ interface TenantPromptConfig {
   dispatcherPrompt: string;
   /** Follow-up prompt (variáveis: {attempt}, {max_attempts}) */
   followupPrompt?: string;
+  /** Always inject communication rules even without inventory tool */
+  alwaysInjectCommRules?: boolean;
   /** Versão do prompt para referência */
   version: string;
   /** Descrição para exibição no painel */
@@ -61,7 +63,8 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     communicationRules: IVM_COMM_RULES,
     dispatcherPrompt: IVM_DISPATCHER,
     followupPrompt: IVM_FOLLOWUP,
-    version: "v1.0.0",
+    alwaysInjectCommRules: true,
+    version: "v1.1.0",
     description: "Mariana — Recepcionista Instituto Vicentim Maekawa (Odontologia Sorocaba/SP)",
   },
 };
@@ -79,7 +82,8 @@ export function buildSystemPrompt(
 ): string {
   const config = tenantSlug ? TENANT_PROMPTS[tenantSlug] : undefined;
   const base = config?.systemPrompt || agentSystemPrompt || "You are a helpful AI assistant.";
-  const commRules = (hasInventoryTool && config?.communicationRules) ? "\n\n" + config.communicationRules : "";
+  const shouldInjectComm = (hasInventoryTool && config?.communicationRules) || config?.alwaysInjectCommRules;
+  const commRules = (shouldInjectComm && config?.communicationRules) ? "\n\n" + config.communicationRules : "";
   const greeting = "\n\n" + BASE_GREETING;
 
   // Inject current Brasilia datetime so the model knows "hoje" and "amanhã"
