@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, FileText, Eye, EyeOff, Copy, Check, Loader2, Code2, MessageSquare, Sparkles } from "lucide-react";
+import { ArrowLeft, FileText, Eye, EyeOff, Copy, Check, Loader2, Code2, MessageSquare, Sparkles, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -81,6 +81,11 @@ function PromptBlock({ title, icon: Icon, content, badge }: { title: string; ico
   );
 }
 
+function formatNumber(n: number) {
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return n.toString();
+}
+
 export default function PromptsPage() {
   const navigate = useNavigate();
   const [tenants, setTenants] = useState<TenantSummary[]>([]);
@@ -111,7 +116,6 @@ export default function PromptsPage() {
         body: null,
         headers: {},
       });
-      // Use query params via direct fetch
       const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/prompt-viewer?slug=${slug}`;
       const resp = await fetch(url, {
         headers: {
@@ -129,17 +133,38 @@ export default function PromptsPage() {
     }
   }
 
+  // Extract agent name from description (e.g. "Juliana — SDR PPL Motors..." → "Juliana")
+  function getAgentName(desc: string) {
+    const dash = desc.indexOf("—");
+    return dash > 0 ? desc.substring(0, dash).trim() : desc.split(" ")[0];
+  }
+
+  // Extract role/company from description
+  function getRole(desc: string) {
+    const dash = desc.indexOf("—");
+    return dash > 0 ? desc.substring(dash + 1).trim() : "";
+  }
+
+  const totalChars = tenants.reduce((sum, t) => sum + t.systemPromptLength + t.communicationRulesLength + t.dispatcherPromptLength + t.followupPromptLength, 0);
+
   return (
-    <div className="space-y-8 pb-12">
+    <div className="space-y-6 pb-12">
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => navigate("/dashboard")}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1">
-          <h1 className="text-2xl font-semibold text-foreground">Prompts por Tenant</h1>
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Prompts por Tenant</h1>
           <p className="text-sm text-muted-foreground">Visualize os prompts gerenciados no código para cada tenant</p>
         </div>
+        {!loading && tenants.length > 0 && (
+          <div className="hidden sm:flex items-center gap-3 text-xs text-muted-foreground">
+            <span>{tenants.length} tenants</span>
+            <span className="text-border">·</span>
+            <span>{formatNumber(totalChars)} chars total</span>
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -153,34 +178,69 @@ export default function PromptsPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          {/* Tenant cards */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {tenants.map((t) => (
-              <button
-                key={t.slug}
-                onClick={() => loadDetail(t.slug)}
-                className={`rounded-xl border p-5 text-left transition-all hover:shadow-md ${
-                  selectedDetail?.slug === t.slug
-                    ? "border-primary bg-primary/5 shadow-sm"
-                    : "border-border bg-card hover:border-primary/50"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-semibold text-foreground truncate">{t.description}</h3>
-                    <p className="text-xs text-muted-foreground mt-1 font-mono">{t.slug}</p>
+          {/* Tenant list */}
+          <div className="rounded-xl border border-border overflow-hidden bg-card">
+            {tenants.map((t, idx) => {
+              const isSelected = selectedDetail?.slug === t.slug;
+              const isLast = idx === tenants.length - 1;
+              const agentName = getAgentName(t.description);
+              const role = getRole(t.description);
+              const totalLen = t.systemPromptLength + t.communicationRulesLength + t.dispatcherPromptLength + t.followupPromptLength;
+
+              return (
+                <button
+                  key={t.slug}
+                  onClick={() => loadDetail(t.slug)}
+                  className={`flex w-full items-center gap-4 px-5 py-4 text-left transition-all hover:bg-muted/40 ${
+                    isSelected ? "bg-primary/5" : ""
+                  } ${!isLast ? "border-b border-border" : ""}`}
+                >
+                  {/* Avatar circle */}
+                  <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                    isSelected 
+                      ? "bg-primary text-primary-foreground" 
+                      : "bg-primary/10 text-primary"
+                  }`}>
+                    {agentName.charAt(0).toUpperCase()}
                   </div>
-                  <Badge variant="outline" className="shrink-0 text-[10px]">{t.version}</Badge>
-                </div>
-                <Separator className="my-3" />
-                <div className="flex gap-4 text-xs text-muted-foreground flex-wrap">
-                  <span>System: {t.systemPromptLength.toLocaleString()}</span>
-                  <span>Rules: {t.communicationRulesLength.toLocaleString()}</span>
-                  <span>Dispatcher: {t.dispatcherPromptLength.toLocaleString()}</span>
-                  <span>Follow-up: {t.followupPromptLength.toLocaleString()}</span>
-                </div>
-              </button>
-            ))}
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-foreground truncate">{agentName}</span>
+                      <Badge variant="outline" className="shrink-0 text-[10px] font-mono">{t.version}</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate mt-0.5">{role}</p>
+                  </div>
+
+                  {/* Stats */}
+                  <div className="hidden md:flex items-center gap-4 text-[11px] text-muted-foreground tabular-nums">
+                    <div className="text-center">
+                      <div className="font-semibold text-foreground/70">{formatNumber(t.systemPromptLength)}</div>
+                      <div>System</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="font-semibold text-foreground/70">{formatNumber(t.communicationRulesLength)}</div>
+                      <div>Rules</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="font-semibold text-foreground/70">{formatNumber(t.dispatcherPromptLength)}</div>
+                      <div>Dispatch</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="font-semibold text-foreground/70">{formatNumber(t.followupPromptLength)}</div>
+                      <div>Follow-up</div>
+                    </div>
+                  </div>
+
+                  {/* Total + arrow */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono text-muted-foreground hidden sm:inline">{formatNumber(totalLen)}</span>
+                    <ChevronRight className={`h-4 w-4 transition-colors ${isSelected ? "text-primary" : "text-muted-foreground/40"}`} />
+                  </div>
+                </button>
+              );
+            })}
           </div>
 
           {/* Detail view */}
