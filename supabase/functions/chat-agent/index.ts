@@ -1016,74 +1016,75 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
 
           if (createError) return JSON.stringify({ error: createError.message });
 
-          // --- Post-booking: assign human agent in Chatwoot & cancel follow-ups ---
+          // --- Post-booking: trigger chatwoot_assign tool if available ---
           try {
-            // Load agent's Chatwoot config
-            const { data: agentFull } = await supabase
-              .from("agents")
-              .select("config")
-              .eq("id", agentId)
-              .single();
-            const cfg = (agentFull?.config || {}) as Record<string, any>;
-            const chatwootUrl = cfg.chatwoot_url;
-            const chatwootToken = cfg.chatwoot_api_token;
-            const chatwootAccountId = cfg.chatwoot_account_id;
-            // Default human agent ID to assign after booking (configurable via agent config)
-            const humanAgentId = cfg.chatwoot_booking_assignee_id || 15;
+            // Check if agent has a chatwoot_assign tool linked
+            const { data: assignTools } = await supabase
+              .from("agent_tools")
+              .select("tool_id, tools(id, tool_type, execution_config)")
+              .eq("agent_id", agentId);
+            
+            const assignTool = assignTools?.find((at: any) => at.tools?.tool_type === "chatwoot_assign");
+            if (assignTool?.tools) {
+              const execConfig = (assignTool.tools.execution_config || {}) as Record<string, any>;
+              const assigneeId = execConfig.assignee_id;
+              const teamId = execConfig.team_id;
+              
+              // Load agent's Chatwoot config
+              const { data: agentFull } = await supabase
+                .from("agents")
+                .select("config")
+                .eq("id", agentId)
+                .single();
+              const cfg = (agentFull?.config || {}) as Record<string, any>;
+              const chatwootUrl = cfg.chatwoot_url;
+              const chatwootToken = cfg.chatwoot_api_token;
+              const chatwootAccountId = cfg.chatwoot_account_id;
 
-            if (chatwootUrl && chatwootToken && chatwootAccountId) {
-              // Find chatwoot_conversation_id from conversations table
-              const { data: convRows } = await supabase
-                .from("conversations")
-                .select("chatwoot_conversation_id, id")
-                .eq("agent_id", agentId)
-                .not("chatwoot_conversation_id", "is", null)
-                .order("started_at", { ascending: false })
-                .limit(20);
+              if (chatwootUrl && chatwootToken && chatwootAccountId) {
+                const { data: convRows } = await supabase
+                  .from("conversations")
+                  .select("chatwoot_conversation_id, id")
+                  .eq("agent_id", agentId)
+                  .not("chatwoot_conversation_id", "is", null)
+                  .order("started_at", { ascending: false })
+                  .limit(20);
 
-              // Try to match by conversation_id context (passed via args or the current execution context)
-              let chatwootConvId: number | null = null;
-              if (convRows && convRows.length > 0) {
-                // Use the most recent conversation with a chatwoot_conversation_id
-                chatwootConvId = convRows[0].chatwoot_conversation_id;
-              }
+                const chatwootConvId = convRows?.[0]?.chatwoot_conversation_id;
+                if (chatwootConvId) {
+                  const baseUrlClean = chatwootUrl.replace(/\/+$/, "");
+                  const assignUrl = `${baseUrlClean}/api/v1/accounts/${chatwootAccountId}/conversations/${chatwootConvId}/assignments`;
+                  const assignBody: Record<string, any> = {};
+                  if (assigneeId) assignBody.assignee_id = assigneeId;
+                  if (teamId) assignBody.team_id = teamId;
 
-              if (chatwootConvId) {
-                const baseUrlClean = chatwootUrl.replace(/\/+$/, "");
-                const assignUrl = `${baseUrlClean}/api/v1/accounts/${chatwootAccountId}/conversations/${chatwootConvId}/assignments`;
-                
-                console.log(`[Calendar] Assigning human agent ${humanAgentId} to Chatwoot conv ${chatwootConvId}`);
-                const assignResp = await fetch(assignUrl, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", api_access_token: chatwootToken },
-                  body: JSON.stringify({ assignee_id: humanAgentId }),
-                });
+                  console.log(`[Calendar→ChatwootAssign] Assigning conv ${chatwootConvId}:`, assignBody);
+                  const assignResp = await fetch(assignUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", api_access_token: chatwootToken },
+                    body: JSON.stringify(assignBody),
+                  });
+                  console.log(`[Calendar→ChatwootAssign] Status: ${assignResp.status}`);
+                  if (!assignResp.ok) console.warn(await assignResp.text());
 
-                if (assignResp.ok) {
-                  console.log(`[Calendar] Human agent ${humanAgentId} assigned successfully`);
-                } else {
-                  console.warn(`[Calendar] Failed to assign agent: ${assignResp.status}`, await assignResp.text());
-                }
-
-                // Cancel pending follow-ups for this conversation
-                try {
-                  const convIdForCancel = convRows[0]?.id;
-                  if (convIdForCancel) {
-                    await supabase.rpc("cancel_pending_followups", {
-                      p_agent_id: agentId,
-                      p_conversation_id: convIdForCancel,
-                    });
-                    console.log(`[Calendar] Cancelled pending follow-ups for conv ${convIdForCancel}`);
+                  // Cancel follow-ups
+                  try {
+                    const convIdForCancel = convRows?.[0]?.id;
+                    if (convIdForCancel) {
+                      await supabase.rpc("cancel_pending_followups", {
+                        p_agent_id: agentId,
+                        p_conversation_id: convIdForCancel,
+                      });
+                      console.log(`[Calendar→ChatwootAssign] Cancelled follow-ups for conv ${convIdForCancel}`);
+                    }
+                  } catch (e) {
+                    console.warn("[Calendar→ChatwootAssign] Could not cancel follow-ups:", e);
                   }
-                } catch (e) {
-                  console.warn("[Calendar] Could not cancel follow-ups:", e);
                 }
-              } else {
-                console.warn("[Calendar] No chatwoot_conversation_id found for this agent");
               }
             }
           } catch (e) {
-            console.warn("[Calendar] Post-booking Chatwoot assignment error (non-blocking):", e);
+            console.warn("[Calendar] Post-booking assignment error (non-blocking):", e);
           }
 
           return JSON.stringify({
@@ -1239,6 +1240,151 @@ Quando o cliente ESCOLHER, o dispatcher DEVE chamar consultar_agenda(action='cri
         });
       }
 
+      case "chatwoot_assign": {
+        // Read assignee_id and team_id from execution_config
+        const execCfg = (tool.execution_config || {}) as Record<string, any>;
+        const assigneeId = args.assignee_id || execCfg.assignee_id;
+        const teamId = args.team_id || execCfg.team_id;
+        const reason = args.reason || "escalation";
+
+        // Load agent's Chatwoot config
+        const { data: agentCfgRow } = await supabase
+          .from("agents")
+          .select("config")
+          .eq("id", agentId)
+          .single();
+        const agCfg = (agentCfgRow?.config || {}) as Record<string, any>;
+        const cwUrl = agCfg.chatwoot_url;
+        const cwToken = agCfg.chatwoot_api_token;
+        const cwAccountId = agCfg.chatwoot_account_id;
+
+        if (!cwUrl || !cwToken || !cwAccountId) {
+          return JSON.stringify({ error: "Chatwoot não configurado neste agente" });
+        }
+
+        // Find the current chatwoot conversation
+        const { data: cwConvRows } = await supabase
+          .from("conversations")
+          .select("chatwoot_conversation_id, id")
+          .eq("agent_id", agentId)
+          .not("chatwoot_conversation_id", "is", null)
+          .order("started_at", { ascending: false })
+          .limit(20);
+
+        const cwConvId = cwConvRows?.[0]?.chatwoot_conversation_id;
+        if (!cwConvId) {
+          return JSON.stringify({ error: "Nenhuma conversa Chatwoot ativa encontrada" });
+        }
+
+        const baseUrl = cwUrl.replace(/\/+$/, "");
+        const assignUrl = `${baseUrl}/api/v1/accounts/${cwAccountId}/conversations/${cwConvId}/assignments`;
+        const assignBody: Record<string, any> = {};
+        if (assigneeId) assignBody.assignee_id = Number(assigneeId);
+        if (teamId) assignBody.team_id = Number(teamId);
+
+        console.log(`[ChatwootAssign] Conv ${cwConvId}, reason: ${reason}, body:`, assignBody);
+        const resp = await fetch(assignUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", api_access_token: cwToken },
+          body: JSON.stringify(assignBody),
+        });
+
+        const respText = await resp.text();
+        if (!resp.ok) {
+          console.warn(`[ChatwootAssign] Failed: ${resp.status}`, respText);
+          return JSON.stringify({ error: `Falha na atribuição: ${resp.status}` });
+        }
+
+        console.log(`[ChatwootAssign] Success`);
+
+        // Cancel follow-ups
+        try {
+          const convIdCancel = cwConvRows?.[0]?.id;
+          if (convIdCancel) {
+            await supabase.rpc("cancel_pending_followups", {
+              p_agent_id: agentId,
+              p_conversation_id: convIdCancel,
+            });
+            console.log(`[ChatwootAssign] Cancelled follow-ups for ${convIdCancel}`);
+          }
+        } catch (e) {
+          console.warn("[ChatwootAssign] Cancel follow-ups error:", e);
+        }
+
+        return JSON.stringify({
+          status: "atribuido",
+          assignee_id: assigneeId || null,
+          team_id: teamId || null,
+          reason,
+          _hint: "Atendente humano foi atribuído à conversa. Informe ao cliente que um especialista irá dar sequência ao atendimento em breve.",
+        });
+      }
+
+      case "send_notification": {
+        const execCfg = (tool.execution_config || {}) as Record<string, any>;
+        const channel = execCfg.channel || "chatwoot_message";
+        const eventType = args.event_type || "custom";
+        let message = args.message || execCfg.template || "Notificação do sistema";
+
+        // Template variable replacement
+        if (args.cliente) message = message.replace(/\{\{cliente\}\}/g, args.cliente);
+        if (args.horario) message = message.replace(/\{\{horario\}\}/g, args.horario);
+        if (args.motivo) message = message.replace(/\{\{motivo\}\}/g, args.motivo);
+
+        if (channel === "chatwoot_message") {
+          // Send as a private note in the current Chatwoot conversation
+          const { data: agCfgRow2 } = await supabase
+            .from("agents")
+            .select("config")
+            .eq("id", agentId)
+            .single();
+          const cfg2 = (agCfgRow2?.config || {}) as Record<string, any>;
+          const cwUrl2 = cfg2.chatwoot_url;
+          const cwToken2 = cfg2.chatwoot_api_token;
+          const cwAccountId2 = cfg2.chatwoot_account_id;
+
+          if (cwUrl2 && cwToken2 && cwAccountId2) {
+            const { data: convRows2 } = await supabase
+              .from("conversations")
+              .select("chatwoot_conversation_id")
+              .eq("agent_id", agentId)
+              .not("chatwoot_conversation_id", "is", null)
+              .order("started_at", { ascending: false })
+              .limit(1);
+
+            const cwCid = convRows2?.[0]?.chatwoot_conversation_id;
+            if (cwCid) {
+              const noteUrl = `${cwUrl2.replace(/\/+$/, "")}/api/v1/accounts/${cwAccountId2}/conversations/${cwCid}/messages`;
+              const noteResp = await fetch(noteUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", api_access_token: cwToken2 },
+                body: JSON.stringify({
+                  content: `📋 [${eventType.toUpperCase()}] ${message}`,
+                  message_type: "activity",
+                  private: true,
+                }),
+              });
+              console.log(`[SendNotification] Chatwoot note sent: ${noteResp.status}`);
+            }
+          }
+        } else if (channel === "webhook" && execCfg.webhook_url) {
+          // Fire a webhook
+          const webhookResp = await fetch(execCfg.webhook_url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ event_type: eventType, message, agent_id: agentId, timestamp: new Date().toISOString() }),
+          });
+          console.log(`[SendNotification] Webhook fired: ${webhookResp.status}`);
+        }
+
+        return JSON.stringify({
+          status: "notificado",
+          channel,
+          event_type: eventType,
+          _hint: "Notificação enviada com sucesso. Continue o atendimento normalmente.",
+        });
+      }
+
       default:
         return JSON.stringify({ error: `Unknown tool type: ${tool.tool_type}` });
     }
@@ -1311,6 +1457,27 @@ const BUILTIN_SCHEMAS: Record<string, { description: string; parameters: any }> 
         calendar_id: { type: "string", description: "ID da agenda específica (opcional, usa a primeira agenda ativa se não informado)" },
       },
       required: ["action"],
+    },
+  },
+  chatwoot_assign: {
+    description: "Atribui a conversa atual a um atendente humano e/ou equipe no Chatwoot. Use quando o cliente solicitar falar com um humano, após agendamentos, ou para escalar o atendimento.",
+    parameters: {
+      type: "object",
+      properties: {
+        reason: { type: "string", description: "Motivo da atribuição (ex: 'agendamento_realizado', 'solicitacao_cliente', 'escalacao')" },
+      },
+      required: ["reason"],
+    },
+  },
+  send_notification: {
+    description: "Envia uma notificação sobre um evento importante (agendamento, cancelamento, escalação). Usada para alertar a equipe.",
+    parameters: {
+      type: "object",
+      properties: {
+        event_type: { type: "string", description: "Tipo: 'booking', 'cancellation', 'escalation', 'custom'" },
+        message: { type: "string", description: "Mensagem da notificação com detalhes do evento" },
+      },
+      required: ["event_type", "message"],
     },
   },
 };
