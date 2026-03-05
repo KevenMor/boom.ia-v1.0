@@ -354,10 +354,46 @@ Deno.serve(async (req: Request) => {
           p_conversation_id: convId,
         });
         if (history && Array.isArray(history)) {
-          conversationMessages = history.slice(-50).map((m: Record<string, unknown>) => ({
-            role: m.role === "tool" ? "system" : (m.role as string),
-            content: (m.content as string) || "",
-          }));
+          const normalizedHistory = history
+            .map((m: Record<string, unknown>) => ({
+              role: m.role as string,
+              content: (m.content as string) || "",
+            }))
+            .filter((m) => !!m.content);
+
+          // CONTEXT CONTINUITY FIX:
+          // Keep a larger and role-aware window to avoid losing tutor/pet facts in long flows.
+          // Previous behavior used history.slice(-50), which was easily saturated by tool/system entries.
+          const MAX_USER_ASSISTANT_MESSAGES = 80;
+          const MAX_SYSTEM_MESSAGES = 20;
+
+          const selected: { role: string; content: string }[] = [];
+          let userAssistantCount = 0;
+          let systemCount = 0;
+
+          for (let i = normalizedHistory.length - 1; i >= 0; i--) {
+            const msg = normalizedHistory[i];
+
+            // Drop tool messages from upstream payload to reduce context pollution.
+            if (msg.role === "tool") continue;
+
+            if ((msg.role === "user" || msg.role === "assistant") && userAssistantCount < MAX_USER_ASSISTANT_MESSAGES) {
+              selected.push(msg);
+              userAssistantCount += 1;
+              continue;
+            }
+
+            if (msg.role === "system" && systemCount < MAX_SYSTEM_MESSAGES) {
+              selected.push(msg);
+              systemCount += 1;
+            }
+          }
+
+          conversationMessages = selected.reverse();
+
+          console.log(
+            `[ProcessQueue] History window selected: total=${conversationMessages.length} (user/assistant=${userAssistantCount}, system=${systemCount}, raw=${normalizedHistory.length})`
+          );
         }
       } catch (e: any) {
         console.warn("[ProcessQueue] load history failed:", e.message);
