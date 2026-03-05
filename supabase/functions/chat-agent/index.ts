@@ -518,7 +518,7 @@ interface ToolDef {
   auth_config: any;
 }
 
-async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: any, agentId: string, userText?: string, history?: any[]): Promise<string> {
+async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: any, agentId: string, userText?: string, history?: any[], context?: { convId?: string; externalUserId?: string }): Promise<string> {
   try {
     switch (tool.tool_type) {
       case "sql_query": {
@@ -1075,8 +1075,25 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
             const assignTool = assignTools?.find((at: any) => at.tools?.tool_type === "chatwoot_assign");
             if (assignTool?.tools) {
               const execConfig = (assignTool.tools.execution_config || {}) as Record<string, any>;
-              const assigneeId = execConfig.assignee_id;
-              const teamId = execConfig.team_id;
+              
+              // Resolve assignee using rules if available, fallback to default
+              const rules = Array.isArray(execConfig.rules) ? execConfig.rules : [];
+              let assigneeId = execConfig.assignee_id;
+              let teamId = execConfig.team_id;
+
+              // Try rule matching with "agendamento" reason
+              if (rules.length > 0) {
+                const reason = "agendamento_realizado";
+                for (const rule of rules) {
+                  const ruleLabel = (rule.label || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                  if (ruleLabel && (reason.includes(ruleLabel) || ruleLabel.includes("agend"))) {
+                    if (rule.assignee_id) assigneeId = rule.assignee_id;
+                    if (rule.team_id) teamId = rule.team_id;
+                    console.log(`[Calendar→ChatwootAssign] Matched rule "${rule.label}" → assignee=${assigneeId}, team=${teamId}`);
+                    break;
+                  }
+                }
+              }
               
               // Load agent's Chatwoot config
               const { data: agentFull } = await supabase
@@ -1089,16 +1106,53 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
               const chatwootToken = cfg.chatwoot_api_token;
               const chatwootAccountId = cfg.chatwoot_account_id;
 
-              if (chatwootUrl && chatwootToken && chatwootAccountId) {
-                const { data: convRows } = await supabase
-                  .from("conversations")
-                  .select("chatwoot_conversation_id, id")
-                  .eq("agent_id", agentId)
-                  .not("chatwoot_conversation_id", "is", null)
-                  .order("started_at", { ascending: false })
-                  .limit(20);
+              if (!chatwootUrl || !chatwootToken || !chatwootAccountId) {
+                console.warn(`[Calendar→ChatwootAssign] Missing Chatwoot config: url=${!!chatwootUrl}, token=${!!chatwootToken}, accountId=${!!chatwootAccountId}`);
+              } else {
+                // Find the current conversation's Chatwoot ID using convId or external_user_id
+                let chatwootConvId: string | null = null;
+                const ctxConvId = context?.convId;
+                const ctxExtUserId = context?.externalUserId;
 
-                const chatwootConvId = convRows?.[0]?.chatwoot_conversation_id;
+                if (ctxConvId) {
+                  // Best: use the exact conversation ID
+                  const { data: exactConv } = await supabase
+                    .from("conversations")
+                    .select("chatwoot_conversation_id")
+                    .eq("id", ctxConvId)
+                    .not("chatwoot_conversation_id", "is", null)
+                    .maybeSingle();
+                  chatwootConvId = exactConv?.chatwoot_conversation_id || null;
+                  if (chatwootConvId) console.log(`[Calendar→ChatwootAssign] Found CW conv ${chatwootConvId} via exact convId ${ctxConvId}`);
+                }
+
+                if (!chatwootConvId && ctxExtUserId) {
+                  // Fallback: find by external_user_id (most recent)
+                  const { data: convByUser } = await supabase
+                    .from("conversations")
+                    .select("chatwoot_conversation_id")
+                    .eq("agent_id", agentId)
+                    .eq("external_user_id", ctxExtUserId)
+                    .not("chatwoot_conversation_id", "is", null)
+                    .order("started_at", { ascending: false })
+                    .limit(1);
+                  chatwootConvId = convByUser?.[0]?.chatwoot_conversation_id || null;
+                  if (chatwootConvId) console.log(`[Calendar→ChatwootAssign] Found CW conv ${chatwootConvId} via external_user_id ${ctxExtUserId}`);
+                }
+
+                if (!chatwootConvId) {
+                  // Last fallback: most recent conversation
+                  const { data: convRows } = await supabase
+                    .from("conversations")
+                    .select("chatwoot_conversation_id, id")
+                    .eq("agent_id", agentId)
+                    .not("chatwoot_conversation_id", "is", null)
+                    .order("started_at", { ascending: false })
+                    .limit(1);
+                  chatwootConvId = convRows?.[0]?.chatwoot_conversation_id || null;
+                  if (chatwootConvId) console.log(`[Calendar→ChatwootAssign] Using fallback most-recent CW conv ${chatwootConvId}`);
+                }
+
                 if (chatwootConvId) {
                   const baseUrlClean = chatwootUrl.replace(/\/+$/, "");
                   const assignUrl = `${baseUrlClean}/api/v1/accounts/${chatwootAccountId}/conversations/${chatwootConvId}/assignments`;
@@ -1106,30 +1160,37 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
                   if (assigneeId) assignBody.assignee_id = assigneeId;
                   if (teamId) assignBody.team_id = teamId;
 
-                  console.log(`[Calendar→ChatwootAssign] Assigning conv ${chatwootConvId}:`, assignBody);
+                  console.log(`[Calendar→ChatwootAssign] Assigning conv ${chatwootConvId}:`, JSON.stringify(assignBody));
                   const assignResp = await fetch(assignUrl, {
                     method: "POST",
                     headers: { "Content-Type": "application/json", api_access_token: chatwootToken },
                     body: JSON.stringify(assignBody),
                   });
                   console.log(`[Calendar→ChatwootAssign] Status: ${assignResp.status}`);
-                  if (!assignResp.ok) console.warn(await assignResp.text());
+                  if (!assignResp.ok) {
+                    const errBody = await assignResp.text().catch(() => "");
+                    console.warn(`[Calendar→ChatwootAssign] Error: ${errBody}`);
+                  }
 
                   // Cancel follow-ups
                   try {
-                    const convIdForCancel = convRows?.[0]?.id;
-                    if (convIdForCancel) {
+                    const cancelConvId = ctxConvId || null;
+                    if (cancelConvId) {
                       await supabase.rpc("cancel_pending_followups", {
                         p_agent_id: agentId,
-                        p_conversation_id: convIdForCancel,
+                        p_conversation_id: cancelConvId,
                       });
-                      console.log(`[Calendar→ChatwootAssign] Cancelled follow-ups for conv ${convIdForCancel}`);
+                      console.log(`[Calendar→ChatwootAssign] Cancelled follow-ups for conv ${cancelConvId}`);
                     }
                   } catch (e) {
                     console.warn("[Calendar→ChatwootAssign] Could not cancel follow-ups:", e);
                   }
+                } else {
+                  console.warn(`[Calendar→ChatwootAssign] No Chatwoot conversation found for agent ${agentId}`);
                 }
               }
+            } else {
+              console.log(`[Calendar→ChatwootAssign] No chatwoot_assign tool linked to agent ${agentId}`);
             }
           } catch (e) {
             console.warn("[Calendar] Post-booking assignment error (non-blocking):", e);
@@ -1332,16 +1393,47 @@ Quando o cliente ESCOLHER, o dispatcher DEVE chamar consultar_agenda(action='cri
           return JSON.stringify({ error: "Chatwoot não configurado neste agente" });
         }
 
-        // Find the current chatwoot conversation
-        const { data: cwConvRows } = await supabase
-          .from("conversations")
-          .select("chatwoot_conversation_id, id")
-          .eq("agent_id", agentId)
-          .not("chatwoot_conversation_id", "is", null)
-          .order("started_at", { ascending: false })
-          .limit(20);
+        // Find the current chatwoot conversation — prefer exact match via context
+        let cwConvId: string | null = null;
+        const ctxConvId2 = context?.convId;
+        const ctxExtUserId2 = context?.externalUserId;
 
-        const cwConvId = cwConvRows?.[0]?.chatwoot_conversation_id;
+        if (ctxConvId2) {
+          const { data: exactConv } = await supabase
+            .from("conversations")
+            .select("chatwoot_conversation_id, id")
+            .eq("id", ctxConvId2)
+            .not("chatwoot_conversation_id", "is", null)
+            .maybeSingle();
+          cwConvId = exactConv?.chatwoot_conversation_id || null;
+          if (cwConvId) console.log(`[ChatwootAssign] Found CW conv ${cwConvId} via exact convId`);
+        }
+
+        if (!cwConvId && ctxExtUserId2) {
+          const { data: convByUser } = await supabase
+            .from("conversations")
+            .select("chatwoot_conversation_id, id")
+            .eq("agent_id", agentId)
+            .eq("external_user_id", ctxExtUserId2)
+            .not("chatwoot_conversation_id", "is", null)
+            .order("started_at", { ascending: false })
+            .limit(1);
+          cwConvId = convByUser?.[0]?.chatwoot_conversation_id || null;
+          if (cwConvId) console.log(`[ChatwootAssign] Found CW conv ${cwConvId} via external_user_id`);
+        }
+
+        if (!cwConvId) {
+          const { data: cwConvRows } = await supabase
+            .from("conversations")
+            .select("chatwoot_conversation_id, id")
+            .eq("agent_id", agentId)
+            .not("chatwoot_conversation_id", "is", null)
+            .order("started_at", { ascending: false })
+            .limit(1);
+          cwConvId = cwConvRows?.[0]?.chatwoot_conversation_id || null;
+          if (cwConvId) console.log(`[ChatwootAssign] Using fallback most-recent CW conv ${cwConvId}`);
+        }
+
         if (!cwConvId) {
           return JSON.stringify({ error: "Nenhuma conversa Chatwoot ativa encontrada" });
         }
@@ -1369,7 +1461,7 @@ Quando o cliente ESCOLHER, o dispatcher DEVE chamar consultar_agenda(action='cri
 
         // Cancel follow-ups
         try {
-          const convIdCancel = cwConvRows?.[0]?.id;
+          const convIdCancel = ctxConvId2 || null;
           if (convIdCancel) {
             await supabase.rpc("cancel_pending_followups", {
               p_agent_id: agentId,
@@ -2456,7 +2548,7 @@ Deno.serve(async (req) => {
 
                 console.log(`[Dispatcher] Executing: ${toolName} (${matchedTool.tool_type}) args:`, JSON.stringify(toolArgs));
                 debugTrace.push({ type: "tool_call", tool: toolName, tool_type: matchedTool.tool_type, args: toolArgs, timestamp: Date.now() });
-                toolResult = await executeTool(matchedTool, toolArgs, supabase, agent_id, latestUserText, sanitizedMessages);
+                toolResult = await executeTool(matchedTool, toolArgs, supabase, agent_id, latestUserText, sanitizedMessages, { convId, externalUserId: external_user_id });
 
                 let resultPreview: any = {};
                 try {
