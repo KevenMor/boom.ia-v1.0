@@ -307,6 +307,116 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "chatwoot_assign": {
+        // Requires agent_id or conversation_id in args
+        const agentId = args?.agent_id;
+        const conversationId = args?.conversation_id; // chatwoot_conversation_id (numeric)
+        const reason = args?.reason || "escalation";
+
+        if (!agentId) {
+          result = { error: "agent_id é obrigatório para testar chatwoot_assign" };
+          break;
+        }
+
+        // Read config with rules support
+        const execCfg = (tool.execution_config || {}) as Record<string, any>;
+        const rules = Array.isArray(execCfg.rules) ? execCfg.rules : [];
+
+        let assigneeId = execCfg.assignee_id;
+        let teamId = execCfg.team_id;
+        let matchedRule = "";
+
+        if (rules.length > 0) {
+          const reasonNorm = reason.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          let bestScore = 0;
+          for (const rule of rules) {
+            if (!rule.label) continue;
+            const labelNorm = rule.label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            const tokens = labelNorm.split(/\s+/).filter((t: string) => t.length >= 3);
+            const score = tokens.reduce((acc: number, tok: string) => acc + (reasonNorm.includes(tok) ? 1 : 0), 0);
+            if (score > bestScore) {
+              bestScore = score;
+              assigneeId = rule.assignee_id ?? assigneeId;
+              teamId = rule.team_id ?? teamId;
+              matchedRule = rule.label;
+            }
+          }
+          console.log(`[TestTool][ChatwootAssign] Matched rule: "${matchedRule}" (score ${bestScore}) for reason: "${reason}"`);
+        }
+
+        // Load agent's Chatwoot config
+        const { data: agentCfgRow } = await supabase
+          .from("agents")
+          .select("config")
+          .eq("id", agentId)
+          .single();
+        const agCfg = (agentCfgRow?.config || {}) as Record<string, any>;
+        const cwUrl = agCfg.chatwoot_url;
+        const cwToken = agCfg.chatwoot_api_token;
+        const cwAccountId = agCfg.chatwoot_account_id;
+
+        if (!cwUrl || !cwToken || !cwAccountId) {
+          result = { error: "Chatwoot não configurado neste agente", agent_id: agentId };
+          break;
+        }
+
+        // Determine conversation ID
+        let cwConvId = conversationId;
+        if (!cwConvId) {
+          // Find the most recent chatwoot conversation for this agent
+          const { data: cwConvRows } = await supabase
+            .from("conversations")
+            .select("chatwoot_conversation_id")
+            .eq("agent_id", agentId)
+            .not("chatwoot_conversation_id", "is", null)
+            .order("started_at", { ascending: false })
+            .limit(1);
+          cwConvId = cwConvRows?.[0]?.chatwoot_conversation_id;
+        }
+
+        if (!cwConvId) {
+          result = { error: "Nenhuma conversa Chatwoot encontrada", agent_id: agentId };
+          break;
+        }
+
+        const baseUrl = cwUrl.replace(/\/+$/, "");
+        const assignUrl = `${baseUrl}/api/v1/accounts/${cwAccountId}/conversations/${cwConvId}/assignments`;
+        const assignBody: Record<string, any> = {};
+        if (assigneeId) assignBody.assignee_id = Number(assigneeId);
+        if (teamId) assignBody.team_id = Number(teamId);
+
+        console.log(`[TestTool][ChatwootAssign] Conv ${cwConvId}, reason: ${reason}, body:`, assignBody);
+        const assignResp = await fetch(assignUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", api_access_token: cwToken },
+          body: JSON.stringify(assignBody),
+        });
+
+        const assignRespText = await assignResp.text();
+        if (!assignResp.ok) {
+          console.warn(`[TestTool][ChatwootAssign] Failed: ${assignResp.status}`, assignRespText);
+          result = { error: `Falha na atribuição: ${assignResp.status}`, detail: assignRespText };
+        } else {
+          let parsedResp: any;
+          try { parsedResp = JSON.parse(assignRespText); } catch { parsedResp = assignRespText; }
+          result = {
+            status: "atribuido",
+            chatwoot_conversation_id: cwConvId,
+            assignee_id: assigneeId || null,
+            team_id: teamId || null,
+            matched_rule: matchedRule || null,
+            reason,
+            chatwoot_response: parsedResp,
+          };
+        }
+        break;
+      }
+
+      case "send_notification": {
+        result = { info: "send_notification requires agent context. Test via Agent Sandbox." };
+        break;
+      }
+
       default:
         result = { error: `Unknown tool type: ${tool.tool_type}` };
     }
