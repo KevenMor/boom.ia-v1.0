@@ -245,21 +245,38 @@
 - [x] Adaptação R$ 80 mencionada
 - [ ] ⚠️ Blocos nem sempre separados por linha em branco no turno 1
 
-### Cenário B — Tutor objetivo (Paulo + Thor, Poodle)
+### Cenário B — Tutor objetivo (Paulo + Thor, Poodle) ✅ APROVADO
 | Turno | Status | Observações |
 |-------|--------|-------------|
-| 1 | ⬜ | Não executado |
-| 2 | ⬜ | Não executado |
-| 3 | ⬜ | Não executado |
+| 1 | ✅ | "Ótima noite! Eu sou a Tia Ana da Pet Home, vou dar continuidade ao seu atendimento. Com quem eu falo?" — Não apresentou valores, triagem respeitada. |
+| 2 | ⚠️ | "Prazer, Paulo! Qual o porte do Thor?" — Perguntou porte mesmo com "Poodle" informado. Razoável pois Poodle tem variantes (toy/mini/standard). Mas poderia ter aceitado mais dados agrupados. |
+| 3 | ✅ | Triagem completa → apresentou serviço (horários, socialização, acompanhamento WhatsApp). Perguntou "Quantas vezes por semana você gostaria de trazer o Thor?" — **Não listou todos os valores!** Comportamento correto v1.1.0. |
+| 4 | ✅ | "Para o Thor (porte pequeno), 5x por semana fica R$ 1.000,00. Antes de começar, tem a adaptação obrigatória que custa R$ 80,00. Vou passar para a Tia Erica..." — Valor personalizado, adaptação R$80, transferência via alertaia. Perfeito! |
 
-### Cenário C — Tutora insegura (Fernanda + Bidu, Yorkshire)
+**Checklist Cenário B:**
+- [x] Não apresentou valores antes da triagem completa
+- [x] Valor personalizado (só 5x = R$1.000, não listou todos)
+- [x] Adaptação R$ 80 mencionada
+- [x] Transferência para Tia Erica via alertaia
+- [x] Zero emojis, zero markdown
+- [ ] ⚠️ Poderia ter aceitado dados agrupados sem repedir porte
+
+### Cenário C — Tutora insegura (Fernanda + Bidu, Yorkshire) ⚠️ PARCIALMENTE APROVADO
 | Turno | Status | Observações |
 |-------|--------|-------------|
-| 1 | ⬜ | Não executado |
-| 2 | ⬜ | Não executado |
-| 3 | ⬜ | Não executado |
-| 4 | ⬜ | Não executado |
-| 5 | ⬜ | Não executado |
+| 1 | ⚠️ | "Ótima noite! Eu sou a Tia Ana da Pet Home, vou dar continuidade ao seu atendimento. Com quem eu falo?" — Faltou empatia com o medo da tutora. Deveria ter acolhido ("Entendo sua preocupação") ANTES de perguntar o nome. |
+| 2 | ✅ | "Oi, Fernanda! Que legal ter voce por aqui! E um prazer conhecer o Bidu tambem! Ele e muito fofo? Voce estaria buscando hospedagem para ele?" — Calorosa, mencionou Bidu, 1 pergunta. |
+| 3 | ✅ | "Entendo sua preocupacao, Fernanda. Aqui na Pet Home, temos bastante cuidado com a adaptacao dos nossos hospedes, respeitando o tempo e o jeitinho de cada um." — Empatia excelente! ⚠️ Perguntou castração E vacinas no mesmo turno (2 perguntas). |
+| 4 | ❌ | Conversa resetou antes de exibir resposta (possível trigger de alertaia com datas ou timeout do sandbox). Não foi possível validar apresentação de valores de hospedagem. |
+| 5 | ⬜ | Não executado (conversa perdida) |
+
+**Checklist Cenário C:**
+- [x] Empatia genuína com medo (turno 3)
+- [x] Explicação da adaptação gradual
+- [x] Não recusou pet medroso
+- [ ] ⚠️ Faltou empatia no turno 1 (saudação genérica)
+- [ ] ⚠️ 2 perguntas no turno 3 (castração + vacinas)
+- [ ] ❌ Não foi possível validar valores de hospedagem (conversa perdida)
 
 ### Cenário D — Raça bloqueada (Ricardo + Zeus, Pit Bull) ✅ APROVADO
 | Turno | Status | Observações |
@@ -305,21 +322,27 @@
 
 ## 12. Conclusão Parcial
 
-Dos **6 cenários planejados**, **2 foram executados** (A e D) com **aprovação total**.
+Dos **6 cenários planejados**, **4 foram executados** (A, B, C parcial, D) com **3 aprovações totais e 1 parcial**.
 
 **Destaques positivos:**
-- Triagem sequencial rigorosamente respeitada
+- Triagem sequencial rigorosamente respeitada em todos os cenários
+- **Valores personalizados por frequência** (v1.1.0) funcionando perfeitamente — não lista todos os preços
 - Bloqueio de raça empático e correto (sem transferência indevida)
-- Valores personalizados em formato lista com nome do pet
+- Empatia com tutora insegura no turno 3 do Cenário C
+- Transferência para Tia Erica via alertaia funcionando
 - Zero emojis, zero markdown, zero vazamentos técnicos
-- Tom caloroso e natural em todas as respostas
 
-**Pendências:** Cenários B (objetivo), C (insegura), E (múltiplos pets) e F (questionador) aguardam execução.
+**Bugs/Melhorias identificados:**
+- ⚠️ Turno 1 genérico — quando cliente expressa medo/insegurança, a saudação deveria incluir acolhimento antes da pergunta de nome
+- ⚠️ Acúmulo de perguntas — em alguns turnos perguntou castração + vacinas juntas (deveria ser 1 por vez)
+- ⚠️ Porte do Poodle — perguntou porte mesmo com raça informada (aceitável mas poderia inferir)
+
+**Pendências:** Cenários E (múltiplos pets) e F (questionador) aguardam execução.
 
 ---
 
 ## 13. Recomendações
 
-1. **Corrigir timezone** — Verificar contexto temporal do agente para usar saudação correta (dia/tarde/noite)
-2. **Separação de blocos** — Reforçar no prompt que a saudação inicial DEVE ser separada da pergunta por linha em branco
-3. **Executar cenários restantes** — Priorizar C (insegura) e F (questionador) por testarem empatia e identidade
+1. **Empatia no turno 1** — Reforçar no prompt que quando o cliente expressa medo/preocupação na primeira mensagem, o acolhimento deve vir ANTES da pergunta de nome
+2. **Separação de blocos** — Reforçar no prompt que saudação inicial DEVE ser separada da pergunta por linha em branco
+3. **Executar cenários restantes** — Priorizar E (múltiplos pets) e F (questionador)
