@@ -1500,7 +1500,29 @@ Quando o cliente ESCOLHER, o dispatcher DEVE chamar consultar_agenda(action='cri
             if (targetCid) {
               // Build brief summary from context
               const extUser = ctxExtUserId2 || "N/A";
-              const notifMsg = `🙋 [LEAD AGUARDANDO ATENDIMENTO HUMANO]\n\nTelefone: ${extUser}\nMotivo: ${reason}\n\nO lead foi atribuído a um agente humano e aguarda atendimento.`;
+              
+              // Try to extract client name from conversation history
+              let clientNameNotif = "Não identificado";
+              const ctxMsgs = (context as any)?.messages || [];
+              const recentAssistantMsgs = ctxMsgs.filter((m: any) => m.role === "assistant" && m.content).slice(-6);
+              for (const m of recentAssistantMsgs) {
+                const nameMatch = m.content.match(/(?:prazer|obrigad[oa]),?\s+([A-ZÀ-Ú][a-zà-ú]+)/);
+                if (nameMatch) { clientNameNotif = nameMatch[1]; break; }
+              }
+              // Also try from user messages (e.g., "meu nome é Kevin")
+              if (clientNameNotif === "Não identificado") {
+                const userMsgs = ctxMsgs.filter((m: any) => m.role === "user" && m.content).slice(-10);
+                for (const m of userMsgs) {
+                  const userNameMatch = m.content.match(/(?:meu nome é|me chamo|sou o|sou a)\s+([A-ZÀ-Ú][a-zà-ú]+)/i);
+                  if (userNameMatch) { clientNameNotif = userNameMatch[1]; break; }
+                }
+              }
+              
+              // Build summary from recent user messages
+              const recentUserMsgs = ctxMsgs.filter((m: any) => m.role === "user" && m.content).slice(-3);
+              const briefSummary = recentUserMsgs.map((m: any) => m.content?.slice(0, 100)).filter(Boolean).join(" | ") || "Sem resumo disponível";
+              
+              const notifMsg = `🙋 [LEAD AGUARDANDO ATENDIMENTO HUMANO]\n\nCliente: ${clientNameNotif}\nTelefone: ${extUser}\nMotivo: ${reason}\nResumo: ${briefSummary}\n\nO lead foi atribuído a um agente humano e aguarda atendimento.`;
               console.log(`[ChatwootAssign→Notify] Sending to CW conv ${targetCid}`);
               const nResp = await fetch(`${baseUrl}/api/v1/accounts/${cwAccountId}/conversations/${targetCid}/messages`, {
                 method: "POST",
