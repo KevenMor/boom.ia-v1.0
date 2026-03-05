@@ -83,6 +83,34 @@ function stripEmojis(content: string): string {
     .trim();
 }
 
+// ---------- Contextual photo acceptance detection ----------
+// Detects when a short user message is accepting a photo offer from the previous assistant message
+function isContextualPhotoAcceptance(userText: string, history: any[]): boolean {
+  if (!userText || !history || history.length === 0) return false;
+  
+  const normalized = userText.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  
+  // Short acceptance patterns (must be concise — typically 1-3 words)
+  const acceptancePattern = /^(quero|sim|pode|manda|claro|por favor|ok|bora|com certeza|gostaria|aceito|positivo|afirmativo|quero sim|pode sim|manda sim|sim por favor|pode me enviar|quero ver|sim quero|manda ai|manda la|envia|envia sim|quero fotos?|sim,?\s*quero|sim,?\s*pode|claro que sim|pode mandar|pode enviar|com certeza|logico|lógico|obvio|óbvio|show|beleza|top|perfeito|isso|isso mesmo|por gentileza|por obsequio|pfv|pf|s|ss|sss|siim|siiim|querooo|queroo|mandaa|mandaaa)[.!,\s]*$/i;
+  if (!acceptancePattern.test(normalized)) return false;
+  
+  // Find the last assistant message in history
+  let lastAssistantContent = "";
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i]?.role === "assistant" && history[i]?.content) {
+      lastAssistantContent = String(history[i].content).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      break;
+    }
+  }
+  
+  if (!lastAssistantContent) return false;
+  
+  // Photo offer patterns in assistant's previous message
+  const photoOfferPattern = /(quer|gostaria|posso|vou|deseja|te mand|te envi|te mostr).{0,30}(fotos?|imagens?|ver\s+(ele|ela|o\s+carro|o\s+veiculo|as\s+fotos?))|fotos?\s+(dele|dela|do\s+\w+|da\s+\w+)|mand[aeo]r?\s+fotos?|envi[aeo]r?\s+fotos?|mostrar\s+fotos?|(quer|gostaria)\s+.{0,20}(ver|receber|conferir)/i;
+  
+  return photoOfferPattern.test(lastAssistantContent);
+}
+
 function dedupeRepeatedParagraphs(content: string): string {
   const parts = content.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
   if (parts.length <= 1) return content;
@@ -695,7 +723,7 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         const photoRequestPattern = /\b(fotos?|imagens?|images?|photos?|mand[ae]r?\s*fotos?|envia(?:r)?\s*fotos?|ver\s*fotos?|ver\s*imagens?|mostra(?:r)?\s*fotos?|mostra(?:r)?\s*imagens?|quero\s*ver\s*fotos?|me\s*envia(?:r)?|me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?|galeria)\b/i;
         // CONTEXTUAL: "me manda/mandar da X tambem" after photos were just sent implies more photos
         const contextualPhotoPattern = /\b(me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?|me\s*envia(?:r)?|pode\s*me\s*envia(?:r)?)\b.*\b(tamb[eé]m|tb|tbm|tamb[eé]n)\b/i;
-        const isPhotoRequest = photoRequestPattern.test(userText || "") || contextualPhotoPattern.test(userText || "");
+        const isPhotoRequest = photoRequestPattern.test(userText || "") || contextualPhotoPattern.test(userText || "") || isContextualPhotoAcceptance(userText || "", messages || []);
         // Show photos ONLY when user explicitly asks AND it's a specific vehicle query (few results)
         const isSpecificWithPhotos = isPhotoRequest && data.length <= 3;
         // Include photo data ONLY when user asked for photos — NOT by default
@@ -2221,7 +2249,13 @@ Deno.serve(async (req) => {
         const schedulingKeywords = /\b(agend|horario|horário|visita|test.?drive|marcar|marcad|reserv|cancelar|desmarcar|reagend|confirma|agendar)\b/i;
         const mentionsScheduling = schedulingKeywords.test(normalizedLatestUser);
 
-        const shouldSkip = (isContestationMsg || isConfirmationQuestion || isReactingToPreviousResponse || isSelectingPreviousOption) && !mentionsScheduling;
+        // OVERRIDE: If contextual photo acceptance detected, ALWAYS dispatch
+        const contextualPhotoAccept = isContextualPhotoAcceptance(latestUserText, sanitizedMessages);
+        if (contextualPhotoAccept) {
+          console.log(`[Dispatcher] Contextual photo acceptance detected — forcing dispatch: "${latestUserText.slice(0, 80)}"`);
+        }
+
+        const shouldSkip = (isContestationMsg || isConfirmationQuestion || isReactingToPreviousResponse || isSelectingPreviousOption) && !mentionsScheduling && !contextualPhotoAccept;
 
         if (shouldSkip) {
           console.log(`[Dispatcher] Skip detected (contestation/confirmation/reaction/selection): "${latestUserText.slice(0, 80)}"`);
@@ -2740,7 +2774,8 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
     // PHOTO INJECTION: Only inject photos when user EXPLICITLY asked for them
     // Must match the same expanded regex from inventory_query to be consistent
     const userExplicitlyAskedPhotos = /\b(fotos?|imagens?|photos?|mand[ae]r?\s*fotos?|envia(?:r)?\s*fotos?|ver\s*fotos?|mostra(?:r)?\s*fotos?|me\s*envia(?:r)?|me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?|galeria)\b/i.test(latestUserText || "")
-      || /\b(me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?|me\s*envia(?:r)?|pode\s*me\s*envia(?:r)?)\b.*\b(tamb[eé]m|tb|tbm|tamb[eé]n)\b/i.test(latestUserText || "");
+      || /\b(me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?|me\s*envia(?:r)?|pode\s*me\s*envia(?:r)?)\b.*\b(tamb[eé]m|tb|tbm|tamb[eé]n)\b/i.test(latestUserText || "")
+      || isContextualPhotoAcceptance(latestUserText || "", sanitizedMessages || []);
     if (toolResultsContext.length > 0 && !isAppraisalPhotoContext && !isTradeInContext && !isSchedulingContext && userExplicitlyAskedPhotos) {
       try {
         for (const ctx of toolResultsContext) {
@@ -2755,7 +2790,8 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
       }
     } else if (!isAppraisalPhotoContext && !isTradeInContext && !isSchedulingContext && toolResultsContext.length === 0 && agent?.tenant_id) {
       const explicitPhotoRequest = /(foto|fotos|imagem|imagens|mand[ae]r?|envia(?:r)?|nao me enviou|não me enviou|cad[eê] as fotos|me envia(?:r)?|me mand[ae]r?|pode me mand[ae]r?)/i.test(latestUserText || "")
-        || /\b(me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?)\b.*\b(tamb[eé]m|tb|tbm)\b/i.test(latestUserText || "");
+        || /\b(me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?)\b.*\b(tamb[eé]m|tb|tbm)\b/i.test(latestUserText || "")
+        || isContextualPhotoAcceptance(latestUserText || "", sanitizedMessages || []);
       const shouldForcePhotoRecovery = !hasMarkdownImages(finalContent) && (!!photoCommandLine || explicitPhotoRequest);
 
       if (shouldForcePhotoRecovery) {

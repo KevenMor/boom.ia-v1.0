@@ -860,9 +860,13 @@ CRITICAL RULES
 - The examples in this prompt (Cruze 2020, Civic 2019, HB20 2021) are JUST examples of FORMAT. NEVER use them as default values when the customer hasn't provided their car details.
 - If only 1 or 2 of the 3 required fields (marca, modelo, ano) are present, DO NOT fill in the missing ones — return NO_TOOLS_NEEDED and let the conversational model ask for the missing info.
 
-13. ⚠️ PHOTO REQUESTS (HIGHEST PRIORITY — NEVER SKIP):
+13. ⚠️ PHOTO REQUESTS + CONTEXTUAL ACCEPTANCE (HIGHEST PRIORITY — NEVER SKIP):
 - If the customer asks for photos, images, or confirms they want photos → ALWAYS call consultar_estoque.
 - This includes: "manda fotos", "envia fotos", "pode enviar", "gostaria sim", "sim por favor", "quero sim", "nao me enviou as fotos", "cadê as fotos", "me envia a foto", "ainda não recebi".
+- ⚠️ CONTEXTUAL ACCEPTANCE (CRITICAL): When the PREVIOUS assistant message offered photos (e.g., "Quer que eu te mande fotos?", "Posso enviar fotos", "Quer ver fotos?") and the customer responds with ANY short confirmation like:
+  "Quero", "Sim", "Pode", "Manda", "Claro", "Por favor", "Ok", "Bora", "Com certeza", "Aceito", "Pode mandar", "Pode enviar", "Quero ver", "Show", "Beleza", "Top", "Perfeito"
+  → This is a PHOTO ACCEPTANCE. ALWAYS call consultar_estoque with marca/modelo from conversation history.
+  → These are NEVER "NO_TOOLS_NEEDED". The customer is explicitly accepting the photo offer.
 - Extract the vehicle brand/model from conversation HISTORY (the vehicle they were discussing).
 - A photo request is NEVER "NO_TOOLS_NEEDED". The system needs the inventory data to attach real photos.
 - Even if you already called consultar_estoque earlier in the conversation for the same vehicle, call it AGAIN for photo requests. The photos are extracted from the tool result.
