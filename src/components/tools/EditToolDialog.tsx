@@ -179,6 +179,94 @@ export function EditToolDialog({ tool, open, onOpenChange }: Props) {
             </div>
           )}
 
+          {toolType === "chatwoot_assign" && (
+            <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <UserCheck className="h-4 w-4 text-primary" />
+                Configuração de Atribuição
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Assignee ID</Label>
+                  <Input
+                    type="number"
+                    defaultValue={(tool?.execution_config as any)?.assignee_id ?? ""}
+                    className="h-9 bg-background font-mono text-sm"
+                    onChange={(e) => {
+                      try {
+                        const cur = JSON.parse((document.querySelector('[name="execution_json"]') as HTMLTextAreaElement)?.value || "{}");
+                        cur.assignee_id = e.target.value ? Number(e.target.value) : null;
+                        setValue("execution_json", JSON.stringify(cur, null, 2));
+                      } catch {
+                        setValue("execution_json", JSON.stringify({ assignee_id: Number(e.target.value) || null }, null, 2));
+                      }
+                    }}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Team ID</Label>
+                  <Input
+                    type="number"
+                    defaultValue={(tool?.execution_config as any)?.team_id ?? ""}
+                    className="h-9 bg-background font-mono text-sm"
+                    onChange={(e) => {
+                      try {
+                        const cur = JSON.parse((document.querySelector('[name="execution_json"]') as HTMLTextAreaElement)?.value || "{}");
+                        cur.team_id = e.target.value ? Number(e.target.value) : null;
+                        setValue("execution_json", JSON.stringify(cur, null, 2));
+                      } catch {
+                        setValue("execution_json", JSON.stringify({ team_id: Number(e.target.value) || null }, null, 2));
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {toolType === "send_notification" && (
+            <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <Bell className="h-4 w-4 text-primary" />
+                Configuração de Notificação
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Canal</Label>
+                <Select defaultValue={(tool?.execution_config as any)?.channel || "chatwoot_message"} onValueChange={(v) => {
+                  try {
+                    const cur = JSON.parse((document.querySelector('[name="execution_json"]') as HTMLTextAreaElement)?.value || "{}");
+                    cur.channel = v;
+                    setValue("execution_json", JSON.stringify(cur, null, 2));
+                  } catch {
+                    setValue("execution_json", JSON.stringify({ channel: v }, null, 2));
+                  }
+                }}>
+                  <SelectTrigger className="h-9 bg-background"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="chatwoot_message">💬 Nota privada Chatwoot</SelectItem>
+                    <SelectItem value="webhook">🔗 Webhook</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Template</Label>
+                <Input
+                  defaultValue={(tool?.execution_config as any)?.template ?? ""}
+                  className="h-9 bg-background text-sm"
+                  onChange={(e) => {
+                    try {
+                      const cur = JSON.parse((document.querySelector('[name="execution_json"]') as HTMLTextAreaElement)?.value || "{}");
+                      cur.template = e.target.value;
+                      setValue("execution_json", JSON.stringify(cur, null, 2));
+                    } catch {
+                      setValue("execution_json", JSON.stringify({ template: e.target.value }, null, 2));
+                    }
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
           <Tabs defaultValue="params" className="w-full">
             <TabsList className="w-full grid grid-cols-2">
               <TabsTrigger value="params" className="text-xs">Parâmetros</TabsTrigger>

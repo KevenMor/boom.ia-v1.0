@@ -168,6 +168,105 @@ export default function EditTool() {
             </div>
           )}
 
+          {toolType === "chatwoot_assign" && (
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 space-y-5">
+              <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <UserCheck className="h-5 w-5 text-primary" />
+                Configuração de Atribuição Chatwoot
+              </div>
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-muted-foreground">Assignee ID (Atendente)</Label>
+                  <Input
+                    type="number"
+                    defaultValue={(tool.execution_config as any)?.assignee_id ?? ""}
+                    placeholder="15"
+                    className="h-11 rounded-lg bg-background border-border font-mono text-sm"
+                    onChange={(e) => {
+                      try {
+                        const cur = JSON.parse((document.querySelector('[name="execution_json"]') as HTMLTextAreaElement)?.value || "{}");
+                        cur.assignee_id = e.target.value ? Number(e.target.value) : null;
+                        setValue("execution_json", JSON.stringify(cur, null, 2));
+                      } catch {
+                        setValue("execution_json", JSON.stringify({ assignee_id: Number(e.target.value) || null }, null, 2));
+                      }
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">ID do atendente humano no Chatwoot que receberá a conversa</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-muted-foreground">Team ID (Equipe)</Label>
+                  <Input
+                    type="number"
+                    defaultValue={(tool.execution_config as any)?.team_id ?? ""}
+                    placeholder="3"
+                    className="h-11 rounded-lg bg-background border-border font-mono text-sm"
+                    onChange={(e) => {
+                      try {
+                        const cur = JSON.parse((document.querySelector('[name="execution_json"]') as HTMLTextAreaElement)?.value || "{}");
+                        cur.team_id = e.target.value ? Number(e.target.value) : null;
+                        setValue("execution_json", JSON.stringify(cur, null, 2));
+                      } catch {
+                        setValue("execution_json", JSON.stringify({ team_id: Number(e.target.value) || null }, null, 2));
+                      }
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">ID da equipe no Chatwoot (opcional — preencha se quiser rotear para um time)</p>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground/80 italic">
+                💡 O agente IA acionará esta tool automaticamente após agendamentos confirmados ou quando o cliente solicitar atendimento humano. Os IDs configurados aqui têm prioridade sobre qualquer parâmetro enviado pelo dispatcher.
+              </p>
+            </div>
+          )}
+
+          {toolType === "send_notification" && (
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 space-y-5">
+              <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <Bell className="h-5 w-5 text-primary" />
+                Configuração de Notificação
+              </div>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-muted-foreground">Canal de Envio</Label>
+                  <Select defaultValue={(tool.execution_config as any)?.channel || "chatwoot_message"} onValueChange={(v) => {
+                    try {
+                      const cur = JSON.parse((document.querySelector('[name="execution_json"]') as HTMLTextAreaElement)?.value || "{}");
+                      cur.channel = v;
+                      setValue("execution_json", JSON.stringify(cur, null, 2));
+                    } catch {
+                      setValue("execution_json", JSON.stringify({ channel: v }, null, 2));
+                    }
+                  }}>
+                    <SelectTrigger className="h-11 rounded-lg bg-background border-border"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="chatwoot_message">💬 Nota privada no Chatwoot</SelectItem>
+                      <SelectItem value="webhook">🔗 Webhook externo (HTTP POST)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-muted-foreground">Template da Mensagem</Label>
+                  <Input
+                    defaultValue={(tool.execution_config as any)?.template ?? ""}
+                    placeholder="Novo agendamento: {{cliente}} às {{horario}}"
+                    className="h-11 rounded-lg bg-background border-border text-sm"
+                    onChange={(e) => {
+                      try {
+                        const cur = JSON.parse((document.querySelector('[name="execution_json"]') as HTMLTextAreaElement)?.value || "{}");
+                        cur.template = e.target.value;
+                        setValue("execution_json", JSON.stringify(cur, null, 2));
+                      } catch {
+                        setValue("execution_json", JSON.stringify({ template: e.target.value }, null, 2));
+                      }
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">Variáveis disponíveis: {"{{cliente}}"}, {"{{horario}}"}, {"{{motivo}}"}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {toolType === "web_scraper" && (
             <div className="space-y-3">
               <Label className="text-sm font-medium text-muted-foreground">URL padrão (scraping)</Label>
