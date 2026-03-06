@@ -183,7 +183,7 @@ export default function Agents() {
               <div className="mt-auto border-t border-border/40 flex">
                 <button
                   className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-                  onClick={() => navigate(`/agents/${agent.id}/edit`)}
+                  onClick={(e) => { e.stopPropagation(); navigate(`/agents/${agent.id}/edit`); }}
                 >
                   <Pencil className="h-3.5 w-3.5" />
                   Editar
@@ -191,7 +191,7 @@ export default function Agents() {
                 <span className="w-px bg-border/40" />
                 <button
                   className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-primary transition-colors hover:bg-primary/5"
-                  onClick={() => navigate(`/agents/${agent.id}/sandbox`)}
+                  onClick={(e) => { e.stopPropagation(); navigate(`/agents/${agent.id}/sandbox`); }}
                 >
                   <MessageSquare className="h-3.5 w-3.5" />
                   Testar
