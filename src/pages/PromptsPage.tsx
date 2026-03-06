@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { cloudClient } from "@/integrations/supabase/cloud-client";
 import { toast } from "sonner";
+import { useTenantContext } from "@/contexts/TenantContext";
 
 interface TenantSummary {
   slug: string;
@@ -88,10 +89,11 @@ function formatNumber(n: number) {
 
 export default function PromptsPage() {
   const navigate = useNavigate();
-  const [tenants, setTenants] = useState<TenantSummary[]>([]);
+  const [allTenants, setAllTenants] = useState<TenantSummary[]>([]);
   const [selectedDetail, setSelectedDetail] = useState<TenantDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const { selectedTenant } = useTenantContext();
 
   useEffect(() => {
     loadTenants();
@@ -101,7 +103,7 @@ export default function PromptsPage() {
     try {
       const { data, error } = await cloudClient.functions.invoke("prompt-viewer");
       if (error) throw error;
-      setTenants(data.tenants || []);
+      setAllTenants(data.tenants || []);
     } catch (err: any) {
       toast.error("Erro ao carregar prompts: " + (err.message || ""));
     } finally {
@@ -144,6 +146,15 @@ export default function PromptsPage() {
     const dash = desc.indexOf("—");
     return dash > 0 ? desc.substring(dash + 1).trim() : "";
   }
+
+  // Filter tenants by selected tenant slug
+  const tenants = selectedTenant
+    ? allTenants.filter((t) => {
+        const tenantSlug = selectedTenant.slug.toLowerCase();
+        const promptSlug = t.slug.toLowerCase();
+        return promptSlug === tenantSlug || promptSlug.startsWith(tenantSlug) || tenantSlug.startsWith(promptSlug);
+      })
+    : allTenants;
 
   const totalChars = tenants.reduce((sum, t) => sum + t.systemPromptLength + t.communicationRulesLength + t.dispatcherPromptLength + t.followupPromptLength, 0);
 
