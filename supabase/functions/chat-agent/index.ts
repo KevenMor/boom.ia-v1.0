@@ -1841,10 +1841,13 @@ Deno.serve(async (req) => {
     }
 
     const authHeader = req.headers.get("x-nexus-auth") || "";
-    const supabase = createClient(nexusUrl, nexusKey, {
+    // IMPORTANT: Public demo links call this function without user session.
+    // Prefer service role for backend reads to avoid anon-RLS blocking in demo mode.
+    const dataApiKey = nexusServiceKey || nexusKey;
+    const supabase = createClient(nexusUrl, dataApiKey, {
       global: { headers: authHeader ? { Authorization: authHeader } : {} },
     });
-    // Service-role client for usage_events inserts (bypasses RLS)
+    // Service-role client for privileged operations (usage_events/save_message)
     const supabaseAdmin = nexusServiceKey
       ? createClient(nexusUrl, nexusServiceKey)
       : supabase;
