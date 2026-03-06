@@ -1,7 +1,7 @@
 // ============================================================
 // Nexus AI — Prompt: PPL Motors (Concessionária de Veículos)
 // Slug: ppl-mortors (legado) / ppl-motors
-// Versão: v2.0.0 — Juliana | SDR PPL MOTORS
+// Versão: v2.0.0 — Ana Júlia | SDR PPL MOTORS
 // ============================================================
 
 /**
