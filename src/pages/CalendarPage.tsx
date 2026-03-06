@@ -492,6 +492,54 @@ export default function CalendarPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Reminder section */}
+            {reminderAgents.length > 0 && (
+              <div className="space-y-3 rounded-lg border border-border p-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bell className="h-4 w-4 text-primary" />
+                    <Label className="text-sm font-medium">Enviar lembrete</Label>
+                  </div>
+                  <Switch checked={sendReminder} onCheckedChange={setSendReminder} />
+                </div>
+
+                {sendReminder && (
+                  <div className="space-y-3 pt-1">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">WhatsApp do cliente</Label>
+                      <div className="flex items-center gap-2">
+                        <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <Input
+                          value={reminderPhone}
+                          onChange={(e) => setReminderPhone(e.target.value)}
+                          placeholder="11999999999"
+                          className="h-9 font-mono text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    {reminderAgents.length > 1 && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Agente</Label>
+                        <Select value={reminderAgentId} onValueChange={setReminderAgentId}>
+                          <SelectTrigger className="h-9"><SelectValue placeholder="Selecione o agente" /></SelectTrigger>
+                          <SelectContent>
+                            {reminderAgents.map((a) => (
+                              <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    <p className="text-xs text-muted-foreground">
+                      O lembrete será enviado via WAHA com a antecedência configurada no agente.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter className="gap-2">
             {editingEventId && (
