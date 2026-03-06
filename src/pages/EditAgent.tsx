@@ -129,6 +129,7 @@ export default function EditAgent() {
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const [reminderMinutesBefore, setReminderMinutesBefore] = useState(60);
   const [reminderTemplate, setReminderTemplate] = useState("");
+  const [testAssigneeId, setTestAssigneeId] = useState("");
 
   const { register, handleSubmit, setValue, watch, reset } = useForm<FormData>({ resolver: zodResolver(schema) });
 
