@@ -168,6 +168,9 @@ export default function EditAgent() {
       setBusinessHours((cfg as any).business_hours ?? DEFAULT_BUSINESS_HOURS);
       setOfflineMessage((cfg as any).business_hours_offline_message ?? "");
       setSandboxPassword((cfg as any).sandbox_password ?? "");
+      setReminderEnabled((cfg as any).reminder_enabled ?? false);
+      setReminderMinutesBefore((cfg as any).reminder_minutes_before ?? 60);
+      setReminderTemplate((cfg as any).reminder_template ?? "");
     }
   }, [agent, reset]);
 
