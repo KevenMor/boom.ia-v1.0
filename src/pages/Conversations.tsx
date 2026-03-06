@@ -588,7 +588,7 @@ export default function Conversations() {
           {/* ─── Right: Chat Panel ─── */}
           <div
             className={cn(
-              "flex-1 flex-col min-w-0 bg-background",
+              "flex-1 flex-col min-w-0 bg-background overflow-hidden",
               !selectedContactKey ? "hidden md:flex" : "flex"
             )}
           >
