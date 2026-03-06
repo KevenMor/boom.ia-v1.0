@@ -14,7 +14,7 @@ import { AgentTokenBreakdown } from "@/components/dashboard/AgentTokenBreakdown"
 import { CostEstimationCard } from "@/components/dashboard/CostEstimationCard";
 import { LatencyChart } from "@/components/dashboard/LatencyChart";
 import { ProviderTokensCard } from "@/components/dashboard/ProviderTokensCard";
-import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
+
 import { RevenueChart } from "@/components/dashboard/RevenueChart";
 import { SprintProgress } from "@/components/dashboard/SprintProgress";
 import { FeatureAdoption } from "@/components/dashboard/FeatureAdoption";
