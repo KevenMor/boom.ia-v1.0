@@ -251,7 +251,12 @@ Deno.serve(async (req: Request) => {
 
         processed++;
       } else {
-        console.error(`[Reminder] Failed to send for event "${item.event_title}"`);
+        console.error(`[Reminder] Failed to send for event "${item.event_title}", marking as failed`);
+        await supabase
+          .from("appointment_reminders")
+          .update({ status: "failed", updated_at: new Date().toISOString() })
+          .eq("id", item.id);
+        failed++;
       }
     }
 
