@@ -246,37 +246,86 @@ export default function CalendarPage() {
         toast.success("Evento criado!");
       }
 
-      // Insert reminder if enabled
-      if (sendReminder && eventId && reminderAgentId) {
-        const agent = reminderAgents.find(a => a.id === reminderAgentId);
-        const cfg = (agent?.config || {}) as Record<string, any>;
-        const minutesBefore = cfg.reminder_minutes_before || 60;
-        const eventStartDate = new Date(finalStart);
-        const remindAt = new Date(eventStartDate.getTime() - minutesBefore * 60 * 1000);
+      // Upsert/cancel manual reminder linked to this event
+      if (eventId) {
+        const conversationId = `manual-${eventId}`;
 
-        // Normalize phone: ensure 55 prefix
-        let phone = reminderPhone.replace(/\D/g, "");
-        if (!phone.startsWith("55")) phone = "55" + phone;
+        if (sendReminder && reminderAgentId) {
+          const agent = reminderAgents.find(a => a.id === reminderAgentId);
+          const cfg = (agent?.config || {}) as Record<string, any>;
+          const minutesBefore = cfg.reminder_minutes_before || 60;
+          const eventStartDate = new Date(finalStart);
+          const remindAt = new Date(eventStartDate.getTime() - minutesBefore * 60 * 1000);
+          const phone = normalizePhoneForReminder(reminderPhone);
 
-        const { error: remErr } = await supabase
-          .from("appointment_reminders")
-          .insert({
-            agent_id: reminderAgentId,
-            tenant_id: selectedTenantId,
-            calendar_event_id: eventId,
-            conversation_id: `manual-${eventId}`,
-            external_user_id: phone,
-            event_title: newTitle,
-            event_start_at: finalStart,
-            remind_at: remindAt.toISOString(),
-            status: "pending",
-          });
+          const { data: existingReminder, error: existingErr } = await supabase
+            .from("appointment_reminders")
+            .select("id")
+            .eq("tenant_id", selectedTenantId)
+            .eq("calendar_event_id", eventId)
+            .eq("conversation_id", conversationId)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
 
-        if (remErr) {
-          console.error("Reminder insert error:", remErr);
-          toast.error("Evento salvo, mas erro ao agendar lembrete.");
-        } else {
-          toast.success("Lembrete agendado! 🔔");
+          if (existingErr) {
+            console.error("Reminder load error:", existingErr);
+            toast.error("Evento salvo, mas erro ao carregar lembrete existente.");
+          } else if (existingReminder?.id) {
+            const { error: remUpdateErr } = await supabase
+              .from("appointment_reminders")
+              .update({
+                agent_id: reminderAgentId,
+                external_user_id: phone,
+                event_title: newTitle,
+                event_start_at: finalStart,
+                remind_at: remindAt.toISOString(),
+                status: "pending",
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", existingReminder.id);
+
+            if (remUpdateErr) {
+              console.error("Reminder update error:", remUpdateErr);
+              toast.error("Evento salvo, mas erro ao atualizar lembrete.");
+            } else {
+              toast.success("Lembrete atualizado! 🔔");
+            }
+          } else {
+            const { error: remInsertErr } = await supabase
+              .from("appointment_reminders")
+              .insert({
+                agent_id: reminderAgentId,
+                tenant_id: selectedTenantId,
+                calendar_event_id: eventId,
+                conversation_id: conversationId,
+                external_user_id: phone,
+                event_title: newTitle,
+                event_start_at: finalStart,
+                remind_at: remindAt.toISOString(),
+                status: "pending",
+              });
+
+            if (remInsertErr) {
+              console.error("Reminder insert error:", remInsertErr);
+              toast.error("Evento salvo, mas erro ao agendar lembrete.");
+            } else {
+              toast.success("Lembrete agendado! 🔔");
+            }
+          }
+        } else if (editingEventId) {
+          const { error: remCancelErr } = await supabase
+            .from("appointment_reminders")
+            .update({ status: "cancelled", updated_at: new Date().toISOString() })
+            .eq("tenant_id", selectedTenantId)
+            .eq("calendar_event_id", eventId)
+            .eq("conversation_id", conversationId)
+            .neq("status", "cancelled");
+
+          if (remCancelErr) {
+            console.error("Reminder cancel error:", remCancelErr);
+            toast.error("Evento salvo, mas erro ao cancelar lembrete.");
+          }
         }
       }
     } catch (e: any) {
