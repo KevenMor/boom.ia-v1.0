@@ -313,6 +313,31 @@ Deno.serve(async (req: Request) => {
         });
         convId = data;
         console.log(`[ProcessQueue] find_or_create result: convId=${convId}, error=${rpcErr?.message || "none"}`);
+
+        // ---------- Fallback: if RPC failed (e.g. missing chatwoot columns), try list_agent_conversations ----------
+        if (!convId && rpcErr) {
+          console.warn(`[ProcessQueue] RPC failed (${rpcErr.message}), attempting fallback via list_agent_conversations`);
+          try {
+            const { data: convList } = await supabase.rpc("list_agent_conversations", {
+              p_agent_id: agent_id,
+              p_limit: 200,
+            });
+            if (Array.isArray(convList)) {
+              // Find open conversation matching this external_user_id
+              const match = convList.find(
+                (c: any) => c.external_user_id === external_user_id && c.status === "open"
+              );
+              if (match) {
+                convId = match.id;
+                console.log(`[ProcessQueue] Fallback found existing conv: ${convId} (${match.message_count} msgs)`);
+              } else {
+                console.log(`[ProcessQueue] Fallback: no open conv found for ${external_user_id} among ${convList.length} conversations`);
+              }
+            }
+          } catch (fallbackErr: any) {
+            console.warn(`[ProcessQueue] Fallback list_agent_conversations failed:`, fallbackErr.message);
+          }
+        }
       } catch (e: any) {
         console.warn("[ProcessQueue] find_or_create failed:", e.message);
       }
@@ -328,6 +353,7 @@ Deno.serve(async (req: Request) => {
           p_contact_avatar_url: contact_avatar_url,
         });
         convId = data;
+        console.log(`[ProcessQueue] create_conversation result: convId=${convId}`);
       } catch (e: any) {
         console.error("[ProcessQueue] create_conversation failed:", e.message);
       }
