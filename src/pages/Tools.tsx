@@ -88,7 +88,7 @@ export default function Tools() {
                     <Icon className="h-5 w-5 text-primary" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold font-mono">{tool.name}</h3>
+                    <h3 className="text-sm font-semibold tracking-tight">{tool.name}</h3>
                     <p className="text-xs text-muted-foreground line-clamp-1">{tool.description ?? "Sem descrição"}</p>
                   </div>
                 </div>
