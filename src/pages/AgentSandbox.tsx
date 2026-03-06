@@ -299,9 +299,6 @@ export default function AgentSandbox() {
     const allMessages = [...messages, userMsg];
 
     try {
-      const { data: { session } } = await nexusDb.auth.getSession();
-      const token = session?.access_token;
-
       const body: any = {
         agent_id: agentId,
         messages: allMessages.map((m) => ({ role: m.role, content: m.content })),
@@ -316,7 +313,6 @@ export default function AgentSandbox() {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          ...(token ? { "x-nexus-auth": `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(body),
       });
