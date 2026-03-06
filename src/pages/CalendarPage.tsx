@@ -13,10 +13,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Clock, CalendarDays } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Plus, Trash2, Clock, CalendarDays, Bell, Phone } from "lucide-react";
 import { useTenants } from "@/hooks/useTenants";
 import { useCalendars, useCreateCalendar } from "@/hooks/useCalendars";
 import { useCalendarEvents, useCreateCalendarEvent, useUpdateCalendarEvent, useDeleteCalendarEvent } from "@/hooks/useCalendarEvents";
+import { useAgents } from "@/hooks/useAgents";
+import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
 import { toast } from "sonner";
 import type { Calendar } from "@/types/calendar";
 
