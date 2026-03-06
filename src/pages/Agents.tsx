@@ -88,8 +88,9 @@ export default function Agents() {
           return (
             <div
               key={agent.id}
-              className="group relative flex flex-col rounded-2xl border border-border/50 bg-card transition-all duration-300 hover:border-border hover:shadow-[0_8px_30px_-12px_hsl(var(--foreground)/0.08)] animate-fade-in overflow-hidden"
+              className="group relative flex flex-col rounded-2xl border border-border/50 bg-card transition-all duration-300 hover:border-border hover:shadow-[0_8px_30px_-12px_hsl(var(--foreground)/0.08)] animate-fade-in overflow-hidden cursor-pointer"
               style={{ animationDelay: `${i * 60}ms` }}
+              onClick={() => navigate(`/agents/${agent.id}/edit`)}
             >
               {/* Top section — Avatar + Info */}
               <div className="flex items-start gap-4 p-5 pb-3">
