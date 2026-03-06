@@ -381,13 +381,65 @@ export default function Conversations() {
                     </Badge>
                   )}
                 </div>
-                <button
-                  onClick={() => { setSelectedAgentId(null); setSelectedContactKey(null); }}
-                  className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                >
-                  <ArrowLeft className="h-3 w-3" />
-                  Voltar
-                </button>
+                <div className="flex items-center gap-1">
+                  <Dialog open={newContactOpen} onOpenChange={setNewContactOpen}>
+                    <DialogTrigger asChild>
+                      <button className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary">
+                        <UserPlus className="h-3.5 w-3.5" />
+                        Novo
+                      </button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[400px]">
+                      <DialogHeader>
+                        <DialogTitle>Novo Contato</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4 pt-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="nc-phone">Telefone *</Label>
+                          <Input
+                            id="nc-phone"
+                            placeholder="(11) 99999-9999"
+                            value={newContactPhone}
+                            onChange={(e) => setNewContactPhone(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="nc-name">Nome (opcional)</Label>
+                          <Input
+                            id="nc-name"
+                            placeholder="Nome do contato"
+                            value={newContactName}
+                            onChange={(e) => setNewContactName(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="nc-msg">Mensagem *</Label>
+                          <Textarea
+                            id="nc-msg"
+                            placeholder="Digite a mensagem..."
+                            value={newContactMessage}
+                            onChange={(e) => setNewContactMessage(e.target.value)}
+                            rows={3}
+                          />
+                        </div>
+                        <Button
+                          className="w-full"
+                          disabled={!newContactPhone.trim() || !newContactMessage.trim() || sendingNewContact}
+                          onClick={handleNewContact}
+                        >
+                          {sendingNewContact ? "Enviando..." : "Enviar Mensagem"}
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                  <button
+                    onClick={() => { setSelectedAgentId(null); setSelectedContactKey(null); }}
+                    className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <ArrowLeft className="h-3 w-3" />
+                    Voltar
+                  </button>
+                </div>
               </div>
 
               {/* Agent info bar */}
