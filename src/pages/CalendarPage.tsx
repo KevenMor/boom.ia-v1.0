@@ -158,15 +158,27 @@ export default function CalendarPage() {
     setStartTime(info.event.allDay ? "08:00" : extractTime(info.event.startStr));
     setEndDate(extractDate(info.event.endStr || info.event.startStr));
     setEndTime(info.event.allDay ? "09:00" : extractTime(info.event.endStr || info.event.startStr));
+    setSendReminder(false);
+    setReminderPhone("");
+    setReminderAgentId(reminderAgents.length === 1 ? reminderAgents[0].id : "");
     setDialogOpen(true);
-  }, []);
+  }, [reminderAgents]);
 
   const handleSave = async () => {
     if (!newTitle.trim() || !selectedTenantId || !eventCalendarId) return;
+    if (sendReminder && !reminderPhone.trim()) {
+      toast.error("Informe o WhatsApp do cliente para enviar lembrete.");
+      return;
+    }
+    if (sendReminder && !reminderAgentId) {
+      toast.error("Selecione o agente para enviar o lembrete.");
+      return;
+    }
     const finalStart = allDay ? `${startDate}T00:00:00` : `${startDate}T${startTime}:00`;
     const finalEnd = allDay ? `${endDate}T23:59:59` : `${endDate}T${endTime}:00`;
 
     try {
+      let eventId = editingEventId;
       if (editingEventId) {
         await updateEvent.mutateAsync({
           id: editingEventId,
@@ -180,7 +192,7 @@ export default function CalendarPage() {
         });
         toast.success("Evento atualizado!");
       } else {
-        await createEvent.mutateAsync({
+        const created = await createEvent.mutateAsync({
           title: newTitle,
           start_at: finalStart,
           end_at: finalEnd,
@@ -189,7 +201,42 @@ export default function CalendarPage() {
           calendar_id: eventCalendarId,
           tenant_id: selectedTenantId,
         });
+        eventId = created.id;
         toast.success("Evento criado!");
+      }
+
+      // Insert reminder if enabled
+      if (sendReminder && eventId && reminderAgentId) {
+        const agent = reminderAgents.find(a => a.id === reminderAgentId);
+        const cfg = (agent?.config || {}) as Record<string, any>;
+        const minutesBefore = cfg.reminder_minutes_before || 60;
+        const eventStartDate = new Date(finalStart);
+        const remindAt = new Date(eventStartDate.getTime() - minutesBefore * 60 * 1000);
+
+        // Normalize phone: ensure 55 prefix
+        let phone = reminderPhone.replace(/\D/g, "");
+        if (!phone.startsWith("55")) phone = "55" + phone;
+
+        const { error: remErr } = await supabase
+          .from("appointment_reminders")
+          .insert({
+            agent_id: reminderAgentId,
+            tenant_id: selectedTenantId,
+            calendar_event_id: eventId,
+            conversation_id: `manual-${eventId}`,
+            external_user_id: phone,
+            event_title: newTitle,
+            event_start_at: finalStart,
+            remind_at: remindAt.toISOString(),
+            status: "pending",
+          });
+
+        if (remErr) {
+          console.error("Reminder insert error:", remErr);
+          toast.error("Evento salvo, mas erro ao agendar lembrete.");
+        } else {
+          toast.success("Lembrete agendado! 🔔");
+        }
       }
     } catch (e: any) {
       toast.error(e.message || "Erro ao salvar evento.");
