@@ -2099,26 +2099,45 @@ Deno.serve(async (req) => {
     // --- Audio transcription via Gemini ---
     for (const audio of audioAttachments) {
       try {
-        console.log(`[Media] Downloading audio: ${audio.data_url.slice(0, 80)}...`);
-        const audioResp = await fetch(audio.data_url);
-        if (!audioResp.ok) {
-          console.error(`[Media] Audio download failed: ${audioResp.status}`);
-          continue;
+        let audioBase64: string;
+        let audioMime: string;
+        let audioSize: number;
+
+        // Handle both data URLs (from sandbox) and HTTP URLs (from Chatwoot/WhatsApp)
+        if (audio.data_url.startsWith("data:")) {
+          // Extract base64 and mime from data URL: data:audio/webm;base64,XXXX
+          const dataUrlMatch = audio.data_url.match(/^data:([^;]+);base64,(.+)$/);
+          if (!dataUrlMatch) {
+            console.error("[Media] Invalid data URL format for audio");
+            continue;
+          }
+          audioMime = dataUrlMatch[1];
+          audioBase64 = dataUrlMatch[2];
+          audioSize = Math.ceil(audioBase64.length * 3 / 4);
+          console.log(`[Media] Audio from data URL (${audioSize} bytes, ${audioMime})`);
+        } else {
+          console.log(`[Media] Downloading audio: ${audio.data_url.slice(0, 80)}...`);
+          const audioResp = await fetch(audio.data_url);
+          if (!audioResp.ok) {
+            console.error(`[Media] Audio download failed: ${audioResp.status}`);
+            continue;
+          }
+          const audioBuffer = await audioResp.arrayBuffer();
+          const audioBytes = new Uint8Array(audioBuffer);
+          audioBase64 = btoa(String.fromCharCode(...audioBytes));
+          audioSize = audioBytes.length;
+
+          // Detect MIME type from URL or default to audio/ogg (WhatsApp default)
+          const urlLower = audio.data_url.toLowerCase();
+          audioMime = "audio/ogg";
+          if (urlLower.includes(".mp3") || urlLower.includes("audio/mpeg")) audioMime = "audio/mp3";
+          else if (urlLower.includes(".wav")) audioMime = "audio/wav";
+          else if (urlLower.includes(".aac")) audioMime = "audio/aac";
+          else if (urlLower.includes(".flac")) audioMime = "audio/flac";
+          else if (urlLower.includes(".m4a")) audioMime = "audio/mp4";
         }
-        const audioBuffer = await audioResp.arrayBuffer();
-        const audioBytes = new Uint8Array(audioBuffer);
-        const audioBase64 = btoa(String.fromCharCode(...audioBytes));
 
-        // Detect MIME type from URL or default to audio/ogg (WhatsApp default)
-        const urlLower = audio.data_url.toLowerCase();
-        let audioMime = "audio/ogg";
-        if (urlLower.includes(".mp3") || urlLower.includes("audio/mpeg")) audioMime = "audio/mp3";
-        else if (urlLower.includes(".wav")) audioMime = "audio/wav";
-        else if (urlLower.includes(".aac")) audioMime = "audio/aac";
-        else if (urlLower.includes(".flac")) audioMime = "audio/flac";
-        else if (urlLower.includes(".m4a")) audioMime = "audio/mp4";
-
-        console.log(`[Media] Transcribing audio (${audioBytes.length} bytes, ${audioMime}) via ${provider.name}`);
+        console.log(`[Media] Transcribing audio (${audioSize} bytes, ${audioMime}) via ${provider.name}`);
 
         // Use the agent's configured Gemini provider for transcription
         const transcriptionResp = await fetch(baseUrl, {
@@ -2188,33 +2207,53 @@ Deno.serve(async (req) => {
     // --- Image processing: download and convert to base64 for multimodal ---
     for (const img of imageAttachments) {
       try {
-        console.log(`[Media] Downloading image: ${img.data_url.slice(0, 80)}...`);
-        const imgResp = await fetch(img.data_url);
-        if (!imgResp.ok) {
-          console.error(`[Media] Image download failed: ${imgResp.status}`);
-          continue;
-        }
-        const imgBuffer = await imgResp.arrayBuffer();
-        const imgBytes = new Uint8Array(imgBuffer);
-        // Limit: skip images > 4MB to avoid payload issues
-        if (imgBytes.length > 4 * 1024 * 1024) {
-          console.warn(`[Media] Image too large (${imgBytes.length} bytes), skipping`);
-          continue;
-        }
-        const imgBase64 = btoa(String.fromCharCode(...imgBytes));
+        let imgBase64: string;
+        let imgMime: string;
+        let imgSize: number;
 
-        const urlLower = img.data_url.toLowerCase();
-        let imgMime = "image/jpeg";
-        if (urlLower.includes(".png")) imgMime = "image/png";
-        else if (urlLower.includes(".webp")) imgMime = "image/webp";
-        else if (urlLower.includes(".gif")) imgMime = "image/gif";
+        if (img.data_url.startsWith("data:")) {
+          const dataUrlMatch = img.data_url.match(/^data:([^;]+);base64,(.+)$/);
+          if (!dataUrlMatch) {
+            console.error("[Media] Invalid data URL format for image");
+            continue;
+          }
+          imgMime = dataUrlMatch[1];
+          imgBase64 = dataUrlMatch[2];
+          imgSize = Math.ceil(imgBase64.length * 3 / 4);
+          if (imgSize > 4 * 1024 * 1024) {
+            console.warn(`[Media] Image too large (${imgSize} bytes), skipping`);
+            continue;
+          }
+          console.log(`[Media] Image from data URL (${imgSize} bytes, ${imgMime})`);
+        } else {
+          console.log(`[Media] Downloading image: ${img.data_url.slice(0, 80)}...`);
+          const imgResp = await fetch(img.data_url);
+          if (!imgResp.ok) {
+            console.error(`[Media] Image download failed: ${imgResp.status}`);
+            continue;
+          }
+          const imgBuffer = await imgResp.arrayBuffer();
+          const imgBytes = new Uint8Array(imgBuffer);
+          if (imgBytes.length > 4 * 1024 * 1024) {
+            console.warn(`[Media] Image too large (${imgBytes.length} bytes), skipping`);
+            continue;
+          }
+          imgBase64 = btoa(String.fromCharCode(...imgBytes));
+          imgSize = imgBytes.length;
+
+          const urlLower = img.data_url.toLowerCase();
+          imgMime = "image/jpeg";
+          if (urlLower.includes(".png")) imgMime = "image/png";
+          else if (urlLower.includes(".webp")) imgMime = "image/webp";
+          else if (urlLower.includes(".gif")) imgMime = "image/gif";
+        }
 
         imageBase64Parts.push({ mime_type: imgMime, base64: imgBase64 });
-        console.log(`[Media] Image prepared (${imgBytes.length} bytes, ${imgMime})`);
+        console.log(`[Media] Image prepared (${imgSize} bytes, ${imgMime})`);
         debugTrace.push({
           type: "image_attachment",
           mime_type: imgMime,
-          size: imgBytes.length,
+          size: imgSize,
           timestamp: Date.now(),
         });
       } catch (e: any) {
