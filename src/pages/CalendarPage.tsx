@@ -140,8 +140,11 @@ export default function CalendarPage() {
     setStartTime(info.allDay ? "08:00" : extractTime(info.startStr));
     setEndDate(extractDate(info.endStr));
     setEndTime(info.allDay ? "09:00" : extractTime(info.endStr));
+    setSendReminder(false);
+    setReminderPhone("");
+    setReminderAgentId(reminderAgents.length === 1 ? reminderAgents[0].id : "");
     setDialogOpen(true);
-  }, [selectedTenantId, calendars, selectedCalendarId]);
+  }, [selectedTenantId, calendars, selectedCalendarId, reminderAgents]);
 
   const handleEventClick = useCallback((info: EventClickArg) => {
     const ep = info.event.extendedProps;
