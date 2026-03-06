@@ -283,11 +283,44 @@ export default function EditAgent() {
             <Select value={watch("status") || agent.status} onValueChange={(v) => setValue("status", v)}>
               <SelectTrigger className="h-11 rounded-lg bg-background border-border"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="active">Ativo</SelectItem>
-                <SelectItem value="paused">Pausado</SelectItem>
+                <SelectItem value="active">
+                  <div className="flex flex-col items-start">
+                    <span>🟢 Ativo</span>
+                    <span className="text-[10px] text-muted-foreground">Atende todos, exceto conversas com atendente humano</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="test">
+                  <div className="flex flex-col items-start">
+                    <span>🧪 Teste</span>
+                    <span className="text-[10px] text-muted-foreground">Responde apenas contatos com assignee específico</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="inactive">
+                  <div className="flex flex-col items-start">
+                    <span>⛔ Inativo</span>
+                    <span className="text-[10px] text-muted-foreground">Não interage com ninguém</span>
+                  </div>
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
+
+          {/* Test Assignee ID — only visible when status is "test" */}
+          {(watch("status") || agent.status) === "test" && (
+            <div className="space-y-3 rounded-lg border border-dashed border-primary/30 bg-primary/5 p-4">
+              <Label className="text-sm font-medium text-foreground">🧪 Assignee ID para Teste</Label>
+              <Input
+                type="number"
+                placeholder="ID do atendente no Chatwoot"
+                value={testAssigneeId}
+                onChange={(e) => setTestAssigneeId(e.target.value)}
+                className="h-11 rounded-lg bg-background border-border font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                O agente só responderá conversas atribuídas a este ID de atendente no Chatwoot.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Provider & Model */}
