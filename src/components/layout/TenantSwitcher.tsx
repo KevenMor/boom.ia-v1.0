@@ -85,9 +85,6 @@ export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
           </div>
           <div className="flex flex-1 flex-col min-w-0 text-start">
             <span className="text-sm font-semibold text-white truncate">{displayName}</span>
-            <span className="text-[10px] text-white/40">
-              {selectedTenant ? selectedTenant.plan : "Administrador"}
-            </span>
           </div>
           <ChevronsUpDown className="h-4 w-4 shrink-0 text-white/30" />
         </button>
