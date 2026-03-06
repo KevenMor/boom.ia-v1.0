@@ -11,7 +11,7 @@ interface Props {
 export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
   if (loading) {
     return (
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[1, 2, 3, 4].map((i) => (
           <StatCard key={i} title="..." value="..." icon={Zap} />
         ))}
@@ -19,13 +19,11 @@ export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
     );
   }
 
-  // Use local date (not UTC) to match the user's timezone (e.g. BRT)
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const yesterday = new Date(now.getTime() - 86400000);
   const yesterdayStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, "0")}-${String(yesterday.getDate()).padStart(2, "0")}`;
 
-  // Convert event created_at to local date for comparison
   const getLocalDate = (iso: string) => {
     const d = new Date(iso);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -39,7 +37,6 @@ export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
   const todaySummary = dailySummary.filter((d) => normalizeSummaryDay(d.day) === today);
   const yesterdaySummary = dailySummary.filter((d) => normalizeSummaryDay(d.day) === yesterdayStr);
 
-  // Total tokens today — prefer daily summary, fallback to events
   const todayTokensFromSummary = todaySummary.reduce((s, d) => s + (d.sum_tokens || 0), 0);
   const yesterdayTokensFromSummary = yesterdaySummary.reduce((s, d) => s + (d.sum_tokens || 0), 0);
 
@@ -56,7 +53,6 @@ export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
   const yesterdayTokens = yesterdayTokensFromSummary > 0 ? yesterdayTokensFromSummary : yesterdayTokensFromEvents;
   const tokensDiff = yesterdayTokens > 0 ? (((todayTokens - yesterdayTokens) / yesterdayTokens) * 100).toFixed(0) : null;
 
-  // Avg latency today (conversational only)
   const convEvents = todayEvents.filter((e) => e.phase === "conversational" && e.latency_ms);
   const avgLatency = convEvents.length > 0
     ? Math.round(convEvents.reduce((s, e) => s + (e.latency_ms || 0), 0) / convEvents.length)
@@ -66,19 +62,23 @@ export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
     ? Math.round(yesterdayConv.reduce((s, e) => s + (e.latency_ms || 0), 0) / yesterdayConv.length)
     : 0;
 
-  // Tool calls today — prefer daily summary, fallback to events
   const todayToolCallsFromSummary = todaySummary.reduce((s, d) => s + (d.sum_tool_calls || 0), 0);
   const todayToolCallsFromEvents = todayEvents.reduce((s, e) => s + (e.tool_calls_count || 0), 0);
   const todayToolCalls = todayToolCallsFromSummary > 0 ? todayToolCallsFromSummary : todayToolCallsFromEvents;
 
-  // Total requests today
   const todayRequests = todayEvents.length;
 
   const formatTokens = (n: number) =>
     n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
 
+  // Generate simple spark data from last 7 days of dailySummary
+  const last7 = dailySummary
+    .map((d) => d.sum_tokens || 0)
+    .slice(-9);
+  const spark1 = last7.length > 2 ? last7 : [25, 44, 30, 56, 40, 50, 13, 24, 84];
+
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <StatCard
         title="Tokens Hoje"
         value={formatTokens(todayTokens)}
@@ -87,7 +87,8 @@ export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
         icon={Zap}
         iconBg="bg-primary/10"
         iconColor="text-primary"
-        accentColor="bg-primary"
+        sparkData={spark1}
+        sparkColor="hsl(var(--primary))"
       />
       <StatCard
         title="Latência Média"
@@ -95,9 +96,9 @@ export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
         change={yesterdayAvgLat > 0 ? `${((avgLatency - yesterdayAvgLat) / 1000).toFixed(1)}s vs ontem` : "Sem referência"}
         changeType={avgLatency < yesterdayAvgLat ? "positive" : avgLatency > yesterdayAvgLat ? "negative" : "neutral"}
         icon={Clock}
-        iconBg="bg-warning/10"
-        iconColor="text-warning"
-        accentColor="bg-warning"
+        iconBg="bg-primary-tint1/10"
+        iconColor="text-primary-tint1"
+        sparkColor="hsl(var(--primary-tint1))"
       />
       <StatCard
         title="Tool Calls Hoje"
@@ -105,9 +106,9 @@ export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
         change={`${todayRequests} requisições`}
         changeType="neutral"
         icon={Wrench}
-        iconBg="bg-success/10"
-        iconColor="text-success"
-        accentColor="bg-success"
+        iconBg="bg-primary-tint2/10"
+        iconColor="text-primary-tint2"
+        sparkColor="hsl(var(--primary-tint2))"
       />
       <StatCard
         title="Requisições Hoje"
@@ -115,11 +116,10 @@ export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
         change={`${yesterdayEvents.length} ontem`}
         changeType={todayRequests >= yesterdayEvents.length ? "positive" : "negative"}
         icon={MessageSquare}
-        iconBg="bg-cyan-500/10"
-        iconColor="text-cyan-500"
-        accentColor="bg-cyan-500"
+        iconBg="bg-primary-tint3/10"
+        iconColor="text-primary-tint3"
+        sparkColor="hsl(var(--primary-tint3))"
       />
     </div>
   );
 }
-

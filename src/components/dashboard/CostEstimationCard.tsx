@@ -2,7 +2,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DollarSign, TrendingUp, Flame } from "lucide-react";
 import type { UsageEvent } from "@/hooks/useUsageMetrics";
 import { estimateCostUsd } from "@/hooks/useTokensByAgent";
-import { useRef, useCallback } from "react";
 
 interface Props {
   events: UsageEvent[];
@@ -16,14 +15,6 @@ function fmtBrl(usd: number): string {
 }
 
 export function CostEstimationCard({ events, loading }: Props) {
-  const cardRef = useRef<HTMLDivElement>(null);
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    const rect = cardRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    cardRef.current!.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
-    cardRef.current!.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
-  }, []);
-
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const getLocalDate = (iso: string) => {
@@ -53,51 +44,59 @@ export function CostEstimationCard({ events, loading }: Props) {
   const projectedMonthly = todayCostUsd * 30;
 
   return (
-    <div ref={cardRef} onMouseMove={handleMouseMove} className="dash-card">
-      <div className="flex items-center gap-2.5 mb-5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10">
-          <DollarSign className="h-4 w-4 text-emerald-500" />
-        </div>
-        <div>
-          <h2 className="text-sm font-semibold">Custo Estimado</h2>
-          <p className="text-[11px] text-muted-foreground">preços oficiais por modelo</p>
+    <div className="box h-full">
+      <div className="box-header justify-between pb-0 border-0">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-success/10">
+            <DollarSign className="h-4 w-4 text-success" />
+          </span>
+          <span className="box-title">Custo Estimado</span>
         </div>
       </div>
 
-      {loading ? (
-        <Skeleton className="h-32 w-full rounded-xl" />
-      ) : (
-        <div className="space-y-4">
-          {/* Today — hero number */}
-          <div className="relative rounded-xl bg-gradient-to-br from-emerald-500/10 via-transparent to-primary/5 border border-emerald-500/20 p-4">
-            <div className="flex items-center gap-1.5 mb-1">
-              <Flame className="h-3 w-3 text-emerald-500" />
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Hoje</p>
+      <div className="box-body">
+        {loading ? (
+          <Skeleton className="h-32 w-full rounded-xl" />
+        ) : (
+          <div className="space-y-4">
+            {/* Today — summary banner */}
+            <div
+              className="rounded-lg p-4 flex items-center gap-4"
+              style={{ background: "linear-gradient(135deg, hsl(var(--success) / 0.08), hsl(var(--primary) / 0.05))" }}
+            >
+              <div className="flex-1">
+                <p className="text-[11px] text-muted-foreground mb-1 font-medium">
+                  Custo de Hoje
+                </p>
+                <p className="metric-value text-2xl font-bold text-foreground">{fmtBrl(todayCostUsd)}</p>
+                <div className="flex gap-3 mt-2 text-[11px] text-muted-foreground font-mono">
+                  <span>↑ {(todayPrompt / 1000).toFixed(1)}k in</span>
+                  <span>↓ {(todayCompletion / 1000).toFixed(1)}k out</span>
+                </div>
+              </div>
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-success/15">
+                <Flame className="h-6 w-6 text-success" />
+              </div>
             </div>
-            <p className="metric-value text-2xl font-bold text-foreground">{fmtBrl(todayCostUsd)}</p>
-            <div className="flex gap-3 mt-2 text-[10px] text-muted-foreground font-mono">
-              <span>↑ {(todayPrompt / 1000).toFixed(1)}k in</span>
-              <span>↓ {(todayCompletion / 1000).toFixed(1)}k out</span>
-            </div>
-          </div>
 
-          {/* Projected */}
-          <div className="rounded-xl border border-border bg-muted/20 p-4">
-            <div className="flex items-center gap-1.5 mb-1">
-              <TrendingUp className="h-3 w-3 text-muted-foreground" />
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Projeção mensal</p>
+            {/* Projected */}
+            <div className="rounded-lg border border-border p-4">
+              <div className="flex items-center gap-1.5 mb-1">
+                <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
+                <p className="text-[11px] text-muted-foreground font-medium">Projeção mensal</p>
+              </div>
+              <p className="metric-value text-lg font-bold">{fmtBrl(projectedMonthly)}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">baseado no consumo de hoje</p>
             </div>
-            <p className="metric-value text-lg font-bold">{fmtBrl(projectedMonthly)}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">baseado no consumo de hoje</p>
-          </div>
 
-          {/* Period total */}
-          <div className="flex items-center justify-between pt-3 border-t border-border">
-            <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Total no período</span>
-            <span className="metric-value text-sm font-bold">{fmtBrl(totalCostUsd)}</span>
+            {/* Period total */}
+            <div className="flex items-center justify-between pt-3 border-t border-border">
+              <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Total no período</span>
+              <span className="metric-value text-sm font-bold">{fmtBrl(totalCostUsd)}</span>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

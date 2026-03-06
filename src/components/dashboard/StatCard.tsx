@@ -1,6 +1,6 @@
 import { type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useRef, useCallback } from "react";
+import { AreaChart, Area, ResponsiveContainer } from "recharts";
 
 interface StatCardProps {
   title: string;
@@ -11,6 +11,8 @@ interface StatCardProps {
   iconBg?: string;
   iconColor?: string;
   accentColor?: string;
+  sparkData?: number[];
+  sparkColor?: string;
 }
 
 export function StatCard({
@@ -21,60 +23,69 @@ export function StatCard({
   icon: Icon,
   iconBg = "bg-primary/10",
   iconColor = "text-primary",
-  accentColor = "bg-primary",
+  sparkData = [25, 44, 30, 56, 40, 50, 13, 24, 84],
+  sparkColor,
 }: StatCardProps) {
-  const cardRef = useRef<HTMLDivElement>(null);
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    const rect = cardRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    cardRef.current!.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
-    cardRef.current!.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
-  }, []);
+  const resolvedSparkColor = sparkColor ?? "hsl(var(--primary))";
 
   return (
-    <div
-      ref={cardRef}
-      onMouseMove={handleMouseMove}
-      className="dash-card pl-8"
-    >
-      {/* Left accent bar */}
-      <div className={cn("accent-bar", accentColor)} />
-
-      {/* Top row: icon + badge */}
-      <div className="flex items-start justify-between mb-3">
-        <div
-          className={cn(
-            "flex h-9 w-9 items-center justify-center rounded-lg",
-            iconBg
-          )}
-        >
-          <Icon className={cn("h-4 w-4", iconColor)} />
-        </div>
-        {change && (
-          <span
-            className={cn(
-              "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-tight",
-              changeType === "positive" &&
-                "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-              changeType === "negative" &&
-                "bg-rose-500/10 text-rose-600 dark:text-rose-400",
-              changeType === "neutral" &&
-                "bg-muted text-muted-foreground"
-            )}
-          >
-            {changeType === "positive" && "↑ "}
-            {changeType === "negative" && "↓ "}
-            {change}
+    <div className="box overflow-hidden">
+      <div className="box-body pb-0 pe-0">
+        {/* Top: icon + label */}
+        <div className="mb-4 flex justify-between items-start flex-wrap">
+          <span className={cn("flex h-10 w-10 items-center justify-center rounded-full", iconBg)}>
+            <Icon className={cn("h-[18px] w-[18px]", iconColor)} />
           </span>
-        )}
+          <span className="text-[13px] font-medium text-muted-foreground pe-4">{title}</span>
+        </div>
+
+        {/* Bottom: value + trend + sparkline */}
+        <div className="flex items-end justify-between">
+          <div className="pb-3">
+            <p className="metric-value text-xl font-semibold text-foreground mb-1">{value}</p>
+            {change && (
+              <div className="text-muted-foreground text-[13px]">
+                {changeType === "positive" ? "Aumentou" : changeType === "negative" ? "Diminuiu" : ""}
+                {changeType !== "neutral" && " "}
+                <span
+                  className={cn(
+                    "font-medium",
+                    changeType === "positive" && "text-success",
+                    changeType === "negative" && "text-destructive"
+                  )}
+                >
+                  {change}
+                  {changeType === "positive" && " ↑"}
+                  {changeType === "negative" && " ↓"}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Mini sparkline */}
+          <div className="w-[100px] h-[70px] shrink-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={sparkData.map((v, i) => ({ v, i }))}>
+                <defs>
+                  <linearGradient id={`spark-${title.replace(/\s/g, "")}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={resolvedSparkColor} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={resolvedSparkColor} stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <Area
+                  type="monotone"
+                  dataKey="v"
+                  stroke={resolvedSparkColor}
+                  strokeWidth={1.5}
+                  fill={`url(#spark-${title.replace(/\s/g, "")})`}
+                  dot={false}
+                  isAnimationActive={false}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </div>
-
-      {/* Value */}
-      <p className="metric-value text-2xl font-bold tracking-tight text-foreground">{value}</p>
-
-      {/* Label */}
-      <p className="mt-0.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">{title}</p>
     </div>
   );
 }
