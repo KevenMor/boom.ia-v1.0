@@ -727,7 +727,7 @@ export default function Conversations() {
 
                             const bubbles: { text: string; images: string[]; isAudio?: boolean; transcription?: string }[] = [];
                             if (!isUser) {
-                              const paragraphs = (msg.content || "").split(/\n\n+/);
+                              const paragraphs = stripChatwootHeader(msg.content || "").split(/\n\n+/);
                               let currentBubble = { text: "", images: [] as string[] };
                               for (const para of paragraphs) {
                                 const { text: pText, images: pImages } = extractImages(para);
