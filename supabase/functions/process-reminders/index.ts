@@ -102,14 +102,14 @@ Deno.serve(async (req: Request) => {
 
     const supabase = createClient(nexusUrl, nexusKey);
 
-    // Fetch pending reminders that are due
+    // Fetch pending reminders that are due — deduplicate by calendar_event_id
     const { data: pendingItems, error: fetchErr } = await supabase
       .from("appointment_reminders")
       .select("*")
       .eq("status", "pending")
       .lte("remind_at", new Date().toISOString())
-      .order("remind_at", { ascending: true })
-      .limit(20);
+      .order("created_at", { ascending: false })
+      .limit(50);
 
     if (fetchErr) {
       console.error("[Reminder] Fetch error:", fetchErr.message);
@@ -126,12 +126,35 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log(`[Reminder] Processing ${pendingItems.length} pending reminder(s)`);
+    // Deduplicate: keep only the latest reminder per calendar_event_id
+    const seen = new Map<string, typeof pendingItems[0]>();
+    const duplicateIds: string[] = [];
+    for (const item of pendingItems) {
+      if (seen.has(item.calendar_event_id)) {
+        duplicateIds.push(item.id);
+      } else {
+        seen.set(item.calendar_event_id, item);
+      }
+    }
+
+    // Cancel duplicate reminders
+    if (duplicateIds.length > 0) {
+      console.log(`[Reminder] Cancelling ${duplicateIds.length} duplicate reminder(s)`);
+      await supabase
+        .from("appointment_reminders")
+        .update({ status: "cancelled", updated_at: new Date().toISOString() })
+        .in("id", duplicateIds);
+    }
+
+    const uniqueItems = Array.from(seen.values());
+
+    console.log(`[Reminder] Processing ${uniqueItems.length} unique reminder(s) (${duplicateIds.length} duplicates cancelled)`);
 
     let processed = 0;
     let skipped = 0;
+    let failed = 0;
 
-    for (const item of pendingItems) {
+    for (const item of uniqueItems) {
       // Fetch agent separately (no FK relationship)
       const { data: agent } = await supabase
         .from("agents")
@@ -228,12 +251,17 @@ Deno.serve(async (req: Request) => {
 
         processed++;
       } else {
-        console.error(`[Reminder] Failed to send for event "${item.event_title}"`);
+        console.error(`[Reminder] Failed to send for event "${item.event_title}", marking as failed`);
+        await supabase
+          .from("appointment_reminders")
+          .update({ status: "failed", updated_at: new Date().toISOString() })
+          .eq("id", item.id);
+        failed++;
       }
     }
 
     return new Response(
-      JSON.stringify({ processed, skipped, total: pendingItems.length }),
+      JSON.stringify({ processed, skipped, failed, duplicatesCancelled: duplicateIds.length, total: uniqueItems.length }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
