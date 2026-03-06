@@ -158,7 +158,7 @@ export default function CalendarPage() {
     setDialogOpen(true);
   }, [selectedTenantId, calendars, selectedCalendarId, reminderAgents]);
 
-  const handleEventClick = useCallback((info: EventClickArg) => {
+  const handleEventClick = useCallback(async (info: EventClickArg) => {
     const ep = info.event.extendedProps;
     setSelectedEventClick(info);
     setEditingEventId(info.event.id);
@@ -170,11 +170,40 @@ export default function CalendarPage() {
     setStartTime(info.event.allDay ? "08:00" : extractTime(info.event.startStr));
     setEndDate(extractDate(info.event.endStr || info.event.startStr));
     setEndTime(info.event.allDay ? "09:00" : extractTime(info.event.endStr || info.event.startStr));
-    setSendReminder(false);
-    setReminderPhone("");
-    setReminderAgentId(reminderAgents.length === 1 ? reminderAgents[0].id : "");
+
+    if (selectedTenantId) {
+      const { data: reminder, error } = await supabase
+        .from("appointment_reminders")
+        .select("agent_id, external_user_id, status")
+        .eq("tenant_id", selectedTenantId)
+        .eq("calendar_event_id", info.event.id)
+        .eq("conversation_id", `manual-${info.event.id}`)
+        .in("status", ["pending", "sent"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error loading reminder:", error);
+      }
+
+      if (reminder) {
+        setSendReminder(true);
+        setReminderPhone(displayPhoneFromReminder(reminder.external_user_id));
+        setReminderAgentId(reminder.agent_id);
+      } else {
+        setSendReminder(false);
+        setReminderPhone("");
+        setReminderAgentId(reminderAgents.length === 1 ? reminderAgents[0].id : "");
+      }
+    } else {
+      setSendReminder(false);
+      setReminderPhone("");
+      setReminderAgentId(reminderAgents.length === 1 ? reminderAgents[0].id : "");
+    }
+
     setDialogOpen(true);
-  }, [reminderAgents]);
+  }, [reminderAgents, selectedTenantId]);
 
   const handleSave = async () => {
     if (!newTitle.trim() || !selectedTenantId || !eventCalendarId) return;
