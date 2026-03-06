@@ -238,14 +238,14 @@
 
   /* Mono number styling */
   .metric-value {
-    font-family: 'DM Mono', 'IBM Plex Mono', 'Menlo', monospace;
+    font-family: 'Sora', 'DM Sans', system-ui, sans-serif;
     letter-spacing: -0.01em;
     font-variant-numeric: tabular-nums;
   }
 
   /* Heading serif */
   .heading-serif {
-    font-family: 'DM Serif Display', Georgia, serif;
+    font-family: 'Sora', 'DM Sans', system-ui, sans-serif;
   }
 
   /* Trend pill — translucent colored background */
