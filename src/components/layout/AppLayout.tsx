@@ -12,7 +12,7 @@ function LayoutInner() {
   const isConversations = location.pathname === "/conversations";
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex h-screen overflow-hidden bg-background">
       <AppSidebar />
       <div
         className="flex flex-1 flex-col transition-all duration-300"
