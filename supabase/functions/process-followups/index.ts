@@ -96,6 +96,12 @@ REGRAS:
   const messages = [...historyMessages, followUpInstruction];
 
   try {
+    // 60s timeout for the entire chat-agent call
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+    console.log(`[FollowUp] Calling chat-agent for agent ${targetAgentId}, conv ${conversationId} (${messages.length} msgs)`);
+
     const chatResp = await fetch(chatAgentUrl, {
       method: "POST",
       headers: {
@@ -108,21 +114,30 @@ REGRAS:
         messages,
         conversation_id: conversationId,
       }),
+      signal: controller.signal,
     });
 
     if (!chatResp.ok) {
+      clearTimeout(timeoutId);
       const errText = await chatResp.text();
       console.error("[FollowUp] chat-agent error:", chatResp.status, errText);
       return "Oi! Tudo bem? Posso te ajudar com algo? 😊";
     }
 
-    // Parse SSE stream
+    // Parse SSE stream with read timeout
     const reader = chatResp.body!.getReader();
     const decoder = new TextDecoder();
     let buf = "";
     let fullContent = "";
+    const streamStart = Date.now();
+    const STREAM_TIMEOUT = 55000; // 55s max for stream reading
 
     while (true) {
+      if (Date.now() - streamStart > STREAM_TIMEOUT) {
+        console.warn("[FollowUp] SSE stream timeout, using partial content");
+        reader.cancel().catch(() => {});
+        break;
+      }
       const { done, value } = await reader.read();
       if (done) break;
       buf += decoder.decode(value, { stream: true });
@@ -145,9 +160,15 @@ REGRAS:
       }
     }
 
+    clearTimeout(timeoutId);
+    console.log(`[FollowUp] LLM generated ${fullContent.length} chars in ${Date.now() - streamStart}ms`);
     return fullContent.trim() || "Oi! Posso te ajudar com algo? 😊";
-  } catch (e) {
-    console.error("[FollowUp] Error generating message:", e);
+  } catch (e: any) {
+    if (e.name === "AbortError") {
+      console.error("[FollowUp] chat-agent TIMEOUT (60s)");
+    } else {
+      console.error("[FollowUp] Error generating message:", e);
+    }
     return "Oi! Tudo bem? Posso te ajudar com algo? 😊";
   }
 }
