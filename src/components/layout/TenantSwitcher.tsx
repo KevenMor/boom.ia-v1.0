@@ -96,11 +96,7 @@ export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
           onClick={() => setSelectedTenantId(null)}
           className="gap-2"
         >
-          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-accent/20 text-[9px] font-bold text-accent-foreground">
-            ALL
-          </div>
           <span className="flex-1 truncate text-sm font-medium">Todos os tenants</span>
-          <span className="text-[10px] text-muted-foreground">Admin</span>
           {!selectedTenantId && <Check className="h-4 w-4 text-primary shrink-0" />}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
