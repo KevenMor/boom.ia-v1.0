@@ -85,10 +85,8 @@ export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
         change={tokensDiff ? `${Number(tokensDiff) >= 0 ? "+" : ""}${tokensDiff}% vs ontem` : "Sem dados de ontem"}
         changeType={tokensDiff ? (Number(tokensDiff) <= 0 ? "positive" : "neutral") : "neutral"}
         icon={Zap}
-        iconBg="bg-primary/10"
-        iconColor="text-primary"
-        sparkData={spark1}
-        sparkColor="hsl(var(--primary))"
+        iconBg="bg-primary"
+        iconColor="text-primary-foreground"
       />
       <StatCard
         title="Latência Média"
@@ -96,9 +94,8 @@ export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
         change={yesterdayAvgLat > 0 ? `${((avgLatency - yesterdayAvgLat) / 1000).toFixed(1)}s vs ontem` : "Sem referência"}
         changeType={avgLatency < yesterdayAvgLat ? "positive" : avgLatency > yesterdayAvgLat ? "negative" : "neutral"}
         icon={Clock}
-        iconBg="bg-primary-tint1/10"
-        iconColor="text-primary-tint1"
-        sparkColor="hsl(var(--primary-tint1))"
+        iconBg="bg-secondary"
+        iconColor="text-secondary-foreground"
       />
       <StatCard
         title="Tool Calls Hoje"
@@ -106,9 +103,8 @@ export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
         change={`${todayRequests} requisições`}
         changeType="neutral"
         icon={Wrench}
-        iconBg="bg-primary-tint2/10"
-        iconColor="text-primary-tint2"
-        sparkColor="hsl(var(--primary-tint2))"
+        iconBg="bg-amber"
+        iconColor="text-amber-foreground"
       />
       <StatCard
         title="Requisições Hoje"
@@ -116,9 +112,8 @@ export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
         change={`${yesterdayEvents.length} ontem`}
         changeType={todayRequests >= yesterdayEvents.length ? "positive" : "negative"}
         icon={MessageSquare}
-        iconBg="bg-primary-tint3/10"
-        iconColor="text-primary-tint3"
-        sparkColor="hsl(var(--primary-tint3))"
+        iconBg="bg-info"
+        iconColor="text-info-foreground"
       />
     </div>
   );
