@@ -92,7 +92,8 @@ function CollapsibleGroup({
     <div>
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-white/25 transition-colors hover:text-white/45"
+        className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[10px] font-semibold uppercase text-white/25 transition-colors hover:text-white/45"
+        style={{ letterSpacing: '0.15em' }}
       >
         <span className="flex-1 text-start">{group.label}</span>
         <ChevronRight
