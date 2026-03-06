@@ -20,10 +20,15 @@ import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 
+function stripChatwootHeader(content: string): string {
+  // Remove prefixes like "[Atendente: Cadastro Teste] Tia Ana:" from Chatwoot echoed messages
+  return content.replace(/^\[Atendente:[^\]]*\]\s*[^:]*:\s*/gm, "").trim();
+}
+
 function extractImages(content: string): { text: string; images: string[] } {
   const imgRegex = /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g;
   const images: string[] = [];
-  const text = content.replace(imgRegex, (_, _alt, url) => {
+  const text = stripChatwootHeader(content).replace(imgRegex, (_, _alt, url) => {
     images.push(url);
     return "";
   }).trim();
@@ -722,7 +727,7 @@ export default function Conversations() {
 
                             const bubbles: { text: string; images: string[]; isAudio?: boolean; transcription?: string }[] = [];
                             if (!isUser) {
-                              const paragraphs = (msg.content || "").split(/\n\n+/);
+                              const paragraphs = stripChatwootHeader(msg.content || "").split(/\n\n+/);
                               let currentBubble = { text: "", images: [] as string[] };
                               for (const para of paragraphs) {
                                 const { text: pText, images: pImages } = extractImages(para);
