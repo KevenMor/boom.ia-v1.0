@@ -88,7 +88,10 @@ function stripEmojis(content: string): string {
 function isContextualPhotoAcceptance(userText: string, history: any[]): boolean {
   if (!userText || !history || history.length === 0) return false;
   
-  const normalized = userText.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  let normalized = userText.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  
+  // Strip trailing polite suffixes before matching core acceptance
+  normalized = normalized.replace(/[,.]?\s*(por favor|por gentileza|por obsequio|pfv|pf)\s*[.!?]*$/i, "").trim();
   
   // Short acceptance patterns (must be concise — typically 1-3 words)
   const acceptancePattern = /^(quero|sim|pode|manda|claro|por favor|ok|bora|com certeza|gostaria|aceito|positivo|afirmativo|quero sim|pode sim|manda sim|sim por favor|pode me enviar|quero ver|sim quero|manda ai|manda la|envia|envia sim|quero fotos?|sim,?\s*quero|sim,?\s*pode|claro que sim|pode mandar|pode enviar|com certeza|logico|lógico|obvio|óbvio|show|beleza|top|perfeito|isso|isso mesmo|por gentileza|por obsequio|pfv|pf|s|ss|sss|siim|siiim|querooo|queroo|mandaa|mandaaa|cade|cad[eê]|cade\s*\?|cad[eê]\s*\?|e\s+as\s+fotos|e\s+a[ií]\s*\??|vai\s+mandar|nao\s+mandou|n[aã]o\s+mandou|nao\s+enviou|n[aã]o\s+enviou|ta\s+demorando|t[aá]\s+demorando|estou\s+esperando|to\s+esperando)[.!?,\s]*$/i;
