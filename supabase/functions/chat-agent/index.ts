@@ -2187,7 +2187,7 @@ Deno.serve(async (req) => {
               transcript_length: transcript.length,
               transcript_preview: transcript.slice(0, 200),
               mime_type: audioMime,
-              audio_size: audioBytes.length,
+              audio_size: audioSize,
               timestamp: Date.now(),
             });
           } else {
