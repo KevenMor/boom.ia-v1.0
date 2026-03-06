@@ -14,8 +14,9 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ["'DM Sans'", "system-ui", "-apple-system", "sans-serif"],
-        mono: ["'IBM Plex Mono'", "'Menlo'", "monospace"],
+        sans: ["'Sora'", "'DM Sans'", "system-ui", "-apple-system", "sans-serif"],
+        serif: ["'DM Serif Display'", "Georgia", "serif"],
+        mono: ["'DM Mono'", "'IBM Plex Mono'", "'Menlo'", "monospace"],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -30,6 +31,10 @@ export default {
         "primary-tint1": "hsl(var(--primary-tint1))",
         "primary-tint2": "hsl(var(--primary-tint2))",
         "primary-tint3": "hsl(var(--primary-tint3))",
+        amber: {
+          DEFAULT: "hsl(var(--amber))",
+          foreground: "hsl(var(--amber-foreground))",
+        },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
           foreground: "hsl(var(--secondary-foreground))",

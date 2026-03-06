@@ -41,7 +41,7 @@ const Dashboard = React.forwardRef<HTMLDivElement>(function Dashboard(_props, re
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <p className="text-xs text-muted-foreground">Dashboards → Boom IA</p>
-          <h1 className="text-lg font-semibold">Analytics</h1>
+          <h1 className="text-lg font-semibold heading-serif">Analytics</h1>
         </div>
       </div>
 
