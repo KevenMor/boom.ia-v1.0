@@ -10,6 +10,7 @@ import {
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTools } from "@/hooks/useTools";
+import { useTenantContext } from "@/contexts/TenantContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CreateToolDialog } from "@/components/tools/CreateToolDialog";
 import { EditToolDialog } from "@/components/tools/EditToolDialog";
@@ -34,7 +35,8 @@ const TOOL_TYPE_LABEL: Record<string, string> = {
 export default function Tools() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
-  const { data: tools, isLoading, error } = useTools();
+  const { selectedTenantId } = useTenantContext();
+  const { data: tools, isLoading, error } = useTools(selectedTenantId);
   const [createOpen, setCreateOpen] = useState(false);
   const [editTool, setEditTool] = useState<Tool | null>(null);
   const [deleteTool, setDeleteTool] = useState<Tool | null>(null);

@@ -28,6 +28,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useState } from "react";
 import { useTheme } from "next-themes";
+import { TenantSwitcher } from "./TenantSwitcher";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -185,6 +186,11 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
             <PanelLeftClose className="h-4 w-4" />
           </button>
         )}
+      </div>
+
+      {/* Tenant Switcher */}
+      <div className="border-b border-white/10 px-2 py-2">
+        <TenantSwitcher collapsed={collapsed} />
       </div>
 
       {/* Navigation */}

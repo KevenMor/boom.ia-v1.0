@@ -2,14 +2,16 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
 import type { Tool } from "@/types/database";
 
-export function useTools() {
+export function useTools(tenantId?: string | null) {
   return useQuery({
-    queryKey: ["tools"],
+    queryKey: ["tools", tenantId ?? "all"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("tools")
         .select("*")
         .order("created_at", { ascending: false });
+      if (tenantId) query = query.eq("tenant_id", tenantId);
+      const { data, error } = await query;
       if (error) throw error;
       return data as Tool[];
     },

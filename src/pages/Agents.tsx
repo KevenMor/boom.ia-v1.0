@@ -9,6 +9,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAgents } from "@/hooks/useAgents";
+import { useTenantContext } from "@/contexts/TenantContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CreateAgentDialog } from "@/components/agents/CreateAgentDialog";
 import { EditAgentDialog } from "@/components/agents/EditAgentDialog";
@@ -21,7 +22,8 @@ const WEBHOOK_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/webhook-
 export default function Agents() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
-  const { data: agents, isLoading, error } = useAgents();
+  const { selectedTenantId } = useTenantContext();
+  const { data: agents, isLoading, error } = useAgents(selectedTenantId ?? undefined);
   const [createOpen, setCreateOpen] = useState(false);
   const [editAgent, setEditAgent] = useState<Agent | null>(null);
   const [deleteAgent, setDeleteAgent] = useState<Agent | null>(null);
