@@ -19,7 +19,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useAgents } from "@/hooks/useAgents";
-import { nexusDb } from "@/integrations/supabase/nexus-client";
 import { cloudClient } from "@/integrations/supabase/cloud-client";
 import { toast } from "sonner";
 import { format } from "date-fns";
