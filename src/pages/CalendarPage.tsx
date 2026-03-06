@@ -55,6 +55,18 @@ function extractDate(dateStr: string): string {
   return dateStr.split("T")[0];
 }
 
+function normalizePhoneForReminder(raw: string): string {
+  let phone = raw.replace(/\D/g, "");
+  if (!phone.startsWith("55")) phone = `55${phone}`;
+  return phone;
+}
+
+function displayPhoneFromReminder(raw: string | null | undefined): string {
+  const phone = (raw || "").replace(/\D/g, "");
+  if (phone.startsWith("55") && phone.length >= 12) return phone.slice(2);
+  return phone;
+}
+
 export default function CalendarPage() {
   const calendarRef = useRef<FullCalendar>(null);
 
