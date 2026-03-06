@@ -5,6 +5,7 @@ import { useProviders } from "@/hooks/useProviders";
 import { useUsageDailySummary, useRecentUsageEvents } from "@/hooks/useUsageMetrics";
 import { useTokensByProvider } from "@/hooks/useTokensByProvider";
 import { useTokensByAgent } from "@/hooks/useTokensByAgent";
+import { useTenantContext } from "@/contexts/TenantContext";
 import { BannerCard } from "@/components/dashboard/BannerCard";
 import { UsageStatsRow } from "@/components/dashboard/UsageStatsRow";
 import { TokenUsageChart } from "@/components/dashboard/TokenUsageChart";
@@ -20,12 +21,13 @@ import { FeatureAdoption } from "@/components/dashboard/FeatureAdoption";
 import { RecentDeployments } from "@/components/dashboard/RecentDeployments";
 
 const Dashboard = React.forwardRef<HTMLDivElement>(function Dashboard(_props, ref) {
+  const { selectedTenantId } = useTenantContext();
   const { data: tenants, isLoading: loadingTenants } = useTenants();
-  const { data: agents, isLoading: loadingAgents } = useAgents();
+  const { data: agents, isLoading: loadingAgents } = useAgents(selectedTenantId ?? undefined);
   const { data: providers, isLoading: loadingProviders } = useProviders();
   const { data: dailySummary, isLoading: loadingDaily } = useUsageDailySummary();
   const { data: recentEvents, isLoading: loadingEvents } = useRecentUsageEvents(200);
-  const { data: providerTokens, isLoading: loadingProviderTokens } = useTokensByProvider();
+  const { data: providerTokens, isLoading: loadingProviderTokens } = useTokensByProvider(selectedTenantId);
   const { data: agentTokens, isLoading: loadingAgentTokens } = useTokensByAgent(7);
 
   const activeTenants = tenants?.filter((t) => t.status === "active").length ?? 0;

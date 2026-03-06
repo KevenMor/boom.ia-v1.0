@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { useAgents } from "@/hooks/useAgents";
+import { useTenantContext } from "@/contexts/TenantContext";
 import { useConversations, useMultiConversationMessages } from "@/hooks/useConversations";
 import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -46,7 +47,8 @@ function getLastMessagePreview(messages: any[] | undefined): string {
 }
 
 export default function Conversations() {
-  const { data: agents, isLoading: agentsLoading } = useAgents();
+  const { selectedTenantId } = useTenantContext();
+  const { data: agents, isLoading: agentsLoading } = useAgents(selectedTenantId ?? undefined);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [selectedContactKey, setSelectedContactKey] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
