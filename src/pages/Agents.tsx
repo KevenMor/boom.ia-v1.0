@@ -80,6 +80,8 @@ export default function Agents() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {filtered.map((agent, i) => {
           const isActive = agent.status === "active";
+          const isTest = agent.status === "test";
+          const isInactive = agent.status === "inactive";
           const tenantName = (agent.tenants as any)?.name ?? "Sem tenant";
           const providerName = (agent.providers as any)?.name;
           const webhookUrl = `${WEBHOOK_BASE}?agent_id=${agent.id}`;
@@ -109,7 +111,7 @@ export default function Agents() {
                   )}
                   {/* Status dot */}
                   <span
-                    className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-card ${isActive ? "bg-success" : "bg-muted-foreground/40"}`}
+                    className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-card ${isActive ? "bg-success" : isTest ? "bg-yellow-500" : "bg-muted-foreground/40"}`}
                   />
                 </div>
 
@@ -145,9 +147,9 @@ export default function Agents() {
 
               {/* Tags */}
               <div className="flex items-center gap-1.5 px-5 pb-3 flex-wrap">
-                <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-medium ${isActive ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-success" : "bg-muted-foreground/50"}`} />
-                  {isActive ? "Ativo" : "Pausado"}
+                <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-medium ${isActive ? "bg-success/10 text-success" : isTest ? "bg-yellow-500/10 text-yellow-600" : "bg-muted text-muted-foreground"}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-success" : isTest ? "bg-yellow-500" : "bg-muted-foreground/50"}`} />
+                  {isActive ? "Ativo" : isTest ? "Teste" : "Inativo"}
                 </span>
                 {agent.model && (
                   <span className="inline-flex items-center rounded-md bg-primary/8 px-2 py-0.5 text-[10px] font-medium text-primary">

@@ -708,8 +708,10 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    if (agent.status !== "active") {
-      return new Response(JSON.stringify({ error: "Agent is not active" }), {
+    // ---- Agent status gate ----
+    if (agent.status === "inactive" || agent.status === "paused") {
+      console.log(`[Webhook] Agent is ${agent.status}, ignoring`);
+      return new Response(JSON.stringify({ error: `Agent is ${agent.status}` }), {
         status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -718,6 +720,30 @@ Deno.serve(async (req: Request) => {
 
     // ---- Parse input ----
     const chatwoot = parseChatwootPayload(body);
+
+    // ---- Test mode: only respond if assignee matches test_assignee_id ----
+    if (agent.status === "test") {
+      const testAssigneeId = Number(cfg.test_assignee_id) || 0;
+      if (!chatwoot.isChatwoot) {
+        console.log(`[Webhook] Agent in test mode, ignoring non-Chatwoot message`);
+        return new Response(JSON.stringify({ status: "ignored", reason: "Test mode: only Chatwoot with specific assignee" }), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (!testAssigneeId) {
+        console.log(`[Webhook] Agent in test mode but no test_assignee_id configured`);
+        return new Response(JSON.stringify({ status: "ignored", reason: "Test mode: no test_assignee_id configured" }), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (chatwoot.assigneeId !== testAssigneeId) {
+        console.log(`[Webhook] Agent in test mode, assignee ${chatwoot.assigneeId} !== test_assignee_id ${testAssigneeId}, ignoring`);
+        return new Response(JSON.stringify({ status: "ignored", reason: "Test mode: assignee mismatch" }), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      console.log(`[Webhook] Agent in test mode, assignee ${chatwoot.assigneeId} matches test_assignee_id, proceeding`);
+    }
 
     let userMessage: string;
     let externalUserId: string;
@@ -729,7 +755,8 @@ Deno.serve(async (req: Request) => {
 
     if (chatwoot.isChatwoot) {
       // ---- Guard: if a human agent is assigned, save message but AI must NOT respond ----
-      if (chatwoot.assigneeId) {
+      // In "test" mode, the assignee check was already done above, so skip this guard
+      if (chatwoot.assigneeId && agent.status !== "test") {
         console.log(`[Webhook] Human agent assigned (id=${chatwoot.assigneeId}, name=${chatwoot.assigneeName}), saving message but AI will NOT respond`);
 
         // Still save the incoming message to the conversation for live chat visibility
