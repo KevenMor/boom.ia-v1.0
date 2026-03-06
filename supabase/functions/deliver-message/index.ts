@@ -216,7 +216,7 @@ function consolidateImageParts(parts: string[]): ConsolidatedPart[] {
     } else if (textOnly.trim()) {
       // Part só de texto
       if (pendingImages.length > 0 && textOnly.trim().length <= 60) {
-        // Texto curto entre blocos de imagens (ex: "Juliana:", "Confira:") — suprimir
+        // Texto curto entre blocos de imagens (ex: "Ana Júlia:", "Confira:") — suprimir
         console.log(`[Deliver] Suppressing short text between images: "${textOnly.trim().substring(0, 40)}"`);
         continue;
       }
