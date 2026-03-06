@@ -30,6 +30,37 @@ async function sendChatwootMessage(
   }
 }
 
+// ---------- WAHA sender ----------
+async function sendWahaMessage(
+  wahaUrl: string,
+  wahaApiKey: string,
+  wahaSession: string,
+  phone: string,
+  content: string
+): Promise<boolean> {
+  try {
+    const chatId = phone.includes("@") ? phone : `${phone}@s.whatsapp.net`;
+    const baseUrl = wahaUrl.replace(/\/+$/, "");
+    const resp = await fetch(`${baseUrl}/api/sendText`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(wahaApiKey ? { Authorization: `Bearer ${wahaApiKey}` } : {}),
+      },
+      body: JSON.stringify({ session: wahaSession, chatId, text: content }),
+    });
+    if (!resp.ok) {
+      console.error(`[Reminder][WAHA] Error ${resp.status}:`, await resp.text());
+      return false;
+    }
+    await resp.text();
+    return true;
+  } catch (e) {
+    console.error(`[Reminder][WAHA] Fetch error:`, e);
+    return false;
+  }
+}
+
 // ---------- Build reminder message from template ----------
 function buildReminderMessage(template: string, eventTitle: string, eventStartAt: string): string {
   const startDate = new Date(eventStartAt);
