@@ -313,6 +313,36 @@ Deno.serve(async (req: Request) => {
         });
         convId = data;
         console.log(`[ProcessQueue] find_or_create result: convId=${convId}, error=${rpcErr?.message || "none"}`);
+
+        // ---------- Fallback: if RPC failed (e.g. missing chatwoot columns), try direct lookup ----------
+        if (!convId && rpcErr) {
+          console.warn(`[ProcessQueue] RPC failed, attempting direct lookup by external_user_id`);
+
+          // Resolve tenant schema
+          const { data: schemaData } = await supabase
+            .from("agents")
+            .select("tenant_id, tenants:tenant_id(db_name)")
+            .eq("id", agent_id)
+            .maybeSingle();
+
+          const tenantSchema = (schemaData as any)?.tenants?.db_name;
+
+          if (tenantSchema) {
+            // Try to find existing open conversation by external_user_id
+            const { data: existingConv } = await supabase.rpc("execute_sql_read", {
+              p_sql: `SELECT id FROM ${tenantSchema}.conversations WHERE agent_id = '${agent_id}' AND external_user_id = '${external_user_id}' AND status = 'open' ORDER BY started_at DESC LIMIT 1`,
+            });
+
+            // execute_sql_read might not exist; try direct query approach
+            if (!existingConv) {
+              // Fallback: use create_conversation which handles simpler schemas
+              console.log(`[ProcessQueue] Direct lookup not available, will create new conversation`);
+            } else if (Array.isArray(existingConv) && existingConv.length > 0) {
+              convId = existingConv[0].id;
+              console.log(`[ProcessQueue] Direct lookup found existing conv: ${convId}`);
+            }
+          }
+        }
       } catch (e: any) {
         console.warn("[ProcessQueue] find_or_create failed:", e.message);
       }
@@ -328,6 +358,7 @@ Deno.serve(async (req: Request) => {
           p_contact_avatar_url: contact_avatar_url,
         });
         convId = data;
+        console.log(`[ProcessQueue] create_conversation result: convId=${convId}`);
       } catch (e: any) {
         console.error("[ProcessQueue] create_conversation failed:", e.message);
       }
