@@ -314,33 +314,28 @@ Deno.serve(async (req: Request) => {
         convId = data;
         console.log(`[ProcessQueue] find_or_create result: convId=${convId}, error=${rpcErr?.message || "none"}`);
 
-        // ---------- Fallback: if RPC failed (e.g. missing chatwoot columns), try direct lookup ----------
+        // ---------- Fallback: if RPC failed (e.g. missing chatwoot columns), try list_agent_conversations ----------
         if (!convId && rpcErr) {
-          console.warn(`[ProcessQueue] RPC failed, attempting direct lookup by external_user_id`);
-
-          // Resolve tenant schema
-          const { data: schemaData } = await supabase
-            .from("agents")
-            .select("tenant_id, tenants:tenant_id(db_name)")
-            .eq("id", agent_id)
-            .maybeSingle();
-
-          const tenantSchema = (schemaData as any)?.tenants?.db_name;
-
-          if (tenantSchema) {
-            // Try to find existing open conversation by external_user_id
-            const { data: existingConv } = await supabase.rpc("execute_sql_read", {
-              p_sql: `SELECT id FROM ${tenantSchema}.conversations WHERE agent_id = '${agent_id}' AND external_user_id = '${external_user_id}' AND status = 'open' ORDER BY started_at DESC LIMIT 1`,
+          console.warn(`[ProcessQueue] RPC failed (${rpcErr.message}), attempting fallback via list_agent_conversations`);
+          try {
+            const { data: convList } = await supabase.rpc("list_agent_conversations", {
+              p_agent_id: agent_id,
+              p_limit: 200,
             });
-
-            // execute_sql_read might not exist; try direct query approach
-            if (!existingConv) {
-              // Fallback: use create_conversation which handles simpler schemas
-              console.log(`[ProcessQueue] Direct lookup not available, will create new conversation`);
-            } else if (Array.isArray(existingConv) && existingConv.length > 0) {
-              convId = existingConv[0].id;
-              console.log(`[ProcessQueue] Direct lookup found existing conv: ${convId}`);
+            if (Array.isArray(convList)) {
+              // Find open conversation matching this external_user_id
+              const match = convList.find(
+                (c: any) => c.external_user_id === external_user_id && c.status === "open"
+              );
+              if (match) {
+                convId = match.id;
+                console.log(`[ProcessQueue] Fallback found existing conv: ${convId} (${match.message_count} msgs)`);
+              } else {
+                console.log(`[ProcessQueue] Fallback: no open conv found for ${external_user_id} among ${convList.length} conversations`);
+              }
             }
+          } catch (fallbackErr: any) {
+            console.warn(`[ProcessQueue] Fallback list_agent_conversations failed:`, fallbackErr.message);
           }
         }
       } catch (e: any) {
