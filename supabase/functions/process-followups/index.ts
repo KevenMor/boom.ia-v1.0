@@ -14,19 +14,27 @@ async function sendChatwootTextMessage(
   content: string
 ): Promise<boolean> {
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
     const resp = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", api_access_token: apiToken },
       body: JSON.stringify({ content, message_type: "outgoing", private: false }),
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
     if (!resp.ok) {
       console.error(`[Chatwoot] Text msg error ${resp.status}:`, await resp.text());
       return false;
     }
     await resp.text();
     return true;
-  } catch (e) {
-    console.error(`[Chatwoot] Text msg fetch error:`, e);
+  } catch (e: any) {
+    if (e.name === "AbortError") {
+      console.error(`[Chatwoot] Text msg TIMEOUT (15s)`);
+    } else {
+      console.error(`[Chatwoot] Text msg fetch error:`, e);
+    }
     return false;
   }
 }
@@ -52,7 +60,7 @@ async function generateFollowUpMessage(
   let historyMessages: { role: string; content: string }[] = [];
   try {
     const { data: history } = await supabase.rpc("load_conversation_messages", {
-      p_agent_id: agentId, // always from original agent's conversation
+      p_agent_id: agentId,
       p_conversation_id: conversationId,
     });
     if (history && Array.isArray(history)) {
@@ -65,7 +73,7 @@ async function generateFollowUpMessage(
     console.warn("[FollowUp] Could not load history:", e);
   }
 
-  // Build the follow-up instruction — use tenant prompt from registry if available
+  // Build the follow-up instruction
   const tenantSlug = (typeof tenantSlugParam === "string") ? tenantSlugParam : null;
   const registryPrompt = getFollowupPrompt(tenantSlug);
 
@@ -81,7 +89,6 @@ REGRAS:
 - Não repita estruturas de frases já usadas no histórico.
 - Responda SOMENTE com o texto da mensagem.`;
 
-  // Priority: registry prompt > custom config prompt > default
   const rawPrompt = registryPrompt || customPrompt || defaultPrompt;
   const promptText = rawPrompt
     .replace(/\{attempt\}/g, String(attempt))
@@ -92,10 +99,15 @@ REGRAS:
     content: `[SISTEMA INTERNO - FOLLOW-UP AUTOMÁTICO]\n${promptText}`,
   };
 
-  // Send full history + follow-up instruction to the target agent
   const messages = [...historyMessages, followUpInstruction];
 
   try {
+    // 60s timeout for the entire chat-agent call
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+    console.log(`[FollowUp] Calling chat-agent for agent ${targetAgentId}, conv ${conversationId} (${messages.length} msgs)`);
+
     const chatResp = await fetch(chatAgentUrl, {
       method: "POST",
       headers: {
@@ -108,21 +120,30 @@ REGRAS:
         messages,
         conversation_id: conversationId,
       }),
+      signal: controller.signal,
     });
 
     if (!chatResp.ok) {
+      clearTimeout(timeoutId);
       const errText = await chatResp.text();
       console.error("[FollowUp] chat-agent error:", chatResp.status, errText);
       return "Oi! Tudo bem? Posso te ajudar com algo? 😊";
     }
 
-    // Parse SSE stream
+    // Parse SSE stream with read timeout
     const reader = chatResp.body!.getReader();
     const decoder = new TextDecoder();
     let buf = "";
     let fullContent = "";
+    const streamStart = Date.now();
+    const STREAM_TIMEOUT = 55000;
 
     while (true) {
+      if (Date.now() - streamStart > STREAM_TIMEOUT) {
+        console.warn("[FollowUp] SSE stream timeout, using partial content");
+        reader.cancel().catch(() => {});
+        break;
+      }
       const { done, value } = await reader.read();
       if (done) break;
       buf += decoder.decode(value, { stream: true });
@@ -145,9 +166,15 @@ REGRAS:
       }
     }
 
+    clearTimeout(timeoutId);
+    console.log(`[FollowUp] LLM generated ${fullContent.length} chars in ${Date.now() - streamStart}ms`);
     return fullContent.trim() || "Oi! Posso te ajudar com algo? 😊";
-  } catch (e) {
-    console.error("[FollowUp] Error generating message:", e);
+  } catch (e: any) {
+    if (e.name === "AbortError") {
+      console.error("[FollowUp] chat-agent TIMEOUT (60s)");
+    } else {
+      console.error("[FollowUp] Error generating message:", e);
+    }
     return "Oi! Tudo bem? Posso te ajudar com algo? 😊";
   }
 }
@@ -157,7 +184,6 @@ function isQuietHours(quietStart: string, quietEnd: string, timezone: string): b
   if (!quietStart || !quietEnd) return false;
 
   try {
-    // Get current time in the specified timezone
     const now = new Date();
     const formatter = new Intl.DateTimeFormat("en-US", {
       hour: "numeric",
@@ -176,10 +202,8 @@ function isQuietHours(quietStart: string, quietEnd: string, timezone: string): b
     const endMinutes = endH * 60 + endM;
 
     if (startMinutes <= endMinutes) {
-      // Same day: e.g., 22:00 - 23:59 (doesn't cross midnight)
       return currentMinutes >= startMinutes && currentMinutes < endMinutes;
     } else {
-      // Crosses midnight: e.g., 22:00 - 08:00
       return currentMinutes >= startMinutes || currentMinutes < endMinutes;
     }
   } catch (e) {
@@ -232,7 +256,7 @@ Deno.serve(async (req: Request) => {
 
     console.log(`[FollowUp] Processing ${pendingItems.length} pending follow-up(s)`);
 
-    // Deduplicate by external_user_id: only process ONE follow-up per contact per cycle
+    // Deduplicate by external_user_id
     const seenUsers = new Set<string>();
     const dedupedItems: typeof pendingItems = [];
     const skippedDedupIds: string[] = [];
@@ -247,9 +271,8 @@ Deno.serve(async (req: Request) => {
       dedupedItems.push(item);
     }
 
-    // Cancel duplicate follow-ups for same contact
     if (skippedDedupIds.length > 0) {
-      console.log(`[FollowUp] Dedup: cancelling ${skippedDedupIds.length} duplicate(s) for same contact(s)`);
+      console.log(`[FollowUp] Dedup: cancelling ${skippedDedupIds.length} duplicate(s)`);
       await supabase
         .from("follow_up_queue")
         .update({ status: "cancelled", updated_at: new Date().toISOString() })
@@ -259,142 +282,160 @@ Deno.serve(async (req: Request) => {
     let processed = 0;
     let skippedQuiet = 0;
     let skippedInactive = 0;
-    let skippedDedup = skippedDedupIds.length;
+    const skippedDedup = skippedDedupIds.length;
 
     for (const item of dedupedItems) {
-      const agent = item.agents;
-      if (!agent || agent.status !== "active") {
-        // Agent inactive — cancel
-        await supabase.from("follow_up_queue").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", item.id);
-        skippedInactive++;
-        continue;
-      }
+      console.log(`[FollowUp] Processing item ${item.id}: agent=${item.agent_id}, conv=${item.conversation_id}, attempt=${item.attempt}/${item.max_attempts}`);
 
-      const cfg = (agent.config || {}) as Record<string, any>;
-
-      // Check quiet hours
-      const quietStart = cfg.followup_quiet_start || "";
-      const quietEnd = cfg.followup_quiet_end || "";
-      const timezone = cfg.followup_timezone || "America/Sao_Paulo";
-
-      if (isQuietHours(quietStart, quietEnd, timezone)) {
-        console.log(`[FollowUp] Skipping ${item.id} — quiet hours`);
-        skippedQuiet++;
-        continue; // Will be picked up next run
-      }
-
-      // Check Chatwoot config
-      const hasChatwoot = !!(cfg.chatwoot_url && cfg.chatwoot_api_token && cfg.chatwoot_account_id);
-      if (!hasChatwoot || !item.chatwoot_conversation_id) {
-        console.warn(`[FollowUp] No Chatwoot config for agent ${agent.id}, cancelling`);
-        await supabase.from("follow_up_queue").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", item.id);
-        continue;
-      }
-
-      // Check if a human agent is assigned to this conversation in Chatwoot
       try {
-        const baseUrlCheck = cfg.chatwoot_url.replace(/\/+$/, "");
-        const convCheckUrl = `${baseUrlCheck}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${item.chatwoot_conversation_id}`;
-        const convResp = await fetch(convCheckUrl, {
-          headers: { "Content-Type": "application/json", api_access_token: cfg.chatwoot_api_token },
-        });
-        if (convResp.ok) {
-          const convData = await convResp.json();
-          const assignee = convData?.meta?.assignee || convData?.assignee;
-          if (assignee && assignee.id) {
-            console.log(`[FollowUp] Human agent assigned (${assignee.name || assignee.id}) to conv ${item.chatwoot_conversation_id}, cancelling follow-up`);
-            await supabase.from("follow_up_queue").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", item.id);
-            // Also cancel any future follow-ups for this conversation
-            await supabase.rpc("cancel_pending_followups", {
+        const agent = item.agents;
+        if (!agent || agent.status !== "active") {
+          console.log(`[FollowUp] Agent inactive or not found, cancelling ${item.id}`);
+          await supabase.from("follow_up_queue").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", item.id);
+          skippedInactive++;
+          continue;
+        }
+
+        const cfg = (agent.config || {}) as Record<string, any>;
+
+        // Check quiet hours
+        const quietStart = cfg.followup_quiet_start || "";
+        const quietEnd = cfg.followup_quiet_end || "";
+        const timezone = cfg.followup_timezone || "America/Sao_Paulo";
+
+        if (isQuietHours(quietStart, quietEnd, timezone)) {
+          console.log(`[FollowUp] Skipping ${item.id} — quiet hours (${quietStart}-${quietEnd} ${timezone})`);
+          skippedQuiet++;
+          continue;
+        }
+
+        // Check Chatwoot config
+        const hasChatwoot = !!(cfg.chatwoot_url && cfg.chatwoot_api_token && cfg.chatwoot_account_id);
+        if (!hasChatwoot || !item.chatwoot_conversation_id) {
+          console.warn(`[FollowUp] No Chatwoot config for agent ${agent.id}, cancelling`);
+          await supabase.from("follow_up_queue").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", item.id);
+          continue;
+        }
+
+        // Check if a human agent is assigned (10s timeout)
+        try {
+          const assigneeController = new AbortController();
+          const assigneeTimeout = setTimeout(() => assigneeController.abort(), 10000);
+          const baseUrlCheck = cfg.chatwoot_url.replace(/\/+$/, "");
+          const convCheckUrl = `${baseUrlCheck}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${item.chatwoot_conversation_id}`;
+          console.log(`[FollowUp] Checking Chatwoot assignee for conv ${item.chatwoot_conversation_id}`);
+          const convResp = await fetch(convCheckUrl, {
+            headers: { "Content-Type": "application/json", api_access_token: cfg.chatwoot_api_token },
+            signal: assigneeController.signal,
+          });
+          clearTimeout(assigneeTimeout);
+          if (convResp.ok) {
+            const convData = await convResp.json();
+            const assignee = convData?.meta?.assignee || convData?.assignee;
+            if (assignee && assignee.id) {
+              console.log(`[FollowUp] Human agent assigned (${assignee.name || assignee.id}) to conv ${item.chatwoot_conversation_id}, cancelling`);
+              await supabase.from("follow_up_queue").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", item.id);
+              await supabase.rpc("cancel_pending_followups", {
+                p_agent_id: agent.id,
+                p_conversation_id: item.conversation_id,
+              });
+              continue;
+            }
+            console.log(`[FollowUp] No human assignee, proceeding`);
+          } else {
+            console.warn(`[FollowUp] Chatwoot assignee check returned ${convResp.status}, proceeding anyway`);
+          }
+        } catch (e: any) {
+          const reason = e.name === "AbortError" ? "TIMEOUT (10s)" : e?.message;
+          console.warn(`[FollowUp] Chatwoot assignee check failed: ${reason}, proceeding anyway`);
+        }
+
+        // Generate follow-up message via LLM
+        console.log(`[FollowUp] Generating follow-up message...`);
+        const tenantSlug = agent.tenants?.slug || null;
+        const followUpMsg = await generateFollowUpMessage(
+          cloudUrl, cloudKey, nexusKey, agent.id,
+          cfg.followup_agent_id || null,
+          item.conversation_id, item.attempt, item.max_attempts,
+          cfg.followup_prompt || null,
+          tenantSlug,
+          supabase
+        );
+        console.log(`[FollowUp] Generated message: "${followUpMsg.substring(0, 80)}..."`);
+
+        // Send to Chatwoot
+        const baseUrl = cfg.chatwoot_url.replace(/\/+$/, "");
+        const msgUrl = `${baseUrl}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${item.chatwoot_conversation_id}/messages`;
+
+        console.log(`[FollowUp] Sending to Chatwoot conv ${item.chatwoot_conversation_id}`);
+        const sent = await sendChatwootTextMessage(msgUrl, cfg.chatwoot_api_token, followUpMsg);
+
+        if (sent) {
+          console.log(`[FollowUp] ✅ Sent attempt ${item.attempt}/${item.max_attempts} for conv ${item.conversation_id}`);
+
+          // Mark current as sent
+          await supabase.from("follow_up_queue").update({
+            status: "sent", updated_at: new Date().toISOString(),
+          }).eq("id", item.id);
+
+          // Schedule next follow-up if not exhausted
+          if (item.attempt < item.max_attempts) {
+            const currentIntervals: number[] = Array.isArray(cfg.followup_intervals) ? cfg.followup_intervals : [10, 20, 30];
+            const currentMaxAttempts = Number(cfg.followup_max_attempts) || currentIntervals.length;
+            const effectiveMaxAttempts = Math.min(item.max_attempts, currentMaxAttempts);
+
+            if (item.attempt >= effectiveMaxAttempts) {
+              console.log(`[FollowUp] Agent config reduced max_attempts to ${effectiveMaxAttempts}, stopping`);
+              await supabase.from("follow_up_queue").update({ status: "exhausted", updated_at: new Date().toISOString() }).eq("id", item.id);
+            } else {
+              const nextIdx = Math.min(item.attempt, currentIntervals.length - 1);
+              const nextDelay = currentIntervals[nextIdx] || currentIntervals[currentIntervals.length - 1] || 30;
+
+              await supabase.rpc("schedule_followup", {
+                p_agent_id: agent.id,
+                p_conversation_id: item.conversation_id,
+                p_external_user_id: item.external_user_id,
+                p_channel: item.channel,
+                p_chatwoot_conversation_id: item.chatwoot_conversation_id,
+                p_attempt: item.attempt + 1,
+                p_max_attempts: effectiveMaxAttempts,
+                p_intervals_minutes: JSON.stringify(currentIntervals),
+                p_delay_minutes: nextDelay,
+              });
+
+              console.log(`[FollowUp] Scheduled next attempt ${item.attempt + 1} in ${nextDelay}min`);
+            }
+          } else {
+            console.log(`[FollowUp] Exhausted all ${item.max_attempts} attempts for conv ${item.conversation_id}`);
+          }
+
+          // Save follow-up message to conversation history
+          try {
+            await supabase.rpc("save_message", {
               p_agent_id: agent.id,
               p_conversation_id: item.conversation_id,
+              p_role: "assistant",
+              p_content: followUpMsg,
+              p_model: "follow-up",
+              p_tokens_input: 0,
+              p_tokens_output: 0,
+              p_latency_ms: 0,
             });
-            continue;
+          } catch (e) {
+            console.warn("[FollowUp] Could not save to history:", e);
           }
-        }
-      } catch (e) {
-        console.warn(`[FollowUp] Could not check Chatwoot assignee (non-blocking):`, e);
-        // Continue with follow-up if API check fails
-      }
 
-      // Generate follow-up message via LLM
-      const tenantSlug = agent.tenants?.slug || null;
-      const followUpMsg = await generateFollowUpMessage(
-        cloudUrl, cloudKey, nexusKey, agent.id,
-        cfg.followup_agent_id || null,
-        item.conversation_id, item.attempt, item.max_attempts,
-        cfg.followup_prompt || null,
-        tenantSlug,
-        supabase
-      );
-
-      // Send to Chatwoot
-      const baseUrl = cfg.chatwoot_url.replace(/\/+$/, "");
-      const msgUrl = `${baseUrl}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${item.chatwoot_conversation_id}/messages`;
-
-      const sent = await sendChatwootTextMessage(msgUrl, cfg.chatwoot_api_token, followUpMsg);
-
-      if (sent) {
-        console.log(`[FollowUp] Sent attempt ${item.attempt}/${item.max_attempts} for conv ${item.conversation_id}`);
-
-        // Mark current as sent
-        await supabase.from("follow_up_queue").update({
-          status: "sent", updated_at: new Date().toISOString(),
-        }).eq("id", item.id);
-
-        // Schedule next follow-up if not exhausted
-        if (item.attempt < item.max_attempts) {
-          // ALWAYS use agent's CURRENT config for intervals (not stale queue record)
-          const currentIntervals: number[] = Array.isArray(cfg.followup_intervals) ? cfg.followup_intervals : [10, 20, 30];
-          const currentMaxAttempts = Number(cfg.followup_max_attempts) || currentIntervals.length;
-          const effectiveMaxAttempts = Math.min(item.max_attempts, currentMaxAttempts);
-
-          if (item.attempt >= effectiveMaxAttempts) {
-            console.log(`[FollowUp] Agent config reduced max_attempts to ${effectiveMaxAttempts}, stopping`);
-            await supabase.from("follow_up_queue").update({ status: "exhausted", updated_at: new Date().toISOString() }).eq("id", item.id);
-          } else {
-            const nextIdx = Math.min(item.attempt, currentIntervals.length - 1);
-            const nextDelay = currentIntervals[nextIdx] || currentIntervals[currentIntervals.length - 1] || 30;
-
-          await supabase.rpc("schedule_followup", {
-            p_agent_id: agent.id,
-            p_conversation_id: item.conversation_id,
-            p_external_user_id: item.external_user_id,
-            p_channel: item.channel,
-            p_chatwoot_conversation_id: item.chatwoot_conversation_id,
-            p_attempt: item.attempt + 1,
-            p_max_attempts: effectiveMaxAttempts,
-            p_intervals_minutes: JSON.stringify(currentIntervals),
-            p_delay_minutes: nextDelay,
-          });
-
-          console.log(`[FollowUp] Scheduled next attempt ${item.attempt + 1} in ${nextDelay}min (intervals from agent config: [${currentIntervals.join(",")}])`);
-          }
+          processed++;
         } else {
-          console.log(`[FollowUp] Exhausted all ${item.max_attempts} attempts for conv ${item.conversation_id}`);
+          console.error(`[FollowUp] ❌ Failed to send for conv ${item.conversation_id}`);
         }
-
-        // Save follow-up message to conversation history
-        try {
-          await supabase.rpc("save_message", {
-            p_agent_id: agent.id,
-            p_conversation_id: item.conversation_id,
-            p_role: "assistant",
-            p_content: followUpMsg,
-            p_model: "follow-up",
-            p_tokens_input: 0,
-            p_tokens_output: 0,
-            p_latency_ms: 0,
-          });
-        } catch (e) {
-          console.warn("[FollowUp] Could not save to history:", e);
-        }
-
-        processed++;
-      } else {
-        console.error(`[FollowUp] Failed to send for conv ${item.conversation_id}`);
+      } catch (itemErr: any) {
+        console.error(`[FollowUp] ❌ Error processing item ${item.id}:`, itemErr?.message || itemErr);
+        // Don't let one item crash the entire batch — continue to next
       }
     }
+
+    console.log(`[FollowUp] Done: processed=${processed}, quiet=${skippedQuiet}, inactive=${skippedInactive}, dedup=${skippedDedup}`);
 
     return new Response(JSON.stringify({
       processed,
@@ -406,7 +447,7 @@ Deno.serve(async (req: Request) => {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
-    console.error("[FollowUp] Error:", err);
+    console.error("[FollowUp] Fatal error:", err);
     return new Response(JSON.stringify({ error: (err as Error).message }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
