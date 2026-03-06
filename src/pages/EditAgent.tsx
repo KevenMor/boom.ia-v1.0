@@ -504,6 +504,15 @@ export default function EditAgent() {
           />
         </div>
 
+        {/* Appointment Reminders */}
+        <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+          <ReminderConfigSection
+            enabled={reminderEnabled} setEnabled={setReminderEnabled}
+            minutesBefore={reminderMinutesBefore} setMinutesBefore={setReminderMinutesBefore}
+            template={reminderTemplate} setTemplate={setReminderTemplate}
+          />
+        </div>
+
         {/* Demo / Public Sandbox */}
         <div className="rounded-xl border border-border bg-card p-6 space-y-4">
           <div className="flex items-center gap-2">
