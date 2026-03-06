@@ -19,7 +19,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useAgents } from "@/hooks/useAgents";
-import { nexusDb } from "@/integrations/supabase/nexus-client";
 import { cloudClient } from "@/integrations/supabase/cloud-client";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -124,12 +123,14 @@ export default function AgentSandbox() {
   const loadConversations = useCallback(async () => {
     if (!agentId) return;
     try {
-      const { data, error } = await nexusDb.rpc("list_agent_conversations", {
-        p_agent_id: agentId,
-        p_limit: 50,
+      const { data, error } = await cloudClient.functions.invoke("conversation-history", {
+        body: { action: "list", agent_id: agentId, limit: 50 },
       });
-      if (!error && data) setConversations(data as Conversation[]);
-    } catch {}
+      if (error) throw error;
+      setConversations((((data as any)?.data ?? []) as Conversation[]));
+    } catch (e) {
+      console.error("[Sandbox] erro ao carregar conversas:", e);
+    }
   }, [agentId]);
 
   useEffect(() => {
@@ -163,13 +164,13 @@ export default function AgentSandbox() {
     if (!agentId) return;
     setLoadingHistory(true);
     try {
-      const { data, error } = await nexusDb.rpc("load_conversation_messages", {
-        p_agent_id: agentId,
-        p_conversation_id: convId,
+      const { data, error } = await cloudClient.functions.invoke("conversation-history", {
+        body: { action: "messages", agent_id: agentId, conversation_id: convId },
       });
       if (error) throw error;
+      const rows = (((data as any)?.data ?? []) as any[]);
       setMessages(
-        (data as any[])
+        rows
           .map((m) => ({
             role: m.role as "user" | "assistant",
             content: m.role === "assistant" ? sanitizeContent(m.content) : m.content,
@@ -298,9 +299,6 @@ export default function AgentSandbox() {
     const allMessages = [...messages, userMsg];
 
     try {
-      const { data: { session } } = await nexusDb.auth.getSession();
-      const token = session?.access_token;
-
       const body: any = {
         agent_id: agentId,
         messages: allMessages.map((m) => ({ role: m.role, content: m.content })),
@@ -315,7 +313,6 @@ export default function AgentSandbox() {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          ...(token ? { "x-nexus-auth": `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(body),
       });

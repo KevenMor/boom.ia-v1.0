@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { nexusDb } from "@/integrations/supabase/nexus-client";
+import { cloudClient } from "@/integrations/supabase/cloud-client";
 
 export interface Conversation {
   id: string;
@@ -32,12 +32,11 @@ export function useConversations(agentId: string | null) {
     queryKey: ["conversations", agentId],
     queryFn: async () => {
       if (!agentId) return [];
-      const { data, error } = await nexusDb.rpc("list_agent_conversations", {
-        p_agent_id: agentId,
-        p_limit: 100,
+      const { data, error } = await cloudClient.functions.invoke("conversation-history", {
+        body: { action: "list", agent_id: agentId, limit: 100 },
       });
       if (error) throw error;
-      return (data ?? []) as Conversation[];
+      return (((data as any)?.data ?? []) as Conversation[]);
     },
     enabled: !!agentId,
     refetchInterval: 5000,
@@ -49,12 +48,11 @@ export function useConversationMessages(agentId: string | null, conversationId: 
     queryKey: ["conversation-messages", agentId, conversationId],
     queryFn: async () => {
       if (!agentId || !conversationId) return [];
-      const { data, error } = await nexusDb.rpc("load_conversation_messages", {
-        p_agent_id: agentId,
-        p_conversation_id: conversationId,
+      const { data, error } = await cloudClient.functions.invoke("conversation-history", {
+        body: { action: "messages", agent_id: agentId, conversation_id: conversationId },
       });
       if (error) throw error;
-      return (data ?? []) as Message[];
+      return (((data as any)?.data ?? []) as Message[]);
     },
     enabled: !!agentId && !!conversationId,
     refetchInterval: 1000,
@@ -69,12 +67,11 @@ export function useMultiConversationMessages(agentId: string | null, conversatio
       if (!agentId || conversationIds.length === 0) return [];
       const results = await Promise.all(
         conversationIds.map(async (cid) => {
-          const { data, error } = await nexusDb.rpc("load_conversation_messages", {
-            p_agent_id: agentId,
-            p_conversation_id: cid,
+          const { data, error } = await cloudClient.functions.invoke("conversation-history", {
+            body: { action: "messages", agent_id: agentId, conversation_id: cid },
           });
           if (error) throw error;
-          return (data ?? []) as Message[];
+          return (((data as any)?.data ?? []) as Message[]);
         })
       );
       // Merge all messages and sort by created_at, deduplicate by id
@@ -95,3 +92,4 @@ export function useMultiConversationMessages(agentId: string | null, conversatio
     refetchInterval: 1000,
   });
 }
+
