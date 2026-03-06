@@ -69,10 +69,12 @@ function displayPhoneFromReminder(raw: string | null | undefined): string {
 
 export default function CalendarPage() {
   const calendarRef = useRef<FullCalendar>(null);
+  const { selectedTenantId: globalTenantId } = useTenantContext();
 
-  // Tenant & calendar selection
+  // Tenant & calendar selection — use global tenant when set
   const { data: tenants } = useTenants();
-  const [selectedTenantId, setSelectedTenantId] = useState<string>("");
+  const [localTenantId, setLocalTenantId] = useState<string>("");
+  const selectedTenantId = globalTenantId || localTenantId;
   const { data: calendars, isLoading: calendarsLoading } = useCalendars(selectedTenantId || undefined);
   const [selectedCalendarId, setSelectedCalendarId] = useState<string>("all");
 
