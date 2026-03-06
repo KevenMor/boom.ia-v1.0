@@ -103,8 +103,9 @@ export default function Tenants() {
                   {filtered.map((tenant, i) => (
                     <tr
                       key={tenant.id}
-                      className="transition-colors hover:bg-muted/30 animate-fade-in"
+                      className="transition-colors hover:bg-muted/30 animate-fade-in cursor-pointer"
                       style={{ animationDelay: `${i * 40}ms` }}
+                      onClick={() => navigate(`/tenants/${tenant.id}/edit`)}
                     >
                       {/* Name */}
                       <td className="whitespace-nowrap px-4 py-4 text-sm font-medium text-foreground">
