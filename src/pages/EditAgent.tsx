@@ -111,6 +111,9 @@ export default function EditAgent() {
   const [chatwootUrl, setChatwootUrl] = useState("");
   const [chatwootApiToken, setChatwootApiToken] = useState("");
   const [chatwootAccountId, setChatwootAccountId] = useState("");
+  const [wahaUrl, setWahaUrl] = useState("");
+  const [wahaApiKey, setWahaApiKey] = useState("");
+  const [wahaSession, setWahaSession] = useState("default");
   const [followupEnabled, setFollowupEnabled] = useState(false);
   const [followupMaxAttempts, setFollowupMaxAttempts] = useState(3);
   const [followupIntervals, setFollowupIntervals] = useState<number[]>([10, 20, 30]);
@@ -147,6 +150,9 @@ export default function EditAgent() {
       setChatwootUrl((cfg as any).chatwoot_url ?? "");
       setChatwootApiToken((cfg as any).chatwoot_api_token ?? "");
       setChatwootAccountId((cfg as any).chatwoot_account_id ?? "");
+      setWahaUrl((cfg as any).waha_url ?? "");
+      setWahaApiKey((cfg as any).waha_api_key ?? "");
+      setWahaSession((cfg as any).waha_session ?? "default");
       setFollowupEnabled((cfg as any).followup_enabled ?? false);
       setFollowupMaxAttempts((cfg as any).followup_max_attempts ?? 3);
       setFollowupIntervals((cfg as any).followup_intervals ?? [10, 20, 30]);
@@ -178,6 +184,8 @@ export default function EditAgent() {
           dispatcher_provider_id: dispatcherProviderId || undefined,
           chatwoot_url: chatwootUrl || undefined, chatwoot_api_token: chatwootApiToken || undefined,
           chatwoot_account_id: chatwootAccountId || undefined,
+          waha_url: wahaUrl || undefined, waha_api_key: wahaApiKey || undefined,
+          waha_session: wahaSession || "default",
           followup_enabled: followupEnabled,
           followup_max_attempts: followupMaxAttempts,
           followup_intervals: followupIntervals,
@@ -454,12 +462,15 @@ export default function EditAgent() {
 
         {/* Chatwoot */}
         <div className="rounded-xl border border-border bg-card p-6 space-y-4">
-          <h3 className="text-base font-semibold text-foreground">Integração Chatwoot</h3>
+          <h3 className="text-base font-semibold text-foreground">Integração Chatwoot & WAHA</h3>
           <ChatwootConfigSection
             chatwootUrl={chatwootUrl} setChatwootUrl={setChatwootUrl}
             chatwootApiToken={chatwootApiToken} setChatwootApiToken={setChatwootApiToken}
             chatwootAccountId={chatwootAccountId} setChatwootAccountId={setChatwootAccountId}
             webhookUrl={`${WEBHOOK_BASE}?agent_id=${agent.id}`}
+            wahaUrl={wahaUrl} setWahaUrl={setWahaUrl}
+            wahaApiKey={wahaApiKey} setWahaApiKey={setWahaApiKey}
+            wahaSession={wahaSession} setWahaSession={setWahaSession}
           />
         </div>
 
