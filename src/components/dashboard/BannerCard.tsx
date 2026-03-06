@@ -3,15 +3,13 @@ import { ArrowRight, Sparkles } from "lucide-react";
 export function BannerCard() {
   return (
     <div
-      className="box overflow-hidden border-0"
-      style={{
-        background: "linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-tint1)))",
-      }}
+      className="mesh-gradient overflow-hidden border-0 shadow-lg"
+      style={{ borderRadius: 16 }}
     >
-      <div className="box-body p-6">
+      <div className="p-6">
         <div className="flex items-center gap-4">
           <div className="flex-1">
-            <h4 className="mb-2 text-lg font-semibold text-white">
+            <h4 className="mb-2 text-lg font-semibold text-white heading-serif">
               Boom IA — Painel de Controle
             </h4>
             <p className="mb-3 text-white/80 text-[12px] leading-relaxed max-w-sm">

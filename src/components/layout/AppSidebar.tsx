@@ -208,13 +208,13 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
                   onClick={onLinkClick}
                   title={item.label}
                   className={cn(
-                    "flex items-center justify-center rounded-xl p-2 transition-all duration-200",
+                    "flex items-center justify-center rounded-full p-2 transition-all duration-200",
                     isActive
-                      ? "bg-white/15 text-white"
-                      : "text-white/60 hover:bg-white/10 hover:text-white"
+                      ? "bg-sidebar-primary/20 text-white shadow-[inset_0_0_0_1px_hsl(var(--sidebar-primary)/0.3)]"
+                      : "text-white/60 hover:bg-white/8 hover:text-white"
                   )}
                 >
-                  <item.icon className={cn("h-[18px] w-[18px]", isActive ? "text-white" : "text-white/40")} />
+                  <item.icon className={cn("h-[18px] w-[18px]", isActive ? "text-sidebar-primary" : "text-white/40")} strokeWidth={isActive ? 2 : 1.5} />
                 </NavLink>
               );
             })}

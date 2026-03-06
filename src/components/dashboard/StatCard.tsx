@@ -44,20 +44,17 @@ export function StatCard({
           <div className="pb-3">
             <p className="metric-value text-xl font-semibold text-foreground mb-1">{value}</p>
             {change && (
-              <div className="text-muted-foreground text-[13px]">
-                {changeType === "positive" ? "Aumentou" : changeType === "negative" ? "Diminuiu" : ""}
-                {changeType !== "neutral" && " "}
-                <span
-                  className={cn(
-                    "font-medium",
-                    changeType === "positive" && "text-success",
-                    changeType === "negative" && "text-destructive"
-                  )}
-                >
-                  {change}
-                  {changeType === "positive" && " ↑"}
-                  {changeType === "negative" && " ↓"}
-                </span>
+              <div
+                className={cn(
+                  "trend-pill",
+                  changeType === "positive" && "trend-pill-positive",
+                  changeType === "negative" && "trend-pill-negative",
+                  changeType === "neutral" && "trend-pill-neutral"
+                )}
+              >
+                {change}
+                {changeType === "positive" && " ↑"}
+                {changeType === "negative" && " ↓"}
               </div>
             )}
           </div>
