@@ -9,6 +9,7 @@ function LayoutInner() {
   const { collapsed } = useSidebar();
   const location = useLocation();
   const isSandbox = location.pathname.includes("/sandbox");
+  const isConversations = location.pathname === "/conversations";
 
   return (
     <div className="flex min-h-screen bg-background">
