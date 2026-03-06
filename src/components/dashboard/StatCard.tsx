@@ -1,6 +1,5 @@
 import { type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { AreaChart, Area, ResponsiveContainer } from "recharts";
 
 interface StatCardProps {
   title: string;
@@ -21,68 +20,42 @@ export function StatCard({
   change,
   changeType = "neutral",
   icon: Icon,
-  iconBg = "bg-primary/10",
-  iconColor = "text-primary",
-  sparkData = [25, 44, 30, 56, 40, 50, 13, 24, 84],
-  sparkColor,
+  iconBg = "bg-primary",
+  iconColor = "text-primary-foreground",
 }: StatCardProps) {
-  const resolvedSparkColor = sparkColor ?? "hsl(var(--primary))";
-
   return (
-    <div className="box overflow-hidden">
-      <div className="box-body pb-0 pe-0">
-        {/* Top: icon + label */}
-        <div className="mb-4 flex justify-between items-start flex-wrap">
-          <span className={cn("flex h-10 w-10 items-center justify-center rounded-full", iconBg)}>
-            <Icon className={cn("h-[18px] w-[18px]", iconColor)} />
-          </span>
-          <span className="text-[13px] font-medium text-muted-foreground pe-4">{title}</span>
-        </div>
-
-        {/* Bottom: value + trend + sparkline */}
-        <div className="flex items-end justify-between">
-          <div className="pb-3">
-            <p className="metric-value text-xl font-semibold text-foreground mb-1">{value}</p>
-            {change && (
-              <div
-                className={cn(
-                  "trend-pill",
-                  changeType === "positive" && "trend-pill-positive",
-                  changeType === "negative" && "trend-pill-negative",
-                  changeType === "neutral" && "trend-pill-neutral"
-                )}
-              >
-                {change}
-                {changeType === "positive" && " ↑"}
-                {changeType === "negative" && " ↓"}
-              </div>
-            )}
-          </div>
-
-          {/* Mini sparkline */}
-          <div className="w-[100px] h-[70px] shrink-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={sparkData.map((v, i) => ({ v, i }))}>
-                <defs>
-                  <linearGradient id={`spark-${title.replace(/\s/g, "")}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={resolvedSparkColor} stopOpacity={0.3} />
-                    <stop offset="95%" stopColor={resolvedSparkColor} stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
-                <Area
-                  type="monotone"
-                  dataKey="v"
-                  stroke={resolvedSparkColor}
-                  strokeWidth={1.5}
-                  fill={`url(#spark-${title.replace(/\s/g, "")})`}
-                  dot={false}
-                  isAnimationActive={false}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+    <div className="stat-card group relative flex flex-col items-center text-center px-4 py-5 rounded-2xl border border-border/40 bg-card/70 dark:bg-card/60 backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_12px_40px_-12px_hsl(var(--primary)/0.15)]">
+      {/* Icon circle */}
+      <div className={cn(
+        "flex h-12 w-12 items-center justify-center rounded-full shadow-lg mb-3 transition-transform duration-300 group-hover:scale-110",
+        iconBg
+      )}>
+        <Icon className={cn("h-5 w-5", iconColor)} />
       </div>
+
+      {/* Trend badge */}
+      {change && (
+        <div className={cn(
+          "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold mb-3",
+          changeType === "positive" && "bg-success/15 text-success",
+          changeType === "negative" && "bg-destructive/15 text-destructive",
+          changeType === "neutral" && "bg-muted text-muted-foreground",
+        )}>
+          {changeType === "positive" && (
+            <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none"><path d="M6 9V3M6 3L3 6M6 3l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          )}
+          {changeType === "negative" && (
+            <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none"><path d="M6 3v6M6 9l3-3M6 9L3 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          )}
+          {change}
+        </div>
+      )}
+
+      {/* Metric value */}
+      <p className="metric-value text-2xl font-bold text-foreground mb-1">{value}</p>
+
+      {/* Label */}
+      <p className="text-xs text-muted-foreground font-medium">{title}</p>
     </div>
   );
 }
