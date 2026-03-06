@@ -53,6 +53,14 @@ export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
         <DropdownMenuContent side="right" align="start" className="w-56">
           <DropdownMenuLabel className="text-xs text-muted-foreground">Alterar conta</DropdownMenuLabel>
           <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => setSelectedTenantId(null)}
+            className="gap-2"
+          >
+            <span className="flex-1 truncate font-medium">Todos os tenants</span>
+            {!selectedTenantId && <Check className="h-4 w-4 text-primary" />}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           {activeTenants.map((t) => (
             <DropdownMenuItem
               key={t.id}
@@ -86,6 +94,18 @@ export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent side="bottom" align="start" className="w-[228px]">
         <DropdownMenuLabel className="text-xs text-muted-foreground">Alterar conta</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => setSelectedTenantId(null)}
+          className="gap-2"
+        >
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-accent/20 text-[9px] font-bold text-accent-foreground">
+            ALL
+          </div>
+          <span className="flex-1 truncate text-sm font-medium">Todos os tenants</span>
+          <span className="text-[10px] text-muted-foreground">Admin</span>
+          {!selectedTenantId && <Check className="h-4 w-4 text-primary shrink-0" />}
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         {isLoading && (
           <DropdownMenuItem disabled className="text-xs text-muted-foreground">Carregando...</DropdownMenuItem>
