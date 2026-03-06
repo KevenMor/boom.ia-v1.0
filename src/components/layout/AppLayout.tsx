@@ -19,7 +19,7 @@ function LayoutInner() {
         style={{ paddingLeft: isMobile ? 0 : (collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH) }}
       >
         <AppHeader />
-        <main className={(isSandbox || isConversations) ? "flex-1 overflow-hidden" : "flex-1 p-4 md:p-6"}>
+        <main className={(isSandbox || isConversations) ? "flex-1 overflow-hidden" : "flex-1 overflow-auto p-4 md:p-6"}>
           <Outlet />
         </main>
       </div>
