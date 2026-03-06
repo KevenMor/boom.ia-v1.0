@@ -13,10 +13,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Clock, CalendarDays } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Plus, Trash2, Clock, CalendarDays, Bell, Phone } from "lucide-react";
 import { useTenants } from "@/hooks/useTenants";
 import { useCalendars, useCreateCalendar } from "@/hooks/useCalendars";
 import { useCalendarEvents, useCreateCalendarEvent, useUpdateCalendarEvent, useDeleteCalendarEvent } from "@/hooks/useCalendarEvents";
+import { useAgents } from "@/hooks/useAgents";
+import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
 import { toast } from "sonner";
 import type { Calendar } from "@/types/calendar";
 
@@ -68,6 +71,7 @@ export default function CalendarPage() {
   }, [calendars, selectedCalendarId]);
 
   const { data: dbEvents, isLoading: eventsLoading } = useCalendarEvents(selectedTenantId || undefined, activeCalendarIds);
+  const { data: agents } = useAgents(selectedTenantId || undefined);
   const createEvent = useCreateCalendarEvent();
   const updateEvent = useUpdateCalendarEvent();
   const deleteEvent = useDeleteCalendarEvent();
@@ -103,6 +107,18 @@ export default function CalendarPage() {
   const [endDate, setEndDate] = useState("");
   const [endTime, setEndTime] = useState("09:00");
   const [allDay, setAllDay] = useState(false);
+  const [sendReminder, setSendReminder] = useState(false);
+  const [reminderPhone, setReminderPhone] = useState("");
+  const [reminderAgentId, setReminderAgentId] = useState("");
+
+  // Agents with reminders enabled
+  const reminderAgents = useMemo(() => {
+    if (!agents) return [];
+    return agents.filter(a => {
+      const cfg = (a.config || {}) as Record<string, any>;
+      return a.status === "active" && cfg.reminder_enabled;
+    });
+  }, [agents]);
 
   // New calendar dialog
   const [newCalDialogOpen, setNewCalDialogOpen] = useState(false);
@@ -124,8 +140,11 @@ export default function CalendarPage() {
     setStartTime(info.allDay ? "08:00" : extractTime(info.startStr));
     setEndDate(extractDate(info.endStr));
     setEndTime(info.allDay ? "09:00" : extractTime(info.endStr));
+    setSendReminder(false);
+    setReminderPhone("");
+    setReminderAgentId(reminderAgents.length === 1 ? reminderAgents[0].id : "");
     setDialogOpen(true);
-  }, [selectedTenantId, calendars, selectedCalendarId]);
+  }, [selectedTenantId, calendars, selectedCalendarId, reminderAgents]);
 
   const handleEventClick = useCallback((info: EventClickArg) => {
     const ep = info.event.extendedProps;
@@ -139,15 +158,27 @@ export default function CalendarPage() {
     setStartTime(info.event.allDay ? "08:00" : extractTime(info.event.startStr));
     setEndDate(extractDate(info.event.endStr || info.event.startStr));
     setEndTime(info.event.allDay ? "09:00" : extractTime(info.event.endStr || info.event.startStr));
+    setSendReminder(false);
+    setReminderPhone("");
+    setReminderAgentId(reminderAgents.length === 1 ? reminderAgents[0].id : "");
     setDialogOpen(true);
-  }, []);
+  }, [reminderAgents]);
 
   const handleSave = async () => {
     if (!newTitle.trim() || !selectedTenantId || !eventCalendarId) return;
+    if (sendReminder && !reminderPhone.trim()) {
+      toast.error("Informe o WhatsApp do cliente para enviar lembrete.");
+      return;
+    }
+    if (sendReminder && !reminderAgentId) {
+      toast.error("Selecione o agente para enviar o lembrete.");
+      return;
+    }
     const finalStart = allDay ? `${startDate}T00:00:00` : `${startDate}T${startTime}:00`;
     const finalEnd = allDay ? `${endDate}T23:59:59` : `${endDate}T${endTime}:00`;
 
     try {
+      let eventId = editingEventId;
       if (editingEventId) {
         await updateEvent.mutateAsync({
           id: editingEventId,
@@ -161,7 +192,7 @@ export default function CalendarPage() {
         });
         toast.success("Evento atualizado!");
       } else {
-        await createEvent.mutateAsync({
+        const created = await createEvent.mutateAsync({
           title: newTitle,
           start_at: finalStart,
           end_at: finalEnd,
@@ -170,7 +201,42 @@ export default function CalendarPage() {
           calendar_id: eventCalendarId,
           tenant_id: selectedTenantId,
         });
+        eventId = created.id;
         toast.success("Evento criado!");
+      }
+
+      // Insert reminder if enabled
+      if (sendReminder && eventId && reminderAgentId) {
+        const agent = reminderAgents.find(a => a.id === reminderAgentId);
+        const cfg = (agent?.config || {}) as Record<string, any>;
+        const minutesBefore = cfg.reminder_minutes_before || 60;
+        const eventStartDate = new Date(finalStart);
+        const remindAt = new Date(eventStartDate.getTime() - minutesBefore * 60 * 1000);
+
+        // Normalize phone: ensure 55 prefix
+        let phone = reminderPhone.replace(/\D/g, "");
+        if (!phone.startsWith("55")) phone = "55" + phone;
+
+        const { error: remErr } = await supabase
+          .from("appointment_reminders")
+          .insert({
+            agent_id: reminderAgentId,
+            tenant_id: selectedTenantId,
+            calendar_event_id: eventId,
+            conversation_id: `manual-${eventId}`,
+            external_user_id: phone,
+            event_title: newTitle,
+            event_start_at: finalStart,
+            remind_at: remindAt.toISOString(),
+            status: "pending",
+          });
+
+        if (remErr) {
+          console.error("Reminder insert error:", remErr);
+          toast.error("Evento salvo, mas erro ao agendar lembrete.");
+        } else {
+          toast.success("Lembrete agendado! 🔔");
+        }
       }
     } catch (e: any) {
       toast.error(e.message || "Erro ao salvar evento.");
@@ -426,6 +492,54 @@ export default function CalendarPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Reminder section */}
+            {reminderAgents.length > 0 && (
+              <div className="space-y-3 rounded-lg border border-border p-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bell className="h-4 w-4 text-primary" />
+                    <Label className="text-sm font-medium">Enviar lembrete</Label>
+                  </div>
+                  <Switch checked={sendReminder} onCheckedChange={setSendReminder} />
+                </div>
+
+                {sendReminder && (
+                  <div className="space-y-3 pt-1">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">WhatsApp do cliente</Label>
+                      <div className="flex items-center gap-2">
+                        <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <Input
+                          value={reminderPhone}
+                          onChange={(e) => setReminderPhone(e.target.value)}
+                          placeholder="11999999999"
+                          className="h-9 font-mono text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    {reminderAgents.length > 1 && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Agente</Label>
+                        <Select value={reminderAgentId} onValueChange={setReminderAgentId}>
+                          <SelectTrigger className="h-9"><SelectValue placeholder="Selecione o agente" /></SelectTrigger>
+                          <SelectContent>
+                            {reminderAgents.map((a) => (
+                              <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    <p className="text-xs text-muted-foreground">
+                      O lembrete será enviado via WAHA com a antecedência configurada no agente.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter className="gap-2">
             {editingEventId && (
