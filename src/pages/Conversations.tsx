@@ -758,12 +758,23 @@ export default function Conversations() {
                                 )}
                                 {bubbles.map((bubble, bIdx) => (
                                   <div key={`${msg.id}-${bIdx}`} className={cn("flex", isUser ? "justify-start" : "justify-end")}>
-                                    <div className="max-w-[75%]">
+                                    <div className={cn("max-w-[75%]", isUser && bIdx === 0 && "flex gap-2.5")}>
+                                      {/* User avatar on first bubble */}
+                                      {isUser && bIdx === 0 && (
+                                        <Avatar className="h-7 w-7 shrink-0 mt-1">
+                                          {selectedConv?.contact_avatar_url && (
+                                            <AvatarImage src={selectedConv.contact_avatar_url} />
+                                          )}
+                                          <AvatarFallback className="text-[10px] bg-accent/20 text-accent-foreground font-semibold">
+                                            {initials(selectedConv)}
+                                          </AvatarFallback>
+                                        </Avatar>
+                                      )}
                                       <div
                                         className={cn(
-                                          "rounded-2xl px-3.5 py-2",
+                                          "rounded-2xl px-3.5 py-2.5 shadow-sm",
                                           isUser
-                                            ? "rounded-bl-md bg-muted"
+                                            ? "rounded-tl-md bg-muted/80 border border-border/40"
                                             : "rounded-br-md bg-primary text-primary-foreground"
                                         )}
                                       >
