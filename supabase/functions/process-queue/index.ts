@@ -392,8 +392,9 @@ Deno.serve(async (req: Request) => {
           // CONTEXT CONTINUITY FIX:
           // Keep a larger and role-aware window to avoid losing tutor/pet facts in long flows.
           // Previous behavior used history.slice(-50), which was easily saturated by tool/system entries.
-          const MAX_USER_ASSISTANT_MESSAGES = 80;
-          const MAX_SYSTEM_MESSAGES = 20;
+          // Large history window to preserve context in long conversations
+          const MAX_USER_ASSISTANT_MESSAGES = 150;
+          const MAX_SYSTEM_MESSAGES = 30;
 
           const selected: { role: string; content: string }[] = [];
           let userAssistantCount = 0;
