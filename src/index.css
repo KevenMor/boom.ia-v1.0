@@ -41,6 +41,9 @@
     --info: 199 89% 48%;
     --info-foreground: 0 0% 100%;
 
+    --amber: 40 96% 53%;
+    --amber-foreground: 30 60% 20%;
+
     --border: 214 32% 95%;
     --input: 214 32% 91%;
     --ring: 236 92% 66%;
@@ -56,7 +59,7 @@
     --sidebar-border: 222 25% 24%;
     --sidebar-ring: 236 92% 72%;
 
-    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+    font-family: 'Sora', 'DM Sans', system-ui, -apple-system, sans-serif;
     font-size: 0.8125rem;
   }
 
@@ -98,6 +101,9 @@
     --info: 199 89% 48%;
     --info-foreground: 0 0% 100%;
 
+    --amber: 40 96% 53%;
+    --amber-foreground: 30 60% 20%;
+
     --border: 222 18% 16%;
     --input: 222 18% 18%;
     --ring: 236 92% 66%;
@@ -124,10 +130,29 @@
     @apply bg-background text-foreground antialiased;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    position: relative;
+  }
+
+  /* Noise texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    background-size: 256px 256px;
+  }
+
+  body > #root {
+    position: relative;
+    z-index: 1;
   }
 
   code, pre, .font-mono {
-    font-family: 'IBM Plex Mono', 'Menlo', monospace;
+    font-family: 'DM Mono', 'IBM Plex Mono', 'Menlo', monospace;
   }
 
   ::-webkit-scrollbar {
@@ -146,13 +171,46 @@
   }
 }
 
+/* Mesh gradient animation for hero card */
+@keyframes mesh-shift {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  25% {
+    background-position: 100% 0%;
+  }
+  50% {
+    background-position: 100% 100%;
+  }
+  75% {
+    background-position: 0% 100%;
+  }
+}
+
+.mesh-gradient {
+  background: linear-gradient(
+    -45deg,
+    hsl(var(--primary)),
+    hsl(var(--primary-tint1)),
+    hsl(var(--secondary)),
+    hsl(var(--primary-tint2))
+  );
+  background-size: 400% 400%;
+  animation: mesh-shift 12s ease infinite;
+}
+
 @layer utilities {
-  /* Box card — template style */
+  /* Box card — glassmorphism style */
   .box {
-    @apply bg-card rounded-lg border border-border shadow-[0_1px_3px_rgba(0,0,0,0.04)] mb-0;
+    @apply bg-card/80 backdrop-blur-md border border-border/50 shadow-[0_1px_3px_rgba(0,0,0,0.04)] mb-0 transition-all duration-300 ease-out;
+    border-radius: 16px;
+  }
+  .box:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px -8px hsl(var(--primary) / 0.1);
   }
   .box-header {
-    @apply flex items-center px-5 py-3.5 border-b border-border;
+    @apply flex items-center px-5 py-3.5 border-b border-border/50;
   }
   .box-title {
     @apply text-[0.9375rem] font-semibold text-foreground;
@@ -161,16 +219,16 @@
     @apply p-5;
   }
   .box-footer {
-    @apply px-5 py-3 border-t border-border;
+    @apply px-5 py-3 border-t border-border/50;
   }
 
-  /* Legacy dash-card (keep for backward compat) */
+  /* Legacy dash-card */
   .dash-card {
-    @apply box p-6 relative overflow-hidden transition-all duration-200;
+    @apply box p-6 relative overflow-hidden;
   }
   .dash-card:hover {
     border-color: hsl(var(--primary) / 0.2);
-    box-shadow: 0 4px 20px -4px hsl(var(--primary) / 0.08);
+    box-shadow: 0 8px 30px -8px hsl(var(--primary) / 0.12);
   }
 
   /* Accent left bar */
@@ -180,9 +238,39 @@
 
   /* Mono number styling */
   .metric-value {
-    font-family: 'IBM Plex Mono', 'Menlo', monospace;
+    font-family: 'DM Mono', 'IBM Plex Mono', 'Menlo', monospace;
     letter-spacing: -0.01em;
     font-variant-numeric: tabular-nums;
+  }
+
+  /* Heading serif */
+  .heading-serif {
+    font-family: 'DM Serif Display', Georgia, serif;
+  }
+
+  /* Trend pill — translucent colored background */
+  .trend-pill {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
+  .trend-pill-positive {
+    @apply trend-pill;
+    background: hsl(var(--success) / 0.15);
+    color: hsl(var(--success));
+  }
+  .trend-pill-negative {
+    @apply trend-pill;
+    background: hsl(var(--destructive) / 0.15);
+    color: hsl(var(--destructive));
+  }
+  .trend-pill-neutral {
+    @apply trend-pill;
+    background: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
+  }
+  .trend-pill-amber {
+    @apply trend-pill;
+    background: hsl(var(--amber) / 0.15);
+    color: hsl(var(--amber));
   }
 
   /* Live dot */
@@ -207,6 +295,7 @@
 
   .glass {
     @apply bg-card/60 backdrop-blur-xl border border-border/50;
+    border-radius: 16px;
   }
 }
 
