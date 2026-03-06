@@ -311,7 +311,7 @@ export default function Conversations() {
   };
 
   return (
-    <div className="h-[calc(100vh-4rem)]">
+    <div className="h-[calc(100vh-4rem)] overflow-hidden">
       {!selectedAgentId ? (
         /* ─── Agent selection ─── */
         <div className="space-y-6 p-6">
