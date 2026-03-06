@@ -31,6 +31,10 @@ export default {
         "primary-tint1": "hsl(var(--primary-tint1))",
         "primary-tint2": "hsl(var(--primary-tint2))",
         "primary-tint3": "hsl(var(--primary-tint3))",
+        amber: {
+          DEFAULT: "hsl(var(--amber))",
+          foreground: "hsl(var(--amber-foreground))",
+        },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
           foreground: "hsl(var(--secondary-foreground))",
