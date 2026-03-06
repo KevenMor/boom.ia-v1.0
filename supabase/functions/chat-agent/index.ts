@@ -1853,18 +1853,32 @@ Deno.serve(async (req) => {
       : supabase;
 
     const saveMessageWithFallback = async (payload: Record<string, any>, logPrefix: string) => {
-      const { data, error } = await supabaseAdmin.rpc("save_message", payload);
+      // IMPORTANT: Some Nexus environments have BOTH signatures below at the same time:
+      // - save_message(..., p_latency_ms)
+      // - save_message(..., p_latency_ms, p_metadata)
+      // Calling with 8 args is ambiguous (PGRST203). To force the 9-arg signature,
+      // always send non-null metadata on first attempt.
+      const metadataAwarePayload = Object.prototype.hasOwnProperty.call(payload, "p_metadata")
+        ? { ...payload, p_metadata: payload.p_metadata ?? {} }
+        : payload;
+
+      const { data, error } = await supabaseAdmin.rpc("save_message", metadataAwarePayload);
       if (!error) return { data, error: null };
 
       const errorText = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`;
-      const shouldFallback = Object.prototype.hasOwnProperty.call(payload, "p_metadata")
-        && /metadata|p_metadata|save_message/i.test(errorText);
+      const canRetryLegacy = Object.prototype.hasOwnProperty.call(payload, "p_metadata")
+        && /metadata|p_metadata|function.*save_message|PGRST203|PGRST202/i.test(errorText);
 
-      if (!shouldFallback) return { data: null, error };
+      if (!canRetryLegacy) return { data: null, error };
 
       const { p_metadata, ...legacyPayload } = payload;
       console.warn(`[${logPrefix}] save_message fallback: retrying without p_metadata`);
       const { data: fallbackData, error: fallbackError } = await supabaseAdmin.rpc("save_message", legacyPayload);
+
+      if (!fallbackError) {
+        console.log(`[${logPrefix}] save_message fallback succeeded (legacy signature)`);
+      }
+
       return { data: fallbackData ?? null, error: fallbackError ?? null };
     };
 
