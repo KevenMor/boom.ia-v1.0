@@ -111,7 +111,7 @@ export default function Agents() {
                   )}
                   {/* Status dot */}
                   <span
-                    className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-card ${isActive ? "bg-success" : "bg-muted-foreground/40"}`}
+                    className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-card ${isActive ? "bg-success" : isTest ? "bg-yellow-500" : "bg-muted-foreground/40"}`}
                   />
                 </div>
 
