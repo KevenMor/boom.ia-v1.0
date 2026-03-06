@@ -382,17 +382,25 @@ export default function CalendarPage() {
         {/* Tenant & Calendar filters */}
         <Card>
           <CardContent className="flex flex-wrap items-end gap-4 py-4">
-            <div className="space-y-1 min-w-[200px]">
-              <Label className="text-xs">Tenant</Label>
-              <Select value={selectedTenantId} onValueChange={(v) => { setSelectedTenantId(v); setSelectedCalendarId("all"); }}>
-                <SelectTrigger><SelectValue placeholder="Selecione o tenant" /></SelectTrigger>
-                <SelectContent>
-                  {tenants?.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {!globalTenantId && (
+              <div className="space-y-1 min-w-[200px]">
+                <Label className="text-xs">Tenant</Label>
+                <Select value={localTenantId} onValueChange={(v) => { setLocalTenantId(v); setSelectedCalendarId("all"); }}>
+                  <SelectTrigger><SelectValue placeholder="Selecione o tenant" /></SelectTrigger>
+                  <SelectContent>
+                    {tenants?.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {globalTenantId && (
+              <div className="space-y-1 min-w-[200px]">
+                <Label className="text-xs">Tenant</Label>
+                <p className="text-sm font-medium py-2">{tenants?.find(t => t.id === globalTenantId)?.name || "—"}</p>
+              </div>
+            )}
             <div className="space-y-1 min-w-[200px]">
               <Label className="text-xs">Agenda</Label>
               <Select value={selectedCalendarId} onValueChange={setSelectedCalendarId} disabled={!selectedTenantId}>
