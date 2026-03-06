@@ -556,7 +556,7 @@ export default function AgentSandbox() {
   };
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
       {/* Sidebar - Conversation History */}
       <div
         className={`border-r border-border bg-card transition-all duration-200 ${
@@ -603,7 +603,7 @@ export default function AgentSandbox() {
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex flex-1 flex-col bg-background">
+      <div className="flex flex-1 flex-col bg-background min-h-0">
         {/* Header */}
         <div className="flex items-center gap-3 bg-card border-b border-border px-4 py-2.5">
           <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground md:hidden" onClick={() => messages.length > 0 ? setShowExitConfirm(true) : navigate("/agents")}>
