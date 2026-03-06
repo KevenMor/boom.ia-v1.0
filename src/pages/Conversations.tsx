@@ -774,7 +774,7 @@ export default function Conversations() {
                                         className={cn(
                                           "rounded-2xl px-3.5 py-2.5 shadow-sm",
                                           isUser
-                                            ? "rounded-tl-md bg-muted/80 border border-border/40"
+                                            ? "rounded-tl-md bg-muted border border-border/60"
                                             : "rounded-br-md bg-primary text-primary-foreground"
                                         )}
                                       >
