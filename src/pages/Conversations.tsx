@@ -763,25 +763,48 @@ export default function Conversations() {
                   </div>
                 </div>
 
-                {/* Footer — read-only */}
+                {/* Footer — send message */}
                 <div className="shrink-0 border-t border-border px-4 py-3 bg-card">
-                  <div className="flex items-end gap-2">
-                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 mb-0.5" disabled>
-                      <Paperclip className="h-4 w-4" />
-                    </Button>
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      const form = e.currentTarget;
+                      const input = form.elements.namedItem("operator-msg") as HTMLTextAreaElement;
+                      const text = input?.value?.trim();
+                      if (!text || !selectedAgentId || !selectedConvIds.length) return;
+                      input.disabled = true;
+                      try {
+                        const { error } = await cloudClient.functions.invoke("send-operator-message", {
+                          body: { agent_id: selectedAgentId, conversation_id: selectedConvIds[0], content: text },
+                        });
+                        if (error) throw error;
+                        input.value = "";
+                        queryClient.invalidateQueries({ queryKey: ["multi-conversation-messages"] });
+                      } catch (err: any) {
+                        toast.error("Erro ao enviar: " + (err?.message || "erro desconhecido"));
+                      } finally {
+                        input.disabled = false;
+                        input.focus();
+                      }
+                    }}
+                    className="flex items-end gap-2"
+                  >
                     <Textarea
+                      name="operator-msg"
                       className="min-h-[40px] max-h-[120px] resize-none text-sm"
-                      placeholder="Modo somente leitura..."
+                      placeholder="Digite uma mensagem..."
                       rows={1}
-                      disabled
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          (e.currentTarget.form as HTMLFormElement)?.requestSubmit();
+                        }
+                      }}
                     />
-                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 mb-0.5" disabled>
-                      <Smile className="h-4 w-4" />
-                    </Button>
-                    <Button size="icon" className="h-8 w-8 shrink-0 mb-0.5" disabled>
+                    <Button type="submit" size="icon" className="h-8 w-8 shrink-0 mb-0.5">
                       <Send className="h-4 w-4" />
                     </Button>
-                  </div>
+                  </form>
                 </div>
               </>
             )}
