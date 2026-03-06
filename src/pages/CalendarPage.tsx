@@ -71,6 +71,7 @@ export default function CalendarPage() {
   }, [calendars, selectedCalendarId]);
 
   const { data: dbEvents, isLoading: eventsLoading } = useCalendarEvents(selectedTenantId || undefined, activeCalendarIds);
+  const { data: agents } = useAgents(selectedTenantId || undefined);
   const createEvent = useCreateCalendarEvent();
   const updateEvent = useUpdateCalendarEvent();
   const deleteEvent = useDeleteCalendarEvent();
