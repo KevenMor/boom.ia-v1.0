@@ -74,7 +74,7 @@ Deno.serve(async (req: Request) => {
     // Fetch pending reminders that are due
     const { data: pendingItems, error: fetchErr } = await supabase
       .from("appointment_reminders")
-      .select("*, agents:agent_id(id, name, config, status, tenants:tenant_id(slug))")
+      .select("*")
       .eq("status", "pending")
       .lte("remind_at", new Date().toISOString())
       .order("remind_at", { ascending: true })
@@ -101,7 +101,13 @@ Deno.serve(async (req: Request) => {
     let skipped = 0;
 
     for (const item of pendingItems) {
-      const agent = item.agents;
+      // Fetch agent separately (no FK relationship)
+      const { data: agent } = await supabase
+        .from("agents")
+        .select("id, name, config, status")
+        .eq("id", item.agent_id)
+        .single();
+
       if (!agent || agent.status !== "active") {
         await supabase
           .from("appointment_reminders")
