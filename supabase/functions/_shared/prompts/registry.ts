@@ -54,7 +54,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: PPL_DISPATCHER,
     followupPrompt: PPL_FOLLOWUP,
     version: "v2.0.0",
-    description: "Juliana — SDR PPL Motors (Concessionária Sorocaba/SP)",
+    description: "Ana Júlia — SDR PPL Motors (Concessionária Sorocaba/SP)",
   },
   "ppl-motors": {
     systemPrompt: PPL_SYSTEM,
@@ -62,7 +62,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: PPL_DISPATCHER,
     followupPrompt: PPL_FOLLOWUP,
     version: "v2.0.0",
-    description: "Juliana — SDR PPL Motors (Concessionária Sorocaba/SP)",
+    description: "Ana Júlia — SDR PPL Motors (Concessionária Sorocaba/SP)",
   },
   "instituto-vicentim-maekawa": {
     systemPrompt: IVM_SYSTEM,
