@@ -94,18 +94,20 @@ export default function PublicSandbox() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Load agent public info
+  // Load agent public info via edge function (no auth required)
   useEffect(() => {
     if (!agentId) return;
     (async () => {
       try {
-        const { data, error } = await nexusDb
-          .from("agents")
-          .select("id, name, avatar_url, config, tenants(name, slug)")
-          .eq("id", agentId)
-          .single();
-        if (error) throw error;
-        setAgent(data as unknown as AgentPublicInfo);
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-agent-info?agent_id=${agentId}`;
+        const resp = await fetch(url, {
+          headers: {
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+        });
+        if (!resp.ok) throw new Error(`Status ${resp.status}`);
+        const data = await resp.json();
+        setAgent(data as AgentPublicInfo);
         // If no password configured, skip gate
         if (!data?.config?.sandbox_password) {
           setAuthenticated(true);
