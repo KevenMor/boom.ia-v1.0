@@ -45,9 +45,7 @@ export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
             className="flex w-full items-center justify-center rounded-xl p-2 transition-colors hover:bg-white/10"
             title={displayName}
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/20 text-[10px] font-bold text-primary">
-              {initials}
-            </div>
+            <Building2 className="h-5 w-5 text-primary" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent side="right" align="start" className="w-56">
