@@ -49,6 +49,11 @@ export default function Conversations() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showDebug, setShowDebug] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [newContactOpen, setNewContactOpen] = useState(false);
+  const [newContactPhone, setNewContactPhone] = useState("");
+  const [newContactName, setNewContactName] = useState("");
+  const [newContactMessage, setNewContactMessage] = useState("");
+  const [sendingNewContact, setSendingNewContact] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: conversations, isLoading: convsLoading } = useConversations(selectedAgentId);
