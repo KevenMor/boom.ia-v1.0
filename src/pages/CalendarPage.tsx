@@ -107,6 +107,18 @@ export default function CalendarPage() {
   const [endDate, setEndDate] = useState("");
   const [endTime, setEndTime] = useState("09:00");
   const [allDay, setAllDay] = useState(false);
+  const [sendReminder, setSendReminder] = useState(false);
+  const [reminderPhone, setReminderPhone] = useState("");
+  const [reminderAgentId, setReminderAgentId] = useState("");
+
+  // Agents with reminders enabled
+  const reminderAgents = useMemo(() => {
+    if (!agents) return [];
+    return agents.filter(a => {
+      const cfg = (a.config || {}) as Record<string, any>;
+      return a.status === "active" && cfg.reminder_enabled;
+    });
+  }, [agents]);
 
   // New calendar dialog
   const [newCalDialogOpen, setNewCalDialogOpen] = useState(false);
