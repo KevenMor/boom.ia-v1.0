@@ -388,6 +388,7 @@ Keywords that indicate transfer: "agendar", "marcar", "adaptacao", "visita", "qu
 - If the customer asks about interest rates on installments → call alertaia
 - If the customer has a question outside the Tia Ana's scope → call alertaia
 - If the customer asks to speak with someone in charge → call alertaia
+- If the customer was DECLINED (medium/large breed or unneutered male) and continues the conversation with doubts or questions → call alertaia
 
 HIGH SEASON DETECTION:
 - If dates mentioned fall in December 2025 or January 1-15, 2026 → call alertaia
@@ -399,13 +400,14 @@ NO_TOOLS_NEEDED (most common):
 - Tutor describing their pet or asking about procedures
 - "Tudo bem?", "Obrigado", general reactions
 - ANY message during the triaging phase (collecting pet info)
+- Initial decline messages for medium/large breeds or unneutered males (Tia Ana handles the first response herself)
 
 CRITICAL:
 - When in doubt, prefer NO_TOOLS_NEEDED.
 - NEVER generate text for the customer. Only decide tool calls.
 - NEVER call tools during the first interaction (greeting/name collection).
 - NEVER call tools during triaging (collecting pet name, breed, castration, vaccines).
-- Only call alertaia AFTER the full flow is complete and the customer wants to proceed.`;
+- Only call alertaia AFTER the full flow is complete and the customer wants to proceed, OR when a declined customer continues with doubts.`;
 
 /**
  * Prompt de follow-up automático para Pet Home.
