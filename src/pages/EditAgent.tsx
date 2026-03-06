@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Bot, Save, Loader2, Wrench, Plus, X } from "lucide-react";
+import { ArrowLeft, Bot, Save, Loader2, Wrench, Plus, X, Link2, Copy } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -121,6 +121,7 @@ export default function EditAgent() {
   const [businessHoursEnabled, setBusinessHoursEnabled] = useState(false);
   const [businessHours, setBusinessHours] = useState<BusinessHours>(DEFAULT_BUSINESS_HOURS);
   const [offlineMessage, setOfflineMessage] = useState("");
+  const [sandboxPassword, setSandboxPassword] = useState("");
 
   const { register, handleSubmit, setValue, watch, reset } = useForm<FormData>({ resolver: zodResolver(schema) });
 
@@ -156,6 +157,7 @@ export default function EditAgent() {
       setBusinessHoursEnabled((cfg as any).business_hours_enabled ?? false);
       setBusinessHours((cfg as any).business_hours ?? DEFAULT_BUSINESS_HOURS);
       setOfflineMessage((cfg as any).business_hours_offline_message ?? "");
+      setSandboxPassword((cfg as any).sandbox_password ?? "");
     }
   }, [agent, reset]);
 
@@ -186,6 +188,7 @@ export default function EditAgent() {
           business_hours_enabled: businessHoursEnabled,
           business_hours: businessHours,
           business_hours_offline_message: offlineMessage || undefined,
+          sandbox_password: sandboxPassword || undefined,
         },
       });
       toast.success("Agente atualizado");
@@ -478,6 +481,48 @@ export default function EditAgent() {
             quietEnd={followupQuietEnd} setQuietEnd={setFollowupQuietEnd}
             followupPrompt={followupPrompt} setFollowupPrompt={setFollowupPrompt}
           />
+        </div>
+
+        {/* Demo / Public Sandbox */}
+        <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+          <div className="flex items-center gap-2">
+            <Link2 className="h-5 w-5 text-primary" />
+            <h3 className="text-base font-semibold text-foreground">Demo Público</h3>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Link público para o cliente testar o agente. Se definir uma senha, o cliente precisará informá-la para acessar.
+          </p>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Senha do Demo</Label>
+              <Input
+                placeholder="Deixe vazio para acesso livre"
+                value={sandboxPassword}
+                onChange={(e) => setSandboxPassword(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            {agentId && (
+              <div>
+                <Label className="text-xs">Link do Demo</Label>
+                <div className="flex items-center gap-1.5 mt-1 rounded-lg border border-border bg-muted/30 px-3 py-2">
+                  <code className="flex-1 truncate text-xs text-muted-foreground select-all">
+                    {`${window.location.origin}/demo/${agentId}`}
+                  </code>
+                  <button
+                    type="button"
+                    className="shrink-0 rounded p-1 text-muted-foreground/50 transition-colors hover:bg-muted hover:text-foreground"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/demo/${agentId}`);
+                      toast.success("Link copiado!");
+                    }}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Tools */}

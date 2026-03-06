@@ -25,6 +25,7 @@ import Audit from "@/pages/Audit";
 import SettingsPage from "@/pages/SettingsPage";
 import PromptsPage from "@/pages/PromptsPage";
 import CalendarPage from "@/pages/CalendarPage";
+import PublicSandbox from "@/pages/PublicSandbox";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -40,6 +41,7 @@ const App = () => (
           <TenantProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/demo/:agentId" element={<PublicSandbox />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route
               element={
