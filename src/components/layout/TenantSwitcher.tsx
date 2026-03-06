@@ -78,9 +78,6 @@ export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-white/10">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/20 text-[10px] font-bold text-primary">
-            {initials}
-          </div>
           <div className="flex flex-1 flex-col min-w-0 text-start">
             <span className="text-sm font-semibold text-white truncate">{displayName}</span>
           </div>
