@@ -160,10 +160,12 @@ Deno.serve(async (req: Request) => {
         continue;
       }
 
-      // Check Chatwoot config
+      // Determine delivery channel
       const hasChatwoot = !!(cfg.chatwoot_url && cfg.chatwoot_api_token && cfg.chatwoot_account_id);
-      if (!hasChatwoot || !item.chatwoot_conversation_id) {
-        console.warn(`[Reminder] No Chatwoot config for agent ${agent.id}, cancelling`);
+      const hasWaha = !!(cfg.waha_url && cfg.waha_session);
+
+      if (!hasChatwoot && !hasWaha) {
+        console.warn(`[Reminder] No delivery channel for agent ${agent.id}, cancelling`);
         await supabase
           .from("appointment_reminders")
           .update({ status: "cancelled", updated_at: new Date().toISOString() })
@@ -177,11 +179,25 @@ Deno.serve(async (req: Request) => {
       const template = cfg.reminder_template || defaultTemplate;
       const message = buildReminderMessage(template, item.event_title, item.event_start_at);
 
-      // Send via Chatwoot
-      const baseUrl = cfg.chatwoot_url.replace(/\/+$/, "");
-      const msgUrl = `${baseUrl}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${item.chatwoot_conversation_id}/messages`;
+      let sent = false;
 
-      const sent = await sendChatwootMessage(msgUrl, cfg.chatwoot_api_token, message);
+      // Try Chatwoot first (if conversation exists)
+      if (hasChatwoot && item.chatwoot_conversation_id) {
+        const baseUrl = cfg.chatwoot_url.replace(/\/+$/, "");
+        const msgUrl = `${baseUrl}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${item.chatwoot_conversation_id}/messages`;
+        sent = await sendChatwootMessage(msgUrl, cfg.chatwoot_api_token, message);
+      }
+
+      // Fallback to WAHA (or primary for manual events)
+      if (!sent && hasWaha && item.external_user_id) {
+        sent = await sendWahaMessage(
+          cfg.waha_url,
+          cfg.waha_api_key || "",
+          cfg.waha_session,
+          item.external_user_id,
+          message
+        );
+      }
 
       if (sent) {
         console.log(`[Reminder] Sent reminder for event "${item.event_title}" at ${item.event_start_at}`);
@@ -191,21 +207,23 @@ Deno.serve(async (req: Request) => {
           .update({ status: "sent", updated_at: new Date().toISOString() })
           .eq("id", item.id);
 
-        // Save to conversation history
-        try {
-          await supabase.rpc("save_message", {
-            p_agent_id: agent.id,
-            p_conversation_id: item.conversation_id,
-            p_role: "assistant",
-            p_content: message,
-            p_model: "reminder",
-            p_tokens_input: 0,
-            p_tokens_output: 0,
-            p_latency_ms: 0,
-            p_metadata: JSON.stringify({}),
-          });
-        } catch (e) {
-          console.warn("[Reminder] Could not save to history:", e);
+        // Save to conversation history (skip for manual events)
+        if (!item.conversation_id.startsWith("manual-")) {
+          try {
+            await supabase.rpc("save_message", {
+              p_agent_id: agent.id,
+              p_conversation_id: item.conversation_id,
+              p_role: "assistant",
+              p_content: message,
+              p_model: "reminder",
+              p_tokens_input: 0,
+              p_tokens_output: 0,
+              p_latency_ms: 0,
+              p_metadata: JSON.stringify({}),
+            });
+          } catch (e) {
+            console.warn("[Reminder] Could not save to history:", e);
+          }
         }
 
         processed++;
