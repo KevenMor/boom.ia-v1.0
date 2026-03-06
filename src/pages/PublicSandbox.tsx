@@ -197,11 +197,19 @@ export default function PublicSandbox() {
       };
       if (apiAttachments.length > 0) body.attachments = apiAttachments;
 
+      // Try to get nexus auth token (if user happened to be authenticated)
+      let nexusToken: string | undefined;
+      try {
+        const { data: { session } } = await nexusDb.auth.getSession();
+        nexusToken = session?.access_token;
+      } catch {}
+
       const resp = await fetch(CHAT_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          ...(nexusToken ? { "x-nexus-auth": `Bearer ${nexusToken}` } : {}),
         },
         body: JSON.stringify(body),
       });
@@ -271,7 +279,11 @@ export default function PublicSandbox() {
       }
     } catch (e: any) {
       console.error("Chat error:", e);
-      if (!hasAssistantContent) setMessages((prev) => prev.slice(0, -1));
+      // Show error as assistant message instead of removing user message
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente.", timestamp: new Date() },
+      ]);
     } finally {
       setIsLoading(false);
     }
