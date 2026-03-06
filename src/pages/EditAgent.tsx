@@ -24,6 +24,7 @@ import { getModelsForProvider } from "@/lib/provider-models";
 import { ChatwootConfigSection } from "@/components/agents/ChatwootConfigSection";
 import { FollowUpConfigSection } from "@/components/agents/FollowUpConfigSection";
 import { AgentAvatarUpload } from "@/components/agents/AgentAvatarUpload";
+import { ReminderConfigSection } from "@/components/agents/ReminderConfigSection";
 import { BusinessHoursSection, DEFAULT_BUSINESS_HOURS, type BusinessHours } from "@/components/agents/BusinessHoursSection";
 import type { Agent } from "@/types/database";
 
@@ -125,6 +126,9 @@ export default function EditAgent() {
   const [businessHours, setBusinessHours] = useState<BusinessHours>(DEFAULT_BUSINESS_HOURS);
   const [offlineMessage, setOfflineMessage] = useState("");
   const [sandboxPassword, setSandboxPassword] = useState("");
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderMinutesBefore, setReminderMinutesBefore] = useState(60);
+  const [reminderTemplate, setReminderTemplate] = useState("");
 
   const { register, handleSubmit, setValue, watch, reset } = useForm<FormData>({ resolver: zodResolver(schema) });
 
@@ -164,6 +168,9 @@ export default function EditAgent() {
       setBusinessHours((cfg as any).business_hours ?? DEFAULT_BUSINESS_HOURS);
       setOfflineMessage((cfg as any).business_hours_offline_message ?? "");
       setSandboxPassword((cfg as any).sandbox_password ?? "");
+      setReminderEnabled((cfg as any).reminder_enabled ?? false);
+      setReminderMinutesBefore((cfg as any).reminder_minutes_before ?? 60);
+      setReminderTemplate((cfg as any).reminder_template ?? "");
     }
   }, [agent, reset]);
 
@@ -197,6 +204,9 @@ export default function EditAgent() {
           business_hours: businessHours,
           business_hours_offline_message: offlineMessage || undefined,
           sandbox_password: sandboxPassword || undefined,
+          reminder_enabled: reminderEnabled,
+          reminder_minutes_before: reminderMinutesBefore,
+          reminder_template: reminderTemplate || undefined,
         },
       });
       toast.success("Agente atualizado");
@@ -491,6 +501,15 @@ export default function EditAgent() {
             quietStart={followupQuietStart} setQuietStart={setFollowupQuietStart}
             quietEnd={followupQuietEnd} setQuietEnd={setFollowupQuietEnd}
             followupPrompt={followupPrompt} setFollowupPrompt={setFollowupPrompt}
+          />
+        </div>
+
+        {/* Appointment Reminders */}
+        <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+          <ReminderConfigSection
+            enabled={reminderEnabled} setEnabled={setReminderEnabled}
+            minutesBefore={reminderMinutesBefore} setMinutesBefore={setReminderMinutesBefore}
+            template={reminderTemplate} setTemplate={setReminderTemplate}
           />
         </div>
 

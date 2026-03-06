@@ -14,7 +14,54 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      appointment_reminders: {
+        Row: {
+          agent_id: string
+          calendar_event_id: string
+          chatwoot_conversation_id: number | null
+          conversation_id: string
+          created_at: string
+          event_start_at: string
+          event_title: string
+          external_user_id: string
+          id: string
+          remind_at: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          calendar_event_id: string
+          chatwoot_conversation_id?: number | null
+          conversation_id: string
+          created_at?: string
+          event_start_at: string
+          event_title: string
+          external_user_id: string
+          id?: string
+          remind_at: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          calendar_event_id?: string
+          chatwoot_conversation_id?: number | null
+          conversation_id?: string
+          created_at?: string
+          event_start_at?: string
+          event_title?: string
+          external_user_id?: string
+          id?: string
+          remind_at?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

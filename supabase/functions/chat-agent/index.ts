@@ -1209,6 +1209,33 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
           const bookingSummary = `${title}\n📅 ${new Date(startAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}\n📞 ${clientPhone || "N/A"}\n🚗 Interesse: ${vehicleInterest || "Não informado"}\n✅ Agendado automaticamente pela IA`;
           await postCalendarAction(supabase, agentId, context, "agendamento", bookingSummary);
 
+          // --- Schedule appointment reminder if enabled ---
+          try {
+            const reminderEnabled = (agentData.config as any)?.reminder_enabled;
+            const reminderMinutes = Number((agentData.config as any)?.reminder_minutes_before) || 60;
+            if (reminderEnabled && context.chatwoot_conversation_id) {
+              const eventStart = new Date(startDate);
+              const remindAt = new Date(eventStart.getTime() - reminderMinutes * 60 * 1000);
+              // Only schedule if remind_at is in the future
+              if (remindAt > new Date()) {
+                await supabase.from("appointment_reminders").insert({
+                  agent_id: agentId,
+                  tenant_id: agentData.tenant_id,
+                  calendar_event_id: newEvent.id,
+                  conversation_id: context.conversation_id,
+                  external_user_id: context.external_user_id || "",
+                  chatwoot_conversation_id: context.chatwoot_conversation_id,
+                  event_title: title,
+                  event_start_at: startDate.toISOString(),
+                  remind_at: remindAt.toISOString(),
+                });
+                console.log(`[Calendar] Reminder scheduled ${reminderMinutes}min before event at ${remindAt.toISOString()}`);
+              }
+            }
+          } catch (reminderErr) {
+            console.warn("[Calendar] Could not schedule reminder:", reminderErr);
+          }
+
           return JSON.stringify({
             status: "agendado",
             evento: {
