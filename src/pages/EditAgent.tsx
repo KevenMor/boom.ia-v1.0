@@ -126,6 +126,9 @@ export default function EditAgent() {
   const [businessHours, setBusinessHours] = useState<BusinessHours>(DEFAULT_BUSINESS_HOURS);
   const [offlineMessage, setOfflineMessage] = useState("");
   const [sandboxPassword, setSandboxPassword] = useState("");
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderMinutesBefore, setReminderMinutesBefore] = useState(60);
+  const [reminderTemplate, setReminderTemplate] = useState("");
 
   const { register, handleSubmit, setValue, watch, reset } = useForm<FormData>({ resolver: zodResolver(schema) });
 
