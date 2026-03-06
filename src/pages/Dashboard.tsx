@@ -25,10 +25,10 @@ const Dashboard = React.forwardRef<HTMLDivElement>(function Dashboard(_props, re
   const { data: tenants, isLoading: loadingTenants } = useTenants();
   const { data: agents, isLoading: loadingAgents } = useAgents(selectedTenantId ?? undefined);
   const { data: providers, isLoading: loadingProviders } = useProviders();
-  const { data: dailySummary, isLoading: loadingDaily } = useUsageDailySummary();
-  const { data: recentEvents, isLoading: loadingEvents } = useRecentUsageEvents(200);
+  const { data: dailySummary, isLoading: loadingDaily } = useUsageDailySummary(selectedTenantId);
+  const { data: recentEvents, isLoading: loadingEvents } = useRecentUsageEvents(200, selectedTenantId);
   const { data: providerTokens, isLoading: loadingProviderTokens } = useTokensByProvider(selectedTenantId);
-  const { data: agentTokens, isLoading: loadingAgentTokens } = useTokensByAgent(7);
+  const { data: agentTokens, isLoading: loadingAgentTokens } = useTokensByAgent(7, selectedTenantId);
 
   const activeTenants = tenants?.filter((t) => t.status === "active").length ?? 0;
   const activeAgents = agents?.filter((a: any) => a.status === "active").length ?? 0;

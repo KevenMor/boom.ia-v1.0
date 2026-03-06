@@ -43,18 +43,20 @@ export function estimateCostUsd(promptTokens: number, completionTokens: number, 
   return (promptTokens / 1_000_000) * cost.input + (completionTokens / 1_000_000) * cost.output;
 }
 
-export function useTokensByAgent(days = 7) {
+export function useTokensByAgent(days = 7, tenantId?: string | null) {
   return useQuery({
-    queryKey: ["tokens-by-agent", days],
+    queryKey: ["tokens-by-agent", days, tenantId ?? "all"],
     queryFn: async () => {
       const since = new Date();
       since.setDate(since.getDate() - days);
 
-      const { data: events, error } = await nexusDb
+      let query = nexusDb
         .from("usage_events")
         .select("agent_id, provider, model, prompt_tokens, completion_tokens, total_tokens, latency_ms, tool_calls_count, phase")
         .gte("created_at", since.toISOString())
         .limit(10000);
+      if (tenantId) query = query.eq("tenant_id", tenantId);
+      const { data: events, error } = await query;
 
       if (error) throw error;
 
