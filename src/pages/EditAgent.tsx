@@ -172,6 +172,7 @@ export default function EditAgent() {
       setReminderEnabled((cfg as any).reminder_enabled ?? false);
       setReminderMinutesBefore((cfg as any).reminder_minutes_before ?? 60);
       setReminderTemplate((cfg as any).reminder_template ?? "");
+      setTestAssigneeId(String((cfg as any).test_assignee_id ?? ""));
     }
   }, [agent, reset]);
 
