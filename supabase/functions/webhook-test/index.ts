@@ -559,8 +559,6 @@ Deno.serve(async (req: Request) => {
       }
 
       // Human agent outgoing message — save to conversation so it appears in live chat
-      console.log(`[Webhook] Human agent outgoing message from ${sender.name || sender.id}, saving to conversation`);
-
       const reqUrl = new URL(req.url);
       const agentIdParam = reqUrl.searchParams.get("agent_id") || (body.agent_id as string) || null;
       if (!agentIdParam) {
@@ -588,17 +586,51 @@ Deno.serve(async (req: Request) => {
           });
 
           if (convId) {
-            await supabaseForOutgoing.rpc("save_message", {
-              p_agent_id: agentIdParam,
-              p_conversation_id: convId,
-              p_role: "assistant",
-              p_content: `[Atendente: ${sender.name || "Humano"}] ${outgoingContent}`,
-              p_model: "human-agent",
-              p_tokens_input: 0,
-              p_tokens_output: 0,
-              p_latency_ms: 0,
-            });
-            console.log(`[Webhook] Saved human agent message to conv ${convId}`);
+            // DEDUP GUARD: Check if this content (or very similar) was already saved
+            // in the last 60s — prevents duplicating AI/operator messages that come
+            // back via the Chatwoot webhook as "outgoing".
+            let isDuplicate = false;
+            try {
+              const { data: recentMsgs } = await supabaseForOutgoing.rpc("load_conversation_messages", {
+                p_agent_id: agentIdParam,
+                p_conversation_id: convId,
+              });
+              if (Array.isArray(recentMsgs)) {
+                const now = Date.now();
+                const normalizeForDedup = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase().slice(0, 200);
+                const outNorm = normalizeForDedup(outgoingContent);
+
+                for (let i = recentMsgs.length - 1; i >= Math.max(0, recentMsgs.length - 10); i--) {
+                  const m = recentMsgs[i] as Record<string, unknown>;
+                  if (m.role !== "assistant") continue;
+                  const msgAge = now - new Date(m.created_at as string).getTime();
+                  if (msgAge > 120_000) break; // older than 2min, stop checking
+                  const mNorm = normalizeForDedup((m.content as string) || "");
+                  // Check if content matches (may have [Atendente:...] prefix stripped)
+                  if (mNorm === outNorm || outNorm.includes(mNorm) || mNorm.includes(outNorm)) {
+                    isDuplicate = true;
+                    console.log(`[Webhook] Dedup: outgoing matches recent assistant msg (age=${msgAge}ms), skipping`);
+                    break;
+                  }
+                }
+              }
+            } catch (dedupErr: any) {
+              console.warn("[Webhook] Dedup check failed (proceeding):", dedupErr.message);
+            }
+
+            if (!isDuplicate) {
+              await supabaseForOutgoing.rpc("save_message", {
+                p_agent_id: agentIdParam,
+                p_conversation_id: convId,
+                p_role: "assistant",
+                p_content: `[Atendente: ${sender.name || "Humano"}] ${outgoingContent}`,
+                p_model: "human-agent",
+                p_tokens_input: 0,
+                p_tokens_output: 0,
+                p_latency_ms: 0,
+              });
+              console.log(`[Webhook] Saved human agent message to conv ${convId}`);
+            }
           }
         } catch (e: any) {
           console.warn("[Webhook] Failed to save human agent outgoing:", e.message);
