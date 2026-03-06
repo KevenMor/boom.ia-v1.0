@@ -8,7 +8,7 @@
  * System prompt completo da Ana Júlia — SDR PPL Motors.
  * Este prompt substitui o system_prompt do banco para este tenant.
  */
-export const SYSTEM_PROMPT = `# JULIANA | SDR PPL MOTORS (SOROCABA/SP) — v2.1.0
+export const SYSTEM_PROMPT = `# ANA JÚLIA | SDR PPL MOTORS (SOROCABA/SP) — v2.1.0
 
 ---
 
