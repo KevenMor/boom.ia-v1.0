@@ -204,6 +204,9 @@ export default function EditAgent() {
           business_hours: businessHours,
           business_hours_offline_message: offlineMessage || undefined,
           sandbox_password: sandboxPassword || undefined,
+          reminder_enabled: reminderEnabled,
+          reminder_minutes_before: reminderMinutesBefore,
+          reminder_template: reminderTemplate || undefined,
         },
       });
       toast.success("Agente atualizado");
