@@ -45,15 +45,8 @@ const Dashboard = React.forwardRef<HTMLDivElement>(function Dashboard(_props, re
         </div>
       </div>
 
-      {/* ROW 1: Banner + 4 KPI Stats */}
-      <div className="grid grid-cols-12 gap-4">
-        <div className="col-span-12 xl:col-span-4">
-          <BannerCard />
-        </div>
-        <div className="col-span-12 xl:col-span-8">
-          <UsageStatsRow events={recentEvents ?? []} dailySummary={dailySummary ?? []} loading={loadingEvents} />
-        </div>
-      </div>
+      {/* ROW 1: 4 KPI Stats */}
+      <UsageStatsRow events={recentEvents ?? []} dailySummary={dailySummary ?? []} loading={loadingEvents} />
 
       {/* ROW 2: Activity + Token Chart + Model Breakdown */}
       <div className="grid grid-cols-12 gap-4">
