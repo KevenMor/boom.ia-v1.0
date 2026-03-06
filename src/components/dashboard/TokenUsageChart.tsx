@@ -1,4 +1,4 @@
-import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   BarChart,
   Bar,
@@ -9,8 +9,9 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { Skeleton } from "@/components/ui/skeleton";
+import { BarChart3 } from "lucide-react";
 import type { UsageDailySummary } from "@/hooks/useUsageMetrics";
+import { useRef, useCallback } from "react";
 
 interface Props {
   data: UsageDailySummary[];
@@ -18,7 +19,14 @@ interface Props {
 }
 
 export function TokenUsageChart({ data, loading }: Props) {
-  // Aggregate by day across all agents/models
+  const cardRef = useRef<HTMLDivElement>(null);
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    const rect = cardRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    cardRef.current!.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
+    cardRef.current!.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
+  }, []);
+
   const byDay = new Map<string, { day: string; prompt: number; completion: number }>();
   for (const row of data) {
     const label = row.day?.slice(0, 10) ?? "?";
@@ -29,17 +37,22 @@ export function TokenUsageChart({ data, loading }: Props) {
   }
   const chartData = Array.from(byDay.values())
     .sort((a, b) => a.day.localeCompare(b.day))
-    .slice(-14) // last 14 days
+    .slice(-14)
     .map((d) => ({
       ...d,
       day: new Date(d.day).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }),
     }));
 
   return (
-    <Card className="rounded-2xl border-border bg-card p-6">
-      <div className="mb-5">
-        <h2 className="text-sm font-semibold">Consumo de Tokens</h2>
-        <p className="text-xs text-muted-foreground">prompt vs completion — últimos 14 dias</p>
+    <div ref={cardRef} onMouseMove={handleMouseMove} className="dash-card">
+      <div className="mb-5 flex items-center gap-2.5">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+          <BarChart3 className="h-4 w-4 text-primary" />
+        </div>
+        <div>
+          <h2 className="text-sm font-semibold">Consumo de Tokens</h2>
+          <p className="text-[11px] text-muted-foreground">prompt vs completion — últimos 14 dias</p>
+        </div>
       </div>
       {loading ? (
         <Skeleton className="h-[220px] w-full rounded-xl" />
@@ -76,6 +89,6 @@ export function TokenUsageChart({ data, loading }: Props) {
           </ResponsiveContainer>
         </div>
       )}
-    </Card>
+    </div>
   );
 }

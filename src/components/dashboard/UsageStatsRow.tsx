@@ -87,6 +87,7 @@ export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
         icon={Zap}
         iconBg="bg-primary/10"
         iconColor="text-primary"
+        accentColor="bg-primary"
       />
       <StatCard
         title="Latência Média"
@@ -96,6 +97,7 @@ export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
         icon={Clock}
         iconBg="bg-warning/10"
         iconColor="text-warning"
+        accentColor="bg-warning"
       />
       <StatCard
         title="Tool Calls Hoje"
@@ -105,6 +107,7 @@ export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
         icon={Wrench}
         iconBg="bg-success/10"
         iconColor="text-success"
+        accentColor="bg-success"
       />
       <StatCard
         title="Requisições Hoje"
@@ -114,6 +117,7 @@ export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
         icon={MessageSquare}
         iconBg="bg-cyan-500/10"
         iconColor="text-cyan-500"
+        accentColor="bg-cyan-500"
       />
     </div>
   );
