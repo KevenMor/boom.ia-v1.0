@@ -6,7 +6,7 @@ import { useUsageDailySummary, useRecentUsageEvents } from "@/hooks/useUsageMetr
 import { useTokensByProvider } from "@/hooks/useTokensByProvider";
 import { useTokensByAgent } from "@/hooks/useTokensByAgent";
 import { useTenantContext } from "@/contexts/TenantContext";
-import { BannerCard } from "@/components/dashboard/BannerCard";
+
 import { UsageStatsRow } from "@/components/dashboard/UsageStatsRow";
 import { TokenUsageChart } from "@/components/dashboard/TokenUsageChart";
 import { ModelBreakdown } from "@/components/dashboard/ModelBreakdown";
