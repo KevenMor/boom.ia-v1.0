@@ -462,12 +462,15 @@ export default function EditAgent() {
 
         {/* Chatwoot */}
         <div className="rounded-xl border border-border bg-card p-6 space-y-4">
-          <h3 className="text-base font-semibold text-foreground">Integração Chatwoot</h3>
+          <h3 className="text-base font-semibold text-foreground">Integração Chatwoot & WAHA</h3>
           <ChatwootConfigSection
             chatwootUrl={chatwootUrl} setChatwootUrl={setChatwootUrl}
             chatwootApiToken={chatwootApiToken} setChatwootApiToken={setChatwootApiToken}
             chatwootAccountId={chatwootAccountId} setChatwootAccountId={setChatwootAccountId}
             webhookUrl={`${WEBHOOK_BASE}?agent_id=${agent.id}`}
+            wahaUrl={wahaUrl} setWahaUrl={setWahaUrl}
+            wahaApiKey={wahaApiKey} setWahaApiKey={setWahaApiKey}
+            wahaSession={wahaSession} setWahaSession={setWahaSession}
           />
         </div>
 
