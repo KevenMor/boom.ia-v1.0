@@ -755,7 +755,8 @@ Deno.serve(async (req: Request) => {
 
     if (chatwoot.isChatwoot) {
       // ---- Guard: if a human agent is assigned, save message but AI must NOT respond ----
-      if (chatwoot.assigneeId) {
+      // In "test" mode, the assignee check was already done above, so skip this guard
+      if (chatwoot.assigneeId && agent.status !== "test") {
         console.log(`[Webhook] Human agent assigned (id=${chatwoot.assigneeId}, name=${chatwoot.assigneeName}), saving message but AI will NOT respond`);
 
         // Still save the incoming message to the conversation for live chat visibility
