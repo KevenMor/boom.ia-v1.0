@@ -111,6 +111,9 @@ export default function EditAgent() {
   const [chatwootUrl, setChatwootUrl] = useState("");
   const [chatwootApiToken, setChatwootApiToken] = useState("");
   const [chatwootAccountId, setChatwootAccountId] = useState("");
+  const [wahaUrl, setWahaUrl] = useState("");
+  const [wahaApiKey, setWahaApiKey] = useState("");
+  const [wahaSession, setWahaSession] = useState("default");
   const [followupEnabled, setFollowupEnabled] = useState(false);
   const [followupMaxAttempts, setFollowupMaxAttempts] = useState(3);
   const [followupIntervals, setFollowupIntervals] = useState<number[]>([10, 20, 30]);
