@@ -88,8 +88,9 @@ export default function Agents() {
           return (
             <div
               key={agent.id}
-              className="group relative flex flex-col rounded-2xl border border-border/50 bg-card transition-all duration-300 hover:border-border hover:shadow-[0_8px_30px_-12px_hsl(var(--foreground)/0.08)] animate-fade-in overflow-hidden"
+              className="group relative flex flex-col rounded-2xl border border-border/50 bg-card transition-all duration-300 hover:border-border hover:shadow-[0_8px_30px_-12px_hsl(var(--foreground)/0.08)] animate-fade-in overflow-hidden cursor-pointer"
               style={{ animationDelay: `${i * 60}ms` }}
+              onClick={() => navigate(`/agents/${agent.id}/edit`)}
             >
               {/* Top section — Avatar + Info */}
               <div className="flex items-start gap-4 p-5 pb-3">
@@ -182,7 +183,7 @@ export default function Agents() {
               <div className="mt-auto border-t border-border/40 flex">
                 <button
                   className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-                  onClick={() => navigate(`/agents/${agent.id}/edit`)}
+                  onClick={(e) => { e.stopPropagation(); navigate(`/agents/${agent.id}/edit`); }}
                 >
                   <Pencil className="h-3.5 w-3.5" />
                   Editar
@@ -190,7 +191,7 @@ export default function Agents() {
                 <span className="w-px bg-border/40" />
                 <button
                   className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-primary transition-colors hover:bg-primary/5"
-                  onClick={() => navigate(`/agents/${agent.id}/sandbox`)}
+                  onClick={(e) => { e.stopPropagation(); navigate(`/agents/${agent.id}/sandbox`); }}
                 >
                   <MessageSquare className="h-3.5 w-3.5" />
                   Testar
