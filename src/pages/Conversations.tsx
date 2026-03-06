@@ -183,6 +183,32 @@ export default function Conversations() {
     }
   };
 
+  const handleNewContact = async () => {
+    if (!newContactPhone.trim() || !newContactMessage.trim() || !selectedAgentId) return;
+    setSendingNewContact(true);
+    try {
+      const { data, error } = await cloudClient.functions.invoke("new-contact", {
+        body: {
+          agent_id: selectedAgentId,
+          phone: newContactPhone.trim(),
+          name: newContactName.trim() || undefined,
+          message: newContactMessage.trim(),
+        },
+      });
+      if (error) throw error;
+      toast.success("Mensagem enviada para " + (newContactName.trim() || newContactPhone.trim()));
+      setNewContactOpen(false);
+      setNewContactPhone("");
+      setNewContactName("");
+      setNewContactMessage("");
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    } catch (e: any) {
+      toast.error("Erro ao enviar: " + (e?.message || "erro desconhecido"));
+    } finally {
+      setSendingNewContact(false);
+    }
+  };
+
   const displayName = (conv: any) => {
     if (conv?.contact_name) return conv.contact_name;
     const ext = conv?.external_user_id;
