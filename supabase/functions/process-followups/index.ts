@@ -382,9 +382,9 @@ Deno.serve(async (req: Request) => {
             p_role: "assistant",
             p_content: followUpMsg,
             p_model: "follow-up",
-            p_tokens_in: 0,
-            p_tokens_out: 0,
-            p_latency: 0,
+            p_tokens_input: 0,
+            p_tokens_output: 0,
+            p_latency_ms: 0,
           });
         } catch (e) {
           console.warn("[FollowUp] Could not save to history:", e);
