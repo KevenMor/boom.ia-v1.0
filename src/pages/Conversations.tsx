@@ -365,7 +365,7 @@ export default function Conversations() {
           {/* ─── Left: Contact List (CRM style) ─── */}
           <div
             className={cn(
-              "w-full flex-col border-r border-border bg-card md:w-[340px] lg:w-[380px] md:shrink-0",
+              "w-full flex-col border-r border-border bg-card md:w-[340px] lg:w-[380px] md:shrink-0 overflow-hidden",
               selectedContactKey ? "hidden md:flex" : "flex"
             )}
           >
