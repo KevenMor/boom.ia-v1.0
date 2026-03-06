@@ -24,6 +24,7 @@ import { getModelsForProvider } from "@/lib/provider-models";
 import { ChatwootConfigSection } from "@/components/agents/ChatwootConfigSection";
 import { FollowUpConfigSection } from "@/components/agents/FollowUpConfigSection";
 import { AgentAvatarUpload } from "@/components/agents/AgentAvatarUpload";
+import { ReminderConfigSection } from "@/components/agents/ReminderConfigSection";
 import { BusinessHoursSection, DEFAULT_BUSINESS_HOURS, type BusinessHours } from "@/components/agents/BusinessHoursSection";
 import type { Agent } from "@/types/database";
 
