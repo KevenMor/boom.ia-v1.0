@@ -594,8 +594,8 @@ Deno.serve(async (req: Request) => {
               p_role: "assistant",
               p_content: `[Atendente: ${sender.name || "Humano"}] ${outgoingContent}`,
               p_model: "human-agent",
-              p_tokens_in: 0,
-              p_tokens_out: 0,
+              p_tokens_input: 0,
+              p_tokens_output: 0,
               p_latency_ms: 0,
             });
             console.log(`[Webhook] Saved human agent message to conv ${convId}`);
@@ -736,8 +736,8 @@ Deno.serve(async (req: Request) => {
                 p_role: "user",
                 p_content: chatwoot.message,
                 p_model: null,
-                p_tokens_in: 0,
-                p_tokens_out: 0,
+                p_tokens_input: 0,
+                p_tokens_output: 0,
                 p_latency_ms: 0,
               });
               console.log(`[Webhook] Saved client message (human-assigned) to conv ${resolvedConvId}`);
@@ -909,8 +909,8 @@ Deno.serve(async (req: Request) => {
               p_role: "user",
               p_content: userMessage,
               p_model: null,
-              p_tokens_in: 0,
-              p_tokens_out: 0,
+              p_tokens_input: 0,
+              p_tokens_output: 0,
               p_latency_ms: 0,
             });
             console.warn(`[Webhook] Fallback saved incoming message to conv ${earlyConvId}`);

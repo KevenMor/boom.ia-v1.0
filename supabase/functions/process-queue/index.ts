@@ -452,8 +452,8 @@ Deno.serve(async (req: Request) => {
             p_role: "user",
             p_content: finalMessage,
             p_model: null,
-            p_tokens_in: 0,
-            p_tokens_out: 0,
+            p_tokens_input: 0,
+            p_tokens_output: 0,
             p_latency_ms: 0,
           });
           console.warn(`[ProcessQueue] Fallback: saved user message to conv ${convId} despite chat-agent failure`);
