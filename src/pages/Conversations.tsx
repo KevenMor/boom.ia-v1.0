@@ -311,7 +311,7 @@ export default function Conversations() {
   };
 
   return (
-    <div className="h-[calc(100vh-4rem)] overflow-hidden">
+    <div className="h-full overflow-hidden">
       {!selectedAgentId ? (
         /* ─── Agent selection ─── */
         <div className="space-y-6 p-6">
@@ -365,7 +365,7 @@ export default function Conversations() {
           {/* ─── Left: Contact List (CRM style) ─── */}
           <div
             className={cn(
-              "w-full flex-col border-r border-border bg-card md:w-[340px] lg:w-[380px] md:shrink-0",
+              "w-full flex-col border-r border-border bg-card md:w-[340px] lg:w-[380px] md:shrink-0 overflow-hidden",
               selectedContactKey ? "hidden md:flex" : "flex"
             )}
           >
@@ -588,7 +588,7 @@ export default function Conversations() {
           {/* ─── Right: Chat Panel ─── */}
           <div
             className={cn(
-              "flex-1 flex-col min-w-0 bg-background",
+              "flex-1 flex-col min-w-0 bg-background overflow-hidden",
               !selectedContactKey ? "hidden md:flex" : "flex"
             )}
           >
