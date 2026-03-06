@@ -123,12 +123,14 @@ export default function AgentSandbox() {
   const loadConversations = useCallback(async () => {
     if (!agentId) return;
     try {
-      const { data, error } = await nexusDb.rpc("list_agent_conversations", {
-        p_agent_id: agentId,
-        p_limit: 50,
+      const { data, error } = await cloudClient.functions.invoke("conversation-history", {
+        body: { action: "list", agent_id: agentId, limit: 50 },
       });
-      if (!error && data) setConversations(data as Conversation[]);
-    } catch {}
+      if (error) throw error;
+      setConversations((((data as any)?.data ?? []) as Conversation[]));
+    } catch (e) {
+      console.error("[Sandbox] erro ao carregar conversas:", e);
+    }
   }, [agentId]);
 
   useEffect(() => {
@@ -162,13 +164,13 @@ export default function AgentSandbox() {
     if (!agentId) return;
     setLoadingHistory(true);
     try {
-      const { data, error } = await nexusDb.rpc("load_conversation_messages", {
-        p_agent_id: agentId,
-        p_conversation_id: convId,
+      const { data, error } = await cloudClient.functions.invoke("conversation-history", {
+        body: { action: "messages", agent_id: agentId, conversation_id: convId },
       });
       if (error) throw error;
+      const rows = (((data as any)?.data ?? []) as any[]);
       setMessages(
-        (data as any[])
+        rows
           .map((m) => ({
             role: m.role as "user" | "assistant",
             content: m.role === "assistant" ? sanitizeContent(m.content) : m.content,
