@@ -298,10 +298,11 @@ Deno.serve(async (req: Request) => {
 
     // ---------- Conversation management ----------
     let convId = conversation_id;
+    console.log(`[ProcessQueue] Conv mgmt: incoming convId=${convId}, agent=${agent_id}, extUser=${external_user_id}, channel=${channel}, cwConvId=${chatwoot_conversation_id}, cwContactId=${chatwoot_contact_id}`);
 
     if (!convId) {
       try {
-        const { data } = await supabase.rpc("find_or_create_webhook_conversation", {
+        const { data, error: rpcErr } = await supabase.rpc("find_or_create_webhook_conversation", {
           p_agent_id: agent_id,
           p_channel: channel,
           p_external_user_id: external_user_id,
@@ -311,6 +312,7 @@ Deno.serve(async (req: Request) => {
           p_contact_avatar_url: contact_avatar_url,
         });
         convId = data;
+        console.log(`[ProcessQueue] find_or_create result: convId=${convId}, error=${rpcErr?.message || "none"}`);
       } catch (e: any) {
         console.warn("[ProcessQueue] find_or_create failed:", e.message);
       }
