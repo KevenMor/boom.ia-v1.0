@@ -1,8 +1,8 @@
-import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DollarSign, TrendingUp } from "lucide-react";
+import { DollarSign, TrendingUp, Flame } from "lucide-react";
 import type { UsageEvent } from "@/hooks/useUsageMetrics";
 import { estimateCostUsd } from "@/hooks/useTokensByAgent";
+import { useRef, useCallback } from "react";
 
 interface Props {
   events: UsageEvent[];
@@ -16,6 +16,14 @@ function fmtBrl(usd: number): string {
 }
 
 export function CostEstimationCard({ events, loading }: Props) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    const rect = cardRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    cardRef.current!.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
+    cardRef.current!.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
+  }, []);
+
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const getLocalDate = (iso: string) => {
@@ -42,50 +50,54 @@ export function CostEstimationCard({ events, loading }: Props) {
     totalCostUsd += estimateCostUsd(e.prompt_tokens || 0, e.completion_tokens || 0, e.model || "");
   }
 
-  // Project monthly cost based on today's average
   const projectedMonthly = todayCostUsd * 30;
 
   return (
-    <Card className="rounded-2xl border-border bg-card p-6">
-      <div className="flex items-center gap-2 mb-4">
-        <DollarSign className="h-4 w-4 text-muted-foreground" />
+    <div ref={cardRef} onMouseMove={handleMouseMove} className="dash-card">
+      <div className="flex items-center gap-2.5 mb-5">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10">
+          <DollarSign className="h-4 w-4 text-emerald-500" />
+        </div>
         <div>
           <h2 className="text-sm font-semibold">Custo Estimado</h2>
-          <p className="text-xs text-muted-foreground">baseado em precos oficiais por modelo</p>
+          <p className="text-[11px] text-muted-foreground">preços oficiais por modelo</p>
         </div>
       </div>
 
       {loading ? (
-        <Skeleton className="h-24 w-full rounded-lg" />
+        <Skeleton className="h-32 w-full rounded-xl" />
       ) : (
         <div className="space-y-4">
-          {/* Today */}
-          <div className="rounded-lg border border-border bg-muted/30 p-3">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Hoje</p>
-            <p className="text-lg font-bold">{fmtBrl(todayCostUsd)}</p>
-            <div className="flex gap-3 mt-1 text-[10px] text-muted-foreground">
-              <span>Entrada: {(todayPrompt / 1000).toFixed(1)}k tokens</span>
-              <span>Saida: {(todayCompletion / 1000).toFixed(1)}k tokens</span>
+          {/* Today — hero number */}
+          <div className="relative rounded-xl bg-gradient-to-br from-emerald-500/10 via-transparent to-primary/5 border border-emerald-500/20 p-4">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Flame className="h-3 w-3 text-emerald-500" />
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Hoje</p>
+            </div>
+            <p className="metric-value text-2xl font-bold text-foreground">{fmtBrl(todayCostUsd)}</p>
+            <div className="flex gap-3 mt-2 text-[10px] text-muted-foreground font-mono">
+              <span>↑ {(todayPrompt / 1000).toFixed(1)}k in</span>
+              <span>↓ {(todayCompletion / 1000).toFixed(1)}k out</span>
             </div>
           </div>
 
           {/* Projected */}
-          <div className="rounded-lg border border-border bg-muted/30 p-3">
-            <div className="flex items-center gap-1 mb-1">
+          <div className="rounded-xl border border-border bg-muted/20 p-4">
+            <div className="flex items-center gap-1.5 mb-1">
               <TrendingUp className="h-3 w-3 text-muted-foreground" />
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Projecao mensal</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Projeção mensal</p>
             </div>
-            <p className="text-lg font-bold">{fmtBrl(projectedMonthly)}</p>
-            <p className="text-[10px] text-muted-foreground">baseado no consumo de hoje</p>
+            <p className="metric-value text-lg font-bold">{fmtBrl(projectedMonthly)}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">baseado no consumo de hoje</p>
           </div>
 
           {/* Period total */}
-          <div className="flex items-center justify-between pt-2 border-t border-border">
-            <span className="text-xs text-muted-foreground">Total no periodo</span>
-            <span className="text-xs font-bold">{fmtBrl(totalCostUsd)}</span>
+          <div className="flex items-center justify-between pt-3 border-t border-border">
+            <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Total no período</span>
+            <span className="metric-value text-sm font-bold">{fmtBrl(totalCostUsd)}</span>
           </div>
         </div>
       )}
-    </Card>
+    </div>
   );
 }

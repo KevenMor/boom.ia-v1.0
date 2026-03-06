@@ -1,4 +1,4 @@
-import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   LineChart,
   Line,
@@ -9,8 +9,9 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Timer } from "lucide-react";
 import type { UsageDailySummary } from "@/hooks/useUsageMetrics";
+import { useRef, useCallback } from "react";
 
 interface Props {
   data: UsageDailySummary[];
@@ -18,10 +19,17 @@ interface Props {
 }
 
 export function LatencyChart({ data, loading }: Props) {
-  // Aggregate by day — weighted average latency and p95
+  const cardRef = useRef<HTMLDivElement>(null);
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    const rect = cardRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    cardRef.current!.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
+    cardRef.current!.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
+  }, []);
+
   const byDay = new Map<string, { day: string; totalLatency: number; totalReqs: number; maxP95: number }>();
   for (const row of data) {
-    if (row.phase !== "conversational") continue; // latency only on conversational phase
+    if (row.phase !== "conversational") continue;
     const label = row.day?.slice(0, 10) ?? "?";
     const existing = byDay.get(label) || { day: label, totalLatency: 0, totalReqs: 0, maxP95: 0 };
     existing.totalLatency += (row.avg_latency_ms || 0) * (row.total_requests || 0);
@@ -40,10 +48,15 @@ export function LatencyChart({ data, loading }: Props) {
     }));
 
   return (
-    <Card className="rounded-2xl border-border bg-card p-6">
-      <div className="mb-5">
-        <h2 className="text-sm font-semibold">Latência</h2>
-        <p className="text-xs text-muted-foreground">média vs P95 — últimos 14 dias</p>
+    <div ref={cardRef} onMouseMove={handleMouseMove} className="dash-card">
+      <div className="mb-5 flex items-center gap-2.5">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-warning/10">
+          <Timer className="h-4 w-4 text-warning" />
+        </div>
+        <div>
+          <h2 className="text-sm font-semibold">Latência</h2>
+          <p className="text-[11px] text-muted-foreground">média vs P95 — últimos 14 dias</p>
+        </div>
       </div>
       {loading ? (
         <Skeleton className="h-[200px] w-full rounded-xl" />
@@ -75,6 +88,6 @@ export function LatencyChart({ data, loading }: Props) {
           </ResponsiveContainer>
         </div>
       )}
-    </Card>
+    </div>
   );
 }
