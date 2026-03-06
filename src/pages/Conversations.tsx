@@ -305,52 +305,78 @@ export default function Conversations() {
     return null;
   };
 
+  const selectedAgent = agents?.find((a) => a.id === selectedAgentId);
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center justify-between">
           <div className="space-y-1">
             <h1 className="text-2xl font-bold tracking-tight text-foreground">Chat ao Vivo</h1>
             <p className="text-sm text-muted-foreground">Mensagens e conversas dos agentes.</p>
           </div>
-          <div className="w-56">
-            <Select
-              value={selectedAgentId ?? ""}
-              onValueChange={(v) => {
-                setSelectedAgentId(v);
-                setSelectedContactKey(null);
-              }}
+          {selectedAgentId && selectedAgent && (
+            <button
+              onClick={() => { setSelectedAgentId(null); setSelectedContactKey(null); }}
+              className="flex items-center gap-2 rounded-xl border border-border/50 bg-card px-3 py-2 text-sm transition-colors hover:bg-muted"
             >
-              <SelectTrigger className="h-9 bg-card text-sm">
-                <SelectValue placeholder="Selecione um agente" />
-              </SelectTrigger>
-              <SelectContent>
-                {agentsLoading && <SelectItem value="_loading" disabled>Carregando...</SelectItem>}
-                {agents?.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    <span className="flex items-center gap-2">
-                      <Bot className="h-3.5 w-3.5" />
-                      {a.name}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+              {selectedAgent.avatar_url ? (
+                <img src={selectedAgent.avatar_url} alt="" className="h-6 w-6 rounded-lg object-cover" />
+              ) : (
+                <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10">
+                  <Bot className="h-3.5 w-3.5 text-primary" />
+                </div>
+              )}
+              <span className="font-medium">{selectedAgent.name}</span>
+              <ArrowLeft className="h-3.5 w-3.5 text-muted-foreground rotate-180" />
+            </button>
+          )}
         </div>
       </div>
 
       {!selectedAgentId ? (
-        <div className="flex h-[calc(100vh-14rem)] items-center justify-center rounded-xl border bg-card text-card-foreground shadow-sm">
-          <div className="text-center space-y-3">
-            <div className="h-16 w-16 rounded-2xl bg-muted/50 flex items-center justify-center mx-auto">
-              <MessageSquare className="h-7 w-7 text-muted-foreground/40" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Selecione um agente para ver as conversas</p>
-            </div>
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">Selecione um agente para ver as conversas:</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {agentsLoading && Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-24 rounded-2xl bg-muted/50 animate-pulse" />
+            ))}
+            {agents?.map((agent) => {
+              const isActive = agent.status === "active";
+              return (
+                <button
+                  key={agent.id}
+                  onClick={() => { setSelectedAgentId(agent.id); setSelectedContactKey(null); }}
+                  className="group flex items-center gap-3 rounded-2xl border border-border/50 bg-card p-4 text-left transition-all duration-200 hover:border-primary/30 hover:shadow-[0_4px_20px_-6px_hsl(var(--primary)/0.12)] hover:-translate-y-0.5"
+                >
+                  <div className="relative shrink-0">
+                    {agent.avatar_url ? (
+                      <img src={agent.avatar_url} alt={agent.name} className="h-11 w-11 rounded-xl object-cover ring-2 ring-border/30" />
+                    ) : (
+                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10">
+                        <Bot className="h-5 w-5 text-primary" />
+                      </div>
+                    )}
+                    <span className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-card ${isActive ? "bg-success" : "bg-muted-foreground/40"}`} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-foreground truncate">{agent.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{(agent.tenants as any)?.name ?? "Sem tenant"}</p>
+                  </div>
+                  <MessageSquare className="h-4 w-4 text-muted-foreground/40 group-hover:text-primary transition-colors shrink-0" />
+                </button>
+              );
+            })}
           </div>
+          {!agentsLoading && (!agents || agents.length === 0) && (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="h-16 w-16 rounded-2xl bg-muted/50 flex items-center justify-center mx-auto mb-4">
+                <Bot className="h-8 w-8 text-muted-foreground/40" />
+              </div>
+              <p className="text-sm text-muted-foreground">Nenhum agente configurado</p>
+            </div>
+          )}
         </div>
       ) : (
         <div className="rounded-xl border bg-card text-card-foreground shadow-sm flex h-[calc(100vh-14rem)] overflow-hidden">
