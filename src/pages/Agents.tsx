@@ -1,10 +1,9 @@
-import { Bot, Plus, Search, MoreHorizontal, Pencil, Trash2, MessageSquare, Copy, Link2 } from "lucide-react";
+import { Bot, Plus, Search, MoreHorizontal, Pencil, Trash2, MessageSquare, Copy, Link2, ExternalLink, Globe } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -36,148 +35,182 @@ export default function Agents() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Agentes</h2>
+          <h2 className="text-lg font-semibold text-foreground">Agentes</h2>
           <p className="text-sm text-muted-foreground">{agents?.length ?? 0} agentes configurados</p>
         </div>
-        <Button className="gap-2" onClick={() => setCreateOpen(true)}>
+        <Button className="gap-2 rounded-xl" onClick={() => setCreateOpen(true)}>
           <Plus className="h-4 w-4" />
           Novo Agente
         </Button>
       </div>
 
+      {/* Search */}
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input placeholder="Buscar agente ou tenant..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-9 bg-background pl-9" />
+        <Input
+          placeholder="Buscar agente ou tenant..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="h-10 rounded-xl bg-card border-border/60 pl-9"
+        />
       </div>
 
       {error && <p className="text-sm text-destructive">Erro ao carregar agentes: {error.message}</p>}
 
       {isLoading && (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-lg" />)}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-64 w-full rounded-2xl" />)}
         </div>
       )}
 
       {!isLoading && filtered.length === 0 && (
-        <p className="py-8 text-center text-sm text-muted-foreground">Nenhum agente encontrado</p>
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted mb-4">
+            <Bot className="h-8 w-8 text-muted-foreground" />
+          </div>
+          <p className="text-sm font-medium text-foreground mb-1">Nenhum agente encontrado</p>
+          <p className="text-xs text-muted-foreground">Crie seu primeiro agente para começar</p>
+        </div>
       )}
 
+      {/* Agent Grid */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {filtered.map((agent, i) => (
-          <Card
-            key={agent.id}
-            className="relative overflow-hidden rounded-xl border-border bg-card p-5 transition-all duration-200 hover:shadow-lg hover:shadow-primary/5 animate-fade-in"
-            style={{ animationDelay: `${i * 50}ms` }}
-          >
-            {/* Logo / Icon */}
-            <div className="flex items-center justify-center rounded-lg bg-gradient-to-br from-card to-muted/40 p-5">
-              {agent.avatar_url ? (
-                <img src={agent.avatar_url} alt={agent.name} className="max-h-14 w-auto object-contain drop-shadow-sm" />
-              ) : (
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
-                  <Bot className="h-7 w-7 text-primary" />
+        {filtered.map((agent, i) => {
+          const isActive = agent.status === "active";
+          const tenantName = (agent.tenants as any)?.name ?? "Sem tenant";
+          const providerName = (agent.providers as any)?.name;
+          const webhookUrl = `${WEBHOOK_BASE}?agent_id=${agent.id}`;
+          const demoUrl = `${window.location.origin}/demo/${agent.id}`;
+
+          return (
+            <div
+              key={agent.id}
+              className="group relative flex flex-col rounded-2xl border border-border/50 bg-card transition-all duration-300 hover:border-border hover:shadow-[0_8px_30px_-12px_hsl(var(--foreground)/0.08)] animate-fade-in overflow-hidden"
+              style={{ animationDelay: `${i * 60}ms` }}
+            >
+              {/* Top section — Avatar + Info */}
+              <div className="flex items-start gap-4 p-5 pb-3">
+                {/* Avatar */}
+                <div className="relative shrink-0">
+                  {agent.avatar_url ? (
+                    <img
+                      src={agent.avatar_url}
+                      alt={agent.name}
+                      className="h-12 w-12 rounded-xl object-cover ring-2 ring-border/30"
+                    />
+                  ) : (
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+                      <Bot className="h-6 w-6 text-primary" />
+                    </div>
+                  )}
+                  {/* Status dot */}
+                  <span
+                    className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-card ${isActive ? "bg-success" : "bg-muted-foreground/40"}`}
+                  />
                 </div>
-              )}
-            </div>
 
-            {/* Content */}
-            <div className="mt-4 text-center">
-              <h3 className="text-base font-semibold text-foreground">{agent.name}</h3>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {(agent.tenants as any)?.name ?? "Sem tenant"}
-              </p>
-              {agent.description && (
-                <p className="mt-2 text-sm text-muted-foreground line-clamp-2">{agent.description}</p>
-              )}
-            </div>
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-semibold text-foreground truncate">{agent.name}</h3>
+                  <p className="text-xs text-muted-foreground truncate mt-0.5">{tenantName}</p>
+                  {agent.description && (
+                    <p className="text-xs text-muted-foreground/80 mt-1.5 line-clamp-2 leading-relaxed">
+                      {agent.description}
+                    </p>
+                  )}
+                </div>
 
-            {/* Tags */}
-            <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
-              <Badge
-                variant="outline"
-                className={`text-[10px] ${agent.status === "active" ? "border-success/30 text-success" : "border-muted-foreground/30 text-muted-foreground"}`}
-              >
-                {agent.status === "active" ? "Ativo" : "Pausado"}
-              </Badge>
-              {agent.model && <Badge variant="secondary" className="text-[10px]">{agent.model}</Badge>}
-              {(agent.providers as any)?.name && <Badge variant="secondary" className="text-[10px]">{(agent.providers as any).name}</Badge>}
-            </div>
+                {/* Menu */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="shrink-0 rounded-lg p-1.5 text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground opacity-0 group-hover:opacity-100">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="rounded-xl">
+                    <DropdownMenuItem onClick={() => navigate(`/agents/${agent.id}/edit`)}>
+                      <Pencil className="mr-2 h-3.5 w-3.5" /> Editar
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem className="text-destructive" onClick={() => setDeleteAgent(agent)}>
+                      <Trash2 className="mr-2 h-3.5 w-3.5" /> Remover
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
 
-            {/* Webhook URL */}
-            <div className="mt-4">
-              <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Webhook</p>
-              <div className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-2.5 py-1.5">
-                <code className="flex-1 truncate text-[11px] text-muted-foreground select-all">
-                  {`${WEBHOOK_BASE}?agent_id=${agent.id}`}
-                </code>
+              {/* Tags */}
+              <div className="flex items-center gap-1.5 px-5 pb-3 flex-wrap">
+                <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-medium ${isActive ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-success" : "bg-muted-foreground/50"}`} />
+                  {isActive ? "Ativo" : "Pausado"}
+                </span>
+                {agent.model && (
+                  <span className="inline-flex items-center rounded-md bg-primary/8 px-2 py-0.5 text-[10px] font-medium text-primary">
+                    {agent.model}
+                  </span>
+                )}
+                {providerName && (
+                  <span className="inline-flex items-center rounded-md bg-secondary/10 px-2 py-0.5 text-[10px] font-medium text-secondary">
+                    {providerName}
+                  </span>
+                )}
+              </div>
+
+              {/* Webhook */}
+              <div className="mx-5 mb-3 rounded-xl bg-muted/40 border border-border/40 px-3 py-2 flex items-center gap-2">
+                <Globe className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                <span className="flex-1 truncate text-[11px] text-muted-foreground select-all">
+                  {webhookUrl}
+                </span>
                 <button
-                  className="shrink-0 rounded p-1 text-muted-foreground/50 transition-colors hover:bg-muted hover:text-foreground"
+                  className="shrink-0 rounded-md p-1 text-muted-foreground/50 transition-colors hover:bg-background hover:text-foreground"
                   onClick={(e) => {
                     e.stopPropagation();
-                    navigator.clipboard.writeText(`${WEBHOOK_BASE}?agent_id=${agent.id}`);
-                    toast.success("URL do webhook copiada!");
+                    navigator.clipboard.writeText(webhookUrl);
+                    toast.success("Webhook copiado!");
                   }}
                 >
-                  <Copy className="h-3.5 w-3.5" />
+                  <Copy className="h-3 w-3" />
+                </button>
+              </div>
+
+              {/* Actions — bottom bar */}
+              <div className="mt-auto border-t border-border/40 flex">
+                <button
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                  onClick={() => navigate(`/agents/${agent.id}/edit`)}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  Editar
+                </button>
+                <span className="w-px bg-border/40" />
+                <button
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-primary transition-colors hover:bg-primary/5"
+                  onClick={() => navigate(`/agents/${agent.id}/sandbox`)}
+                >
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  Testar
+                </button>
+                <span className="w-px bg-border/40" />
+                <button
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigator.clipboard.writeText(demoUrl);
+                    toast.success("Link demo copiado!");
+                  }}
+                >
+                  <Link2 className="h-3.5 w-3.5" />
+                  Demo
                 </button>
               </div>
             </div>
-            <div className="mt-4 flex items-center gap-2">
-              <Button
-                variant="outline"
-                className="flex-1 text-sm"
-                onClick={() => navigate(`/agents/${agent.id}/edit`)}
-              >
-                <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                Editar
-              </Button>
-              <Button
-                className="flex-1 text-sm"
-                onClick={() => navigate(`/agents/${agent.id}/sandbox`)}
-              >
-                <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
-                Testar
-              </Button>
-            </div>
-            {/* Demo link */}
-            <div className="mt-2">
-              <button
-                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-muted/30 px-2.5 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const url = `${window.location.origin}/demo/${agent.id}`;
-                  navigator.clipboard.writeText(url);
-                  toast.success("Link do demo copiado!");
-                }}
-              >
-                <Link2 className="h-3.5 w-3.5" />
-                Copiar Link Demo
-              </button>
-            </div>
-
-            {/* More menu - top right */}
-            <div className="absolute right-3 top-3">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => navigate(`/agents/${agent.id}/edit`)}>
-                    <Pencil className="mr-2 h-3 w-3" />Editar
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem className="text-destructive" onClick={() => setDeleteAgent(agent)}>
-                    <Trash2 className="mr-2 h-3 w-3" />Remover
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </Card>
-        ))}
+          );
+        })}
       </div>
 
       <CreateAgentDialog open={createOpen} onOpenChange={setCreateOpen} />
