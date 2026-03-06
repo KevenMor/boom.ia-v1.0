@@ -184,6 +184,8 @@ export default function EditAgent() {
           dispatcher_provider_id: dispatcherProviderId || undefined,
           chatwoot_url: chatwootUrl || undefined, chatwoot_api_token: chatwootApiToken || undefined,
           chatwoot_account_id: chatwootAccountId || undefined,
+          waha_url: wahaUrl || undefined, waha_api_key: wahaApiKey || undefined,
+          waha_session: wahaSession || "default",
           followup_enabled: followupEnabled,
           followup_max_attempts: followupMaxAttempts,
           followup_intervals: followupIntervals,
