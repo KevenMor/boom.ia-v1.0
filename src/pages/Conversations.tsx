@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { MessageSquare, Bot, ArrowLeft, Search, Send, Paperclip, Smile, CheckCheck, Bug, Trash2, Mic, Phone, Hash, Clock, Users } from "lucide-react";
+import { MessageSquare, Bot, ArrowLeft, Search, Send, Paperclip, Smile, CheckCheck, Bug, Trash2, Mic, Phone, Hash, Clock, Users, UserPlus } from "lucide-react";
 import { DebugBlock } from "@/components/sandbox/DebugBlock";
 import { cloudClient } from "@/integrations/supabase/cloud-client";
 import { useQueryClient } from "@tanstack/react-query";
