@@ -209,6 +209,7 @@ export default function EditAgent() {
           reminder_enabled: reminderEnabled,
           reminder_minutes_before: reminderMinutesBefore,
           reminder_template: reminderTemplate || undefined,
+          test_assignee_id: testAssigneeId ? Number(testAssigneeId) : undefined,
         },
       });
       toast.success("Agente atualizado");

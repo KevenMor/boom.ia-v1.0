@@ -327,8 +327,9 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
             <Select defaultValue={agent?.status} onValueChange={(v) => setValue("status", v)}>
               <SelectTrigger className="h-11 rounded-lg bg-background border-border"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="active">Ativo</SelectItem>
-                <SelectItem value="paused">Pausado</SelectItem>
+                <SelectItem value="active">🟢 Ativo</SelectItem>
+                <SelectItem value="test">🧪 Teste</SelectItem>
+                <SelectItem value="inactive">⛔ Inativo</SelectItem>
               </SelectContent>
             </Select>
           </div>

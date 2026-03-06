@@ -147,9 +147,9 @@ export default function Agents() {
 
               {/* Tags */}
               <div className="flex items-center gap-1.5 px-5 pb-3 flex-wrap">
-                <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-medium ${isActive ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-success" : "bg-muted-foreground/50"}`} />
-                  {isActive ? "Ativo" : "Pausado"}
+                <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-medium ${isActive ? "bg-success/10 text-success" : isTest ? "bg-yellow-500/10 text-yellow-600" : "bg-muted text-muted-foreground"}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-success" : isTest ? "bg-yellow-500" : "bg-muted-foreground/50"}`} />
+                  {isActive ? "Ativo" : isTest ? "Teste" : "Inativo"}
                 </span>
                 {agent.model && (
                   <span className="inline-flex items-center rounded-md bg-primary/8 px-2 py-0.5 text-[10px] font-medium text-primary">
