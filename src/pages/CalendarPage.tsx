@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Plus, Trash2, Clock, CalendarDays, Bell, Phone } from "lucide-react";
+import { useTenantContext } from "@/contexts/TenantContext";
 import { useTenants } from "@/hooks/useTenants";
 import { useCalendars, useCreateCalendar } from "@/hooks/useCalendars";
 import { useCalendarEvents, useCreateCalendarEvent, useUpdateCalendarEvent, useDeleteCalendarEvent } from "@/hooks/useCalendarEvents";
@@ -69,10 +70,12 @@ function displayPhoneFromReminder(raw: string | null | undefined): string {
 
 export default function CalendarPage() {
   const calendarRef = useRef<FullCalendar>(null);
+  const { selectedTenantId: globalTenantId } = useTenantContext();
 
-  // Tenant & calendar selection
+  // Tenant & calendar selection — use global tenant when set
   const { data: tenants } = useTenants();
-  const [selectedTenantId, setSelectedTenantId] = useState<string>("");
+  const [localTenantId, setLocalTenantId] = useState<string>("");
+  const selectedTenantId = globalTenantId || localTenantId;
   const { data: calendars, isLoading: calendarsLoading } = useCalendars(selectedTenantId || undefined);
   const [selectedCalendarId, setSelectedCalendarId] = useState<string>("all");
 
@@ -379,17 +382,25 @@ export default function CalendarPage() {
         {/* Tenant & Calendar filters */}
         <Card>
           <CardContent className="flex flex-wrap items-end gap-4 py-4">
-            <div className="space-y-1 min-w-[200px]">
-              <Label className="text-xs">Tenant</Label>
-              <Select value={selectedTenantId} onValueChange={(v) => { setSelectedTenantId(v); setSelectedCalendarId("all"); }}>
-                <SelectTrigger><SelectValue placeholder="Selecione o tenant" /></SelectTrigger>
-                <SelectContent>
-                  {tenants?.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {!globalTenantId && (
+              <div className="space-y-1 min-w-[200px]">
+                <Label className="text-xs">Tenant</Label>
+                <Select value={localTenantId} onValueChange={(v) => { setLocalTenantId(v); setSelectedCalendarId("all"); }}>
+                  <SelectTrigger><SelectValue placeholder="Selecione o tenant" /></SelectTrigger>
+                  <SelectContent>
+                    {tenants?.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {globalTenantId && (
+              <div className="space-y-1 min-w-[200px]">
+                <Label className="text-xs">Tenant</Label>
+                <p className="text-sm font-medium py-2">{tenants?.find(t => t.id === globalTenantId)?.name || "—"}</p>
+              </div>
+            )}
             <div className="space-y-1 min-w-[200px]">
               <Label className="text-xs">Agenda</Label>
               <Select value={selectedCalendarId} onValueChange={setSelectedCalendarId} disabled={!selectedTenantId}>
