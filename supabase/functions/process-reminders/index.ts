@@ -45,7 +45,7 @@ async function sendWahaMessage(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(wahaApiKey ? { Authorization: `Bearer ${wahaApiKey}` } : {}),
+        ...(wahaApiKey ? { "X-Api-Key": wahaApiKey } : {}),
       },
       body: JSON.stringify({ session: wahaSession, chatId, text: content }),
     });
