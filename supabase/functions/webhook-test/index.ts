@@ -795,7 +795,7 @@ Deno.serve(async (req: Request) => {
     // We cancel early, before debounce, so follow-ups don't fire while we wait
     let earlyConvId: string | null = null;
     try {
-      const { data: existingConvId } = await supabase.rpc("find_or_create_webhook_conversation", {
+      const { data: existingConvId, error: focErr } = await supabase.rpc("find_or_create_webhook_conversation", {
         p_agent_id: agentId,
         p_channel: channel,
         p_external_user_id: externalUserId,
@@ -805,6 +805,29 @@ Deno.serve(async (req: Request) => {
         p_contact_avatar_url: contactAvatarUrl,
       });
       earlyConvId = existingConvId;
+
+      // Fallback: if RPC failed (missing chatwoot columns), use list_agent_conversations
+      if (!earlyConvId && focErr) {
+        console.warn(`[Webhook] find_or_create failed (${focErr.message}), trying list fallback`);
+        try {
+          const { data: convList } = await supabase.rpc("list_agent_conversations", {
+            p_agent_id: agentId,
+            p_limit: 200,
+          });
+          if (Array.isArray(convList)) {
+            const match = convList.find(
+              (c: any) => c.external_user_id === externalUserId && c.status === "open"
+            );
+            if (match) {
+              earlyConvId = match.id;
+              console.log(`[Webhook] Fallback found conv: ${earlyConvId}`);
+            }
+          }
+        } catch (fbErr: any) {
+          console.warn(`[Webhook] Fallback failed:`, fbErr.message);
+        }
+      }
+
       if (earlyConvId) {
         const { data: cancelledCount } = await supabase.rpc("cancel_pending_followups", {
           p_agent_id: agentId,
