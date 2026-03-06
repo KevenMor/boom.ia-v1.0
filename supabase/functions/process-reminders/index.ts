@@ -261,7 +261,7 @@ Deno.serve(async (req: Request) => {
     }
 
     return new Response(
-      JSON.stringify({ processed, skipped, total: pendingItems.length }),
+      JSON.stringify({ processed, skipped, failed, duplicatesCancelled: duplicateIds.length, total: uniqueItems.length }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
