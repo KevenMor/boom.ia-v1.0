@@ -80,6 +80,8 @@ export default function Agents() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {filtered.map((agent, i) => {
           const isActive = agent.status === "active";
+          const isTest = agent.status === "test";
+          const isInactive = agent.status === "inactive";
           const tenantName = (agent.tenants as any)?.name ?? "Sem tenant";
           const providerName = (agent.providers as any)?.name;
           const webhookUrl = `${WEBHOOK_BASE}?agent_id=${agent.id}`;
