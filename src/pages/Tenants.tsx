@@ -185,13 +185,13 @@ export default function Tenants() {
                       <td className="whitespace-nowrap px-4 py-4 text-sm">
                         <div className="flex items-center gap-x-4">
                           <button
-                            onClick={() => setDeleteTenant(tenant)}
+                            onClick={(e) => { e.stopPropagation(); setDeleteTenant(tenant); }}
                             className="text-muted-foreground transition-colors duration-200 hover:text-destructive"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
                           <button
-                            onClick={() => navigate(`/tenants/${tenant.id}/edit`)}
+                            onClick={(e) => { e.stopPropagation(); navigate(`/tenants/${tenant.id}/edit`); }}
                             className="text-muted-foreground transition-colors duration-200 hover:text-warning"
                           >
                             <Pencil className="h-4 w-4" />
