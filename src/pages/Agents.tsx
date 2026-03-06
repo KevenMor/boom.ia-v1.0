@@ -1,4 +1,4 @@
-import { Bot, Plus, Search, MoreHorizontal, Pencil, Trash2, MessageSquare, Copy } from "lucide-react";
+import { Bot, Plus, Search, MoreHorizontal, Pencil, Trash2, MessageSquare, Copy, Link2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -140,6 +140,21 @@ export default function Agents() {
                 <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
                 Testar
               </Button>
+            </div>
+            {/* Demo link */}
+            <div className="mt-2">
+              <button
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-muted/30 px-2.5 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const url = `${window.location.origin}/demo/${agent.id}`;
+                  navigator.clipboard.writeText(url);
+                  toast.success("Link do demo copiado!");
+                }}
+              >
+                <Link2 className="h-3.5 w-3.5" />
+                Copiar Link Demo
+              </button>
             </div>
 
             {/* More menu - top right */}
