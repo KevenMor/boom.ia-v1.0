@@ -150,6 +150,9 @@ export default function EditAgent() {
       setChatwootUrl((cfg as any).chatwoot_url ?? "");
       setChatwootApiToken((cfg as any).chatwoot_api_token ?? "");
       setChatwootAccountId((cfg as any).chatwoot_account_id ?? "");
+      setWahaUrl((cfg as any).waha_url ?? "");
+      setWahaApiKey((cfg as any).waha_api_key ?? "");
+      setWahaSession((cfg as any).waha_session ?? "default");
       setFollowupEnabled((cfg as any).followup_enabled ?? false);
       setFollowupMaxAttempts((cfg as any).followup_max_attempts ?? 3);
       setFollowupIntervals((cfg as any).followup_intervals ?? [10, 20, 30]);
