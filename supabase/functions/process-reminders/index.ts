@@ -148,12 +148,13 @@ Deno.serve(async (req: Request) => {
 
     const uniqueItems = Array.from(seen.values());
 
-    console.log(`[Reminder] Processing ${pendingItems.length} pending reminder(s)`);
+    console.log(`[Reminder] Processing ${uniqueItems.length} unique reminder(s) (${duplicateIds.length} duplicates cancelled)`);
 
     let processed = 0;
     let skipped = 0;
+    let failed = 0;
 
-    for (const item of pendingItems) {
+    for (const item of uniqueItems) {
       // Fetch agent separately (no FK relationship)
       const { data: agent } = await supabase
         .from("agents")
