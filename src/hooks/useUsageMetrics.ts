@@ -32,15 +32,17 @@ export interface UsageEvent {
   created_at: string;
 }
 
-export function useUsageDailySummary() {
+export function useUsageDailySummary(tenantId?: string | null) {
   return useQuery({
-    queryKey: ["usage-daily-summary"],
+    queryKey: ["usage-daily-summary", tenantId ?? "all"],
     queryFn: async () => {
-      const { data, error } = await nexusDb
+      let query = nexusDb
         .from("usage_daily_summary")
         .select("*")
         .order("day", { ascending: false })
         .limit(500);
+      if (tenantId) query = query.eq("tenant_id", tenantId);
+      const { data, error } = await query;
       if (error) throw error;
       return (data ?? []) as UsageDailySummary[];
     },
@@ -48,19 +50,20 @@ export function useUsageDailySummary() {
   });
 }
 
-export function useRecentUsageEvents(limit = 200) {
+export function useRecentUsageEvents(limit = 200, tenantId?: string | null) {
   return useQuery({
-    queryKey: ["usage-events-recent", limit],
+    queryKey: ["usage-events-recent", limit, tenantId ?? "all"],
     queryFn: async () => {
-      // Fetch events from last 2 days to ensure we capture all of "today" in any timezone
       const twoDaysAgo = new Date();
       twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
-      const { data, error } = await nexusDb
+      let query = nexusDb
         .from("usage_events")
         .select("*")
         .gte("created_at", twoDaysAgo.toISOString())
         .order("created_at", { ascending: false })
         .limit(1000);
+      if (tenantId) query = query.eq("tenant_id", tenantId);
+      const { data, error } = await query;
       if (error) throw error;
       return (data ?? []) as UsageEvent[];
     },
