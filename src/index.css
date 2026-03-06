@@ -152,7 +152,7 @@
   }
 
   code, pre, .font-mono {
-    font-family: 'DM Mono', 'IBM Plex Mono', 'Menlo', monospace;
+    font-family: 'Sora', 'DM Sans', system-ui, sans-serif;
   }
 
   ::-webkit-scrollbar {
