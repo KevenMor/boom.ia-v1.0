@@ -772,9 +772,9 @@ export default function Conversations() {
                                       )}
                                       <div
                                         className={cn(
-                                          "rounded-2xl px-3.5 py-2.5 shadow-sm",
+                                          "rounded-2xl px-3.5 py-2.5",
                                           isUser
-                                            ? "rounded-tl-md bg-muted border border-border/60"
+                                            ? "rounded-tl-md bg-secondary border border-border shadow-md"
                                             : "rounded-br-md bg-primary text-primary-foreground"
                                         )}
                                       >
