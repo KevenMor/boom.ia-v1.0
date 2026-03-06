@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { MessageSquare, Bot, ArrowLeft, Search, Send, Paperclip, Smile, CheckCheck, Bug, Trash2, Mic, Phone, Hash, Clock, Users } from "lucide-react";
+import { MessageSquare, Bot, ArrowLeft, Search, Send, Paperclip, Smile, CheckCheck, Bug, Trash2, Mic, Phone, Hash, Clock, Users, UserPlus } from "lucide-react";
 import { DebugBlock } from "@/components/sandbox/DebugBlock";
 import { cloudClient } from "@/integrations/supabase/cloud-client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useAgents } from "@/hooks/useAgents";
 import { useTenantContext } from "@/contexts/TenantContext";
@@ -47,6 +49,11 @@ export default function Conversations() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showDebug, setShowDebug] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [newContactOpen, setNewContactOpen] = useState(false);
+  const [newContactPhone, setNewContactPhone] = useState("");
+  const [newContactName, setNewContactName] = useState("");
+  const [newContactMessage, setNewContactMessage] = useState("");
+  const [sendingNewContact, setSendingNewContact] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: conversations, isLoading: convsLoading } = useConversations(selectedAgentId);
@@ -173,6 +180,32 @@ export default function Conversations() {
       toast.error("Erro ao limpar histórico: " + (e?.message || "erro desconhecido"));
     } finally {
       setClearing(false);
+    }
+  };
+
+  const handleNewContact = async () => {
+    if (!newContactPhone.trim() || !newContactMessage.trim() || !selectedAgentId) return;
+    setSendingNewContact(true);
+    try {
+      const { data, error } = await cloudClient.functions.invoke("new-contact", {
+        body: {
+          agent_id: selectedAgentId,
+          phone: newContactPhone.trim(),
+          name: newContactName.trim() || undefined,
+          message: newContactMessage.trim(),
+        },
+      });
+      if (error) throw error;
+      toast.success("Mensagem enviada para " + (newContactName.trim() || newContactPhone.trim()));
+      setNewContactOpen(false);
+      setNewContactPhone("");
+      setNewContactName("");
+      setNewContactMessage("");
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    } catch (e: any) {
+      toast.error("Erro ao enviar: " + (e?.message || "erro desconhecido"));
+    } finally {
+      setSendingNewContact(false);
     }
   };
 
@@ -348,13 +381,65 @@ export default function Conversations() {
                     </Badge>
                   )}
                 </div>
-                <button
-                  onClick={() => { setSelectedAgentId(null); setSelectedContactKey(null); }}
-                  className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                >
-                  <ArrowLeft className="h-3 w-3" />
-                  Voltar
-                </button>
+                <div className="flex items-center gap-1">
+                  <Dialog open={newContactOpen} onOpenChange={setNewContactOpen}>
+                    <DialogTrigger asChild>
+                      <button className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary">
+                        <UserPlus className="h-3.5 w-3.5" />
+                        Novo
+                      </button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[400px]">
+                      <DialogHeader>
+                        <DialogTitle>Novo Contato</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4 pt-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="nc-phone">Telefone *</Label>
+                          <Input
+                            id="nc-phone"
+                            placeholder="(11) 99999-9999"
+                            value={newContactPhone}
+                            onChange={(e) => setNewContactPhone(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="nc-name">Nome (opcional)</Label>
+                          <Input
+                            id="nc-name"
+                            placeholder="Nome do contato"
+                            value={newContactName}
+                            onChange={(e) => setNewContactName(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="nc-msg">Mensagem *</Label>
+                          <Textarea
+                            id="nc-msg"
+                            placeholder="Digite a mensagem..."
+                            value={newContactMessage}
+                            onChange={(e) => setNewContactMessage(e.target.value)}
+                            rows={3}
+                          />
+                        </div>
+                        <Button
+                          className="w-full"
+                          disabled={!newContactPhone.trim() || !newContactMessage.trim() || sendingNewContact}
+                          onClick={handleNewContact}
+                        >
+                          {sendingNewContact ? "Enviando..." : "Enviar Mensagem"}
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                  <button
+                    onClick={() => { setSelectedAgentId(null); setSelectedContactKey(null); }}
+                    className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <ArrowLeft className="h-3 w-3" />
+                    Voltar
+                  </button>
+                </div>
               </div>
 
               {/* Agent info bar */}
