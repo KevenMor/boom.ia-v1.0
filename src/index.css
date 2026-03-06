@@ -56,7 +56,7 @@
     --sidebar-border: 222 25% 24%;
     --sidebar-ring: 236 92% 72%;
 
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
     font-size: 0.8125rem;
   }
 
@@ -127,7 +127,7 @@
   }
 
   code, pre, .font-mono {
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-family: 'IBM Plex Mono', 'Menlo', monospace;
   }
 
   ::-webkit-scrollbar {
@@ -180,8 +180,8 @@
 
   /* Mono number styling */
   .metric-value {
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    letter-spacing: -0.02em;
+    font-family: 'IBM Plex Mono', 'Menlo', monospace;
+    letter-spacing: -0.01em;
     font-variant-numeric: tabular-nums;
   }
 
