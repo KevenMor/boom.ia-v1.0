@@ -85,9 +85,6 @@ export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
           </div>
           <div className="flex flex-1 flex-col min-w-0 text-start">
             <span className="text-sm font-semibold text-white truncate">{displayName}</span>
-            <span className="text-[10px] text-white/40">
-              {selectedTenant ? selectedTenant.plan : "Administrador"}
-            </span>
           </div>
           <ChevronsUpDown className="h-4 w-4 shrink-0 text-white/30" />
         </button>
@@ -99,11 +96,7 @@ export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
           onClick={() => setSelectedTenantId(null)}
           className="gap-2"
         >
-          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-accent/20 text-[9px] font-bold text-accent-foreground">
-            ALL
-          </div>
           <span className="flex-1 truncate text-sm font-medium">Todos os tenants</span>
-          <span className="text-[10px] text-muted-foreground">Admin</span>
           {!selectedTenantId && <Check className="h-4 w-4 text-primary shrink-0" />}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
@@ -116,11 +109,7 @@ export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
             onClick={() => setSelectedTenantId(t.id)}
             className="gap-2"
           >
-            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-primary/10 text-[9px] font-bold text-primary">
-              {t.name.slice(0, 2).toUpperCase()}
-            </div>
             <span className="flex-1 truncate text-sm">{t.name}</span>
-            <span className="text-[10px] text-muted-foreground capitalize">{t.plan}</span>
             {selectedTenantId === t.id && <Check className="h-4 w-4 text-primary shrink-0" />}
           </DropdownMenuItem>
         ))}
