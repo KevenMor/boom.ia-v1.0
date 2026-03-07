@@ -770,7 +770,10 @@ STEP 2: EXTRACT PARAMETERS
 ═══════════════════════════════════════════════
 
 For consultar_fipe: extract marca, modelo, ano from conversation (can be in history)
-For consultar_estoque: extract marca, modelo, faixa_preco, ano, etc. from the message
+For consultar_estoque: extract ALL relevant parameters from the message:
+  - marca (brand), modelo (model), ano (year), faixa_preco (price range)
+  - cor (color) — CRITICAL: if the customer mentions a color (branco, preto, prata, vermelho, azul, cinza, etc.), ALWAYS pass it as the "cor" parameter
+  - cambio (transmission), combustivel (fuel type), tipo_veiculo (body type: SUV, sedan, hatch, picape)
 
 ═══════════════════════════════════════════════
 DECISION EXAMPLES (study these carefully)
@@ -782,6 +785,13 @@ CALL consultar_estoque:
 - "vi uma A3 no pátio, quanto custa?" → consultar_estoque(marca="Audi", modelo="A3")
 - "tem algo até 200 mil?" → consultar_estoque(faixa_preco="até 200000")
 - "quero ver um sedan" → consultar_estoque(modelo="sedan")
+- "tem Onix branco?" → consultar_estoque(marca="Chevrolet", modelo="Onix", cor="branco")
+- "quero um preto, automático" → consultar_estoque(cor="preto", cambio="automático")
+- "vi o Onix branco de vocês" → consultar_estoque(marca="Chevrolet", modelo="Onix", cor="branco")
+- "tem algum carro prata?" → consultar_estoque(cor="prata")
+
+⚠️ CRITICAL — COLOR EXTRACTION (v2.7.0):
+When the customer mentions a COLOR alongside a model (e.g., "Onix branco", "Civic preto", "HB20 prata"), you MUST pass the "cor" parameter. This filters the inventory to show ONLY vehicles of that specific color. Missing the color parameter causes the system to return ALL vehicles of that model, which confuses the customer.
 
 CALL consultar_estoque (PHOTO REQUESTS — CRITICAL):
 - "manda as fotos" → consultar_estoque(marca/modelo from conversation history)
