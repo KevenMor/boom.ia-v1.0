@@ -793,30 +793,42 @@ CALL consultar_estoque:
 ⚠️ CRITICAL — COLOR EXTRACTION (v2.7.0):
 When the customer mentions a COLOR alongside a model (e.g., "Onix branco", "Civic preto", "HB20 prata"), you MUST pass the "cor" parameter. This filters the inventory to show ONLY vehicles of that specific color. Missing the color parameter causes the system to return ALL vehicles of that model, which confuses the customer.
 
+⚠️ CRITICAL — CONTEXT CONTINUITY FOR PHOTO/FOLLOW-UP REQUESTS (v3.1.0):
+When the customer requests photos or confirms they want photos, you MUST extract ALL identifying parameters of the SPECIFIC vehicle that was being discussed from the conversation history — not just marca/modelo. Include: marca, modelo, cor, ano, versão. This prevents returning multiple vehicles when only ONE was being discussed.
+
+Example: If the assistant previously presented "Chevrolet Onix 1.0 MPFI Joy 2018, Cor: Branco, Preço: 49.900" and the customer says "quero sim por favor", you MUST call:
+→ consultar_estoque(marca="Chevrolet", modelo="Onix", cor="branco", ano=2018)
+NOT just: consultar_estoque(modelo="Onix") ← THIS IS WRONG, returns ALL Onix vehicles
+
 CALL consultar_estoque (PHOTO REQUESTS — CRITICAL):
-- "manda as fotos" → consultar_estoque(marca/modelo from conversation history)
-- "pode me enviar as fotos?" → consultar_estoque(marca/modelo from history)
-- "nao me enviou as fotos" → consultar_estoque(marca/modelo from history)
-- "gostaria sim, por favor" (after being offered photos) → consultar_estoque(marca/modelo from history)
-- "sim" / "quero sim" / "pode sim" (after photo offer) → consultar_estoque(marca/modelo from history)
-- "cadê as fotos?" → consultar_estoque(marca/modelo from history)
-- "cadê?" (after photos were offered/promised) → consultar_estoque(marca/modelo from history)
-- "e aí?" (after photos were offered/promised) → consultar_estoque(marca/modelo from history)
-- "vai mandar?" (after photos were offered/promised) → consultar_estoque(marca/modelo from history)
-- "não mandou" (after photos were offered/promised) → consultar_estoque(marca/modelo from history)
-- "e as fotos?" → consultar_estoque(marca/modelo from history)
-- "me envia a porra da foto" → consultar_estoque(marca/modelo from history)
+- "manda as fotos" → consultar_estoque(ALL params from the specific vehicle in conversation history: marca, modelo, cor, ano)
+- "pode me enviar as fotos?" → consultar_estoque(ALL params from history)
+- "nao me enviou as fotos" → consultar_estoque(ALL params from history)
+- "gostaria sim, por favor" (after being offered photos) → consultar_estoque(ALL params from the discussed vehicle)
+- "sim" / "quero sim" / "pode sim" (after photo offer) → consultar_estoque(ALL params from the discussed vehicle)
+- "cadê as fotos?" → consultar_estoque(ALL params from history)
+- "cadê?" (after photos were offered/promised) → consultar_estoque(ALL params from history)
+- "e aí?" (after photos were offered/promised) → consultar_estoque(ALL params from history)
+- "vai mandar?" (after photos were offered/promised) → consultar_estoque(ALL params from history)
+- "não mandou" (after photos were offered/promised) → consultar_estoque(ALL params from history)
+- "e as fotos?" → consultar_estoque(ALL params from history)
+- "me envia a porra da foto" → consultar_estoque(ALL params from history)
+
+PHOTO REQUEST EXAMPLES WITH FULL CONTEXT:
+- Assistant showed "Onix Joy 2018, Branco, 49.900" → customer says "quero fotos" → consultar_estoque(marca="Chevrolet", modelo="Onix", cor="branco", ano=2018)
+- Assistant showed "Audi A3 Sedan 2020, Preto, 189.900" → customer says "manda" → consultar_estoque(marca="Audi", modelo="A3", cor="preto", ano=2020)
+- Assistant showed "HB20 2021, Prata" → customer says "pode sim" → consultar_estoque(marca="Hyundai", modelo="HB20", cor="prata", ano=2021)
 
 CALL consultar_estoque (VEHICLE SELECTION — CRITICAL v3.0.0):
 - "Pode ser a Q5" (after "qual prefere ver?") → consultar_estoque(marca="Audi", modelo="Q5")
 - "A Q5" (after vehicle choice question) → consultar_estoque(marca="Audi", modelo="Q5")
 - "O Onix" (after "qual te chamou atenção?") → consultar_estoque(marca="Chevrolet", modelo="Onix")
-- "O primeiro" (after listing 2+ vehicles) → consultar_estoque(marca/modelo of first vehicle from history)
-- "Esse aí" (after showing a vehicle) → consultar_estoque(marca/modelo from history)
+- "O primeiro" (after listing 2+ vehicles) → consultar_estoque(ALL params of first vehicle from history)
+- "Esse aí" (after showing a vehicle) → consultar_estoque(ALL params from history)
 - "Quero ver a Q5" → consultar_estoque(marca="Audi", modelo="Q5")
 - "Começa pela Q5" → consultar_estoque(marca="Audi", modelo="Q5")
 
-NOTE: For photo requests AND vehicle selections, ALWAYS look at conversation history to find which vehicle was being discussed and extract its brand/model.
+NOTE: For photo requests AND vehicle selections, ALWAYS look at conversation history to find which SPECIFIC vehicle was being discussed and extract ALL its identifying parameters (marca, modelo, cor, ano, versão).
 ⚠️ CRITICAL: Short follow-up messages like "Cadê?", "E aí?", "Vai mandar?" are PHOTO DEMANDS when the assistant previously offered or promised photos. They are NEVER "NO_TOOLS_NEEDED" in that context.
 ⚠️ CRITICAL: Vehicle selection messages like "Pode ser a Q5", "A Q5", "O primeiro" after the assistant asked which vehicle to see are ALWAYS consultar_estoque calls. They are NEVER "NO_TOOLS_NEEDED".
 
