@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { Bell, User, LogOut, Menu } from "lucide-react";
+import { User, LogOut, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -11,6 +11,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { NotificationsPopover } from "./NotificationsPopover";
 
 const routeTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
