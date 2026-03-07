@@ -1154,8 +1154,9 @@ REGRAS OBRIGATÓRIAS:
             calendarId = calendars[0].id;
           }
 
-          // Calculate end time
-          const startDate = new Date(startAt);
+          // Calculate end time — ensure São Paulo timezone if no offset provided
+          const tzAwareStart = /[Zz]|[+-]\d{2}:\d{2}$/.test(startAt) ? startAt : `${startAt}-03:00`;
+          const startDate = new Date(tzAwareStart);
           const endDate = new Date(startDate.getTime() + durationMin * 60000);
 
           // Check for conflicts
@@ -1197,7 +1198,9 @@ REGRAS OBRIGATÓRIAS:
           if (createError) return JSON.stringify({ error: createError.message });
 
           // --- Post-booking: trigger assign + notify via helper ---
-          const bookingSummary = `${title}\n📅 ${new Date(startAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}\n📞 ${clientPhone || "N/A"}\n🚗 Interesse: ${vehicleInterest || "Não informado"}\n✅ Agendado automaticamente pela IA`;
+          const formattedDate = startDate.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" });
+          const formattedTime = startDate.toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+          const bookingSummary = `[AGENDAMENTO] ${title}\n📅 ${formattedDate}, ${formattedTime}\n📞 ${clientPhone || "N/A"}\n🚗 Interesse: ${vehicleInterest || "Não informado"}\n✅ Agendado automaticamente pela IA`;
           await postCalendarAction(supabase, agentId, context, "agendamento", bookingSummary);
 
           // --- Schedule appointment reminder if enabled ---
