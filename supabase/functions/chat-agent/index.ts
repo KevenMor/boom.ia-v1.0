@@ -83,73 +83,10 @@ function stripEmojis(content: string): string {
     .trim();
 }
 
-// ---------- Contextual photo acceptance detection ----------
-// Detects when a short user message is accepting a photo offer from the previous assistant message
-function isContextualPhotoAcceptance(userText: string, history: any[]): boolean {
-  if (!userText || !history || history.length === 0) return false;
-  
-  let normalized = userText.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  
-  // Strip trailing polite suffixes before matching core acceptance
-  normalized = normalized.replace(/[,.]?\s*(por favor|por gentileza|por obsequio|pfv|pf)\s*[.!?]*$/i, "").trim();
-  
-  // Short acceptance patterns (must be concise — typically 1-3 words)
-  const acceptancePattern = /^(quero|sim|pode|manda|claro|por favor|ok|bora|com certeza|gostaria|aceito|positivo|afirmativo|quero sim|pode sim|manda sim|sim por favor|pode me enviar|quero ver|sim quero|manda ai|manda la|envia|envia sim|quero fotos?|sim,?\s*quero|sim,?\s*pode|claro que sim|pode mandar|pode enviar|com certeza|logico|lógico|obvio|óbvio|show|beleza|top|perfeito|isso|isso mesmo|por gentileza|por obsequio|pfv|pf|s|ss|sss|siim|siiim|querooo|queroo|mandaa|mandaaa|cade|cad[eê]|cade\s*\?|cad[eê]\s*\?|e\s+as\s+fotos|e\s+a[ií]\s*\??|vai\s+mandar|nao\s+mandou|n[aã]o\s+mandou|nao\s+enviou|n[aã]o\s+enviou|ta\s+demorando|t[aá]\s+demorando|estou\s+esperando|to\s+esperando)[.!?,\s]*$/i;
-  if (!acceptancePattern.test(normalized)) return false;
-  
-  // Find the last assistant message in history
-  let lastAssistantContent = "";
-  for (let i = history.length - 1; i >= 0; i--) {
-    if (history[i]?.role === "assistant" && history[i]?.content) {
-      lastAssistantContent = String(history[i].content).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      break;
-    }
-  }
-  
-  if (!lastAssistantContent) return false;
-  
-  // Photo offer patterns in assistant's previous message
-  const photoOfferPattern = /(quer|gostaria|posso|vou|deseja|te mand|te envi|te mostr).{0,30}(fotos?|imagens?|ver\s+(ele|ela|o\s+carro|o\s+veiculo|as\s+fotos?))|fotos?\s+(dele|dela|do\s+\w+|da\s+\w+)|mand[aeo]r?\s+fotos?|envi[aeo]r?\s+fotos?|mostrar\s+fotos?|(quer|gostaria)\s+.{0,20}(ver|receber|conferir)/i;
-  
-  return photoOfferPattern.test(lastAssistantContent);
-}
-
-// ---------- Vehicle selection for photos detection ----------
-// Detects when the assistant asked "which vehicle do you want to see photos of?" 
-// and the client responds with a vehicle name like "Pode ser a Q5", "A Q5", "O Onix"
-function isVehicleSelectionForPhotos(userText: string, history: any[]): boolean {
-  if (!userText || !history || history.length === 0) return false;
-  
-  const normalized = userText.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  
-  // Must be a short message (vehicle selection is typically brief)
-  if (normalized.length > 80) return false;
-  
-  // Patterns: "pode ser a/o X", "a Q5", "o onix", "quero ver a/o X", "primeiro a/o X"
-  const vehicleSelectionPattern = /^(pode ser|quero ver|primeiro|começa|comeca|vamos com|vai de|manda d[ao]|envia d[ao]|pode ser d[ao]|a |o |d[ao] )?\s*(a |o |d[ao] )?\s*\w+/i;
-  if (!vehicleSelectionPattern.test(normalized)) return false;
-  
-  // Find the last assistant message
-  let lastAssistantContent = "";
-  for (let i = history.length - 1; i >= 0; i--) {
-    if (history[i]?.role === "assistant" && history[i]?.content) {
-      lastAssistantContent = String(history[i].content).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      break;
-    }
-  }
-  
-  if (!lastAssistantContent) return false;
-  
-  // The assistant must have asked which vehicle to see — patterns like "qual prefere ver primeiro",
-  // "qual quer ver", "qual deseja", "qual te chamou atenção"
-  const vehicleChoiceQuestion = /(qual\s+(prefere|quer|deseja|gostaria|voce quer)\s+(ver|conferir|receber|que eu)|qual\s+.{0,30}(primeiro|antes|ver)|prefere\s+ver\s+.{0,20}primeiro|algum.{0,20}(chamou|interesse)|quer\s+ver\s+.{0,15}(qual|primeiro))/i;
-  
-  // Also detect the specific hint response: "há X veículos. PERGUNTE qual prefere"
-  // which produces messages like "qual você prefere ver primeiro?"
-  const photoContextInQuestion = /(fotos?|imagens?|ver\s+primeiro|conferir\s+primeiro|mandar\s+primeiro)/i;
-  
-  return vehicleChoiceQuestion.test(lastAssistantContent) && photoContextInQuestion.test(lastAssistantContent);
-}
+// ---------- Photo decision: delegated to LLM (v3.0.0) ----------
+// Regex gatekeeping for photos has been ELIMINATED.
+// The LLM Phase 2 decides whether to include photos based on conversation context.
+// See _hint in inventory handler and Dispatcher Rule 13 in ppl-motors.ts.
 
 function dedupeRepeatedParagraphs(content: string): string {
   const parts = content.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
@@ -763,45 +700,23 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         if (error) return JSON.stringify({ error: error.message });
         if (!data?.length) return JSON.stringify({ message: "Nenhum veículo encontrado com esses filtros" });
 
-        // Determine if user EXPLICITLY asked for PHOTOS/IMAGES
-        // Covers infinitive forms (mandar, enviar, mostrar) AND conjugations (manda, envia, mostra)
-        // Also covers contextual requests like "me manda da X tambem" (implying photos from context)
-        const photoRequestPattern = /\b(fotos?|imagens?|images?|photos?|mand[ae]r?\s*fotos?|envia(?:r)?\s*fotos?|ver\s*fotos?|ver\s*imagens?|mostra(?:r)?\s*fotos?|mostra(?:r)?\s*imagens?|quero\s*ver\s*fotos?|me\s*envia(?:r)?|me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?|galeria)\b/i;
-        // CONTEXTUAL: "me manda/mandar da X tambem" after photos were just sent implies more photos
-        const contextualPhotoPattern = /\b(me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?|me\s*envia(?:r)?|pode\s*me\s*envia(?:r)?)\b.*\b(tamb[eé]m|tb|tbm|tamb[eé]n)\b/i;
-        // NEW: detect vehicle selection after "which one to see photos of?" question
-        const isVehicleSelection = isVehicleSelectionForPhotos(userText || "", history || []);
-        if (isVehicleSelection) {
-          console.log(`[Inventory] Vehicle selection for photos detected: "${(userText || "").slice(0, 60)}"`);
-        }
-        const isPhotoRequest = photoRequestPattern.test(userText || "") || contextualPhotoPattern.test(userText || "") || isContextualPhotoAcceptance(userText || "", history || []) || isVehicleSelection;
-        // Aceite genérico: cliente disse "Sim"/"Quero" etc. MAS não nomeou veículo específico
-        const isGenericAcceptance = isContextualPhotoAcceptance(userText || "", history || [])
-          && !photoRequestPattern.test(userText || "")
-          && !contextualPhotoPattern.test(userText || "")
-          && !isVehicleSelection
-          && !brandArg && !modelArg && !(args.search || args.query || args.termo);
-        // Só ativa modo foto se: pedido específico OU aceite genérico com 1 veículo (sem ambiguidade)
-        const isSpecificWithPhotos = isPhotoRequest && data.length <= 3
-          && !(isGenericAcceptance && data.length > 1);
-        // Include photo data ONLY when user asked for photos — NOT when generic acceptance + multiple vehicles
-        const includePhotosInData = isPhotoRequest && data.length <= 3
-          && !(isGenericAcceptance && data.length > 1);
+        // v3.0.0: LLM decides photo inclusion — no regex gatekeeping
+        // Always include photos for ≤3 vehicles; listing mode for >3
+        const MAX_PHOTOS_PER_VEHICLE = 8;
+        const includePhotos = data.length <= 3;
 
         let _hint: string;
-        if (isGenericAcceptance && data.length > 1) {
-          _hint = `Cliente aceitou ver fotos mas há ${data.length} veículos. PERGUNTE qual prefere ver primeiro. NÃO envie fotos ainda.`;
-        } else if (isSpecificWithPhotos) {
-          _hint = "Envie TODAS as fotos do array 'photos' usando ![foto](URL). Antes das fotos, escreva UMA frase curta e VARIADA (NUNCA repita 'Aqui estão as fotos'). Use variações como: 'Dá uma olhada!', 'Olha só como ela está!', 'Veja que linda!', 'Tá aqui pra você conferir!'. PROIBIDO inventar atributos, acabamento, materiais ou equipamentos que não estejam explicitamente nos campos do veículo. NÃO faça pergunta de fechamento nesta mensagem — deixe o cliente reagir às fotos primeiro.";
-        } else {
+        if (data.length > 3) {
           _hint = `Apresente os ${data.length} veículos de forma NATURAL, como um vendedor experiente no WhatsApp. REGRAS ANTI-REPETIÇÃO: 1) NÃO repita o nome completo do carro se já mencionou antes — use apelidos curtos ("o Nivus", "o Haval", "esse aqui"). 2) Varie a estrutura das frases — cada parágrafo deve soar diferente. 3) NÃO use a mesma abertura para todos os carros. 4) Destaque algo ÚNICO de cada um (um é mais econômico, outro tem mais espaço, etc). 5) Finalize com UMA pergunta natural tipo "Algum te chamou atenção?" ou "Quer ver fotos de algum deles?". NÃO use listas numeradas. NÃO inclua fotos nesta resposta — ESPERE o cliente pedir. NÃO repita dados que o cliente já sabe.`;
+        } else {
+          _hint = `Fotos estão disponíveis no campo 'photos' de cada veículo. REGRA DE DECISÃO (use o contexto da conversa): Se o cliente PEDIU fotos, ACEITOU ver fotos, SELECIONOU um veículo para ver, ou respondeu com confirmação curta ("Sim", "Quero", "Pode ser a Q5", etc.) a uma oferta de fotos → INCLUA TODAS as fotos usando ![foto](URL). Antes das fotos, escreva UMA frase curta e VARIADA (NUNCA repita 'Aqui estão as fotos'). Se o cliente apenas perguntou preço, disponibilidade ou informações SEM demonstrar interesse visual → apresente os dados e OFEREÇA enviar fotos. PROIBIDO inventar atributos que não estejam nos campos. NÃO faça pergunta de fechamento quando enviar fotos — deixe o cliente reagir primeiro.`;
         }
 
           return JSON.stringify({
           total: data.length,
           _hint,
           vehicles: data.map((v: any) => {
-            if (!includePhotosInData) {
+            if (!includePhotos) {
               // Listing mode (>3 results): compact, no photos to keep context small
               return {
                 id: v.id,
@@ -817,7 +732,7 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
               };
             }
 
-            // Specific vehicle: include all photos (handle double-escaped JSON)
+            // ≤3 vehicles: include photos (LLM decides whether to render them)
             let parsedPhotos: string[] = [];
             if (Array.isArray(v.photos)) {
               parsedPhotos = v.photos.filter((p: unknown) => typeof p === "string") as string[];
@@ -838,7 +753,7 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
 
             const allPhotos = Array.from(
               new Set([...(v.photo_url ? [v.photo_url] : []), ...parsedPhotos])
-            ).map(cleanPhotoUrl).filter(isValidPhotoUrl);
+            ).map(cleanPhotoUrl).filter(isValidPhotoUrl).slice(0, MAX_PHOTOS_PER_VEHICLE);
 
             return {
               id: v.id,
@@ -2586,13 +2501,8 @@ Deno.serve(async (req) => {
         const schedulingKeywords = /\b(agend|horario|horário|visita|test.?drive|marcar|marcad|reserv|cancelar|desmarcar|reagend|confirma|agendar)\b/i;
         const mentionsScheduling = schedulingKeywords.test(normalizedLatestUser);
 
-        // OVERRIDE: If contextual photo acceptance detected, ALWAYS dispatch
-        const contextualPhotoAccept = isContextualPhotoAcceptance(latestUserText, sanitizedMessages);
-        if (contextualPhotoAccept) {
-          console.log(`[Dispatcher] Contextual photo acceptance detected — forcing dispatch: "${latestUserText.slice(0, 80)}"`);
-        }
-
-        const shouldSkip = (isContestationMsg || isConfirmationQuestion || isReactingToPreviousResponse || isSelectingPreviousOption) && !mentionsScheduling && !contextualPhotoAccept;
+        // v3.0.0: Removed contextualPhotoAccept override — LLM Dispatcher handles photo context via prompt
+        const shouldSkip = (isContestationMsg || isConfirmationQuestion || isReactingToPreviousResponse || isSelectingPreviousOption) && !mentionsScheduling;
 
         if (shouldSkip) {
           console.log(`[Dispatcher] Skip detected (contestation/confirmation/reaction/selection): "${latestUserText.slice(0, 80)}"`);
@@ -3199,111 +3109,14 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
       }
     }
 
-    // Inject missing photos: if tool results contain vehicles with photos, ensure they appear in content
-    // BUT NOT when user sent images (appraisal flow — they sent THEIR car photos, don't inject dealer photos)
-    // AND NOT when the conversation is about trade-in/appraisal (user talking about THEIR car)
+    // v3.0.0: Photo injection/recovery regex ELIMINATED
+    // The LLM Phase 2 decides whether to include ![](url) in its response.
+    // If it included them, they pass through naturally to deliver-message.
+    // If it didn't, we respect the LLM's decision.
+    // Only guard: appraisal context (user sent THEIR car photo, don't inject dealer photos)
     const isAppraisalPhotoContext = imageBase64Parts.length > 0 && !(latestUserText || "").trim();
-    const isTradeInContext = /(troca|trocar|negocio|negócio|dar na troca|meu carro|tenho um|avalia|pré-avalia|pre-avalia|quanto vale o meu|dar como entrada|colocar na negociação|aceita|aceitam)/i.test(latestUserText || "");
-    const isSchedulingContext = /(agend|reagend|remar|horario|horário|visita|test.?drive|marcar|remarcar|quero ir|posso ir|vou aí|vou ai|chegar na loja|estacionamento|endere[cç]o|como chego)/i.test(latestUserText || "");
-    const hasFipeResult = toolResultsContext.some(ctx => /fipe|tabela_fipe|valor_fipe|preco_medio/i.test(ctx));
-    // PHOTO INJECTION: Only inject photos when user EXPLICITLY asked for them
-    // Must match the same expanded regex from inventory_query to be consistent
-    const userExplicitlyAskedPhotos = /\b(fotos?|imagens?|photos?|mand[ae]r?\s*fotos?|envia(?:r)?\s*fotos?|ver\s*fotos?|mostra(?:r)?\s*fotos?|me\s*envia(?:r)?|me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?|galeria)\b/i.test(latestUserText || "")
-      || /\b(me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?|me\s*envia(?:r)?|pode\s*me\s*envia(?:r)?)\b.*\b(tamb[eé]m|tb|tbm|tamb[eé]n)\b/i.test(latestUserText || "")
-      || isContextualPhotoAcceptance(latestUserText || "", sanitizedMessages || []);
-    if (toolResultsContext.length > 0 && !isAppraisalPhotoContext && !isTradeInContext && !isSchedulingContext && userExplicitlyAskedPhotos) {
-      try {
-        for (const ctx of toolResultsContext) {
-          const parsed = JSON.parse(ctx.replace(/^\[Resultado da ferramenta "[^"]+"\]: /, ""));
-          if (parsed?.vehicles && Array.isArray(parsed.vehicles)) {
-            finalContent = appendMissingVehiclePhotos(finalContent, parsed.vehicles, latestUserText, true);
-            console.log(`[PostProcess] appendMissingVehiclePhotos applied (user requested photos), vehicles=${parsed.vehicles.length}`);
-          }
-        }
-      } catch (e: any) {
-        console.warn("[PostProcess] Could not extract vehicles for photo injection:", e?.message);
-      }
-    } else if (!isAppraisalPhotoContext && !isTradeInContext && !isSchedulingContext && toolResultsContext.length === 0 && agent?.tenant_id) {
-      const explicitPhotoRequest = /(foto|fotos|imagem|imagens|mand[ae]r?|envia(?:r)?|nao me enviou|não me enviou|cad[eê]\s*(as\s+fotos|\?|$)|me envia(?:r)?|me mand[ae]r?|pode me mand[ae]r?)/i.test(latestUserText || "")
-        || /\b(me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?)\b.*\b(tamb[eé]m|tb|tbm)\b/i.test(latestUserText || "")
-        || isContextualPhotoAcceptance(latestUserText || "", sanitizedMessages || []);
-      const shouldForcePhotoRecovery = !hasMarkdownImages(finalContent) && (!!photoCommandLine || explicitPhotoRequest);
-
-      if (shouldForcePhotoRecovery) {
-        // Fallback: user asked for photos, but dispatcher called no tools (NO_TOOLS_NEEDED).
-        // Recover likely vehicle(s) from inventory using command ID or recent conversation context.
-        try {
-          const idFromCommand = photoCommandLine.match(/\bid:\s*([0-9a-f-]{36})\b/i)?.[1] || null;
-          const contextWindow = [
-            photoCommandLine,
-            latestUserText,
-            ...(sanitizedMessages || []).slice(-8).map((m: any) => String(m?.content || "")),
-          ].join(" ");
-          const normalizedContext = contextWindow
-            .toLowerCase()
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, " ");
-
-          let fallbackVehicles: any[] = [];
-
-          if (idFromCommand) {
-            const { data, error } = await supabase
-              .from("inventory")
-              .select("*")
-              .eq("tenant_id", agent.tenant_id)
-              .eq("status", "available")
-              .eq("id", idFromCommand)
-              .limit(1);
-            if (error) {
-              console.warn("[PostProcess] Photo fallback by id failed:", error.message);
-            } else {
-              fallbackVehicles = data || [];
-            }
-          } else {
-            const { data: pool, error: poolErr } = await supabase
-              .from("inventory")
-              .select("*")
-              .eq("tenant_id", agent.tenant_id)
-              .eq("status", "available")
-              .limit(120);
-
-            if (poolErr) {
-              console.warn("[PostProcess] Photo fallback inventory pool failed:", poolErr.message);
-            } else if (pool && pool.length > 0) {
-              const scoreVehicle = (v: any) => {
-                let score = 0;
-                const hay = `${v?.brand || ""} ${v?.model || ""} ${v?.version || ""}`
-                  .toLowerCase()
-                  .normalize("NFD")
-                  .replace(/[\u0300-\u036f]/g, " ");
-                const tokens = hay.split(/\s+/).filter((t: string) => t.length >= 3);
-                score += tokens.reduce((acc: number, token: string) => acc + (normalizedContext.includes(token) ? 1 : 0), 0);
-                if (v?.year && normalizedContext.includes(String(v.year))) score += 3;
-                return score;
-              };
-
-              const ranked = [...pool]
-                .map((v: any) => ({ v, score: scoreVehicle(v) }))
-                .filter((x: any) => x.score > 0)
-                .sort((a: any, b: any) => b.score - a.score);
-
-              fallbackVehicles = ranked.slice(0, 3).map((x: any) => x.v);
-            }
-          }
-
-          if (fallbackVehicles.length > 0) {
-            finalContent = appendMissingVehiclePhotos(finalContent, fallbackVehicles, latestUserText || contextWindow, true);
-            console.log(`[PostProcess] Photo fallback applied from context, vehicles=${fallbackVehicles.length}, by_id=${!!idFromCommand}`);
-            debugTrace.push({ type: "photo_fallback_from_context", vehicles: fallbackVehicles.length, has_id: !!idFromCommand, explicit_photo_request: explicitPhotoRequest, timestamp: Date.now() });
-          } else {
-            console.warn(`[PostProcess] Photo fallback found no candidate vehicles (request='${latestUserText}')`);
-          }
-        } catch (e: any) {
-          console.warn("[PostProcess] Photo fallback error:", e?.message);
-        }
-      }
-    } else if (isAppraisalPhotoContext && toolResultsContext.length > 0) {
-      console.log(`[PostProcess] Skipping photo injection — appraisal context (user sent image, no text)`);
+    if (isAppraisalPhotoContext && toolResultsContext.length > 0) {
+      console.log(`[PostProcess] Skipping — appraisal context (user sent image, no text)`);
     }
 
     // Guard: strip premature closing questions (scheduling, simulation, visit) when photos are being sent
