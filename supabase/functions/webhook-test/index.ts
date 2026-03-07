@@ -610,7 +610,7 @@ Deno.serve(async (req: Request) => {
 
               if (allRecentMsgs.length > 0) {
                 const now = Date.now();
-                const normalizeForDedup = (s: string) => s.replace(/\s+/g, " ").replace(/\[Atendente:[^\]]*\]\s*/g, "").trim().toLowerCase().slice(0, 200);
+                const normalizeForDedup = (s: string) => s.replace(/\s+/g, " ").replace(/\[Atendente:[^\]]*\]\s*/g, "").replace(/\*[^*]+:\*\s*/g, "").trim().toLowerCase().slice(0, 200);
                 const outNorm = normalizeForDedup(outgoingContent);
 
                 // Sort by created_at desc and check last 15 assistant messages within 120s
