@@ -574,39 +574,54 @@ Deno.serve(async (req: Request) => {
 
       if (cwConvId && outgoingContent.trim()) {
         try {
-          // Find existing conversation by chatwoot_conversation_id
-          const { data: convId } = await supabaseForOutgoing.rpc("find_or_create_webhook_conversation", {
+          // Find ALL existing conversations for this agent that match the chatwoot_conversation_id.
+          // We list conversations and pick the one with this cwConvId — avoids creating
+          // a spurious "human-agent" conversation that caused duplicate messages.
+          const { data: allConvs } = await supabaseForOutgoing.rpc("list_agent_conversations", {
             p_agent_id: agentIdParam,
-            p_channel: (conversation.channel as string) || "chatwoot",
-            p_external_user_id: "human-agent",
-            p_chatwoot_conversation_id: cwConvId,
-            p_chatwoot_contact_id: null,
-            p_contact_name: null,
-            p_contact_avatar_url: null,
+            p_limit: 200,
           });
+
+          // Find the real conversation (from the client, not a "human-agent" ghost)
+          const matchingConv = Array.isArray(allConvs)
+            ? allConvs.find((c: any) => c.chatwoot_conversation_id === cwConvId)
+            : null;
+          const convId = matchingConv?.id as string | null;
 
           if (convId) {
             // DEDUP GUARD: Check if this content (or very similar) was already saved
-            // in the last 60s — prevents duplicating AI/operator messages that come
-            // back via the Chatwoot webhook as "outgoing".
+            // in any conversation with this chatwoot_conversation_id — prevents duplicating
+            // AI/operator messages that come back via the Chatwoot webhook as "outgoing".
             let isDuplicate = false;
             try {
-              const { data: recentMsgs } = await supabaseForOutgoing.rpc("load_conversation_messages", {
-                p_agent_id: agentIdParam,
-                p_conversation_id: convId,
-              });
-              if (Array.isArray(recentMsgs)) {
+              // Collect all conversation IDs for this cwConvId (in case of merges)
+              const relatedConvIds = Array.isArray(allConvs)
+                ? allConvs.filter((c: any) => c.chatwoot_conversation_id === cwConvId).map((c: any) => c.id as string)
+                : [convId];
+
+              const allRecentMsgs: Array<Record<string, unknown>> = [];
+              for (const cid of relatedConvIds) {
+                const { data: msgs } = await supabaseForOutgoing.rpc("load_conversation_messages", {
+                  p_agent_id: agentIdParam,
+                  p_conversation_id: cid,
+                });
+                if (Array.isArray(msgs)) allRecentMsgs.push(...(msgs as Array<Record<string, unknown>>));
+              }
+
+              if (allRecentMsgs.length > 0) {
                 const now = Date.now();
-                const normalizeForDedup = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase().slice(0, 200);
+                const normalizeForDedup = (s: string) => s.replace(/\s+/g, " ").replace(/\[Atendente:[^\]]*\]\s*/g, "").trim().toLowerCase().slice(0, 200);
                 const outNorm = normalizeForDedup(outgoingContent);
 
-                for (let i = recentMsgs.length - 1; i >= Math.max(0, recentMsgs.length - 10); i--) {
-                  const m = recentMsgs[i] as Record<string, unknown>;
+                // Sort by created_at desc and check last 15 assistant messages within 120s
+                allRecentMsgs.sort((a, b) => new Date(b.created_at as string).getTime() - new Date(a.created_at as string).getTime());
+
+                for (let i = 0; i < Math.min(15, allRecentMsgs.length); i++) {
+                  const m = allRecentMsgs[i];
                   if (m.role !== "assistant") continue;
                   const msgAge = now - new Date(m.created_at as string).getTime();
-                  if (msgAge > 120_000) break; // older than 2min, stop checking
+                  if (msgAge > 120_000) break;
                   const mNorm = normalizeForDedup((m.content as string) || "");
-                  // Check if content matches (may have [Atendente:...] prefix stripped)
                   if (mNorm === outNorm || outNorm.includes(mNorm) || mNorm.includes(outNorm)) {
                     isDuplicate = true;
                     console.log(`[Webhook] Dedup: outgoing matches recent assistant msg (age=${msgAge}ms), skipping`);
@@ -631,6 +646,8 @@ Deno.serve(async (req: Request) => {
               });
               console.log(`[Webhook] Saved human agent message to conv ${convId}`);
             }
+          } else {
+            console.log(`[Webhook] No existing conversation found for cwConvId=${cwConvId}, skipping outgoing save`);
           }
         } catch (e: any) {
           console.warn("[Webhook] Failed to save human agent outgoing:", e.message);
