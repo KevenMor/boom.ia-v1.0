@@ -2564,13 +2564,8 @@ Deno.serve(async (req) => {
         const schedulingKeywords = /\b(agend|horario|horário|visita|test.?drive|marcar|marcad|reserv|cancelar|desmarcar|reagend|confirma|agendar)\b/i;
         const mentionsScheduling = schedulingKeywords.test(normalizedLatestUser);
 
-        // OVERRIDE: If contextual photo acceptance detected, ALWAYS dispatch
-        const contextualPhotoAccept = isContextualPhotoAcceptance(latestUserText, sanitizedMessages);
-        if (contextualPhotoAccept) {
-          console.log(`[Dispatcher] Contextual photo acceptance detected — forcing dispatch: "${latestUserText.slice(0, 80)}"`);
-        }
-
-        const shouldSkip = (isContestationMsg || isConfirmationQuestion || isReactingToPreviousResponse || isSelectingPreviousOption) && !mentionsScheduling && !contextualPhotoAccept;
+        // v3.0.0: Removed contextualPhotoAccept override — LLM Dispatcher handles photo context via prompt
+        const shouldSkip = (isContestationMsg || isConfirmationQuestion || isReactingToPreviousResponse || isSelectingPreviousOption) && !mentionsScheduling;
 
         if (shouldSkip) {
           console.log(`[Dispatcher] Skip detected (contestation/confirmation/reaction/selection): "${latestUserText.slice(0, 80)}"`);
