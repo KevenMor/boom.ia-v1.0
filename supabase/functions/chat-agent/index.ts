@@ -3198,7 +3198,45 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
       }
     }
 
-    // Guard: when dispatcher did NOT call any tool, NEVER allow photos in the response.
+    // Guard: PHOTO COMPLETENESS — when tool results had photos and the LLM included SOME
+    // but not ALL, inject the missing ones. This prevents the LLM from cherry-picking 1-2 photos.
+    if (toolResultsContext.length > 0 && hasMarkdownImages(finalContent)) {
+      const allToolPhotoUrls: string[] = [];
+      for (const ctx of toolResultsContext) {
+        const urlMatches = ctx.matchAll(/https?:\/\/[^\s"',\]})]+\.(jpg|jpeg|png|gif|webp|avif|svg|bmp)[^\s"',\]})']*/gi);
+        for (const m of urlMatches) {
+          allToolPhotoUrls.push(cleanPhotoUrl(m[0]));
+        }
+      }
+      // Deduplicate
+      const uniqueToolPhotos = [...new Set(allToolPhotoUrls)];
+
+      if (uniqueToolPhotos.length > 1) {
+        // Extract photos already in the response
+        const presentPhotos = new Set<string>();
+        const imgRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/gi;
+        let imgMatch;
+        while ((imgMatch = imgRegex.exec(finalContent)) !== null) {
+          presentPhotos.add(cleanPhotoUrl(imgMatch[1]));
+        }
+
+        const missingPhotos = uniqueToolPhotos.filter(url => !presentPhotos.has(url));
+        if (missingPhotos.length > 0 && presentPhotos.size > 0) {
+          // LLM included some photos but missed others — append the missing ones
+          const missingMarkdown = missingPhotos.map(url => `![foto](${url})`).join("\n");
+          finalContent = finalContent.trimEnd() + "\n\n" + missingMarkdown;
+          console.log(`[PostProcess] Photo completeness: injected ${missingPhotos.length} missing photo(s) (had ${presentPhotos.size}, total ${uniqueToolPhotos.length})`);
+          debugTrace.push({
+            type: "photo_completeness_inject",
+            injected: missingPhotos.length,
+            already_present: presentPhotos.size,
+            total_available: uniqueToolPhotos.length,
+            timestamp: Date.now(),
+          });
+        }
+      }
+    }
+
     // The LLM may hallucinate or pull photos from conversation history.
     if (toolResultsContext.length === 0 && finalContent && hasMarkdownImages(finalContent)) {
       let strippedCount = 0;
