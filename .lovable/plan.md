@@ -1,70 +1,101 @@
 
 
-## Problem: Photo Acceptance ("Quero") Fails at Multiple Layers
+# Plano Definitivo: LLM como Decisor de Fotos (Eliminar Regex Gatekeeping)
 
-When the agent offers photos ("Quer que eu te mande fotos do Corolla?") and the client responds "Quero" / "Sim" / "Pode" / "Manda", photos are never delivered. This is a **three-layer failure**:
+## Diagnóstico
 
-**Layer 1 — Dispatcher**: May classify "Quero" as `NO_TOOLS_NEEDED` since it lacks explicit photo/vehicle keywords. Even though it receives conversation history, short confirmations are ambiguous without explicit contextual rules.
+Existem **~200 linhas de regex** espalhadas em 3 camadas que decidem se fotos são enviadas — após o Dispatcher já ter decidido chamar `consultar_estoque`. Isso é fundamentalmente errado: o LLM tem contexto conversacional completo, o regex não.
 
-**Layer 2 — Inventory Handler**: Even if the dispatcher correctly calls `consultar_estoque`, the `isPhotoRequest` check (line 698) only tests `latestUserText` for explicit photo keywords ("fotos", "imagens", etc.). "Quero" matches none, so the photo arrays are **stripped from the tool response** before the conversational LLM sees them.
+### Código a eliminar
 
-**Layer 3 — Post-Processing**: `userExplicitlyAskedPhotos` (line 2742) and the Photo Recovery Fallback (line 2757) both use the same explicit keyword regex on `latestUserText`. "Quero" fails all of them.
-
----
-
-## Plan
-
-### 1. New helper function: `isContextualPhotoAcceptance`
-
-Add a function in `chat-agent/index.ts` that detects when a short user message is accepting a photo offer from the previous assistant message:
-
-```
-function isContextualPhotoAcceptance(userText: string, history: any[]): boolean
-```
-
-- **User text check**: Short confirmation pattern — `quero`, `sim`, `pode`, `manda`, `claro`, `por favor`, `ok`, `bora`, `quero sim`, `pode sim`, `manda sim`, `quero ver`, `aceito`, `com certeza`, `gostaria`
-- **History check**: Last assistant message contains a photo-offer pattern like "quer que eu te mande fotos", "posso enviar fotos", "gostaria de ver fotos", "quer ver fotos"
-- Returns `true` only when BOTH conditions match
-
-### 2. Update `isPhotoRequest` in inventory handler (~line 698)
-
-Expand the check to also be true when `isContextualPhotoAcceptance` returns true. This ensures when the dispatcher correctly calls `consultar_estoque`, the photo data is NOT stripped from the response.
-
-### 3. Update `userExplicitlyAskedPhotos` in post-processing (~line 2742)
-
-Same expansion — include `isContextualPhotoAcceptance` so the post-processing photo injection works for contextual acceptances.
-
-### 4. Update `explicitPhotoRequest` in recovery fallback (~line 2757)
-
-Same expansion for the fallback path, ensuring photos can be recovered even if the dispatcher skipped the tool call.
-
-### 5. Update dispatcher prompt (ppl-motors.ts)
-
-Add explicit contextual acceptance examples to the dispatcher's Rule 13 (photo priority):
-
-```
-RULE 13 — CONTEXTUAL ACCEPTANCE:
-When the previous assistant message offered photos and the user responds with
-"Quero", "Sim", "Pode", "Manda", "Claro", "Por favor" → call consultar_estoque
-with the marca/modelo from conversation history. These are photo acceptance responses.
-```
-
-Add corresponding examples to the NO_TOOLS_NEEDED exclusion list to prevent the dispatcher from skipping these.
-
-### 6. Force dispatch override for contextual photo acceptance (~line 2224)
-
-In the `shouldSkip` logic, add a new override similar to `mentionsScheduling`:
-
-```
-const contextualPhotoAccept = isContextualPhotoAcceptance(latestUserText, sanitizedMessages);
-const shouldSkip = (...) && !mentionsScheduling && !contextualPhotoAccept;
-```
-
-This ensures even if "Quero" somehow matches a skip pattern, the system forces dispatch when it detects photo acceptance context.
+| Camada | Localização | Linhas aprox. | O que faz |
+|--------|-------------|---------------|-----------|
+| **Funções helper** | `isContextualPhotoAcceptance()` | 88-115 | Regex de aceitação contextual |
+| **Funções helper** | `isVehicleSelectionForPhotos()` | 120-152 | Regex de seleção de veículo |
+| **Inventory handler** | `isPhotoRequest` + `includePhotosInData` | 766-789 | Regex decide se fotos entram no payload |
+| **Post-processing** | `userExplicitlyAskedPhotos` | 3209-3225 | Regex re-injeta fotos após LLM |
+| **Recovery fallback** | `explicitPhotoRequest` + fallback | 3226-3299 | Regex recupera fotos quando Dispatcher falhou |
 
 ---
 
-### Files to modify
-- `supabase/functions/chat-agent/index.ts` — New helper function + 4 integration points (skip logic, inventory handler, post-processing, recovery fallback)
-- `supabase/functions/_shared/prompts/ppl-motors.ts` — Dispatcher prompt Rule 13 update with contextual acceptance examples
+## Solução em 4 Mudanças
+
+### Mudança 1 — Inventory Handler: Sempre incluir fotos (com limite)
+
+**Arquivo:** `supabase/functions/chat-agent/index.ts` (~linhas 766-860)
+
+- Eliminar `isPhotoRequest`, `isGenericAcceptance`, `isSpecificWithPhotos`, `includePhotosInData`
+- Sempre retornar fotos no payload do veículo, **limitadas a 8 URLs por veículo**
+- Manter a lógica de disambiguação: se >3 veículos, retornar dados compactos (sem fotos) para não estourar tokens. Se ≤3 veículos, incluir fotos
+- O `_hint` continua orientando o LLM Fase 2, mas sem depender de regex para decidir
+
+**Nova lógica simplificada:**
+```
+Se data.length > 3 → modo listagem (sem fotos, hint "apresente e pergunte qual quer ver")
+Se data.length ≤ 3 → modo detalhado (COM fotos, hint "apresente com fotos se o contexto pedir")
+```
+
+### Mudança 2 — Enriquecer hints para o LLM Fase 2
+
+O `_hint` que vai junto com o resultado da tool passa a instruir o LLM sobre quando incluir fotos:
+
+- **≤3 veículos:** "Fotos estão disponíveis no campo 'photos'. Inclua-as com `![](url)` se o cliente pediu para ver, aceitou ver, ou selecionou um veículo. NÃO inclua fotos se o cliente apenas perguntou preço/disponibilidade."
+- **>3 veículos:** "NÃO inclua fotos. Apresente os veículos e pergunte qual quer ver primeiro."
+
+### Mudança 3 — Eliminar post-processing regex
+
+**Arquivo:** `supabase/functions/chat-agent/index.ts` (~linhas 3209-3299)
+
+- Remover o bloco `userExplicitlyAskedPhotos` que re-injeta fotos
+- Remover o bloco `explicitPhotoRequest` + photo recovery fallback
+- Se o LLM Fase 2 incluiu `![](url)` na resposta, as fotos passam naturalmente pelo `deliver-message`
+- Se não incluiu, respeitar a decisão do LLM
+
+### Mudança 4 — Atualizar prompt do Dispatcher
+
+**Arquivo:** `supabase/functions/_shared/prompts/ppl-motors.ts`
+
+Adicionar regra explícita:
+```
+Quando o cliente demonstrar interesse em ver/conhecer um veículo específico — 
+incluindo respostas curtas como "Pode ser a Q5", "Quero", "Sim", "O primeiro", 
+"Esse aí" — SEMPRE chame consultar_estoque com marca/modelo do contexto.
+```
+
+Isso resolve o Layer 1 (Dispatcher não chamando a tool) sem regex.
+
+---
+
+## O que NÃO muda
+
+- `sendChatwootImagesBatch` no deliver-message — intocado
+- `extractImagesFromMarkdown` no deliver-message — intocado
+- `consolidateImageParts` no deliver-message — intocado
+- Welcome flow — intocado
+- Lógica de humanização — intocada
+- Sanitização de output (JSON artifacts) — intocada
+- Lógica de disambiguação (>3 veículos → perguntar qual) — mantida, mas via contagem, não regex
+
+## Código eliminado
+
+- `isContextualPhotoAcceptance()` — ~30 linhas
+- `isVehicleSelectionForPhotos()` — ~35 linhas
+- Bloco regex no inventory handler — ~25 linhas
+- Bloco post-processing photo injection — ~20 linhas
+- Bloco photo recovery fallback — ~70 linhas
+- **Total: ~180 linhas de regex eliminadas**
+
+## Riscos e Mitigações
+
+| Risco | Mitigação |
+|-------|-----------|
+| LLM não inclui fotos quando deveria | Hint explícito no payload da tool + monitoramento |
+| LLM inclui fotos quando não deveria | Baixo risco — Dispatcher já filtrou intent |
+| Token overflow com muitas fotos | Limite de 8 URLs por veículo no payload |
+| Dispatcher não chama tool para aceitações curtas | Regra explícita no prompt do Dispatcher (Mudança 4) |
+
+## Arquivos modificados
+
+1. **`supabase/functions/chat-agent/index.ts`** — Remover 3 funções helper + simplificar inventory handler + eliminar post-processing regex
+2. **`supabase/functions/_shared/prompts/ppl-motors.ts`** — Regra de aceitação contextual no Dispatcher
 
