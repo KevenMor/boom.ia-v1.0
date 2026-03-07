@@ -769,11 +769,17 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         const photoRequestPattern = /\b(fotos?|imagens?|images?|photos?|mand[ae]r?\s*fotos?|envia(?:r)?\s*fotos?|ver\s*fotos?|ver\s*imagens?|mostra(?:r)?\s*fotos?|mostra(?:r)?\s*imagens?|quero\s*ver\s*fotos?|me\s*envia(?:r)?|me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?|galeria)\b/i;
         // CONTEXTUAL: "me manda/mandar da X tambem" after photos were just sent implies more photos
         const contextualPhotoPattern = /\b(me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?|me\s*envia(?:r)?|pode\s*me\s*envia(?:r)?)\b.*\b(tamb[eé]m|tb|tbm|tamb[eé]n)\b/i;
-        const isPhotoRequest = photoRequestPattern.test(userText || "") || contextualPhotoPattern.test(userText || "") || isContextualPhotoAcceptance(userText || "", history || []);
+        // NEW: detect vehicle selection after "which one to see photos of?" question
+        const isVehicleSelection = isVehicleSelectionForPhotos(userText || "", history || []);
+        if (isVehicleSelection) {
+          console.log(`[Inventory] Vehicle selection for photos detected: "${(userText || "").slice(0, 60)}"`);
+        }
+        const isPhotoRequest = photoRequestPattern.test(userText || "") || contextualPhotoPattern.test(userText || "") || isContextualPhotoAcceptance(userText || "", history || []) || isVehicleSelection;
         // Aceite genérico: cliente disse "Sim"/"Quero" etc. MAS não nomeou veículo específico
         const isGenericAcceptance = isContextualPhotoAcceptance(userText || "", history || [])
           && !photoRequestPattern.test(userText || "")
           && !contextualPhotoPattern.test(userText || "")
+          && !isVehicleSelection
           && !brandArg && !modelArg && !(args.search || args.query || args.termo);
         // Só ativa modo foto se: pedido específico OU aceite genérico com 1 veículo (sem ambiguidade)
         const isSpecificWithPhotos = isPhotoRequest && data.length <= 3
