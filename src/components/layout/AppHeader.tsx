@@ -68,6 +68,10 @@ export function AppHeader() {
               {user?.email ?? "—"}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => navigate("/profile")}>
+              <User className="mr-2 h-3 w-3" />
+              Meu Perfil
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => signOut()}>
               <LogOut className="mr-2 h-3 w-3" />
               Sair
