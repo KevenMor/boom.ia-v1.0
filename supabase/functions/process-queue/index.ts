@@ -463,7 +463,7 @@ Deno.serve(async (req: Request) => {
     if (welcomeVideoUrl && isFirstInteraction) {
       messages.unshift({
         role: "system",
-        content: "[SISTEMA] Esta é a PRIMEIRA mensagem do cliente. Responda de forma natural e calorosa ao que ele disse, apresente-se como Ana Júlia da PPL Motors de Sorocaba e diga que vai enviar um breve vídeo da loja para ele conhecer melhor. NÃO pergunte o nome do cliente agora — isso será feito automaticamente DEPOIS do vídeo. Seja breve (2-3 frases no máximo). Exemplo de tom: 'Oi! Tudo ótimo por aqui, e com você? Sou a Ana Júlia, aqui da PPL Motors de Sorocaba, e vou cuidar do seu atendimento. Aqui vai um breve vídeo da nossa loja pra você nos conhecer melhor!'",
+        content: "[SISTEMA] Esta é a PRIMEIRA mensagem do cliente. Responda de forma natural ao que ele disse. Apresente-se como Ana Júlia da PPL Motors de Sorocaba e diga que vai enviar um breve vídeo da loja. NÃO pergunte o nome do cliente agora — isso será feito DEPOIS do vídeo. Seja breve (2-3 frases). REGRA CRÍTICA: NÃO diga 'tudo bem/ótimo por aqui' ou qualquer variação a menos que o cliente EXPLICITAMENTE tenha perguntado 'tudo bem?'. Se o cliente apenas mandou 'oi', 'bom dia' ou mensagem automática, responda apenas com a saudação correspondente + apresentação. Exemplo para 'Bom dia': 'Bom dia! Sou a Ana Júlia, da PPL Motors de Sorocaba, e vou cuidar do seu atendimento. Vou te mandar um breve vídeo da nossa loja!'",
       });
     }
 
