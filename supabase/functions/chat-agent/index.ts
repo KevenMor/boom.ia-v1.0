@@ -634,20 +634,50 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
           return [...new Set(variants)];
         };
 
+        // Word-by-word search: split multi-word terms into individual words
+        // and require EACH word to appear in at least one text field (AND logic).
+        // This handles cases like "XTZ Lander 250" matching "XTZ 250 LANDER 249CC"
+        // where word order in the DB differs from the search term.
+        const wordSearch = (term: string, fields: string[]) => {
+          const words = term.split(/\s+/).filter(w => w.length >= 2);
+          if (words.length <= 1) {
+            // Single word or short: use original approach with variants
+            const variants = expandModelVariants(term);
+            const orParts = variants.flatMap(v => fields.map(f => `${f}.ilike.%${v}%`));
+            query = query.or(orParts.join(","));
+          } else {
+            // Multi-word: each word must match at least one field (AND per word)
+            for (const word of words) {
+              const variants = expandModelVariants(word);
+              const orParts = variants.flatMap(v => fields.map(f => `${f}.ilike.%${v}%`));
+              query = query.or(orParts.join(","));
+            }
+          }
+        };
+
+        const textFields = ["brand", "model", "version", "description"];
+
         if (brandArg) {
-          const bVariants = expandModelVariants(brandArg);
-          const orParts = bVariants.flatMap(v => [`brand.ilike.%${v}%`, `model.ilike.%${v}%`, `version.ilike.%${v}%`, `description.ilike.%${v}%`]);
-          query = query.or(orParts.join(","));
+          wordSearch(brandArg, textFields);
         }
         if (modelArg) {
-          const mVariants = expandModelVariants(modelArg);
-          const orParts = mVariants.flatMap(v => [`model.ilike.%${v}%`, `version.ilike.%${v}%`, `brand.ilike.%${v}%`, `description.ilike.%${v}%`]);
-          query = query.or(orParts.join(","));
+          wordSearch(modelArg, textFields);
         }
         if (args.search || args.query || args.termo) {
           const term = args.search || args.query || args.termo;
-          const sVariants = expandModelVariants(term);
-          const orParts = sVariants.flatMap(v => [`brand.ilike.%${v}%`, `model.ilike.%${v}%`, `version.ilike.%${v}%`, `description.ilike.%${v}%`, `color.ilike.%${v}%`]);
+          const sFields = [...textFields, "color"];
+          const words = term.split(/\s+/).filter((w: string) => w.length >= 2);
+          if (words.length <= 1) {
+            const variants = expandModelVariants(term);
+            const orParts = variants.flatMap(v => sFields.map(f => `${f}.ilike.%${v}%`));
+            query = query.or(orParts.join(","));
+          } else {
+            for (const word of words) {
+              const variants = expandModelVariants(word);
+              const orParts = variants.flatMap(v => sFields.map(f => `${f}.ilike.%${v}%`));
+              query = query.or(orParts.join(","));
+            }
+          }
           query = query.or(orParts.join(","));
         }
         if (args.tipo_veiculo) {
