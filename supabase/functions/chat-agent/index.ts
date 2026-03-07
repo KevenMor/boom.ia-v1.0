@@ -1154,8 +1154,9 @@ REGRAS OBRIGATÓRIAS:
             calendarId = calendars[0].id;
           }
 
-          // Calculate end time
-          const startDate = new Date(startAt);
+          // Calculate end time — ensure São Paulo timezone if no offset provided
+          const tzAwareStart = /[Zz]|[+-]\d{2}:\d{2}$/.test(startAt) ? startAt : `${startAt}-03:00`;
+          const startDate = new Date(tzAwareStart);
           const endDate = new Date(startDate.getTime() + durationMin * 60000);
 
           // Check for conflicts
