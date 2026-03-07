@@ -770,7 +770,10 @@ STEP 2: EXTRACT PARAMETERS
 ═══════════════════════════════════════════════
 
 For consultar_fipe: extract marca, modelo, ano from conversation (can be in history)
-For consultar_estoque: extract marca, modelo, faixa_preco, ano, etc. from the message
+For consultar_estoque: extract ALL relevant parameters from the message:
+  - marca (brand), modelo (model), ano (year), faixa_preco (price range)
+  - cor (color) — CRITICAL: if the customer mentions a color (branco, preto, prata, vermelho, azul, cinza, etc.), ALWAYS pass it as the "cor" parameter
+  - cambio (transmission), combustivel (fuel type), tipo_veiculo (body type: SUV, sedan, hatch, picape)
 
 ═══════════════════════════════════════════════
 DECISION EXAMPLES (study these carefully)
