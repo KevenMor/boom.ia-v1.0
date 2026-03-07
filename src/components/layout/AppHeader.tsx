@@ -34,6 +34,7 @@ function getTitle(pathname: string): string {
 
 export function AppHeader() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const { setMobileOpen } = useSidebar();
   const isMobile = useIsMobile();
