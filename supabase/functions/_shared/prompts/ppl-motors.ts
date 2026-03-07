@@ -866,7 +866,10 @@ SCHEDULING: TWO-STEP FLOW (CRITICAL)
 ═══════════════════════════════════════════════
 
 Step 1: When customer ASKS about availability → call consultar_agenda(action="check_availability")
-Step 2: When customer CHOOSES a specific date/time → call consultar_agenda(action="criar", title="Visita - [nome]", start_at="YYYY-MM-DDTHH:00:00")
+Step 2: When customer CHOOSES a specific date/time → call consultar_agenda(action="criar", title="Visita - [nome]", start_at="YYYY-MM-DDTHH:00:00-03:00", telefone_cliente="[phone]", veiculo_interesse="[veículo]")
+
+⚠️ CRITICAL — TIMEZONE: ALWAYS include "-03:00" suffix in start_at (São Paulo timezone). Example: "2026-03-08T09:00:00-03:00". NEVER send without timezone offset.
+⚠️ CRITICAL — VEICULO_INTERESSE: This field is MANDATORY. Extract the vehicle the customer showed interest in from the conversation. If unknown, use the last vehicle discussed. NEVER leave it empty.
 
 NEVER skip Step 2! When the customer confirms a time, you MUST call the tool with action="criar" to actually book it.
 After calling check_availability, if in the SAME conversation turn the customer already said what time they want, immediately call action="criar".
