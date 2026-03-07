@@ -795,8 +795,19 @@ CALL consultar_estoque (PHOTO REQUESTS — CRITICAL):
 - "não mandou" (after photos were offered/promised) → consultar_estoque(marca/modelo from history)
 - "e as fotos?" → consultar_estoque(marca/modelo from history)
 - "me envia a porra da foto" → consultar_estoque(marca/modelo from history)
-NOTE: For photo requests, ALWAYS look at conversation history to find which vehicle was being discussed and extract its brand/model.
+
+CALL consultar_estoque (VEHICLE SELECTION — CRITICAL v3.0.0):
+- "Pode ser a Q5" (after "qual prefere ver?") → consultar_estoque(marca="Audi", modelo="Q5")
+- "A Q5" (after vehicle choice question) → consultar_estoque(marca="Audi", modelo="Q5")
+- "O Onix" (after "qual te chamou atenção?") → consultar_estoque(marca="Chevrolet", modelo="Onix")
+- "O primeiro" (after listing 2+ vehicles) → consultar_estoque(marca/modelo of first vehicle from history)
+- "Esse aí" (after showing a vehicle) → consultar_estoque(marca/modelo from history)
+- "Quero ver a Q5" → consultar_estoque(marca="Audi", modelo="Q5")
+- "Começa pela Q5" → consultar_estoque(marca="Audi", modelo="Q5")
+
+NOTE: For photo requests AND vehicle selections, ALWAYS look at conversation history to find which vehicle was being discussed and extract its brand/model.
 ⚠️ CRITICAL: Short follow-up messages like "Cadê?", "E aí?", "Vai mandar?" are PHOTO DEMANDS when the assistant previously offered or promised photos. They are NEVER "NO_TOOLS_NEEDED" in that context.
+⚠️ CRITICAL: Vehicle selection messages like "Pode ser a Q5", "A Q5", "O primeiro" after the assistant asked which vehicle to see are ALWAYS consultar_estoque calls. They are NEVER "NO_TOOLS_NEEDED".
 
 CALL consultar_fipe:
 - "tenho um Cruze 2020, quanto vale?" → consultar_fipe(marca="Chevrolet", modelo="Cruze", ano=2020)
