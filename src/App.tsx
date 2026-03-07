@@ -24,6 +24,7 @@ import Conversations from "@/pages/Conversations";
 import Audit from "@/pages/Audit";
 import SettingsPage from "@/pages/SettingsPage";
 import PromptsPage from "@/pages/PromptsPage";
+import ProfilePage from "@/pages/ProfilePage";
 import CalendarPage from "@/pages/CalendarPage";
 import PublicSandbox from "@/pages/PublicSandbox";
 import NotFound from "@/pages/NotFound";
@@ -66,6 +67,7 @@ const App = () => (
               <Route path="/audit" element={<Audit />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/prompts" element={<PromptsPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

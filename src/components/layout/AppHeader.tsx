@@ -1,5 +1,5 @@
-import { useLocation } from "react-router-dom";
-import { Bell, Search, User, LogOut, Menu } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { Bell, User, LogOut, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -23,6 +23,7 @@ const routeTitles: Record<string, string> = {
   "/monitoring": "Monitoramento",
   "/audit": "Auditoria",
   "/settings": "Configurações",
+  "/profile": "Meu Perfil",
 };
 
 function getTitle(pathname: string): string {
@@ -34,6 +35,7 @@ function getTitle(pathname: string): string {
 
 export function AppHeader() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const { setMobileOpen } = useSidebar();
   const isMobile = useIsMobile();
@@ -51,10 +53,7 @@ export function AppHeader() {
       </div>
 
       <div className="flex items-center gap-1">
-        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-          <Search className="h-4 w-4" />
-        </Button>
-        <Button variant="ghost" size="icon" className="relative h-8 w-8 text-muted-foreground hover:text-foreground">
+        <Button variant="ghost" size="icon" className="relative h-8 w-8 text-muted-foreground hover:text-foreground" title="Notificações">
           <Bell className="h-4 w-4" />
           <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary ring-2 ring-background" />
         </Button>
@@ -70,6 +69,10 @@ export function AppHeader() {
               {user?.email ?? "—"}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => navigate("/profile")}>
+              <User className="mr-2 h-3 w-3" />
+              Meu Perfil
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => signOut()}>
               <LogOut className="mr-2 h-3 w-3" />
               Sair
