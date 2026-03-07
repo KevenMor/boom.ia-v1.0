@@ -785,6 +785,13 @@ CALL consultar_estoque:
 - "vi uma A3 no pátio, quanto custa?" → consultar_estoque(marca="Audi", modelo="A3")
 - "tem algo até 200 mil?" → consultar_estoque(faixa_preco="até 200000")
 - "quero ver um sedan" → consultar_estoque(modelo="sedan")
+- "tem Onix branco?" → consultar_estoque(marca="Chevrolet", modelo="Onix", cor="branco")
+- "quero um preto, automático" → consultar_estoque(cor="preto", cambio="automático")
+- "vi o Onix branco de vocês" → consultar_estoque(marca="Chevrolet", modelo="Onix", cor="branco")
+- "tem algum carro prata?" → consultar_estoque(cor="prata")
+
+⚠️ CRITICAL — COLOR EXTRACTION (v2.7.0):
+When the customer mentions a COLOR alongside a model (e.g., "Onix branco", "Civic preto", "HB20 prata"), you MUST pass the "cor" parameter. This filters the inventory to show ONLY vehicles of that specific color. Missing the color parameter causes the system to return ALL vehicles of that model, which confuses the customer.
 
 CALL consultar_estoque (PHOTO REQUESTS — CRITICAL):
 - "manda as fotos" → consultar_estoque(marca/modelo from conversation history)
