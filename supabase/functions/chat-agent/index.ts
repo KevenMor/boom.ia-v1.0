@@ -3265,7 +3265,24 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
       finalContent = finalContent.replace(/(?<!_)_([^_\n]+?)_(?!_)/g, '$1');  // _italic_ → italic
     }
 
-    // ===== HANDOFF DETECTION — cancel follow-ups + send notification =====
+    // Guard: Strip hallucinated photo commentary (e.g., "o interior está impecável" when no interior photo was sent)
+    // When photos are present, remove sentences that describe/comment on photo content
+    if (hasMarkdownImages(finalContent)) {
+      const photoCommentaryPatterns = [
+        /[^.!?\n]*\b(dá pra notar|dá pra ver|pode ver|pode notar|repare|observe|veja como|olha como)\b[^.!?\n]*\b(pelas? fotos?|nas? fotos?|nas? imagens?)\b[^.!?\n]*/gi,
+        /[^.!?\n]*\b(o interior|por dentro|por fora|o exterior)\b[^.!?\n]*\b(está|tá|impecável|lindo|bonito|conservado|perfeito|novo)\b[^.!?\n]*/gi,
+      ];
+      let commentaryStripped = 0;
+      for (const pattern of photoCommentaryPatterns) {
+        finalContent = finalContent.replace(pattern, () => { commentaryStripped++; return ""; });
+      }
+      if (commentaryStripped > 0) {
+        finalContent = finalContent.replace(/\n{3,}/g, "\n\n").trim();
+        console.log(`[PostProcess] Stripped ${commentaryStripped} hallucinated photo commentary line(s)`);
+        debugTrace.push({ type: "photo_commentary_strip", removed: commentaryStripped, timestamp: Date.now() });
+      }
+    }
+
     // If raw content contained HANDOFF_COMERCIAL or the LLM mentioned transferring to a human,
     // proactively cancel follow-ups and send a team notification (safety net for when LLM
     // uses the legacy text command instead of calling chatwoot_assign + send_notification tools)
