@@ -1159,6 +1159,15 @@ REGRAS OBRIGATÓRIAS:
           const startDate = new Date(tzAwareStart);
           const endDate = new Date(startDate.getTime() + durationMin * 60000);
 
+          // Validate: reject Sundays
+          if (startDate.getDay() === 0) {
+            // Check day in São Paulo timezone
+            const spDay = new Date(startDate.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+            if (spDay.getDay() === 0) {
+              return JSON.stringify({ error: "Domingos não são dias de funcionamento. Escolha outro dia." });
+            }
+          }
+
           // Check for conflicts
           const { data: conflicts } = await supabase
             .from("calendar_events")
