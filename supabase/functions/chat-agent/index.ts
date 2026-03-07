@@ -3172,111 +3172,14 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
       }
     }
 
-    // Inject missing photos: if tool results contain vehicles with photos, ensure they appear in content
-    // BUT NOT when user sent images (appraisal flow — they sent THEIR car photos, don't inject dealer photos)
-    // AND NOT when the conversation is about trade-in/appraisal (user talking about THEIR car)
+    // v3.0.0: Photo injection/recovery regex ELIMINATED
+    // The LLM Phase 2 decides whether to include ![](url) in its response.
+    // If it included them, they pass through naturally to deliver-message.
+    // If it didn't, we respect the LLM's decision.
+    // Only guard: appraisal context (user sent THEIR car photo, don't inject dealer photos)
     const isAppraisalPhotoContext = imageBase64Parts.length > 0 && !(latestUserText || "").trim();
-    const isTradeInContext = /(troca|trocar|negocio|negócio|dar na troca|meu carro|tenho um|avalia|pré-avalia|pre-avalia|quanto vale o meu|dar como entrada|colocar na negociação|aceita|aceitam)/i.test(latestUserText || "");
-    const isSchedulingContext = /(agend|reagend|remar|horario|horário|visita|test.?drive|marcar|remarcar|quero ir|posso ir|vou aí|vou ai|chegar na loja|estacionamento|endere[cç]o|como chego)/i.test(latestUserText || "");
-    const hasFipeResult = toolResultsContext.some(ctx => /fipe|tabela_fipe|valor_fipe|preco_medio/i.test(ctx));
-    // PHOTO INJECTION: Only inject photos when user EXPLICITLY asked for them
-    // Must match the same expanded regex from inventory_query to be consistent
-    const userExplicitlyAskedPhotos = /\b(fotos?|imagens?|photos?|mand[ae]r?\s*fotos?|envia(?:r)?\s*fotos?|ver\s*fotos?|mostra(?:r)?\s*fotos?|me\s*envia(?:r)?|me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?|galeria)\b/i.test(latestUserText || "")
-      || /\b(me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?|me\s*envia(?:r)?|pode\s*me\s*envia(?:r)?)\b.*\b(tamb[eé]m|tb|tbm|tamb[eé]n)\b/i.test(latestUserText || "")
-      || isContextualPhotoAcceptance(latestUserText || "", sanitizedMessages || []);
-    if (toolResultsContext.length > 0 && !isAppraisalPhotoContext && !isTradeInContext && !isSchedulingContext && userExplicitlyAskedPhotos) {
-      try {
-        for (const ctx of toolResultsContext) {
-          const parsed = JSON.parse(ctx.replace(/^\[Resultado da ferramenta "[^"]+"\]: /, ""));
-          if (parsed?.vehicles && Array.isArray(parsed.vehicles)) {
-            finalContent = appendMissingVehiclePhotos(finalContent, parsed.vehicles, latestUserText, true);
-            console.log(`[PostProcess] appendMissingVehiclePhotos applied (user requested photos), vehicles=${parsed.vehicles.length}`);
-          }
-        }
-      } catch (e: any) {
-        console.warn("[PostProcess] Could not extract vehicles for photo injection:", e?.message);
-      }
-    } else if (!isAppraisalPhotoContext && !isTradeInContext && !isSchedulingContext && toolResultsContext.length === 0 && agent?.tenant_id) {
-      const explicitPhotoRequest = /(foto|fotos|imagem|imagens|mand[ae]r?|envia(?:r)?|nao me enviou|não me enviou|cad[eê]\s*(as\s+fotos|\?|$)|me envia(?:r)?|me mand[ae]r?|pode me mand[ae]r?)/i.test(latestUserText || "")
-        || /\b(me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?)\b.*\b(tamb[eé]m|tb|tbm)\b/i.test(latestUserText || "")
-        || isContextualPhotoAcceptance(latestUserText || "", sanitizedMessages || []);
-      const shouldForcePhotoRecovery = !hasMarkdownImages(finalContent) && (!!photoCommandLine || explicitPhotoRequest);
-
-      if (shouldForcePhotoRecovery) {
-        // Fallback: user asked for photos, but dispatcher called no tools (NO_TOOLS_NEEDED).
-        // Recover likely vehicle(s) from inventory using command ID or recent conversation context.
-        try {
-          const idFromCommand = photoCommandLine.match(/\bid:\s*([0-9a-f-]{36})\b/i)?.[1] || null;
-          const contextWindow = [
-            photoCommandLine,
-            latestUserText,
-            ...(sanitizedMessages || []).slice(-8).map((m: any) => String(m?.content || "")),
-          ].join(" ");
-          const normalizedContext = contextWindow
-            .toLowerCase()
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, " ");
-
-          let fallbackVehicles: any[] = [];
-
-          if (idFromCommand) {
-            const { data, error } = await supabase
-              .from("inventory")
-              .select("*")
-              .eq("tenant_id", agent.tenant_id)
-              .eq("status", "available")
-              .eq("id", idFromCommand)
-              .limit(1);
-            if (error) {
-              console.warn("[PostProcess] Photo fallback by id failed:", error.message);
-            } else {
-              fallbackVehicles = data || [];
-            }
-          } else {
-            const { data: pool, error: poolErr } = await supabase
-              .from("inventory")
-              .select("*")
-              .eq("tenant_id", agent.tenant_id)
-              .eq("status", "available")
-              .limit(120);
-
-            if (poolErr) {
-              console.warn("[PostProcess] Photo fallback inventory pool failed:", poolErr.message);
-            } else if (pool && pool.length > 0) {
-              const scoreVehicle = (v: any) => {
-                let score = 0;
-                const hay = `${v?.brand || ""} ${v?.model || ""} ${v?.version || ""}`
-                  .toLowerCase()
-                  .normalize("NFD")
-                  .replace(/[\u0300-\u036f]/g, " ");
-                const tokens = hay.split(/\s+/).filter((t: string) => t.length >= 3);
-                score += tokens.reduce((acc: number, token: string) => acc + (normalizedContext.includes(token) ? 1 : 0), 0);
-                if (v?.year && normalizedContext.includes(String(v.year))) score += 3;
-                return score;
-              };
-
-              const ranked = [...pool]
-                .map((v: any) => ({ v, score: scoreVehicle(v) }))
-                .filter((x: any) => x.score > 0)
-                .sort((a: any, b: any) => b.score - a.score);
-
-              fallbackVehicles = ranked.slice(0, 3).map((x: any) => x.v);
-            }
-          }
-
-          if (fallbackVehicles.length > 0) {
-            finalContent = appendMissingVehiclePhotos(finalContent, fallbackVehicles, latestUserText || contextWindow, true);
-            console.log(`[PostProcess] Photo fallback applied from context, vehicles=${fallbackVehicles.length}, by_id=${!!idFromCommand}`);
-            debugTrace.push({ type: "photo_fallback_from_context", vehicles: fallbackVehicles.length, has_id: !!idFromCommand, explicit_photo_request: explicitPhotoRequest, timestamp: Date.now() });
-          } else {
-            console.warn(`[PostProcess] Photo fallback found no candidate vehicles (request='${latestUserText}')`);
-          }
-        } catch (e: any) {
-          console.warn("[PostProcess] Photo fallback error:", e?.message);
-        }
-      }
-    } else if (isAppraisalPhotoContext && toolResultsContext.length > 0) {
-      console.log(`[PostProcess] Skipping photo injection — appraisal context (user sent image, no text)`);
+    if (isAppraisalPhotoContext && toolResultsContext.length > 0) {
+      console.log(`[PostProcess] Skipping — appraisal context (user sent image, no text)`);
     }
 
     // Guard: strip premature closing questions (scheduling, simulation, visit) when photos are being sent
