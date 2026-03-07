@@ -23,6 +23,7 @@ const routeTitles: Record<string, string> = {
   "/monitoring": "Monitoramento",
   "/audit": "Auditoria",
   "/settings": "Configurações",
+  "/profile": "Meu Perfil",
 };
 
 function getTitle(pathname: string): string {
