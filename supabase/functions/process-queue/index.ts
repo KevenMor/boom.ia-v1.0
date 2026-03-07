@@ -459,12 +459,37 @@ Deno.serve(async (req: Request) => {
     // ---------- Call chat-agent ----------
     const messages = [...conversationMessages, { role: "user", content: finalMessage }];
 
-    // If welcome flow is active, instruct LLM to generate natural greeting + intro only
+    // If welcome flow is active, inject anti-hallucination + welcome instructions
+    // Using user+assistant pair (NOT system role) because Gemini ignores system messages
     if (welcomeVideoUrl && isFirstInteraction) {
-      messages.unshift({
-        role: "system",
-        content: "[SISTEMA] Esta é a PRIMEIRA mensagem do cliente. Responda de forma natural ao que ele disse. Apresente-se como Ana Júlia da PPL Motors de Sorocaba e diga que vai enviar um breve vídeo da loja. NÃO pergunte o nome do cliente agora — isso será feito DEPOIS do vídeo. Seja breve (2-3 frases). REGRA CRÍTICA: NÃO diga 'tudo bem/ótimo por aqui' ou qualquer variação a menos que o cliente EXPLICITAMENTE tenha perguntado 'tudo bem?'. Se o cliente apenas mandou 'oi', 'bom dia' ou mensagem automática, responda apenas com a saudação correspondente + apresentação. Exemplo para 'Bom dia': 'Bom dia! Sou a Ana Júlia, da PPL Motors de Sorocaba, e vou cuidar do seu atendimento. Vou te mandar um breve vídeo da nossa loja!'",
+      // Insert as the LAST messages before the user's actual message (high attention zone for Gemini)
+      const userMsg = messages.pop()!; // temporarily remove user message
+      messages.push({
+        role: "user",
+        content: `[INSTRUÇÃO OBRIGATÓRIA PARA ESTA RESPOSTA]
+Esta é a PRIMEIRA mensagem do cliente. Siga TODAS estas regras:
+
+1. PROIBIDO dizer "tudo bem", "tudo ótimo", "tudo certo", "e com você?" ou QUALQUER variação — o cliente NÃO perguntou como você está. Responder isso é ALUCINAÇÃO GRAVE.
+2. Apresente-se como Ana Júlia da PPL Motors de Sorocaba.
+3. Diga que vai enviar um breve vídeo da loja.
+4. NÃO pergunte o nome do cliente agora — isso será feito DEPOIS do vídeo.
+5. Seja breve (2-3 frases no máximo).
+6. Se o cliente mencionou um veículo específico, NÃO dê informações ainda — apenas confirme que viu o interesse e apresente-se.
+
+EXEMPLOS CORRETOS:
+- Cliente disse "Bom dia" → "Bom dia! Sou a Ana Júlia, da PPL Motors de Sorocaba, e vou cuidar do seu atendimento. Vou te mandar um breve vídeo da nossa loja!"
+- Cliente disse "Olá! Vi o anúncio do Onix..." → "Olá! Sou a Ana Júlia, da PPL Motors de Sorocaba. Vou cuidar do seu atendimento por aqui. Antes, vou te mandar um breve vídeo da nossa loja pra você nos conhecer!"
+
+EXEMPLOS PROIBIDOS (NUNCA faça isso):
+- "Oi! Tudo ótimo por aqui, e com você?" ← PROIBIDO
+- "Tudo bem sim!" ← PROIBIDO
+- "Tudo certo por aqui!" ← PROIBIDO`,
       });
+      messages.push({
+        role: "assistant",
+        content: "Entendido. Vou seguir todas as regras: sem 'tudo bem', apresentação breve, mencionar o vídeo, sem perguntar nome agora.",
+      });
+      messages.push(userMsg); // re-add user message at the end
     }
 
     console.log(`[ProcessQueue] Calling chat-agent with ${messages.length} messages, ${(attachments || []).length} attachment(s)`);
