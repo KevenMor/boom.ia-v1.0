@@ -709,7 +709,37 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         if (data.length > 3) {
           _hint = `Apresente os ${data.length} veículos de forma NATURAL, como um vendedor experiente no WhatsApp. REGRAS ANTI-REPETIÇÃO: 1) NÃO repita o nome completo do carro se já mencionou antes — use apelidos curtos ("o Nivus", "o Haval", "esse aqui"). 2) Varie a estrutura das frases — cada parágrafo deve soar diferente. 3) NÃO use a mesma abertura para todos os carros. 4) Destaque algo ÚNICO de cada um (um é mais econômico, outro tem mais espaço, etc). 5) Finalize com UMA pergunta natural tipo "Algum te chamou atenção?" ou "Quer ver fotos de algum deles?". NÃO use listas numeradas. NÃO inclua fotos nesta resposta — ESPERE o cliente pedir. NÃO repita dados que o cliente já sabe.`;
         } else {
-          _hint = `Fotos estão disponíveis no campo 'photos' de cada veículo. REGRA DE DECISÃO (use o contexto da conversa): Se o cliente PEDIU fotos, ACEITOU ver fotos, SELECIONOU um veículo para ver, ou respondeu com confirmação curta ("Sim", "Quero", "Pode ser a Q5", etc.) a uma oferta de fotos → INCLUA TODAS as fotos usando ![foto](URL). Antes das fotos, escreva UMA frase curta e VARIADA (NUNCA repita 'Aqui estão as fotos'). Se o cliente apenas perguntou preço, disponibilidade ou informações SEM demonstrar interesse visual → apresente os dados e OFEREÇA enviar fotos. PROIBIDO inventar atributos que não estejam nos campos. NÃO faça pergunta de fechamento quando enviar fotos — deixe o cliente reagir primeiro.`;
+          // Build explicit photo markdown list so the LLM copies them directly
+          const photoMarkdownList = data.map((v: any) => {
+            let photos: string[] = [];
+            if (Array.isArray(v.photos)) {
+              photos = v.photos.filter((p: unknown) => typeof p === "string") as string[];
+            } else if (typeof v.photos === "string" && v.photos.trim()) {
+              let raw = v.photos.trim();
+              for (let attempt = 0; attempt < 3; attempt++) {
+                try {
+                  const decoded = JSON.parse(raw);
+                  if (Array.isArray(decoded)) { photos = decoded.filter((p: unknown) => typeof p === "string") as string[]; break; }
+                  else if (typeof decoded === "string") { raw = decoded; } else { break; }
+                } catch { break; }
+              }
+            }
+            const allPhotos = Array.from(new Set([...(v.photo_url ? [v.photo_url] : []), ...photos]))
+              .map(cleanPhotoUrl).filter(isValidPhotoUrl).slice(0, MAX_PHOTOS_PER_VEHICLE);
+            return allPhotos.map((url: string) => `![foto](${url})`).join("\n");
+          }).filter(Boolean).join("\n");
+
+          _hint = `REGRA DE DECISÃO para fotos (use o contexto da conversa):
+Se o cliente PEDIU fotos, ACEITOU ver fotos, SELECIONOU um veículo para ver, ou respondeu com confirmação curta ("Sim", "Quero", "Pode ser", "Manda", etc.) → você DEVE copiar e incluir TODAS as fotos listadas abaixo na sua resposta. Escreva UMA frase curta antes das fotos e NENHUMA frase entre ou depois das fotos. NÃO comente sobre o que aparece nas fotos (interior, exterior, etc.) — deixe o cliente ver por conta própria.
+Se o cliente apenas perguntou preço ou informações SEM demonstrar interesse visual → apresente os dados e OFEREÇA enviar fotos.
+
+FOTOS DISPONÍVEIS (copie TODAS quando aplicável):
+${photoMarkdownList}
+
+REGRAS OBRIGATÓRIAS:
+- INCLUA TODAS as fotos acima, não apenas uma ou duas
+- NÃO descreva ou comente sobre o que aparece nas fotos
+- NÃO faça pergunta de fechamento quando enviar fotos — deixe o cliente reagir`;
         }
 
           return JSON.stringify({
@@ -3168,7 +3198,45 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
       }
     }
 
-    // Guard: when dispatcher did NOT call any tool, NEVER allow photos in the response.
+    // Guard: PHOTO COMPLETENESS — when tool results had photos and the LLM included SOME
+    // but not ALL, inject the missing ones. This prevents the LLM from cherry-picking 1-2 photos.
+    if (toolResultsContext.length > 0 && hasMarkdownImages(finalContent)) {
+      const allToolPhotoUrls: string[] = [];
+      for (const ctx of toolResultsContext) {
+        const urlMatches = ctx.matchAll(/https?:\/\/[^\s"',\]})]+\.(jpg|jpeg|png|gif|webp|avif|svg|bmp)[^\s"',\]})']*/gi);
+        for (const m of urlMatches) {
+          allToolPhotoUrls.push(cleanPhotoUrl(m[0]));
+        }
+      }
+      // Deduplicate
+      const uniqueToolPhotos = [...new Set(allToolPhotoUrls)];
+
+      if (uniqueToolPhotos.length > 1) {
+        // Extract photos already in the response
+        const presentPhotos = new Set<string>();
+        const imgRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/gi;
+        let imgMatch;
+        while ((imgMatch = imgRegex.exec(finalContent)) !== null) {
+          presentPhotos.add(cleanPhotoUrl(imgMatch[1]));
+        }
+
+        const missingPhotos = uniqueToolPhotos.filter(url => !presentPhotos.has(url));
+        if (missingPhotos.length > 0 && presentPhotos.size > 0) {
+          // LLM included some photos but missed others — append the missing ones
+          const missingMarkdown = missingPhotos.map(url => `![foto](${url})`).join("\n");
+          finalContent = finalContent.trimEnd() + "\n\n" + missingMarkdown;
+          console.log(`[PostProcess] Photo completeness: injected ${missingPhotos.length} missing photo(s) (had ${presentPhotos.size}, total ${uniqueToolPhotos.length})`);
+          debugTrace.push({
+            type: "photo_completeness_inject",
+            injected: missingPhotos.length,
+            already_present: presentPhotos.size,
+            total_available: uniqueToolPhotos.length,
+            timestamp: Date.now(),
+          });
+        }
+      }
+    }
+
     // The LLM may hallucinate or pull photos from conversation history.
     if (toolResultsContext.length === 0 && finalContent && hasMarkdownImages(finalContent)) {
       let strippedCount = 0;
@@ -3197,7 +3265,24 @@ Se você sentir vontade de retornar um JSON ou chamar uma ferramenta, PARE e esc
       finalContent = finalContent.replace(/(?<!_)_([^_\n]+?)_(?!_)/g, '$1');  // _italic_ → italic
     }
 
-    // ===== HANDOFF DETECTION — cancel follow-ups + send notification =====
+    // Guard: Strip hallucinated photo commentary (e.g., "o interior está impecável" when no interior photo was sent)
+    // When photos are present, remove sentences that describe/comment on photo content
+    if (hasMarkdownImages(finalContent)) {
+      const photoCommentaryPatterns = [
+        /[^.!?\n]*\b(dá pra notar|dá pra ver|pode ver|pode notar|repare|observe|veja como|olha como)\b[^.!?\n]*\b(pelas? fotos?|nas? fotos?|nas? imagens?)\b[^.!?\n]*/gi,
+        /[^.!?\n]*\b(o interior|por dentro|por fora|o exterior)\b[^.!?\n]*\b(está|tá|impecável|lindo|bonito|conservado|perfeito|novo)\b[^.!?\n]*/gi,
+      ];
+      let commentaryStripped = 0;
+      for (const pattern of photoCommentaryPatterns) {
+        finalContent = finalContent.replace(pattern, () => { commentaryStripped++; return ""; });
+      }
+      if (commentaryStripped > 0) {
+        finalContent = finalContent.replace(/\n{3,}/g, "\n\n").trim();
+        console.log(`[PostProcess] Stripped ${commentaryStripped} hallucinated photo commentary line(s)`);
+        debugTrace.push({ type: "photo_commentary_strip", removed: commentaryStripped, timestamp: Date.now() });
+      }
+    }
+
     // If raw content contained HANDOFF_COMERCIAL or the LLM mentioned transferring to a human,
     // proactively cancel follow-ups and send a team notification (safety net for when LLM
     // uses the legacy text command instead of calling chatwoot_assign + send_notification tools)
