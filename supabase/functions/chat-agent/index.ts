@@ -114,6 +114,43 @@ function isContextualPhotoAcceptance(userText: string, history: any[]): boolean 
   return photoOfferPattern.test(lastAssistantContent);
 }
 
+// ---------- Vehicle selection for photos detection ----------
+// Detects when the assistant asked "which vehicle do you want to see photos of?" 
+// and the client responds with a vehicle name like "Pode ser a Q5", "A Q5", "O Onix"
+function isVehicleSelectionForPhotos(userText: string, history: any[]): boolean {
+  if (!userText || !history || history.length === 0) return false;
+  
+  const normalized = userText.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  
+  // Must be a short message (vehicle selection is typically brief)
+  if (normalized.length > 80) return false;
+  
+  // Patterns: "pode ser a/o X", "a Q5", "o onix", "quero ver a/o X", "primeiro a/o X"
+  const vehicleSelectionPattern = /^(pode ser|quero ver|primeiro|começa|comeca|vamos com|vai de|manda d[ao]|envia d[ao]|pode ser d[ao]|a |o |d[ao] )?\s*(a |o |d[ao] )?\s*\w+/i;
+  if (!vehicleSelectionPattern.test(normalized)) return false;
+  
+  // Find the last assistant message
+  let lastAssistantContent = "";
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i]?.role === "assistant" && history[i]?.content) {
+      lastAssistantContent = String(history[i].content).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      break;
+    }
+  }
+  
+  if (!lastAssistantContent) return false;
+  
+  // The assistant must have asked which vehicle to see — patterns like "qual prefere ver primeiro",
+  // "qual quer ver", "qual deseja", "qual te chamou atenção"
+  const vehicleChoiceQuestion = /(qual\s+(prefere|quer|deseja|gostaria|voce quer)\s+(ver|conferir|receber|que eu)|qual\s+.{0,30}(primeiro|antes|ver)|prefere\s+ver\s+.{0,20}primeiro|algum.{0,20}(chamou|interesse)|quer\s+ver\s+.{0,15}(qual|primeiro))/i;
+  
+  // Also detect the specific hint response: "há X veículos. PERGUNTE qual prefere"
+  // which produces messages like "qual você prefere ver primeiro?"
+  const photoContextInQuestion = /(fotos?|imagens?|ver\s+primeiro|conferir\s+primeiro|mandar\s+primeiro)/i;
+  
+  return vehicleChoiceQuestion.test(lastAssistantContent) && photoContextInQuestion.test(lastAssistantContent);
+}
+
 function dedupeRepeatedParagraphs(content: string): string {
   const parts = content.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
   if (parts.length <= 1) return content;
