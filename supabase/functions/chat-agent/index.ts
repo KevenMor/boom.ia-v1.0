@@ -83,73 +83,10 @@ function stripEmojis(content: string): string {
     .trim();
 }
 
-// ---------- Contextual photo acceptance detection ----------
-// Detects when a short user message is accepting a photo offer from the previous assistant message
-function isContextualPhotoAcceptance(userText: string, history: any[]): boolean {
-  if (!userText || !history || history.length === 0) return false;
-  
-  let normalized = userText.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  
-  // Strip trailing polite suffixes before matching core acceptance
-  normalized = normalized.replace(/[,.]?\s*(por favor|por gentileza|por obsequio|pfv|pf)\s*[.!?]*$/i, "").trim();
-  
-  // Short acceptance patterns (must be concise — typically 1-3 words)
-  const acceptancePattern = /^(quero|sim|pode|manda|claro|por favor|ok|bora|com certeza|gostaria|aceito|positivo|afirmativo|quero sim|pode sim|manda sim|sim por favor|pode me enviar|quero ver|sim quero|manda ai|manda la|envia|envia sim|quero fotos?|sim,?\s*quero|sim,?\s*pode|claro que sim|pode mandar|pode enviar|com certeza|logico|lógico|obvio|óbvio|show|beleza|top|perfeito|isso|isso mesmo|por gentileza|por obsequio|pfv|pf|s|ss|sss|siim|siiim|querooo|queroo|mandaa|mandaaa|cade|cad[eê]|cade\s*\?|cad[eê]\s*\?|e\s+as\s+fotos|e\s+a[ií]\s*\??|vai\s+mandar|nao\s+mandou|n[aã]o\s+mandou|nao\s+enviou|n[aã]o\s+enviou|ta\s+demorando|t[aá]\s+demorando|estou\s+esperando|to\s+esperando)[.!?,\s]*$/i;
-  if (!acceptancePattern.test(normalized)) return false;
-  
-  // Find the last assistant message in history
-  let lastAssistantContent = "";
-  for (let i = history.length - 1; i >= 0; i--) {
-    if (history[i]?.role === "assistant" && history[i]?.content) {
-      lastAssistantContent = String(history[i].content).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      break;
-    }
-  }
-  
-  if (!lastAssistantContent) return false;
-  
-  // Photo offer patterns in assistant's previous message
-  const photoOfferPattern = /(quer|gostaria|posso|vou|deseja|te mand|te envi|te mostr).{0,30}(fotos?|imagens?|ver\s+(ele|ela|o\s+carro|o\s+veiculo|as\s+fotos?))|fotos?\s+(dele|dela|do\s+\w+|da\s+\w+)|mand[aeo]r?\s+fotos?|envi[aeo]r?\s+fotos?|mostrar\s+fotos?|(quer|gostaria)\s+.{0,20}(ver|receber|conferir)/i;
-  
-  return photoOfferPattern.test(lastAssistantContent);
-}
-
-// ---------- Vehicle selection for photos detection ----------
-// Detects when the assistant asked "which vehicle do you want to see photos of?" 
-// and the client responds with a vehicle name like "Pode ser a Q5", "A Q5", "O Onix"
-function isVehicleSelectionForPhotos(userText: string, history: any[]): boolean {
-  if (!userText || !history || history.length === 0) return false;
-  
-  const normalized = userText.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  
-  // Must be a short message (vehicle selection is typically brief)
-  if (normalized.length > 80) return false;
-  
-  // Patterns: "pode ser a/o X", "a Q5", "o onix", "quero ver a/o X", "primeiro a/o X"
-  const vehicleSelectionPattern = /^(pode ser|quero ver|primeiro|começa|comeca|vamos com|vai de|manda d[ao]|envia d[ao]|pode ser d[ao]|a |o |d[ao] )?\s*(a |o |d[ao] )?\s*\w+/i;
-  if (!vehicleSelectionPattern.test(normalized)) return false;
-  
-  // Find the last assistant message
-  let lastAssistantContent = "";
-  for (let i = history.length - 1; i >= 0; i--) {
-    if (history[i]?.role === "assistant" && history[i]?.content) {
-      lastAssistantContent = String(history[i].content).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      break;
-    }
-  }
-  
-  if (!lastAssistantContent) return false;
-  
-  // The assistant must have asked which vehicle to see — patterns like "qual prefere ver primeiro",
-  // "qual quer ver", "qual deseja", "qual te chamou atenção"
-  const vehicleChoiceQuestion = /(qual\s+(prefere|quer|deseja|gostaria|voce quer)\s+(ver|conferir|receber|que eu)|qual\s+.{0,30}(primeiro|antes|ver)|prefere\s+ver\s+.{0,20}primeiro|algum.{0,20}(chamou|interesse)|quer\s+ver\s+.{0,15}(qual|primeiro))/i;
-  
-  // Also detect the specific hint response: "há X veículos. PERGUNTE qual prefere"
-  // which produces messages like "qual você prefere ver primeiro?"
-  const photoContextInQuestion = /(fotos?|imagens?|ver\s+primeiro|conferir\s+primeiro|mandar\s+primeiro)/i;
-  
-  return vehicleChoiceQuestion.test(lastAssistantContent) && photoContextInQuestion.test(lastAssistantContent);
-}
+// ---------- Photo decision: delegated to LLM (v3.0.0) ----------
+// Regex gatekeeping for photos has been ELIMINATED.
+// The LLM Phase 2 decides whether to include photos based on conversation context.
+// See _hint in inventory handler and Dispatcher Rule 13 in ppl-motors.ts.
 
 function dedupeRepeatedParagraphs(content: string): string {
   const parts = content.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
