@@ -763,45 +763,23 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
         if (error) return JSON.stringify({ error: error.message });
         if (!data?.length) return JSON.stringify({ message: "Nenhum veículo encontrado com esses filtros" });
 
-        // Determine if user EXPLICITLY asked for PHOTOS/IMAGES
-        // Covers infinitive forms (mandar, enviar, mostrar) AND conjugations (manda, envia, mostra)
-        // Also covers contextual requests like "me manda da X tambem" (implying photos from context)
-        const photoRequestPattern = /\b(fotos?|imagens?|images?|photos?|mand[ae]r?\s*fotos?|envia(?:r)?\s*fotos?|ver\s*fotos?|ver\s*imagens?|mostra(?:r)?\s*fotos?|mostra(?:r)?\s*imagens?|quero\s*ver\s*fotos?|me\s*envia(?:r)?|me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?|galeria)\b/i;
-        // CONTEXTUAL: "me manda/mandar da X tambem" after photos were just sent implies more photos
-        const contextualPhotoPattern = /\b(me\s*mand[ae]r?|pode\s*me\s*mand[ae]r?|me\s*envia(?:r)?|pode\s*me\s*envia(?:r)?)\b.*\b(tamb[eé]m|tb|tbm|tamb[eé]n)\b/i;
-        // NEW: detect vehicle selection after "which one to see photos of?" question
-        const isVehicleSelection = isVehicleSelectionForPhotos(userText || "", history || []);
-        if (isVehicleSelection) {
-          console.log(`[Inventory] Vehicle selection for photos detected: "${(userText || "").slice(0, 60)}"`);
-        }
-        const isPhotoRequest = photoRequestPattern.test(userText || "") || contextualPhotoPattern.test(userText || "") || isContextualPhotoAcceptance(userText || "", history || []) || isVehicleSelection;
-        // Aceite genérico: cliente disse "Sim"/"Quero" etc. MAS não nomeou veículo específico
-        const isGenericAcceptance = isContextualPhotoAcceptance(userText || "", history || [])
-          && !photoRequestPattern.test(userText || "")
-          && !contextualPhotoPattern.test(userText || "")
-          && !isVehicleSelection
-          && !brandArg && !modelArg && !(args.search || args.query || args.termo);
-        // Só ativa modo foto se: pedido específico OU aceite genérico com 1 veículo (sem ambiguidade)
-        const isSpecificWithPhotos = isPhotoRequest && data.length <= 3
-          && !(isGenericAcceptance && data.length > 1);
-        // Include photo data ONLY when user asked for photos — NOT when generic acceptance + multiple vehicles
-        const includePhotosInData = isPhotoRequest && data.length <= 3
-          && !(isGenericAcceptance && data.length > 1);
+        // v3.0.0: LLM decides photo inclusion — no regex gatekeeping
+        // Always include photos for ≤3 vehicles; listing mode for >3
+        const MAX_PHOTOS_PER_VEHICLE = 8;
+        const includePhotos = data.length <= 3;
 
         let _hint: string;
-        if (isGenericAcceptance && data.length > 1) {
-          _hint = `Cliente aceitou ver fotos mas há ${data.length} veículos. PERGUNTE qual prefere ver primeiro. NÃO envie fotos ainda.`;
-        } else if (isSpecificWithPhotos) {
-          _hint = "Envie TODAS as fotos do array 'photos' usando ![foto](URL). Antes das fotos, escreva UMA frase curta e VARIADA (NUNCA repita 'Aqui estão as fotos'). Use variações como: 'Dá uma olhada!', 'Olha só como ela está!', 'Veja que linda!', 'Tá aqui pra você conferir!'. PROIBIDO inventar atributos, acabamento, materiais ou equipamentos que não estejam explicitamente nos campos do veículo. NÃO faça pergunta de fechamento nesta mensagem — deixe o cliente reagir às fotos primeiro.";
-        } else {
+        if (data.length > 3) {
           _hint = `Apresente os ${data.length} veículos de forma NATURAL, como um vendedor experiente no WhatsApp. REGRAS ANTI-REPETIÇÃO: 1) NÃO repita o nome completo do carro se já mencionou antes — use apelidos curtos ("o Nivus", "o Haval", "esse aqui"). 2) Varie a estrutura das frases — cada parágrafo deve soar diferente. 3) NÃO use a mesma abertura para todos os carros. 4) Destaque algo ÚNICO de cada um (um é mais econômico, outro tem mais espaço, etc). 5) Finalize com UMA pergunta natural tipo "Algum te chamou atenção?" ou "Quer ver fotos de algum deles?". NÃO use listas numeradas. NÃO inclua fotos nesta resposta — ESPERE o cliente pedir. NÃO repita dados que o cliente já sabe.`;
+        } else {
+          _hint = `Fotos estão disponíveis no campo 'photos' de cada veículo. REGRA DE DECISÃO (use o contexto da conversa): Se o cliente PEDIU fotos, ACEITOU ver fotos, SELECIONOU um veículo para ver, ou respondeu com confirmação curta ("Sim", "Quero", "Pode ser a Q5", etc.) a uma oferta de fotos → INCLUA TODAS as fotos usando ![foto](URL). Antes das fotos, escreva UMA frase curta e VARIADA (NUNCA repita 'Aqui estão as fotos'). Se o cliente apenas perguntou preço, disponibilidade ou informações SEM demonstrar interesse visual → apresente os dados e OFEREÇA enviar fotos. PROIBIDO inventar atributos que não estejam nos campos. NÃO faça pergunta de fechamento quando enviar fotos — deixe o cliente reagir primeiro.`;
         }
 
           return JSON.stringify({
           total: data.length,
           _hint,
           vehicles: data.map((v: any) => {
-            if (!includePhotosInData) {
+            if (!includePhotos) {
               // Listing mode (>3 results): compact, no photos to keep context small
               return {
                 id: v.id,
@@ -817,7 +795,7 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
               };
             }
 
-            // Specific vehicle: include all photos (handle double-escaped JSON)
+            // ≤3 vehicles: include photos (LLM decides whether to render them)
             let parsedPhotos: string[] = [];
             if (Array.isArray(v.photos)) {
               parsedPhotos = v.photos.filter((p: unknown) => typeof p === "string") as string[];
@@ -838,7 +816,7 @@ async function executeTool(tool: ToolDef, args: Record<string, any>, supabase: a
 
             const allPhotos = Array.from(
               new Set([...(v.photo_url ? [v.photo_url] : []), ...parsedPhotos])
-            ).map(cleanPhotoUrl).filter(isValidPhotoUrl);
+            ).map(cleanPhotoUrl).filter(isValidPhotoUrl).slice(0, MAX_PHOTOS_PER_VEHICLE);
 
             return {
               id: v.id,
