@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",
+    "undici": "^7.0.0",
     "@fastify/env": "^5.0.1",
     "@supabase/supabase-js": "^2.98.0",
     "dotenv": "^17.0.0",

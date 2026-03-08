@@ -33,6 +33,7 @@ services:
       - CORS_ORIGINS=${CORS_ORIGINS}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - INTERNAL_API_INSECURE_TLS=${INTERNAL_API_INSECURE_TLS:-true}
     networks:
       - boom_network
 

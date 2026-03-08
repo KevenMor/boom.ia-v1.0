@@ -1,6 +1,8 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+import { Agent, fetch as undiciFetch } from "undici";
 
 const USE_CHAT_LOCAL = process.env.USE_CHAT_LOCAL !== "false";
+const INTERNAL_API_INSECURE_TLS = process.env.INTERNAL_API_INSECURE_TLS === "true";
 const EDGE_CHAT_URL =
   process.env.EDGE_CHAT_URL ||
   (process.env.SUPABASE_URL ? `${process.env.SUPABASE_URL}/functions/v1/chat-agent` : null);
@@ -15,14 +17,18 @@ export async function chatRoutes(fastify: FastifyInstance) {
       const nexusAuth = (req.headers["x-nexus-auth"] as string) || "";
 
       try {
-        const upstream = await fetch(chatLocalUrl, {
-          method: "POST",
+        const fetchOpts = {
+          method: "POST" as const,
           headers: {
             "Content-Type": "application/json",
             "x-nexus-auth": nexusAuth ? (nexusAuth.startsWith("Bearer ") ? nexusAuth : `Bearer ${nexusAuth}`) : "",
           },
           body: JSON.stringify(req.body),
-        });
+          ...(chatLocalUrl.startsWith("https://") && INTERNAL_API_INSECURE_TLS
+            ? { dispatcher: new Agent({ connect: { rejectUnauthorized: false } }) }
+            : {}),
+        };
+        const upstream = await undiciFetch(chatLocalUrl, fetchOpts);
 
         if (!upstream.ok) {
           const errText = await upstream.text();

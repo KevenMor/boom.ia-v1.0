@@ -28,6 +28,7 @@ services:
       GEMINI_API_KEY: "AIzaSyDsSKTvCIDGH3RaRq0m7ue6TtIWEhbfvpQ"
       API_BASE_URL: "https://ia.agboom.com.br"
       CORS_ORIGINS: "https://ia.agboom.com.br,http://localhost:8080,http://127.0.0.1:8080"
+      INTERNAL_API_INSECURE_TLS: "true"
     deploy:
       replicas: 1
       restart_policy:
