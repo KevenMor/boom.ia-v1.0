@@ -87,28 +87,28 @@ Depois de deixar as imagens públicas (ou adicionar o registry), faça **Redeplo
 
 ## 5. Já deixou público e ainda 0/1
 
-1. **Remova a stack por completo**  
-   Stacks → boom_ia → **Remove stack** (não só Redeploy). O Swarm às vezes mantém o estado de falha em cache.
-
-2. **Crie a stack de novo**  
-   Add stack → Web editor → cole o `docker-compose.portainer.yml` → Deploy the stack.
-
-3. **Veja o erro exato da tarefa**  
-   Services → **boom_ia_server** → aba **Tasks** → clique na tarefa em vermelho (Failed/Rejected).  
+1. **Veja o erro na tarefa**  
+   **Services** → **boom_ia_server** (ou boom_ia_proxy) → aba **Tasks** → clique na tarefa com status **Failed** / **Rejected**.  
    A mensagem pode ser:
-   - `no such image` / `pull access denied` → imagem ainda inacessível ou nome errado
+   - `no such image` / `pull access denied` → imagem inacessível ou nome errado
    - `failed to create task` / `invalid argument` → configuração do serviço ou do Swarm
-   - `non-zero exit` / container saindo → aplicação cai ao iniciar (ex.: não conecta no Supabase)
+   - `non-zero exit` → container saiu ao iniciar; veja os **logs** do serviço (aba Logs). Com **server v6** deve aparecer pelo menos `[Boom] Server starting...` antes de qualquer erro do Node.
 
-4. **Teste se o nó puxa a imagem** (se tiver SSH na VPS):
+2. **Remova a stack por completo**  
+   Stacks → boom_ia → **Remove stack** (não só Redeploy). O Swarm às vezes mantém estado de falha em cache.
+
+3. **Crie a stack de novo**  
+   Add stack → Web editor → cole o `docker-compose.portainer-images.yml` (server **v6**, proxy **v4**) → Deploy the stack.
+
+4. **Teste pull/run na VPS** (se tiver SSH):
    ```bash
-   docker pull ghcr.io/kevenmor/boom-ia-server:latest
-   docker run --rm -e PORT=3001 ghcr.io/kevenmor/boom-ia-server:latest
+   docker pull ghcr.io/kevenmor/boom-ia-server:v6
+   docker run --rm -e PORT=3001 ghcr.io/kevenmor/boom-ia-server:v6
    ```
-   Se o `pull` falhar, o problema é rede/firewall ou o pacote ainda não está público.  
-   Se o `run` subir e cair na hora, o problema é a aplicação (env, Supabase, etc.).
+   Se o `pull` falhar, o problema é rede/firewall ou pacote não público.  
+   Se o `run` subir e cair na hora, veja a última linha do log (erro do Node). O server v6 imprime `[Boom] Server starting...` antes do Node; se aparecer isso e depois uma mensagem de erro, essa é a causa.
 
-**Manda a mensagem de erro que aparece na tarefa** (copiar/colar) para conseguir afinar o próximo passo.
+**Manda a mensagem de erro que aparece na tarefa** (e, se houver, a última linha do log do serviço) para afinar o próximo passo.
 
 ---
 

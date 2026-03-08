@@ -16,7 +16,7 @@ networks:
 
 services:
   server:
-    image: ghcr.io/kevenmor/boom-ia-server:v5
+    image: ghcr.io/kevenmor/boom-ia-server:v6
     environment:
       PORT: "3001"
       NODE_ENV: "production"
@@ -42,12 +42,6 @@ services:
       update_config:
         order: start-first
         failure_action: rollback
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:3001/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
 
   frontend:
     image: ghcr.io/kevenmor/boom-ia-frontend:latest

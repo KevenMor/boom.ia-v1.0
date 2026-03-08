@@ -18,4 +18,5 @@ RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
 EXPOSE 3001
 ENV NODE_ENV=production
-CMD ["node", "dist/index.js"]
+# Wrapper para sempre logar antes do Node (Swarm/Portainer mostra o erro se crashar)
+CMD ["sh", "-c", "echo '[Boom] Server starting...' && exec node dist/index.js"]
