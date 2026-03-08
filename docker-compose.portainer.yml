@@ -8,7 +8,7 @@ version: '3.8'
 
 services:
   server:
-    image: ghcr.io/kevenMor/boom-ia-server:latest
+    image: ghcr.io/kevenmor/boom-ia-server:latest
     environment:
       - PORT=${PORT:-3001}
       - NODE_ENV=${NODE_ENV:-production}
@@ -21,7 +21,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    image: ghcr.io/kevenMor/boom-ia-frontend:latest
+    image: ghcr.io/kevenmor/boom-ia-frontend:latest
     restart: unless-stopped
 
   proxy:

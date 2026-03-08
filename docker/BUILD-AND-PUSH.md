@@ -22,8 +22,8 @@ Substitua:
 
 ```bash
 cd /caminho/para/boom-agents
-docker build -f Dockerfile.server -t ghcr.io/kevenMor/boom-ia-server:latest .
-docker push ghcr.io/kevenMor/boom-ia-server:latest
+docker build -f Dockerfile.server -t ghcr.io/kevenmor/boom-ia-server:latest .
+docker push ghcr.io/kevenmor/boom-ia-server:latest
 ```
 
 ### Frontend (React)
@@ -34,9 +34,9 @@ docker build \
   --build-arg VITE_SUPABASE_PUBLISHABLE_KEY=sua_anon_key \
   --build-arg VITE_SUPABASE_PROJECT_ID=default \
   --build-arg VITE_API_URL=https://ia.agboom.com.br/api \
-  -t ghcr.io/kevenMor/boom-ia-frontend:latest \
+  -t ghcr.io/kevenmor/boom-ia-frontend:latest \
   .
-docker push ghcr.io/kevenMor/boom-ia-frontend:latest
+docker push ghcr.io/kevenmor/boom-ia-frontend:latest
 ```
 
 **Importante:** troque os valores dos `--build-arg` pelos valores **reais** do seu Supabase na VPS. O frontend é buildado com essas URLs **embutidas** no bundle.
@@ -66,4 +66,4 @@ docker build --build-arg ... -t seuusuario/boom-ia-frontend:latest .
 docker push seuusuario/boom-ia-frontend:latest
 ```
 
-E no `docker-compose.portainer.yml`, troque `ghcr.io/kevenMor/...` por `seuusuario/...`.
+E no `docker-compose.portainer.yml`, troque `ghcr.io/kevenmor/...` por `seuusuario/...`.
