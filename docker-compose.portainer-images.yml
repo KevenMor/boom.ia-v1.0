@@ -29,6 +29,7 @@ services:
       OPENAI_API_KEY: "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"
       GEMINI_API_KEY: "AIzaSyDsSKTvCIDGH3RaRq0m7ue6TtIWEhbfvpQ"
       INTERNAL_API_INSECURE_TLS: "true"
+      INTERNAL_API_BASE: "http://server:3001"
     networks:
       - internal
     deploy:
