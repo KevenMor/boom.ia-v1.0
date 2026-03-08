@@ -1,0 +1,41 @@
+# Boom IA - Stack para Portainer (usa imagens pré-buildadas)
+# Use este arquivo no Portainer se o build não for suportado.
+#
+# Pré-requisito: buildar e publicar as imagens no registry (GitHub Container Registry ou Docker Hub).
+# Ver: docker/BUILD-AND-PUSH.md
+
+version: '3.8'
+
+services:
+  server:
+    image: ghcr.io/kevenMor/boom-ia-server:latest
+    environment:
+      - PORT=${PORT:-3001}
+      - NODE_ENV=${NODE_ENV:-production}
+      - NEXUS_DB_URL=${NEXUS_DB_URL}
+      - NEXUS_SERVICE_ROLE_KEY=${NEXUS_SERVICE_ROLE_KEY}
+      - NEXUS_DB_ANON_KEY=${NEXUS_DB_ANON_KEY}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - API_BASE_URL=${API_BASE_URL}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+    restart: unless-stopped
+
+  frontend:
+    image: ghcr.io/kevenMor/boom-ia-frontend:latest
+    restart: unless-stopped
+
+  proxy:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    configs:
+      - source: nginx_config
+        target: /etc/nginx/conf.d/default.conf
+    depends_on:
+      - server
+      - frontend
+    restart: unless-stopped
+
+configs:
+  nginx_config:
+    file: ./docker/nginx-proxy.conf
