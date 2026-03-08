@@ -16,7 +16,7 @@ networks:
 
 services:
   server:
-    image: ghcr.io/kevenmor/boom-ia-server:v3
+    image: ghcr.io/kevenmor/boom-ia-server:v4-debug
     environment:
       PORT: "3001"
       NODE_ENV: "production"

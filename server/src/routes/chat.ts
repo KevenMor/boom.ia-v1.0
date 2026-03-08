@@ -11,10 +11,13 @@ const EDGE_CHAT_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE
 
 export async function chatRoutes(fastify: FastifyInstance) {
   fastify.post("/chat", async (req: FastifyRequest, reply: FastifyReply) => {
+    console.log("[Chat] USE_CHAT_LOCAL:", USE_CHAT_LOCAL, "USE_CHAT_LOCAL_INJECT:", USE_CHAT_LOCAL_INJECT);
+    
     if (USE_CHAT_LOCAL) {
       const nexusAuth = (req.headers["x-nexus-auth"] as string) || "";
 
       if (USE_CHAT_LOCAL_INJECT) {
+        console.log("[Chat] Usando fastify.inject() para /api/chat-local");
         try {
           const res = await fastify.inject({
             method: "POST",
@@ -56,14 +59,18 @@ export async function chatRoutes(fastify: FastifyInstance) {
           return reply.send(res.payload);
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : String(e);
-          console.error("[Chat] Inject error:", e);
+          console.error("[Chat] Inject error (caindo no fallback fetch):", e);
           return reply.status(502).send({ error: msg || "Chat proxy failed" });
         }
+      } else {
+        console.log("[Chat] USE_CHAT_LOCAL_INJECT é false, usando fetch com rede");
       }
 
       const port = process.env.PORT || "3001";
       const internalBase = process.env.INTERNAL_API_BASE || `http://127.0.0.1:${port}`;
       const chatLocalUrl = `${internalBase.replace(/\/+$/, "").replace(/\/api$/, "")}/api/chat-local`;
+      
+      console.log("[Chat] Usando fetch para:", chatLocalUrl, "INTERNAL_API_INSECURE_TLS:", INTERNAL_API_INSECURE_TLS);
 
       try {
         const fetchOpts = {
