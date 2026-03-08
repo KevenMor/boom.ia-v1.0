@@ -13,10 +13,11 @@ Use **`Dockerfile.server`** na raiz para o servidor — assim o Build Path pode 
 
 - **Só o servidor** usa variáveis de banco (`NEXUS_DB_URL`, `NEXUS_SERVICE_ROLE_KEY`).
 - As variáveis do **server/.env.easypanel** devem ser configuradas **apenas no serviço do Servidor** no Easypanel.
+- O **frontend** precisa de **Build Args** (variáveis de construção) — ver seção 2b.
 
 ---
 
-## 2. Configuração do serviço SERVIDOR no Easypanel
+## 2a. Configuração do serviço SERVIDOR no Easypanel
 
 ### Fonte (Source)
 - **Github:** `KevenMor/boom.ia-v1.0`
@@ -45,6 +46,27 @@ Obrigatórias:
 | `CORS_ORIGINS` | `https://ia.agboom.com.br` |
 
 Opcionais (fallback): `NEXUS_DB_ANON_KEY`
+
+---
+
+## 2b. Configuração do serviço FRONTEND no Easypanel
+
+O frontend é buildado com Vite; as URLs são **embutidas no build**. Por isso é obrigatório configurar **Build Args** no serviço do frontend. Sem isso o login dá **"Failed to fetch"** e a API não é encontrada.
+
+### Build Args (variáveis de construção)
+
+No Easypanel, no serviço do **Frontend**, adicione estas variáveis como **Build Args** (não como variáveis de ambiente de runtime):
+
+| Nome | Valor |
+|------|--------|
+| `VITE_SUPABASE_URL` | `https://SEU_PROJECT_REF.supabase.co` |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Chave **anon** do Supabase |
+| `VITE_SUPABASE_PROJECT_ID` | Project ref (ex.: `qqueviooottrostbxkek`) |
+| `VITE_API_URL` | `https://ia.agboom.com.br/api` |
+
+Valores de exemplo estão em **`.env.frontend.easypanel`** na raiz do repositório.
+
+Depois de alterar os Build Args, faça **Rebuild** do serviço do frontend.
 
 ---
 
@@ -82,12 +104,13 @@ Se o nome do serviço for outro (ex.: `supabase`), use esse nome no lugar de `bo
 
 ## 4. Checklist – falha de comunicação com o banco
 
-- [ ] Existe um **serviço separado** para o servidor (Build Path = `server`), não só o frontend.
+- [ ] Existe um **serviço separado** para o servidor (Build Path = `/`, Dockerfile = `Dockerfile.server`), não só o frontend.
 - [ ] No serviço do **servidor**, todas as variáveis do **server/.env.easypanel** estão preenchidas (sem comentários nos valores).
 - [ ] **NEXUS_DB_URL** é URL HTTP/HTTPS da API (não `postgres://`).
 - [ ] Se Supabase está no Easypanel: **NEXUS_DB_URL** usa a URL **interna** (ex.: `http://boomsolution-supabase:8000`).
 - [ ] **NEXUS_SERVICE_ROLE_KEY** é a chave **service_role** do **mesmo** projeto Supabase dessa URL.
 - [ ] Após alterar variáveis, o serviço do servidor foi **reiniciado** (redeploy/restart).
+- [ ] No serviço do **frontend**, os **Build Args** (`VITE_*`) estão configurados e o frontend foi **reconstruído** (Rebuild).
 
 ---
 
@@ -102,8 +125,9 @@ No Easypanel (ou proxy reverso), configure o roteamento para que `/api` aponte p
 
 ## 6. Resumo rápido
 
-1. **Dois serviços:** frontend (raiz, porta 80) e servidor (build path `server`, porta 3001).
+1. **Dois serviços:** frontend (raiz, porta 80) e servidor (raiz, `Dockerfile.server`, porta 3001).
 2. **Variáveis de banco** só no serviço do **servidor**.
-3. **NEXUS_DB_URL** no Easypanel self-hosted: preferir URL interna `http://NOME_SERVIÇO_SUPABASE:8000`.
-4. **NEXUS_SERVICE_ROLE_KEY** = service_role do mesmo projeto Supabase.
-5. Depois de mudar env, **reiniciar** o serviço do servidor.
+3. **Build Args do frontend:** `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_SUPABASE_PROJECT_ID`, `VITE_API_URL` — no serviço do frontend; depois **Rebuild**.
+4. **NEXUS_DB_URL** no Easypanel self-hosted: preferir URL interna `http://NOME_SERVIÇO_SUPABASE:8000`.
+5. **NEXUS_SERVICE_ROLE_KEY** = service_role do mesmo projeto Supabase.
+6. Depois de mudar env, **reiniciar** o serviço do servidor; depois de mudar Build Args do frontend, **Rebuild** do frontend.
