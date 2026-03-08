@@ -14,9 +14,10 @@ import { CreateAgentDialog } from "@/components/agents/CreateAgentDialog";
 import { EditAgentDialog } from "@/components/agents/EditAgentDialog";
 import { DeleteAgentDialog } from "@/components/agents/DeleteAgentDialog";
 import { toast } from "sonner";
+import { getApiBase } from "@/lib/api-client";
 import type { Agent } from "@/types/database";
 
-const WEBHOOK_BASE = `${import.meta.env.VITE_API_URL || "http://localhost:3001/api"}/webhooks`;
+const WEBHOOK_BASE = `${getApiBase()}/webhooks`;
 
 export default function Agents() {
   const navigate = useNavigate();

@@ -21,6 +21,7 @@ import { nexusDb } from "@/integrations/supabase/nexus-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { getModelsForProvider } from "@/lib/provider-models";
+import { getApiBase } from "@/lib/api-client";
 import { ChatwootConfigSection } from "@/components/agents/ChatwootConfigSection";
 import { FollowUpConfigSection } from "@/components/agents/FollowUpConfigSection";
 import { AgentAvatarUpload } from "@/components/agents/AgentAvatarUpload";
@@ -28,7 +29,7 @@ import { ReminderConfigSection } from "@/components/agents/ReminderConfigSection
 import { BusinessHoursSection, DEFAULT_BUSINESS_HOURS, type BusinessHours } from "@/components/agents/BusinessHoursSection";
 import type { Agent } from "@/types/database";
 
-const WEBHOOK_BASE = `${import.meta.env.VITE_API_URL || "http://localhost:3001/api"}/webhooks`;
+const WEBHOOK_BASE = `${getApiBase()}/webhooks`;
 
 const schema = z.object({
   name: z.string().min(2),

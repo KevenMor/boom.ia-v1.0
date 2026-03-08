@@ -1,4 +1,8 @@
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
+// Em produção usa a origem atual; em dev usa VITE_API_URL ou localhost.
+const API_BASE =
+  typeof window !== "undefined"
+    ? (import.meta.env.VITE_API_URL || `${window.location.origin}/api`)
+    : (import.meta.env.VITE_API_URL || "http://localhost:3001/api");
 
 export function getApiBase(): string {
   return API_BASE.replace(/\/+$/, "");
