@@ -28,40 +28,9 @@ docker build --build-arg VITE_SUPABASE_URL=http://ia.agboom.com.br:8000 --build-
 
 ## 2. Stack no Portainer – Web editor (Compose)
 
-Em **Stacks** → **Add stack** (ou editar a stack) → **Web editor**, apague tudo e cole **só o bloco abaixo**. As variáveis de ambiente já estão dentro do compose; não é preciso preencher nada em "Environment variables".
+Em **Stacks** → **Add stack** (ou editar a stack) → **Web editor**, apague tudo e cole **o conteúdo do arquivo `docker-compose.portainer.yml`** (sem rede customizada; testado em Swarm). Não preencha "Environment variables".
 
-```yaml
-version: '3.8'
-
-services:
-  server:
-    image: ghcr.io/kevenmor/boom-ia-server:latest
-    environment:
-      PORT: "3001"
-      NODE_ENV: "production"
-      NEXUS_DB_URL: "http://supabase_kong:8000"
-      NEXUS_SERVICE_ROLE_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJzZXJ2aWNlX3JvbGUiLAogICAgImlzcyI6ICJzdXBhYmFzZS1kZW1vIiwKICAgICJpYXQiOiAxNjQxNzY5MjAwLAogICAgImV4cCI6IDE3OTk1MzU2MDAKfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q"
-      NEXUS_DB_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE"
-      ENCRYPTION_KEY: "change-me-32-chars-minimum!!"
-      API_BASE_URL: "https://ia.agboom.com.br"
-      CORS_ORIGINS: "https://ia.agboom.com.br"
-    restart: unless-stopped
-
-  frontend:
-    image: ghcr.io/kevenmor/boom-ia-frontend:latest
-    restart: unless-stopped
-
-  proxy:
-    image: ghcr.io/kevenmor/boom-ia-proxy:latest
-    ports:
-      - "8080:80"
-    depends_on:
-      - server
-      - frontend
-    restart: unless-stopped
-```
-
-**Nota:** Se a stack do Supabase tiver outro nome, edite no compose o valor de `NEXUS_DB_URL` (ex.: `http://NOME_DA_STACK_kong:8000`). O painel fica em **http://IP_OU_DOMINIO:8080**.
+**Importante:** No Portainer em modo **Swarm** não use rede customizada e não use `build:` — use só este compose com imagens do GHCR. Porta **8081**.
 
 ---
 
@@ -74,7 +43,7 @@ Se precisar alterar depois (ex.: outro Supabase, outro domínio), edite no Web e
 - `API_BASE_URL` e `CORS_ORIGINS`: domínio do painel (ex.: `https://ia.agboom.com.br`)
 - `ENCRYPTION_KEY`: troque em produção por uma chave de 32+ caracteres
 
-Depois clique em **Deploy the stack**. O painel fica em **http://IP_OU_DOMINIO:8080**.
+Depois clique em **Deploy the stack**. O painel fica em **http://IP_OU_DOMINIO:8081**.
 
 Na mesma tela da stack, em **Environment variables** (ou “Load from .env file”), adicione **cada variável** ou cole o bloco (sem os comentários #):
 

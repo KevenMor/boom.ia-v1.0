@@ -1,5 +1,5 @@
-# Boom IA - Stack para Portainer Swarm
-# Cole no Web editor. Imagens públicas no GHCR (já publicadas).
+# Boom IA - Stack para Portainer Swarm (sem rede customizada)
+# Cole no Web editor. Imagens no GHCR. Sem rede customizada = Swarm usa a rede padrão da stack.
 # Acesso: http://IP_DA_VPS:8081
 
 version: '3.8'
@@ -16,8 +16,6 @@ services:
       ENCRYPTION_KEY: "change-me-32-chars-minimum!!"
       API_BASE_URL: "https://ia.agboom.com.br"
       CORS_ORIGINS: "https://ia.agboom.com.br"
-    networks:
-      - boom_network
     deploy:
       replicas: 1
       restart_policy:
@@ -25,8 +23,6 @@ services:
 
   frontend:
     image: ghcr.io/kevenmor/boom-ia-frontend:latest
-    networks:
-      - boom_network
     deploy:
       replicas: 1
       restart_policy:
@@ -38,13 +34,7 @@ services:
       - target: 80
         published: 8081
         mode: host
-    networks:
-      - boom_network
     deploy:
       replicas: 1
       restart_policy:
         condition: any
-
-networks:
-  boom_network:
-    driver: overlay
