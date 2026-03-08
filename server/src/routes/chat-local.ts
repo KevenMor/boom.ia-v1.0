@@ -535,7 +535,12 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
             model: convBody.model,
             hasAuth: !!providerConfig.apiKey,
             authLength: providerConfig.apiKey?.length,
+            messagesCount: conversationalMessagesClean.length,
+            hasToolResults: toolResults.length > 0,
           });
+          if (toolResults.length > 0) {
+            console.log("[Chat-Local] Tool results sendo enviados ao LLM conversacional:", toolResults.length, "results");
+          }
 
           let convResp: Response;
           try {
@@ -560,11 +565,13 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
 
           if (!convResp.ok) {
             const errText = await convResp.text();
+            console.error("[Chat-Local] Conversational LLM error:", convResp.status, errText.slice(0, 200));
             sendSse({ error: errText.slice(0, 500) });
             sendSse("[DONE]");
             reply.raw.end();
             return;
           }
+          console.log("[Chat-Local] Conversational LLM response OK, iniciando streaming...");
 
           const convReader = convResp.body!.getReader();
           const convDecoder = new TextDecoder();
