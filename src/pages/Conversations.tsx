@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { MessageSquare, Bot, ArrowLeft, Search, Send, Paperclip, Smile, CheckCheck, Bug, Trash2, Mic, Phone, Hash, Clock, Users, UserPlus } from "lucide-react";
 import { DebugBlock } from "@/components/sandbox/DebugBlock";
-import { cloudClient } from "@/integrations/supabase/cloud-client";
+import { callAPI } from "@/lib/api-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -173,10 +173,9 @@ export default function Conversations() {
     if (!confirm(`Tem certeza que deseja apagar todo o histórico de "${name}"? Essa ação não pode ser desfeita.`)) return;
     setClearing(true);
     try {
-      const { data, error } = await cloudClient.functions.invoke("clear-conversations", {
+      const data = await callAPI<{ deleted_messages?: number }>("/admin/clear-conversations", {
         body: { conversation_ids: selectedConvIds, agent_id: selectedAgentId },
       });
-      if (error) throw error;
       toast.success(`Histórico limpo: ${data.deleted_messages} mensagens removidas`);
       setSelectedContactKey(null);
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
@@ -192,7 +191,7 @@ export default function Conversations() {
     if (!newContactPhone.trim() || !newContactMessage.trim() || !selectedAgentId) return;
     setSendingNewContact(true);
     try {
-      const { data, error } = await cloudClient.functions.invoke("new-contact", {
+      await callAPI("/contacts/new", {
         body: {
           agent_id: selectedAgentId,
           phone: newContactPhone.trim(),
@@ -200,7 +199,6 @@ export default function Conversations() {
           message: newContactMessage.trim(),
         },
       });
-      if (error) throw error;
       toast.success("Mensagem enviada para " + (newContactName.trim() || newContactPhone.trim()));
       setNewContactOpen(false);
       setNewContactPhone("");
@@ -697,18 +695,21 @@ export default function Conversations() {
                         </div>
 
                         <div className="space-y-3">
-                          {msgs?.filter((msg) => {
-                            if (msg.role === "user" && msg.content?.startsWith("[SISTEMA INTERNO")) return false;
-                            if (msg.role === "user" && msg.content?.trim().startsWith("{") && (msg.content.includes('"_hint"') || msg.content.includes('"vehicles"') || msg.content.includes('"total"'))) return false;
-                            if (msg.role === "user" && msg.content?.trim().startsWith("{") && msg.content.includes('"tool_results"')) return false;
-                            if ((msg.role === "tool" || msg.role === "system") && !showDebug) {
-                              const c = (msg.content || "").trim();
-                              if (c.startsWith("{") || c.startsWith("[")) return false;
-                              if (c.startsWith("[Resultado da ferramenta")) return false;
-                              if (c.startsWith("⚠️")) return false;
-                            }
-                            return true;
-                          }).map((msg) => {
+                          {(() => {
+                            const filtered = msgs?.filter((msg) => {
+                              if (msg.role === "user" && msg.content?.startsWith("[SISTEMA INTERNO")) return false;
+                              if (msg.role === "user" && msg.content?.trim().startsWith("{") && (msg.content.includes('"_hint"') || msg.content.includes('"vehicles"') || msg.content.includes('"total"'))) return false;
+                              if (msg.role === "user" && msg.content?.trim().startsWith("{") && msg.content.includes('"tool_results"')) return false;
+                              if ((msg.role === "tool" || msg.role === "system") && !showDebug) {
+                                const c = (msg.content || "").trim();
+                                if (c.startsWith("{") || c.startsWith("[")) return false;
+                                if (c.startsWith("[Resultado da ferramenta")) return false;
+                                if (c.startsWith("⚠️")) return false;
+                              }
+                              return true;
+                            }) ?? [];
+                            return filtered;
+                          })().map((msg) => {
                             const isUser = msg.role === "user";
                             const isSystem = msg.role === "system" || msg.role === "tool";
                             const audioInfo = isUser ? parseAudioTranscription(msg.content || "") : { isAudio: false, transcription: "", remainingText: msg.content || "" };
@@ -875,10 +876,9 @@ export default function Conversations() {
                       if (!text || !selectedAgentId || !selectedConvIds.length) return;
                       input.disabled = true;
                       try {
-                        const { error } = await cloudClient.functions.invoke("send-operator-message", {
+                        await callAPI("/contacts/send-operator-message", {
                           body: { agent_id: selectedAgentId, conversation_id: selectedConvIds[0], content: text },
                         });
-                        if (error) throw error;
                         input.value = "";
                         queryClient.invalidateQueries({ queryKey: ["multi-conversation-messages"] });
                       } catch (err: any) {

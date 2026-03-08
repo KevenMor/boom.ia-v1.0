@@ -19,17 +19,30 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useAgents } from "@/hooks/useAgents";
-import { cloudClient } from "@/integrations/supabase/cloud-client";
+import { nexusDb } from "@/integrations/supabase/nexus-client";
+import { getApiBase, callAPI } from "@/lib/api-client";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
 type DebugEntry = { type: string; [key: string]: any };
+type TokenUsageEntry = {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  model?: string;
+};
+type TokenUsageData = {
+  dispatcher?: TokenUsageEntry | null;
+  conversational?: TokenUsageEntry | null;
+  single?: TokenUsageEntry | null;
+};
 type Msg = {
   role: "user" | "assistant";
   content: string;
   timestamp?: Date;
   debug?: DebugEntry[];
   edgeLogs?: EdgeLog[];
+  tokenUsage?: TokenUsageData;
   userAttachments?: UserAttachmentMeta[];
 };
 type Conversation = {
@@ -40,7 +53,7 @@ type Conversation = {
   message_count: number;
 };
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-agent`;
+const CHAT_URL = `${getApiBase()}/chat`;
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 
 // Extract image URLs from message content
@@ -123,11 +136,12 @@ export default function AgentSandbox() {
   const loadConversations = useCallback(async () => {
     if (!agentId) return;
     try {
-      const { data, error } = await cloudClient.functions.invoke("conversation-history", {
-        body: { action: "list", agent_id: agentId, limit: 50 },
+      const { data, error } = await nexusDb.rpc("list_agent_conversations", {
+        p_agent_id: agentId,
+        p_limit: 50,
       });
       if (error) throw error;
-      setConversations((((data as any)?.data ?? []) as Conversation[]));
+      setConversations((data ?? []) as Conversation[]);
     } catch (e) {
       console.error("[Sandbox] erro ao carregar conversas:", e);
     }
@@ -164,11 +178,12 @@ export default function AgentSandbox() {
     if (!agentId) return;
     setLoadingHistory(true);
     try {
-      const { data, error } = await cloudClient.functions.invoke("conversation-history", {
-        body: { action: "messages", agent_id: agentId, conversation_id: convId },
+      const { data, error } = await nexusDb.rpc("load_conversation_messages", {
+        p_agent_id: agentId,
+        p_conversation_id: convId,
       });
       if (error) throw error;
-      const rows = (((data as any)?.data ?? []) as any[]);
+      const rows = (data ?? []) as any[];
       setMessages(
         rows
           .map((m) => ({
@@ -201,10 +216,9 @@ export default function AgentSandbox() {
 
     setIsDeletingConversation(true);
     try {
-      const { data, error } = await cloudClient.functions.invoke("clear-conversations", {
+      const data = await callAPI<{ deleted_messages?: number; deleted_conversations?: number }>("/admin/clear-conversations", {
         body: { conversation_ids: [conversationId], agent_id: agentId },
       });
-      if (error) throw error;
 
       toast.success(`Conversa excluída (${data?.deleted_messages ?? 0} mensagens removidas)`);
       startNewConversation();
@@ -298,6 +312,9 @@ export default function AgentSandbox() {
     let hasAssistantContent = false;
     const allMessages = [...messages, userMsg];
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 90000);
+
     try {
       const body: any = {
         agent_id: agentId,
@@ -308,13 +325,18 @@ export default function AgentSandbox() {
         body.attachments = apiAttachments;
       }
 
+      const { data: { session } } = await nexusDb.auth.getSession();
+      const nexusToken = session?.access_token;
+
       const resp = await fetch(CHAT_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || ""}`,
+          ...(nexusToken ? { "x-nexus-auth": `Bearer ${nexusToken}` } : {}),
         },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
 
       if (!resp.ok) {
@@ -327,6 +349,46 @@ export default function AgentSandbox() {
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let textBuffer = "";
+      let streamAccum = "";
+
+      const applyAccumulatedWithSplit = () => {
+        while (streamAccum.includes(MSG_SPLIT)) {
+          const idx = streamAccum.indexOf(MSG_SPLIT);
+          const partBefore = streamAccum.slice(0, idx);
+          streamAccum = streamAccum.slice(idx + MSG_SPLIT.length);
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            const isAppendToLast = last?.role === "assistant";
+            let out = prev;
+            if (partBefore.trim()) {
+              if (isAppendToLast) {
+                out = prev.map((m, i) =>
+                  i === prev.length - 1 ? { ...m, content: m.content + partBefore } : m
+                );
+              } else {
+                out = [...prev, { role: "assistant" as const, content: partBefore, timestamp: new Date(), debug: debugData, edgeLogs: edgeLogsData }];
+              }
+            }
+            if (streamAccum !== "") {
+              out = [...out, { role: "assistant" as const, content: "", timestamp: new Date(), debug: debugData, edgeLogs: edgeLogsData }];
+            }
+            return out;
+          });
+        }
+      };
+
+      const updateStreamingMessage = () => {
+        if (!streamAccum) return;
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last?.role === "assistant") {
+            return prev.map((m, i) =>
+              i === prev.length - 1 ? { ...m, content: streamAccum } : m
+            );
+          }
+          return [...prev, { role: "assistant" as const, content: streamAccum, timestamp: new Date(), debug: debugData, edgeLogs: edgeLogsData }];
+        });
+      };
 
       while (true) {
         const { done, value } = await reader.read();
@@ -353,6 +415,17 @@ export default function AgentSandbox() {
               continue;
             }
 
+            if (parsed.error) {
+              const errMsg = typeof parsed.error === "string" ? parsed.error : JSON.stringify(parsed.error);
+              hasAssistantContent = true;
+              setMessages((prev) => [
+                ...prev,
+                { role: "assistant", content: `⚠️ Erro: ${errMsg}`, timestamp: new Date() },
+              ]);
+              toast.error("O agente retornou um erro. Verifique os logs.");
+              continue;
+            }
+
             if (parsed.debug) {
               debugData = parsed.debug;
               setPendingDebug(parsed.debug);
@@ -364,41 +437,25 @@ export default function AgentSandbox() {
               continue;
             }
 
+            if (parsed.token_usage) {
+              setMessages((prev) => {
+                const lastIdx = prev.length - 1;
+                if (lastIdx >= 0 && prev[lastIdx].role === "assistant") {
+                  return prev.map((m, idx) =>
+                    idx === lastIdx ? { ...m, tokenUsage: parsed.token_usage } : m
+                  );
+                }
+                return prev;
+              });
+              continue;
+            }
+
             const content = parsed.choices?.[0]?.delta?.content as string | undefined;
             if (content) {
-              if (content.includes(MSG_SPLIT)) {
-                const segments = content.split(MSG_SPLIT);
-                for (let si = 0; si < segments.length; si++) {
-                  if (si > 0) {
-                    setMessages((prev) => [
-                      ...prev,
-                      { role: "assistant", content: segments[si] || "", timestamp: new Date() },
-                    ]);
-                  } else if (segments[si]) {
-                    setMessages((prev) => {
-                      const last = prev[prev.length - 1];
-                      if (last?.role === "assistant") {
-                        return prev.map((m, idx) =>
-                          idx === prev.length - 1 ? { ...m, content: m.content + segments[si] } : m
-                        );
-                      }
-                      return [...prev, { role: "assistant", content: segments[si], timestamp: new Date(), debug: debugData || undefined, edgeLogs: edgeLogsData || undefined }];
-                    });
-                  }
-                }
-                hasAssistantContent = true;
-              } else {
-                hasAssistantContent = true;
-                setMessages((prev) => {
-                  const last = prev[prev.length - 1];
-                  if (last?.role === "assistant") {
-                    return prev.map((m, idx) =>
-                      idx === prev.length - 1 ? { ...m, content: m.content + content } : m
-                    );
-                  }
-                  return [...prev, { role: "assistant", content: content, timestamp: new Date(), debug: debugData || undefined, edgeLogs: edgeLogsData || undefined }];
-                });
-              }
+              hasAssistantContent = true;
+              streamAccum += content;
+              applyAccumulatedWithSplit();
+              updateStreamingMessage();
             }
           } catch {
             textBuffer = line + "\n" + textBuffer;
@@ -407,12 +464,47 @@ export default function AgentSandbox() {
         }
       }
 
+      if (streamAccum.trim()) {
+        updateStreamingMessage();
+      }
+
+      clearTimeout(timeoutId);
+
+      if (!hasAssistantContent) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "⚠️ O servidor não retornou texto. Pode ter havido timeout ou falha no provedor de IA; tente novamente.", timestamp: new Date() },
+        ]);
+        toast.error("Nenhuma resposta do agente. Verifique o console (F12) para detalhes.");
+      }
+
       loadConversations();
     } catch (e: any) {
+      clearTimeout(timeoutId);
       console.error("Chat error:", e);
-      toast.error(e.message || "Erro ao enviar mensagem");
-      if (!hasAssistantContent) {
-        setMessages((prev) => prev.slice(0, -1));
+
+      const isAbort = e?.name === "AbortError";
+      const isNetworkError =
+        e?.message === "Failed to fetch" ||
+        (e?.name === "TypeError" && /fetch|network|aborted/i.test(String(e?.message || "")));
+
+      if (isAbort) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "⚠️ A resposta demorou muito e foi cancelada. Tente novamente ou simplifique a pergunta.", timestamp: new Date() },
+        ]);
+        toast.error("Tempo esgotado. Tente novamente.");
+      } else if (isNetworkError) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "⚠️ Conexão interrompida ou servidor indisponível. Verifique sua rede e se o servidor está rodando; tente enviar novamente.", timestamp: new Date() },
+        ]);
+        toast.error("Erro de conexão. Tente novamente.");
+      } else {
+        toast.error(e.message || "Erro ao enviar mensagem");
+        if (!hasAssistantContent) {
+          setMessages((prev) => prev.slice(0, -1));
+        }
       }
     } finally {
       setIsLoading(false);
@@ -459,7 +551,7 @@ export default function AgentSandbox() {
         {/* Debug block */}
         {!isUser && (msg.debug || msg.edgeLogs) && showDebug && (
           <div className="flex justify-start mb-1">
-            <DebugBlock debug={msg.debug || []} edgeLogs={msg.edgeLogs} />
+            <DebugBlock debug={msg.debug || []} edgeLogs={msg.edgeLogs} tokenUsage={msg.tokenUsage} />
           </div>
         )}
         <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-1`}>
@@ -636,7 +728,7 @@ export default function AgentSandbox() {
               size="icon"
               className={`h-9 w-9 ${showDebug ? "text-primary bg-primary/10" : "text-muted-foreground"} hover:text-foreground`}
               onClick={() => setShowDebug(!showDebug)}
-              title="Debug mode"
+              title={showDebug ? "Desativar debug (ocultar tools e logs)" : "Ativar debug (ver tools chamadas e argumentos)"}
             >
               <Bug className="h-5 w-5" />
             </Button>

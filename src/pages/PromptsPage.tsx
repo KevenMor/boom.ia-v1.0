@@ -4,7 +4,7 @@ import { ArrowLeft, FileText, Eye, EyeOff, Copy, Check, Loader2, Code2, MessageS
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { cloudClient } from "@/integrations/supabase/cloud-client";
+import { callAPI } from "@/lib/api-client";
 import { toast } from "sonner";
 import { useTenantContext } from "@/contexts/TenantContext";
 
@@ -101,8 +101,7 @@ export default function PromptsPage() {
 
   async function loadTenants() {
     try {
-      const { data, error } = await cloudClient.functions.invoke("prompt-viewer");
-      if (error) throw error;
+      const data = await callAPI<{ tenants?: TenantSummary[] }>("/admin/prompts", { method: "GET" });
       setAllTenants(data.tenants || []);
     } catch (err: any) {
       toast.error("Erro ao carregar prompts: " + (err.message || ""));
@@ -114,19 +113,7 @@ export default function PromptsPage() {
   async function loadDetail(slug: string) {
     setLoadingDetail(true);
     try {
-      const { data, error } = await cloudClient.functions.invoke("prompt-viewer", {
-        body: null,
-        headers: {},
-      });
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/prompt-viewer?slug=${slug}`;
-      const resp = await fetch(url, {
-        headers: {
-          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          "Content-Type": "application/json",
-        },
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const detail = await resp.json();
+      const detail = await callAPI<Record<string, unknown>>(`/admin/prompts?slug=${slug}`, { method: "GET" });
       setSelectedDetail(detail);
     } catch (err: any) {
       toast.error("Erro ao carregar detalhes: " + (err.message || ""));

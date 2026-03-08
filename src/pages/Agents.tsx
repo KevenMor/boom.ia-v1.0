@@ -16,7 +16,7 @@ import { DeleteAgentDialog } from "@/components/agents/DeleteAgentDialog";
 import { toast } from "sonner";
 import type { Agent } from "@/types/database";
 
-const WEBHOOK_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/webhook-test`;
+const WEBHOOK_BASE = `${import.meta.env.VITE_API_URL || "http://localhost:3001/api"}/webhooks`;
 
 export default function Agents() {
   const navigate = useNavigate();

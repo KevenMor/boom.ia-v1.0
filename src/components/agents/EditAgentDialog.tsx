@@ -22,7 +22,7 @@ import { FollowUpConfigSection } from "@/components/agents/FollowUpConfigSection
 import { AgentAvatarUpload } from "@/components/agents/AgentAvatarUpload";
 import type { Agent } from "@/types/database";
 
-const WEBHOOK_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/webhook-test`;
+const WEBHOOK_BASE = `${import.meta.env.VITE_API_URL || "http://localhost:3001/api"}/webhooks`;
 
 const schema = z.object({
   name: z.string().min(2),

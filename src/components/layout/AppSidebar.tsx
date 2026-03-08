@@ -21,6 +21,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   CalendarDays,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebar } from "@/contexts/SidebarContext";
@@ -68,6 +69,7 @@ const navGroups: NavGroup[] = [
     label: "Sistema",
     defaultOpen: false,
     items: [
+      { to: "/analytics/tokens", icon: BarChart3, label: "Analytics Tokens" },
       { to: "/prompts", icon: FileText, label: "Prompts" },
       { to: "/monitoring", icon: Activity, label: "Monitoramento" },
       { to: "/audit", icon: FileText, label: "Auditoria" },

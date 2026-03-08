@@ -1,0 +1,68 @@
+import "dotenv/config";
+import Fastify from "fastify";
+import cors from "@fastify/cors";
+import { chatRoutes } from "./routes/chat.js";
+import { chatLocalRoutes } from "./routes/chat-local.js";
+import { deliveryRoutes } from "./routes/delivery.js";
+import { queueRoutes } from "./routes/queue.js";
+import { webhookRoutes } from "./routes/webhooks.js";
+import { toolsRoutes } from "./routes/tools.js";
+import { adminRoutes } from "./routes/admin.js";
+import { inventoryRoutes } from "./routes/inventory.js";
+import { contactsRoutes } from "./routes/contacts.js";
+
+const PORT = parseInt(process.env.PORT || "3001", 10);
+
+async function build() {
+  const fastify = Fastify({ logger: true });
+
+  const extraOrigins = (process.env.CORS_ORIGINS || "")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
+  await fastify.register(cors, {
+    origin: [
+      "http://localhost:5173",
+      "http://localhost:8080",
+      "http://127.0.0.1:5173",
+      "http://127.0.0.1:8080",
+      /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|172\.\d+\.\d+\.\d+)(:\d+)?$/,
+      /\.lovable\.dev$/,
+      ...extraOrigins,
+    ],
+    credentials: true,
+    allowedHeaders: [
+      "authorization",
+      "x-client-info",
+      "apikey",
+      "content-type",
+      "x-nexus-auth",
+      "x-supabase-client-platform",
+      "x-supabase-client-platform-version",
+      "x-supabase-client-runtime",
+      "x-supabase-client-runtime-version",
+    ],
+  });
+
+  fastify.register(chatRoutes, { prefix: "/api" });
+  fastify.register(chatLocalRoutes, { prefix: "/api" });
+  fastify.register(deliveryRoutes, { prefix: "/api" });
+  fastify.register(queueRoutes, { prefix: "/api" });
+  fastify.register(webhookRoutes, { prefix: "/api" });
+  fastify.register(toolsRoutes, { prefix: "/api" });
+  fastify.register(adminRoutes, { prefix: "/api" });
+  fastify.register(inventoryRoutes, { prefix: "/api" });
+  fastify.register(contactsRoutes, { prefix: "/api" });
+
+  fastify.get("/health", async () => ({ ok: true, timestamp: new Date().toISOString() }));
+
+  return fastify;
+}
+
+build()
+  .then((app) => app.listen({ port: PORT, host: "0.0.0.0" }))
+  .then(() => console.log(`Server listening on http://localhost:${PORT}`))
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });

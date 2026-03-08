@@ -21,6 +21,7 @@ const routeTitles: Record<string, string> = {
   "/calendar": "Agenda",
   "/tools": "Tools",
   "/providers": "Providers",
+  "/analytics/tokens": "Analytics de Tokens",
   "/monitoring": "Monitoramento",
   "/audit": "Auditoria",
   "/settings": "Configurações",

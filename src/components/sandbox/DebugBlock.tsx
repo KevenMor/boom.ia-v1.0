@@ -3,9 +3,23 @@ import { Bug, ChevronDown, ChevronRight, ScrollText } from "lucide-react";
 
 type DebugEntry = { type: string; [key: string]: any };
 
+type TokenUsageEntry = {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  model?: string;
+};
+
+type TokenUsageData = {
+  dispatcher?: TokenUsageEntry | null;
+  conversational?: TokenUsageEntry | null;
+  single?: TokenUsageEntry | null;
+};
+
 interface DebugBlockProps {
   debug: DebugEntry[];
   edgeLogs?: EdgeLog[];
+  tokenUsage?: TokenUsageData | null;
 }
 
 export interface EdgeLog {
@@ -14,11 +28,29 @@ export interface EdgeLog {
   message: string;
 }
 
-export function DebugBlock({ debug, edgeLogs }: DebugBlockProps) {
+// Preços por 1M tokens (USD) - atualizado 2025
+const PRICING: Record<string, { input: number; output: number }> = {
+  "gpt-4o-mini": { input: 0.15, output: 0.6 },
+  "gpt-4o": { input: 2.5, output: 10 },
+  "gpt-4": { input: 30, output: 60 },
+  "gemini-2.0-flash": { input: 0.075, output: 0.3 },
+  "gemini-2.0-flash-exp": { input: 0.075, output: 0.3 },
+  "gemini-3-flash-preview": { input: 0.075, output: 0.3 },
+};
+
+function estimateCost(entry: TokenUsageEntry): number {
+  const model = (entry.model || "").toLowerCase();
+  const prices = PRICING[model] || PRICING["gpt-4o-mini"];
+  const inputCost = (entry.prompt_tokens / 1_000_000) * prices.input;
+  const outputCost = (entry.completion_tokens / 1_000_000) * prices.output;
+  return inputCost + outputCost;
+}
+
+export function DebugBlock({ debug, edgeLogs, tokenUsage }: DebugBlockProps) {
   const [expanded, setExpanded] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
 
-  if (!debug.length && !edgeLogs?.length) return null;
+  if (!debug.length && !edgeLogs?.length && !tokenUsage) return null;
 
   const config = debug.find((d) => d.type === "config");
   const toolCalls = debug.filter((d) => d.type === "tool_call");
@@ -33,19 +65,36 @@ export function DebugBlock({ debug, edgeLogs }: DebugBlockProps) {
   const fipeIntercepts = debug.filter((d) => d.type === "fipe_intercept" || d.type === "fipe_intercept_result");
   const dispatcherSteps = debug.filter((d) => d.type?.startsWith("dispatcher_"));
   const tokenUsages = debug.filter((d) => d.type === "token_usage");
-  const dispatcherTokens = dispatcherSteps
+  const dispatcherTokensFromDebug = dispatcherSteps
     .filter((d) => d.usage)
     .reduce((acc, d) => ({
       prompt: acc.prompt + (d.usage?.prompt_tokens || 0),
       completion: acc.completion + (d.usage?.completion_tokens || 0),
       total: acc.total + (d.usage?.total_tokens || 0),
     }), { prompt: 0, completion: 0, total: 0 });
-  const convTokens = tokenUsages.reduce((acc, d) => ({
+  const convTokensFromDebug = tokenUsages.reduce((acc, d) => ({
     prompt: acc.prompt + (d.prompt_tokens || 0),
     completion: acc.completion + (d.completion_tokens || 0),
     total: acc.total + (d.total_tokens || 0),
   }), { prompt: 0, completion: 0, total: 0 });
-  const totalTokens = dispatcherTokens.total + convTokens.total;
+  const totalTokensFromDebug = dispatcherTokensFromDebug.total + convTokensFromDebug.total;
+
+  const dispatcherTokens = tokenUsage?.dispatcher
+    ? { prompt: tokenUsage.dispatcher.prompt_tokens, completion: tokenUsage.dispatcher.completion_tokens, total: tokenUsage.dispatcher.total_tokens }
+    : dispatcherTokensFromDebug;
+  const convTokens = tokenUsage?.conversational
+    ? { prompt: tokenUsage.conversational.prompt_tokens, completion: tokenUsage.conversational.completion_tokens, total: tokenUsage.conversational.total_tokens }
+    : tokenUsage?.single
+      ? { prompt: tokenUsage.single.prompt_tokens, completion: tokenUsage.single.completion_tokens, total: tokenUsage.single.total_tokens }
+      : convTokensFromDebug;
+  const totalTokens = tokenUsage
+    ? (tokenUsage.dispatcher?.total_tokens ?? 0) + (tokenUsage.conversational?.total_tokens ?? 0) + (tokenUsage.single?.total_tokens ?? 0)
+    : totalTokensFromDebug;
+
+  const estimatedCost =
+    (tokenUsage?.dispatcher ? estimateCost(tokenUsage.dispatcher) : 0) +
+    (tokenUsage?.conversational ? estimateCost(tokenUsage.conversational) : 0) +
+    (tokenUsage?.single ? estimateCost(tokenUsage.single) : 0);
 
   return (
     <div className="mb-1 max-w-[85%] md:max-w-[65%]">
@@ -174,18 +223,36 @@ export function DebugBlock({ debug, edgeLogs }: DebugBlockProps) {
             <div className="border-t border-[#2a3942] pt-2">
               <div className="text-emerald-400 font-semibold mb-1">📊 Token Usage</div>
               <div className="text-[#8696a0] space-y-0.5">
-                {dispatcherTokens.total > 0 && (
+                {tokenUsage?.dispatcher && dispatcherTokens.total > 0 && (
+                  <div>
+                    🎯 Dispatcher ({tokenUsage.dispatcher.model}): <span className="text-[#e9edef]">{dispatcherTokens.prompt.toLocaleString()}</span> in + <span className="text-[#e9edef]">{dispatcherTokens.completion.toLocaleString()}</span> out = <span className="text-emerald-300 font-semibold">{dispatcherTokens.total.toLocaleString()}</span>
+                  </div>
+                )}
+                {tokenUsage?.conversational && convTokens.total > 0 && (
+                  <div>
+                    🧠 Conversacional ({tokenUsage.conversational.model}): <span className="text-[#e9edef]">{convTokens.prompt.toLocaleString()}</span> in + <span className="text-[#e9edef]">{convTokens.completion.toLocaleString()}</span> out = <span className="text-emerald-300 font-semibold">{convTokens.total.toLocaleString()}</span>
+                  </div>
+                )}
+                {tokenUsage?.single && convTokens.total > 0 && (
+                  <div>
+                    🧠 LLM ({tokenUsage.single.model}): <span className="text-[#e9edef]">{convTokens.prompt.toLocaleString()}</span> in + <span className="text-[#e9edef]">{convTokens.completion.toLocaleString()}</span> out = <span className="text-emerald-300 font-semibold">{convTokens.total.toLocaleString()}</span>
+                  </div>
+                )}
+                {!tokenUsage && dispatcherTokens.total > 0 && (
                   <div>
                     🎯 Dispatcher: <span className="text-[#e9edef]">{dispatcherTokens.prompt.toLocaleString()}</span> prompt + <span className="text-[#e9edef]">{dispatcherTokens.completion.toLocaleString()}</span> completion = <span className="text-emerald-300 font-semibold">{dispatcherTokens.total.toLocaleString()}</span>
                   </div>
                 )}
-                {convTokens.total > 0 && (
+                {!tokenUsage && convTokens.total > 0 && (
                   <div>
                     🧠 Conversacional: <span className="text-[#e9edef]">{convTokens.prompt.toLocaleString()}</span> prompt + <span className="text-[#e9edef]">{convTokens.completion.toLocaleString()}</span> completion = <span className="text-emerald-300 font-semibold">{convTokens.total.toLocaleString()}</span>
                   </div>
                 )}
                 <div className="border-t border-[#2a3942] pt-1 mt-1">
                   Total: <span className="text-emerald-300 font-bold">{totalTokens.toLocaleString()} tokens</span>
+                  {estimatedCost > 0 && (
+                    <span className="ml-2 text-amber-400">~${estimatedCost.toFixed(4)} USD</span>
+                  )}
                 </div>
               </div>
             </div>

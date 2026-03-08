@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Play, CheckCircle2, XCircle } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { nexusDb } from "@/integrations/supabase/nexus-client";
+import { callAPI } from "@/lib/api-client";
 import type { Tool } from "@/types/database";
 
 interface Props {
@@ -67,28 +68,15 @@ export function TestToolDialog({ tool, open, onOpenChange }: Props) {
       const { data: { session } } = await nexusDb.auth.getSession();
       const nexusToken = session?.access_token;
 
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${supabaseKey}`,
-        "apikey": supabaseKey,
-      };
-      if (nexusToken) {
-        headers["x-nexus-auth"] = nexusToken;
-      }
-
-      const resp = await fetch(`${supabaseUrl}/functions/v1/test-tool`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ tool_id: tool.id, tool_name: tool.name, args: parsedArgs }),
+      const data = await callAPI<{ result?: { error?: string; detail?: string } | unknown; error?: string; detail?: string }>("/tools/test", {
+        body: { tool_id: tool.id, tool_name: tool.name, args: parsedArgs },
+        headers: nexusToken ? { "x-nexus-auth": nexusToken } : {},
       });
 
-      const data = await resp.json();
-
-      if (!resp.ok) {
-        setError([data.error, data.detail].filter(Boolean).join(" — ") || `HTTP ${resp.status}`);
+      const err = data.error || (data.result as any)?.error;
+      const errDetail = data.detail || (data.result as any)?.detail;
+      if (err) {
+        setError([err, errDetail].filter(Boolean).join(" — ") || "Erro desconhecido");
       } else {
         setResult(JSON.stringify(data.result, null, 2));
       }

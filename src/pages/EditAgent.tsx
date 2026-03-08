@@ -28,7 +28,7 @@ import { ReminderConfigSection } from "@/components/agents/ReminderConfigSection
 import { BusinessHoursSection, DEFAULT_BUSINESS_HOURS, type BusinessHours } from "@/components/agents/BusinessHoursSection";
 import type { Agent } from "@/types/database";
 
-const WEBHOOK_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/webhook-test`;
+const WEBHOOK_BASE = `${import.meta.env.VITE_API_URL || "http://localhost:3001/api"}/webhooks`;
 
 const schema = z.object({
   name: z.string().min(2),
@@ -320,7 +320,7 @@ export default function EditAgent() {
                 className="h-11 rounded-lg bg-background border-border font-mono text-sm"
               />
               <p className="text-xs text-muted-foreground">
-                O agente só responderá conversas atribuídas a este ID de atendente no Chatwoot.
+                Regra exclusiva do status <strong>Teste</strong>: o agente só interage quando a conversa no Chatwoot estiver atribuída a este ID. Qualquer mensagem em conversa com outro atendente (ou sem atribuição) não será respondida pelo agente.
               </p>
             </div>
           )}

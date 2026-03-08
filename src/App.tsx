@@ -26,6 +26,7 @@ import SettingsPage from "@/pages/SettingsPage";
 import PromptsPage from "@/pages/PromptsPage";
 import ProfilePage from "@/pages/ProfilePage";
 import CalendarPage from "@/pages/CalendarPage";
+import TokenAnalytics from "@/pages/TokenAnalytics";
 import PublicSandbox from "@/pages/PublicSandbox";
 import NotFound from "@/pages/NotFound";
 
@@ -63,6 +64,7 @@ const App = () => (
               <Route path="/tools/:toolId/edit" element={<EditTool />} />
               <Route path="/providers" element={<Providers />} />
               <Route path="/providers/:providerId/edit" element={<EditProvider />} />
+              <Route path="/analytics/tokens" element={<TokenAnalytics />} />
               <Route path="/monitoring" element={<Monitoring />} />
               <Route path="/audit" element={<Audit />} />
               <Route path="/settings" element={<SettingsPage />} />
