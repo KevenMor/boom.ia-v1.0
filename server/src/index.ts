@@ -56,6 +56,46 @@ async function build() {
 
   fastify.get("/health", async () => ({ ok: true, timestamp: new Date().toISOString() }));
 
+  fastify.get("/api/health/nexus", async (_req, reply) => {
+    const url = process.env.NEXUS_DB_URL;
+    const apikey = process.env.NEXUS_DB_ANON_KEY || process.env.NEXUS_SERVICE_ROLE_KEY;
+    if (!url || !apikey) {
+      return reply.code(503).send({
+        ok: false,
+        nexus: "unreachable",
+        error: "NEXUS_DB_URL or NEXUS_DB_ANON_KEY not configured",
+      });
+    }
+    const healthUrl = `${url.replace(/\/$/, "")}/rest/v1/`;
+    const maskedUrl = url.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+    try {
+      const res = await fetch(healthUrl, {
+        method: "GET",
+        headers: {
+          apikey,
+          Authorization: `Bearer ${apikey}`,
+        },
+      });
+      if (res.ok || res.status === 401) {
+        return { ok: true, nexus: "reachable", url: maskedUrl };
+      }
+      return reply.code(503).send({
+        ok: false,
+        nexus: "unreachable",
+        error: `Supabase returned ${res.status}`,
+        url: maskedUrl,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return reply.code(503).send({
+        ok: false,
+        nexus: "unreachable",
+        error: msg,
+        url: maskedUrl,
+      });
+    }
+  });
+
   return fastify;
 }
 

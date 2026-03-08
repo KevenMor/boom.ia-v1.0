@@ -2,6 +2,19 @@
 
 O `docker-compose.portainer.yml` está configurado para o **Traefik** rotear **ia.agboom.com.br** para o proxy da stack (porta 80 do container). Acesso: **http://ia.agboom.com.br** e **https://ia.agboom.com.br** (se o Traefik tiver TLS).
 
+## Rede externa: criar ou usar a do Traefik
+
+A stack usa a rede **`traefik_public`** (external). Se ela não existir, o deploy falha com *network could not be found*.
+
+**Opção A – Criar a rede na VPS (SSH ou Portainer → Networks):**
+```bash
+docker network create --driver overlay traefik_public
+```
+Depois, na stack do **Traefik**, coloque o serviço do Traefik também na rede `traefik_public` (se ainda não estiver). Assim o Boom IA e o Traefik ficam na mesma rede.
+
+**Opção B – Usar a rede que o Traefik já usa**  
+No Portainer: **Networks** → veja em qual rede o **Traefik** está (ex.: `traefik_web`, `proxy`, nome da stack do Traefik). No compose do Boom IA, troque `traefik_public` por esse nome (nas `networks:` e na label `traefik.docker.network` do proxy).
+
 ## O que o compose faz
 
 - **Rede `traefik_public`** (external): o proxy entra nessa rede para o Traefik alcançá-lo.
