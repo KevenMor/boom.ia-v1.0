@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import { AudioRecorder } from "@/components/sandbox/AudioRecorder";
 import { AttachmentPreview, classifyFile, type AttachmentFile } from "@/components/sandbox/AttachmentPreview";
 import { extractVideos, VideoPlayer, UserMediaPreview, type UserAttachmentMeta } from "@/components/sandbox/MediaBubble";
-import { nexusDb } from "@/integrations/supabase/nexus-client";
+import { nexusDb, getSupabaseBaseUrl } from "@/integrations/supabase/nexus-client";
 import { format } from "date-fns";
 
 type Msg = {
@@ -15,7 +15,7 @@ type Msg = {
   userAttachments?: UserAttachmentMeta[];
 };
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-agent`;
+const CHAT_URL = `${getSupabaseBaseUrl()}/functions/v1/chat-agent`;
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 
 function extractImages(content: string): { text: string; images: string[] } {
@@ -99,7 +99,7 @@ export default function PublicSandbox() {
     if (!agentId) return;
     (async () => {
       try {
-        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-agent-info?agent_id=${agentId}`;
+        const url = `${getSupabaseBaseUrl()}/functions/v1/public-agent-info?agent_id=${agentId}`;
         const resp = await fetch(url, {
           headers: {
             Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,

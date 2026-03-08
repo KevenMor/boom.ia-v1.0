@@ -1,6 +1,16 @@
-# Login: "Failed to fetch" – CORS no Supabase
+# Login: "Failed to fetch" – CORS no Supabase (ou use o proxy)
 
-O login do painel chama a **API de Auth do Supabase** direto do navegador (de `http://ia.agboom.com.br` para a URL do Supabase no Easypanel). Se o Supabase não permitir a origem do painel, o navegador bloqueia a requisição e aparece **"Failed to fetch"**.
+O login do painel **agora usa um proxy no backend** (`/api/supabase-proxy`): o navegador chama o mesmo domínio (ia.agboom.com.br) e o servidor encaminha para o Supabase. Assim **não há mais CORS** entre navegador e Supabase.
+
+Se o login ainda falhar com "Failed to fetch", verifique:
+1. O **backend** está rodando e acessível (ex.: `curl https://ia.agboom.com.br/api/health/nexus`).
+2. O **proxy** (`/api/supabase-proxy/*`) está ativo (o servidor precisa ter `NEXUS_DB_URL` configurado).
+
+---
+
+## Alternativa: chamar Supabase direto (requer CORS)
+
+Se quiser que o frontend chame o Supabase **diretamente** (sem proxy), o Supabase precisa permitir CORS da origem do painel.
 
 ## O que fazer no Easypanel / Supabase
 

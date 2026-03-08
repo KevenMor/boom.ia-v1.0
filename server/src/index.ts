@@ -56,6 +56,31 @@ async function build() {
 
   fastify.get("/health", async () => ({ ok: true, timestamp: new Date().toISOString() }));
 
+  // Proxy Supabase (auth, rest) para evitar CORS: frontend chama /api/supabase-proxy/* -> NEXUS_DB_URL/*
+  const nexusUrl = process.env.NEXUS_DB_URL;
+  if (nexusUrl) {
+    const base = nexusUrl.replace(/\/$/, "");
+    fastify.all("/api/supabase-proxy/*", async (request, reply) => {
+      const suffix = (request.url.split("?")[0].replace(/^\/api\/supabase-proxy\/?/, "") || "") + (request.url.includes("?") ? "?" + request.url.split("?")[1] : "");
+      const targetUrl = `${base}/${suffix}`.replace(/([^:]\/)\/+/g, "$1");
+      const headers: Record<string, string> = {};
+      for (const [k, v] of Object.entries(request.headers)) {
+        if (v && !["host", "connection", "content-length"].includes(k.toLowerCase())) headers[k] = Array.isArray(v) ? v[0] : v;
+      }
+      try {
+        const body = ["POST", "PUT", "PATCH"].includes(request.method) && request.body ? JSON.stringify(request.body) : undefined;
+        const res = await fetch(targetUrl, { method: request.method, headers, body });
+        const text = await res.text();
+        reply.code(res.status);
+        res.headers.forEach((v, k) => { if (!["transfer-encoding"].includes(k.toLowerCase())) reply.header(k, v); });
+        return reply.send(text);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return reply.code(502).send({ error: "Supabase proxy error", message: msg });
+      }
+    });
+  }
+
   fastify.get("/api/health/nexus", async (_req, reply) => {
     const url = process.env.NEXUS_DB_URL;
     const apikey = process.env.NEXUS_DB_ANON_KEY || process.env.NEXUS_SERVICE_ROLE_KEY;
