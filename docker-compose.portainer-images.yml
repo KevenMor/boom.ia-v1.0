@@ -16,10 +16,12 @@ networks:
 
 services:
   server:
-    image: ghcr.io/kevenmor/boom-ia-server:v4-debug
+    image: ghcr.io/kevenmor/boom-ia-server:v5
     environment:
       PORT: "3001"
       NODE_ENV: "production"
+      USE_CHAT_LOCAL: "true"
+      USE_CHAT_LOCAL_INJECT: "true"
       NEXUS_DB_URL: "https://boomsolution-supabase.kgn6uc.easypanel.host"
       NEXUS_SERVICE_ROLE_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJzZXJ2aWNlX3JvbGUiLAogICAgImlzcyI6ICJzdXBhYmFzZS1kZW1vIiwKICAgICJpYXQiOiAxNjQxNzY5MjAwLAogICAgImV4cCI6IDE3OTk1MzU2MDAKfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q"
       NEXUS_DB_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE"
@@ -36,9 +38,16 @@ services:
       replicas: 1
       restart_policy:
         condition: any
+        delay: 5s
       update_config:
         order: start-first
         failure_action: rollback
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   frontend:
     image: ghcr.io/kevenmor/boom-ia-frontend:latest
@@ -51,7 +60,7 @@ services:
         delay: 5s
 
   proxy:
-    image: ghcr.io/kevenmor/boom-ia-proxy:v2
+    image: ghcr.io/kevenmor/boom-ia-proxy:v3
     networks:
       - internal
       - minha_rede

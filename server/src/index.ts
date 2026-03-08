@@ -13,6 +13,8 @@ import { contactsRoutes } from "./routes/contacts.js";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 
+console.log("[Server] Starting... PORT=%s NODE_ENV=%s", PORT, process.env.NODE_ENV);
+
 async function build() {
   const fastify = Fastify({ logger: true });
 
@@ -127,8 +129,9 @@ async function build() {
 
 build()
   .then((app) => app.listen({ port: PORT, host: "0.0.0.0" }))
-  .then(() => console.log(`Server listening on http://localhost:${PORT}`))
+  .then(() => console.log(`[Server] Listening on http://0.0.0.0:${PORT}`))
   .catch((err) => {
-    console.error(err);
+    console.error("[Server] Startup failed:", err?.message || err);
+    if (err?.stack) console.error(err.stack);
     process.exit(1);
   });

@@ -1,5 +1,8 @@
 # Proxy nginx com config embutido (para Portainer, sem volume)
+# Entrypoint espera o server estar up antes de iniciar nginx
 FROM nginx:alpine
 COPY docker/nginx-proxy.conf /etc/nginx/conf.d/default.conf
+COPY docker/proxy-entrypoint.sh /proxy-entrypoint.sh
+RUN chmod +x /proxy-entrypoint.sh
 EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["/proxy-entrypoint.sh"]
