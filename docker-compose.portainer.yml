@@ -1,6 +1,22 @@
-# Boom IA - Stack para Portainer Swarm (sem rede customizada)
-# Cole no Web editor. Imagens no GHCR. Sem rede customizada = Swarm usa a rede padrão da stack.
-# Acesso: http://IP_DA_VPS:8081
+# =============================================================================
+# Boom IA - Stack Portainer Swarm
+# =============================================================================
+#
+# REGISTRY: GitHub Container Registry (GHCR)
+#   URL: https://ghcr.io
+#   Imagens (caminho completo):
+#     - ghcr.io/kevenmor/boom-ia-server:latest
+#     - ghcr.io/kevenmor/boom-ia-frontend:latest
+#     - ghcr.io/kevenmor/boom-ia-proxy:latest
+#
+# TOKEN DE ACESSO (imagens privadas no GHCR):
+#   O token fica em ambiente (Portainer > Registries): adicione o registry ghcr.io
+#   com Username e Password (token). Ou use a variável de ambiente do Portainer
+#   se o seu fluxo já definir o token por env.
+#   Ao criar/editar esta stack, em "Registries" selecione o registry ghcr.io.
+#
+# Acesso ao painel: http://IP_DA_VPS:8081
+# =============================================================================
 
 version: '3.8'
 
