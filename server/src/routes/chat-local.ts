@@ -24,13 +24,22 @@ async function getProviderApiKey(
       let apiKey = "";
       if (provider.api_key_encrypted && process.env.ENCRYPTION_KEY) {
         try {
+          console.log("[Chat-Local] Descriptografando chave do provider:", providerId);
           const { decrypt } = await import("../services/crypto.js");
           apiKey = await decrypt(provider.api_key_encrypted, process.env.ENCRYPTION_KEY);
-        } catch {
+          console.log("[Chat-Local] Chave descriptografada com sucesso, length:", apiKey.length);
+        } catch (err) {
+          console.error("[Chat-Local] Falha ao descriptografar chave do provider:", providerId, err);
           apiKey = openaiKey || geminiKey || "";
+          if (apiKey) {
+            console.log("[Chat-Local] Usando fallback de env var, length:", apiKey.length);
+          }
         }
       } else {
         apiKey = openaiKey || geminiKey || "";
+        if (apiKey) {
+          console.log("[Chat-Local] Usando chave de env var (sem encryption), length:", apiKey.length);
+        }
       }
       const baseUrl = (provider.base_url || "https://api.openai.com/v1").replace(/\/+$/, "");
       if (apiKey) return { apiKey, baseUrl };
@@ -208,6 +217,12 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           error: "No LLM provider configured. Set OPENAI_API_KEY or GEMINI_API_KEY, or configure provider with API key.",
         });
       }
+      console.log("[Chat-Local] Provider config:", {
+        hasApiKey: !!providerConfig.apiKey,
+        apiKeyLength: providerConfig.apiKey?.length,
+        baseUrl: providerConfig.baseUrl,
+        providerId: agent.provider_id,
+      });
 
       let model = agent.model || "gpt-4o-mini";
       const { openaiTools, nameToTool } = buildOpenAITools(tools, providerConfig.baseUrl);
@@ -309,6 +324,13 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           const dispatcherApiUrl = isGeminiBase && !base.includes("/openai")
             ? `${base}/openai/chat/completions`
             : `${base}/chat/completions`;
+
+          console.log("[Chat-Local] Dispatcher request:", {
+            url: dispatcherApiUrl,
+            model: dispatcherBody.model,
+            hasAuth: !!dispatcherConfig.apiKey,
+            authLength: dispatcherConfig.apiKey?.length,
+          });
 
           let dispatcherResp: Response;
           try {
@@ -508,6 +530,13 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
             ? `${convBase}/openai/chat/completions`
             : `${convBase}/chat/completions`;
 
+          console.log("[Chat-Local] Conversational request:", {
+            url: convApiUrl,
+            model: convBody.model,
+            hasAuth: !!providerConfig.apiKey,
+            authLength: providerConfig.apiKey?.length,
+          });
+
           let convResp: Response;
           try {
             convResp = await fetch(convApiUrl, {
@@ -562,7 +591,10 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
                     };
                   }
                   const delta = ev.choices?.[0]?.delta;
-                  if (delta?.content) sendSse({ choices: [{ delta: { content: delta.content } }] });
+                  if (delta?.content) {
+                    console.log("[Chat-Local] Streaming content chunk:", delta.content.slice(0, 50));
+                    sendSse({ choices: [{ delta: { content: delta.content } }] });
+                  }
                 } catch { /* skip */ }
               }
             }

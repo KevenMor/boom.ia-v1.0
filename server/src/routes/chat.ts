@@ -9,25 +9,28 @@ const EDGE_CHAT_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE
 export async function chatRoutes(fastify: FastifyInstance) {
   fastify.post("/chat", async (req: FastifyRequest, reply: FastifyReply) => {
     if (USE_CHAT_LOCAL) {
+      const port = process.env.PORT || "3001";
+      const internalBase = process.env.INTERNAL_API_BASE || `http://127.0.0.1:${port}`;
+      const chatLocalUrl = `${internalBase.replace(/\/+$/, "").replace(/\/api$/, "")}/api/chat-local`;
       const nexusAuth = (req.headers["x-nexus-auth"] as string) || "";
+
       try {
-        // Chamada interna via inject - evita 502 em Docker (sem round-trip HTTP)
-        const res = await fastify.inject({
+        const upstream = await fetch(chatLocalUrl, {
           method: "POST",
-          url: "/api/chat-local",
-          payload: req.body,
           headers: {
-            "content-type": "application/json",
+            "Content-Type": "application/json",
             "x-nexus-auth": nexusAuth ? (nexusAuth.startsWith("Bearer ") ? nexusAuth : `Bearer ${nexusAuth}`) : "",
           },
+          body: JSON.stringify(req.body),
         });
 
-        if (res.statusCode >= 400) {
-          console.error("[Chat] chat-local error:", res.statusCode, String(res.payload).slice(0, 400));
-          return reply.status(res.statusCode).send(res.payload);
+        if (!upstream.ok) {
+          const errText = await upstream.text();
+          console.error("[Chat] Upstream error:", upstream.status, errText.slice(0, 400));
+          return reply.status(upstream.status).send(errText);
         }
 
-        const contentType = res.headers["content-type"] || "";
+        const contentType = upstream.headers.get("content-type") || "";
         if (contentType.includes("text/event-stream")) {
           const origin = (req.headers.origin as string) || "";
           const extraOrigins = (process.env.CORS_ORIGINS || "").split(",").map((o) => o.trim()).filter(Boolean);
@@ -48,15 +51,35 @@ export async function chatRoutes(fastify: FastifyInstance) {
             "Access-Control-Allow-Origin": allowOrigin,
             "Access-Control-Allow-Credentials": "true",
           });
-          return reply.raw.end(res.payload);
+          const reader = upstream.body!.getReader();
+          const pump = async () => {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              reply.raw.write(value);
+            }
+            reply.raw.end();
+          };
+          pump().catch((e: unknown) => {
+            const msg = e instanceof Error ? e.message : String(e);
+            const isClientDisconnect = /ECONNRESET|socket hang up|EPIPE/i.test(msg);
+            if (isClientDisconnect) {
+              console.warn("[Chat] Stream: cliente desconectou:", msg);
+            } else {
+              console.error("[Chat] Stream error:", e);
+            }
+            reply.raw.end();
+          });
+          return;
         }
 
-        return reply.status(res.statusCode).headers(res.headers).send(res.payload);
-      } catch (e: any) {
+        const data = await upstream.json();
+        return reply.send(data);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
         console.error("[Chat] Proxy error:", e);
-        return reply.status(502).send({ error: e.message || "Chat proxy failed" });
+        return reply.status(502).send({ error: msg || "Chat proxy failed" });
       }
-    }
     }
 
     if (!EDGE_CHAT_URL || !EDGE_CHAT_KEY) {
