@@ -48,9 +48,10 @@ services:
       replicas: 1
       restart_policy:
         condition: any
+        delay: 5s
 
   proxy:
-    image: ghcr.io/kevenmor/boom-ia-proxy:latest
+    image: ghcr.io/kevenmor/boom-ia-proxy:v2
     networks:
       - internal
       - minha_rede
@@ -58,6 +59,7 @@ services:
       replicas: 1
       restart_policy:
         condition: any
+        delay: 10s
       labels:
         # Traefik: ia.agboom.com.br -> proxy:80 (rede minha_rede = rede do Traefik na VPS)
         - "traefik.enable=true"
