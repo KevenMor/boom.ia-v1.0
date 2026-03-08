@@ -1,17 +1,23 @@
 # =============================================================================
 # Boom IA - Stack Portainer Swarm (com pull explícito)
 # =============================================================================
-# Se as imagens já estão públicas e ainda fica 0/1:
-# 1. Remova a stack (Remove stack), depois crie de novo e cole este compose.
-# 2. Em cada serviço, use image sem :latest e force pull (Redeploy).
-# 3. Veja o erro: Services > clique no serviço > Tasks > clique na tarefa falha.
+# Traefik: proxy na rede do Traefik + labels para ia.agboom.com.br (sem :8081).
+# Troque "traefik_public" pelo nome da rede do seu Traefik se for diferente.
 # =============================================================================
 
 version: '3.8'
 
+networks:
+  internal:
+    driver: overlay
+  traefik_public:
+    external: true
+
 services:
   server:
     image: ghcr.io/kevenmor/boom-ia-server:latest
+    networks:
+      - internal
     environment:
       PORT: "3001"
       NODE_ENV: "production"
@@ -31,6 +37,8 @@ services:
 
   frontend:
     image: ghcr.io/kevenmor/boom-ia-frontend:latest
+    networks:
+      - internal
     deploy:
       replicas: 1
       restart_policy:
@@ -38,13 +46,20 @@ services:
 
   proxy:
     image: ghcr.io/kevenmor/boom-ia-proxy:latest
-    ports:
-      # Porta 80: acesse por http://ia.agboom.com.br (sem :8081)
-      # Se a porta 80 já estiver em uso na VPS, volte para published: 8081 e use um proxy reverso (ver docker/REVERSE-PROXY-CADDY.md)
-      - target: 80
-        published: 80
-        mode: host
+    networks:
+      - internal
+      - traefik_public
     deploy:
       replicas: 1
       restart_policy:
         condition: any
+      labels:
+        # Traefik: ia.agboom.com.br -> proxy:80. Troque traefik_public pelo nome da sua rede Traefik.
+        # Se não usar HTTPS, remova as linhas tls e certresolver e deixe só entrypoints=web
+        - "traefik.enable=true"
+        - "traefik.docker.network=traefik_public"
+        - "traefik.http.routers.boom-ia.rule=Host(`ia.agboom.com.br`)"
+        - "traefik.http.routers.boom-ia.entrypoints=web,websecure"
+        - "traefik.http.routers.boom-ia.tls=true"
+        - "traefik.http.routers.boom-ia.tls.certresolver=letsencrypt"
+        - "traefik.http.services.boom-ia.loadbalancer.server.port=80"

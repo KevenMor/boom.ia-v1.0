@@ -82,3 +82,69 @@ Se ficar **1/1** e você acessar `http://IP_DA_VPS:8082` e ver a página do ngin
 | Tarefa "Rejected"    | Mensagem na tarefa          | Ajustar recurso, placement ou imagem   |
 
 Depois de deixar as imagens públicas (ou adicionar o registry), faça **Redeploy** da stack Boom IA e confira de novo em **Tasks** se ainda aparecer 0/1.
+
+---
+
+## 5. Já deixou público e ainda 0/1
+
+1. **Remova a stack por completo**  
+   Stacks → boom_ia → **Remove stack** (não só Redeploy). O Swarm às vezes mantém o estado de falha em cache.
+
+2. **Crie a stack de novo**  
+   Add stack → Web editor → cole o `docker-compose.portainer.yml` → Deploy the stack.
+
+3. **Veja o erro exato da tarefa**  
+   Services → **boom_ia_server** → aba **Tasks** → clique na tarefa em vermelho (Failed/Rejected).  
+   A mensagem pode ser:
+   - `no such image` / `pull access denied` → imagem ainda inacessível ou nome errado
+   - `failed to create task` / `invalid argument` → configuração do serviço ou do Swarm
+   - `non-zero exit` / container saindo → aplicação cai ao iniciar (ex.: não conecta no Supabase)
+
+4. **Teste se o nó puxa a imagem** (se tiver SSH na VPS):
+   ```bash
+   docker pull ghcr.io/kevenmor/boom-ia-server:latest
+   docker run --rm -e PORT=3001 ghcr.io/kevenmor/boom-ia-server:latest
+   ```
+   Se o `pull` falhar, o problema é rede/firewall ou o pacote ainda não está público.  
+   Se o `run` subir e cair na hora, o problema é a aplicação (env, Supabase, etc.).
+
+**Manda a mensagem de erro que aparece na tarefa** (copiar/colar) para conseguir afinar o próximo passo.
+
+---
+
+## 6. Proxy 0/1 com "host not found in upstream server"
+
+Se o **boom_ia_proxy** fica **0/1** e nos logs aparece `host not found in upstream "server"`, o container está rodando a **imagem antiga** do proxy (sem o resolver em tempo de requisição).
+
+**O que fazer:**
+
+1. **No seu PC**, rebuild e push da imagem do proxy:
+   ```powershell
+   cd "C:\...\boom-agents"
+   docker build -f docker/Dockerfile.proxy -t ghcr.io/kevenmor/boom-ia-proxy:latest .
+   docker push ghcr.io/kevenmor/boom-ia-proxy:latest
+   ```
+2. No **Portainer**: na stack **boom_ia**, abra o serviço **boom_ia_proxy** → **Pull and redeploy** (ou **Recreate**) para puxar a nova imagem.
+
+---
+
+## 7. Porta 80 já em uso (proxy não sobe com 80:80)
+
+Se o proxy está configurado com **80:80** e continua 0/1 (e não é o erro "host not found"), pode ser que a **porta 80** já esteja em uso na VPS.
+
+**Na VPS (SSH):**
+```bash
+sudo ss -tlnp | grep ':80 '
+# ou
+sudo netstat -tlnp | grep ':80 '
+```
+Se aparecer algum processo, a 80 está ocupada. Opções:
+- No compose, use **8081** de novo: `published: 8081` e acesse **http://ia.agboom.com.br:8081**.
+- Ou pare o serviço que usa a 80 e deixe o proxy na 80.
+
+---
+
+## 8. Rede customizada (ex.: minha_rede)
+
+A stack **boom_ia** usa a rede padrão da stack (**boom_ia_default**). O `docker-compose.portainer.yml` **não** referencia redes customizadas como **minha_rede**. Se você não anexou a stack à **minha_rede** no Portainer, ela não é a causa do proxy 0/1.  
+Se a stack estiver em uma rede **internal: true**, o proxy não recebe tráfego externo; use a rede padrão da stack.
