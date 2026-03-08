@@ -29,7 +29,8 @@ export default function Login() {
     const { error } = await signIn(email, password);
     setLoading(false);
     if (error) {
-      toast.error("Falha no login: " + error.message);
+      const msg = error?.message || (error as { error_description?: string })?.error_description || "Erro desconhecido";
+      toast.error("Falha no login: " + msg);
     } else {
       navigate("/dashboard");
     }

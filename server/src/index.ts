@@ -76,6 +76,7 @@ async function build() {
         return reply.send(text);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        request.log.error({ err, targetUrl }, "Supabase proxy fetch failed");
         return reply.code(502).send({ error: "Supabase proxy error", message: msg });
       }
     });
