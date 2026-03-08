@@ -1,7 +1,11 @@
-// Em produção usa a origem atual; em dev usa VITE_API_URL ou localhost.
+// Em dev (localhost) usa /api relativo (proxy do Vite); em produção usa origem atual.
+const isLocalhost =
+  typeof window !== "undefined" &&
+  /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(window.location.origin);
+
 const API_BASE =
   typeof window !== "undefined"
-    ? (import.meta.env.VITE_API_URL || `${window.location.origin}/api`)
+    ? (isLocalhost ? "/api" : `${window.location.origin}/api`)
     : (import.meta.env.VITE_API_URL || "http://localhost:3001/api");
 
 export function getApiBase(): string {

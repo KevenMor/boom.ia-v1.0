@@ -1,8 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 
-// Em dev (localhost), usa proxy de produção se VITE_SUPABASE_PROXY_URL estiver definido (Supabase pode ser inacessível do PC).
+// Em dev (localhost) usa proxy local (Vite → backend); em produção usa origem atual.
 const isDev = typeof window !== "undefined" && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(window.location.origin);
-const proxyBase = import.meta.env.VITE_SUPABASE_PROXY_URL || "https://ia.agboom.com.br/api/supabase-proxy";
+const proxyBase =
+  import.meta.env.VITE_SUPABASE_PROXY_URL ||
+  (typeof window !== "undefined" ? `${window.location.origin}/api/supabase-proxy` : "https://boomsolution-supabase.kgn6uc.easypanel.host");
 const NEXUS_URL =
   typeof window !== "undefined"
     ? (isDev ? proxyBase : `${window.location.origin}/api/supabase-proxy`)
