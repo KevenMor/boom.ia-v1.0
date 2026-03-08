@@ -39,11 +39,8 @@ services:
   proxy:
     image: ghcr.io/kevenmor/boom-ia-proxy:latest
     ports:
-      # Porta 80: acesse por http://ia.agboom.com.br (DNS apontando para o IP da VPS)
-      # Se a porta 80 já estiver em uso (ex.: Caddy/nginx para SSL), use target: 80 / published: 8081
-      # e configure o proxy externo para encaminhar ia.agboom.com.br para localhost:8081
       - target: 80
-        published: 80
+        published: 8081
         mode: host
     deploy:
       replicas: 1
