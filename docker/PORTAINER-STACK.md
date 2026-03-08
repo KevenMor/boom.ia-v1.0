@@ -22,9 +22,10 @@ Use o arquivo **`.env.portainer.example`** na raiz do projeto como modelo. Preen
    - **Repository URL**: `https://github.com/KevenMor/boom.ia-v1.0` (ou seu repositório).
    - **Repository reference**: `main` (ou a branch que você usa).
    - **Compose path**: `docker-compose.yml` (se estiver na raiz, pode deixar em branco dependendo da versão do Portainer).
-4. **Environment variables**:
-   - Opção A: **Load variables from .env file** e cole o conteúdo do `.env` já preenchido.
+4. **Environment variables** (obrigatório — não há arquivo `.env` no repositório):
+   - Opção A: **Load variables from .env file** e cole o conteúdo do seu `.env.stack` (ou do `.env.portainer.example` preenchido).
    - Opção B: Adicione cada variável manualmente (nome e valor).
+   - O compose **não** usa `env_file`; todas as variáveis vêm daqui.
 5. **Deploy the stack**.
 
 ## 3. Rede e portas

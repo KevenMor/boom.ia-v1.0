@@ -1,12 +1,23 @@
 # Boom IA - Docker Compose (frontend + server + proxy)
 # Acesse: http://localhost (frontend em /, API em /api)
+#
+# No Portainer: defina as variáveis na stack (Environment variables).
+# Não use env_file: o Portainer não tem .env no diretório do clone.
 
 services:
   server:
     build:
       context: .
       dockerfile: Dockerfile.server
-    env_file: .env
+    environment:
+      - PORT=${PORT:-3001}
+      - NODE_ENV=${NODE_ENV:-production}
+      - NEXUS_DB_URL=${NEXUS_DB_URL}
+      - NEXUS_SERVICE_ROLE_KEY=${NEXUS_SERVICE_ROLE_KEY}
+      - NEXUS_DB_ANON_KEY=${NEXUS_DB_ANON_KEY}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - API_BASE_URL=${API_BASE_URL}
+      - CORS_ORIGINS=${CORS_ORIGINS}
     restart: unless-stopped
 
   frontend:
