@@ -18,6 +18,15 @@ Substitua:
 
 ## 2. Buildar e publicar as imagens
 
+**Todas a partir da raiz do repositório** (`/caminho/para/boom-agents`).
+
+### Proxy (nginx com config)
+
+```bash
+docker build -f docker/Dockerfile.proxy -t ghcr.io/kevenmor/boom-ia-proxy:latest .
+docker push ghcr.io/kevenmor/boom-ia-proxy:latest
+```
+
 ### Server (API Node.js)
 
 ```bash
@@ -49,7 +58,7 @@ docker push ghcr.io/kevenmor/boom-ia-frontend:latest
 2. Defina as variáveis de ambiente (só as do **servidor**; o frontend já tem as URLs no build).
 3. Deploy da stack.
 
-As imagens são baixadas do GHCR; não há build no Portainer.
+As imagens são baixadas do GHCR; não há build nem arquivos externos no Portainer.
 
 ---
 
@@ -61,6 +70,9 @@ Se preferir Docker Hub:
 docker login
 docker build -f Dockerfile.server -t seuusuario/boom-ia-server:latest .
 docker push seuusuario/boom-ia-server:latest
+
+docker build -f docker/Dockerfile.proxy -t seuusuario/boom-ia-proxy:latest .
+docker push seuusuario/boom-ia-proxy:latest
 
 docker build --build-arg ... -t seuusuario/boom-ia-frontend:latest .
 docker push seuusuario/boom-ia-frontend:latest
