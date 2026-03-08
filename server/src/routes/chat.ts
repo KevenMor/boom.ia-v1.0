@@ -9,75 +9,53 @@ const EDGE_CHAT_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE
 export async function chatRoutes(fastify: FastifyInstance) {
   fastify.post("/chat", async (req: FastifyRequest, reply: FastifyReply) => {
     if (USE_CHAT_LOCAL) {
-      // Usar URL interna (127.0.0.1) para evitar 502 em Docker quando o server chama a si mesmo via URL externa
-      const port = process.env.PORT || "3001";
-      const internalBase = process.env.INTERNAL_API_BASE || `http://127.0.0.1:${port}`;
-      const chatLocalUrl = `${internalBase.replace(/\/+$/, "").replace(/\/api$/, "")}/api/chat-local`;
       const nexusAuth = (req.headers["x-nexus-auth"] as string) || "";
-
       try {
-        const upstream = await fetch(chatLocalUrl, {
+        // Chamada interna via inject - evita 502 em Docker (sem round-trip HTTP)
+        const res = await fastify.inject({
           method: "POST",
+          url: "/api/chat-local",
+          payload: req.body,
           headers: {
-            "Content-Type": "application/json",
+            "content-type": "application/json",
             "x-nexus-auth": nexusAuth ? (nexusAuth.startsWith("Bearer ") ? nexusAuth : `Bearer ${nexusAuth}`) : "",
           },
-          body: JSON.stringify(req.body),
         });
 
-      if (!upstream.ok) {
-        const errText = await upstream.text();
-        console.error("[Chat] Upstream error:", upstream.status, errText.slice(0, 400));
-        return reply.status(upstream.status).send(errText);
+        if (res.statusCode >= 400) {
+          console.error("[Chat] chat-local error:", res.statusCode, String(res.payload).slice(0, 400));
+          return reply.status(res.statusCode).send(res.payload);
+        }
+
+        const contentType = res.headers["content-type"] || "";
+        if (contentType.includes("text/event-stream")) {
+          const origin = (req.headers.origin as string) || "";
+          const extraOrigins = (process.env.CORS_ORIGINS || "").split(",").map((o) => o.trim()).filter(Boolean);
+          const allowedOrigins = [
+            "http://localhost:5173",
+            "http://localhost:8080",
+            "http://127.0.0.1:5173",
+            "http://127.0.0.1:8080",
+            ...extraOrigins,
+          ];
+          const isLocalNetwork = /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|172\.\d+\.\d+\.\d+)(:\d+)?$/.test(origin);
+          const isAllowed = allowedOrigins.includes(origin) || isLocalNetwork || /\.lovable\.dev$/.test(origin);
+          const allowOrigin = isAllowed ? origin : "http://localhost:8080";
+          reply.raw.writeHead(200, {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            Connection: "keep-alive",
+            "Access-Control-Allow-Origin": allowOrigin,
+            "Access-Control-Allow-Credentials": "true",
+          });
+          return reply.raw.end(res.payload);
+        }
+
+        return reply.status(res.statusCode).headers(res.headers).send(res.payload);
+      } catch (e: any) {
+        console.error("[Chat] Proxy error:", e);
+        return reply.status(502).send({ error: e.message || "Chat proxy failed" });
       }
-
-      const contentType = upstream.headers.get("content-type") || "";
-      if (contentType.includes("text/event-stream")) {
-        const origin = (req.headers.origin as string) || "";
-        const extraOrigins = (process.env.CORS_ORIGINS || "").split(",").map((o) => o.trim()).filter(Boolean);
-        const allowedOrigins = [
-          "http://localhost:5173",
-          "http://localhost:8080",
-          "http://127.0.0.1:5173",
-          "http://127.0.0.1:8080",
-          ...extraOrigins,
-        ];
-        const isLocalNetwork = /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|172\.\d+\.\d+\.\d+)(:\d+)?$/.test(origin);
-        const isAllowed = allowedOrigins.includes(origin) || isLocalNetwork || /\.lovable\.dev$/.test(origin);
-        const allowOrigin = isAllowed ? origin : "http://localhost:8080";
-        reply.raw.writeHead(200, {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-          "Access-Control-Allow-Origin": allowOrigin,
-          "Access-Control-Allow-Credentials": "true",
-        });
-        const reader = upstream.body!.getReader();
-        const pump = async () => {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            reply.raw.write(value);
-          }
-          reply.raw.end();
-        };
-        pump().catch((e: any) => {
-          const isClientDisconnect = e?.code === "ECONNRESET" || /ECONNRESET|socket hang up|EPIPE/i.test(String(e?.message || ""));
-          if (isClientDisconnect) {
-            console.warn("[Chat] Stream: cliente desconectou antes de receber resposta completa:", e?.message || e);
-          } else {
-            console.error("[Chat] Stream error:", e);
-          }
-          reply.raw.end();
-        });
-        return;
-      }
-
-      const data = await upstream.json();
-      return reply.send(data);
-    } catch (e: any) {
-      console.error("[Chat] Proxy error:", e);
-      return reply.status(502).send({ error: e.message || "Chat proxy failed" });
     }
     }
 
