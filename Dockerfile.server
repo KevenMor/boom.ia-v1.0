@@ -1,0 +1,20 @@
+# Dockerfile para construir apenas o SERVIDOR (API Node.js)
+# Use no Easypanel com: Build Path = "/" e Arquivo = "Dockerfile.server"
+# Assim evita o erro "server/server: no such file or directory"
+
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY server/package*.json ./
+RUN npm ci
+COPY server/tsconfig.json ./
+COPY server/src ./src
+RUN npm run build
+
+FROM node:20-alpine
+WORKDIR /app
+COPY server/package*.json ./
+RUN npm ci --omit=dev
+COPY --from=builder /app/dist ./dist
+EXPOSE 3001
+ENV NODE_ENV=production
+CMD ["node", "dist/index.js"]
