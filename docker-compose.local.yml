@@ -1,18 +1,10 @@
-# Boom IA - Stack para Portainer usando IMAGENS PRÉ-BUILDADAS do GHCR
-# Testado localmente com: docker-compose -f docker-compose.local.yml up -d
-#
-# No Portainer:
-#   1. Stacks > Add stack > Web editor
-#   2. Cole este arquivo completo
-#   3. Deploy the stack (SEM precisar de Git ou variáveis)
-
-version: '3.8'
+# Teste LOCAL - mesmo ambiente que Portainer (sem Swarm)
+# Uso: docker-compose -f docker-compose.local.yml up -d
+# Testado: server v5 + proxy v4 (entrypoint com LF) + frontend latest
 
 networks:
   internal:
-    driver: overlay
-  minha_rede:
-    external: true
+    driver: bridge
 
 services:
   server:
@@ -34,14 +26,6 @@ services:
       INTERNAL_API_BASE: "http://server:3001"
     networks:
       - internal
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: any
-        delay: 5s
-      update_config:
-        order: start-first
-        failure_action: rollback
     healthcheck:
       test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:3001/health"]
       interval: 10s
@@ -53,28 +37,13 @@ services:
     image: ghcr.io/kevenmor/boom-ia-frontend:latest
     networks:
       - internal
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: any
-        delay: 5s
 
   proxy:
-    image: ghcr.io/kevenmor/boom-ia-proxy:v4
+    image: ghcr.io/kevenmor/boom-ia-proxy:v3
+    depends_on:
+      server:
+        condition: service_healthy
     networks:
       - internal
-      - minha_rede
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: any
-        delay: 10s
-      labels:
-        # Traefik: ia.agboom.com.br -> proxy:80 (rede minha_rede = rede do Traefik na VPS)
-        - "traefik.enable=true"
-        - "traefik.docker.network=minha_rede"
-        - "traefik.http.routers.boom-ia.rule=Host(`ia.agboom.com.br`)"
-        - "traefik.http.routers.boom-ia.entrypoints=web,websecure"
-        - "traefik.http.routers.boom-ia.tls=true"
-        - "traefik.http.routers.boom-ia.tls.certresolver=letsencrypt"
-        - "traefik.http.services.boom-ia.loadbalancer.server.port=80"
+    ports:
+      - "8888:80"
