@@ -1,12 +1,6 @@
-# Boom IA - Stack para Portainer (variáveis já incluídas)
-# Copie todo o conteúdo abaixo e cole no Web editor da stack. Não precisa preencher variáveis à parte.
-#
-# GitHub: GITHUB_USERNAME e GITHUB_TOKEN NÃO vão no compose. Eles são usados só pelo Portainer
-# em "Repository authentication" quando você faz deploy a partir do Git. Com Web editor + imagens
-# do GHCR, os containers não usam GitHub — não adicione essas variáveis aqui.
-#
-# Supabase: URL do Easypanel (boomsolution-supabase)
-# Porta: 8081 (evita conflito com Traefik nas portas 80 e 8080)
+# Boom IA - Stack para Portainer Swarm
+# Cole no Web editor. Imagens públicas no GHCR (já publicadas).
+# Acesso: http://IP_DA_VPS:8081
 
 version: '3.8'
 
@@ -22,14 +16,35 @@ services:
       ENCRYPTION_KEY: "change-me-32-chars-minimum!!"
       API_BASE_URL: "https://ia.agboom.com.br"
       CORS_ORIGINS: "https://ia.agboom.com.br"
+    networks:
+      - boom_network
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
 
   frontend:
     image: ghcr.io/kevenmor/boom-ia-frontend:latest
+    networks:
+      - boom_network
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
 
   proxy:
     image: ghcr.io/kevenmor/boom-ia-proxy:latest
     ports:
-      - "8081:80"
-    depends_on:
-      - server
-      - frontend
+      - target: 80
+        published: 8081
+        mode: host
+    networks:
+      - boom_network
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+
+networks:
+  boom_network:
+    driver: overlay
