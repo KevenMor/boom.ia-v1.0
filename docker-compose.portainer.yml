@@ -1,8 +1,7 @@
 # =============================================================================
 # Boom IA - Stack Portainer Swarm (com pull explícito)
 # =============================================================================
-# Traefik: proxy na rede do Traefik + labels para ia.agboom.com.br (sem :8081).
-# Troque "traefik_public" pelo nome da rede do seu Traefik se for diferente.
+# Traefik: proxy na rede do Traefik (minha_rede) + labels para ia.agboom.com.br (sem :8081).
 # =============================================================================
 
 version: '3.8'
@@ -10,7 +9,7 @@ version: '3.8'
 networks:
   internal:
     driver: overlay
-  traefik_public:
+  minha_rede:
     external: true
 
 services:
@@ -48,16 +47,15 @@ services:
     image: ghcr.io/kevenmor/boom-ia-proxy:latest
     networks:
       - internal
-      - traefik_public
+      - minha_rede
     deploy:
       replicas: 1
       restart_policy:
         condition: any
       labels:
-        # Traefik: ia.agboom.com.br -> proxy:80. Troque traefik_public pelo nome da sua rede Traefik.
-        # Se não usar HTTPS, remova as linhas tls e certresolver e deixe só entrypoints=web
+        # Traefik: ia.agboom.com.br -> proxy:80 (rede minha_rede = rede do Traefik na VPS)
         - "traefik.enable=true"
-        - "traefik.docker.network=traefik_public"
+        - "traefik.docker.network=minha_rede"
         - "traefik.http.routers.boom-ia.rule=Host(`ia.agboom.com.br`)"
         - "traefik.http.routers.boom-ia.entrypoints=web,websecure"
         - "traefik.http.routers.boom-ia.tls=true"
