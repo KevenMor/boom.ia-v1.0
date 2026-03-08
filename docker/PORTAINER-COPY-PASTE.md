@@ -30,7 +30,7 @@ docker build --build-arg VITE_SUPABASE_URL=http://ia.agboom.com.br:8000 --build-
 
 Em **Stacks** → **Add stack** (ou editar a stack) → **Web editor**, apague tudo e cole **o conteúdo do arquivo `docker-compose.portainer.yml`** (sem rede customizada; testado em Swarm). Não preencha "Environment variables".
 
-**Importante:** No Portainer em modo **Swarm** não use rede customizada e não use `build:` — use só este compose com imagens do GHCR. Proxy na porta **8081**; acesse **http://ia.agboom.com.br:8081** (DNS apontando para o IP da VPS).
+**Importante:** No Portainer em modo **Swarm** não use rede customizada e não use `build:` — use só este compose com imagens do GHCR. Com o proxy na porta **80**, acesse **http://ia.agboom.com.br** (sem porta). Se a 80 já estiver em uso, use `published: 8081` e configure um proxy reverso (ver `docker/REVERSE-PROXY-CADDY.md`).
 
 ---
 
@@ -43,7 +43,7 @@ Se precisar alterar depois (ex.: outro Supabase, outro domínio), edite no Web e
 - `API_BASE_URL` e `CORS_ORIGINS`: domínio do painel (ex.: `https://ia.agboom.com.br`)
 - `ENCRYPTION_KEY`: troque em produção por uma chave de 32+ caracteres
 
-Depois clique em **Deploy the stack**. Acesse **http://ia.agboom.com.br:8081** (DNS apontando para o IP da VPS).
+Depois clique em **Deploy the stack**. Acesse **http://ia.agboom.com.br** (DNS apontando para o IP da VPS; porta 80).
 
 Na mesma tela da stack, em **Environment variables** (ou “Load from .env file”), adicione **cada variável** ou cole o bloco (sem os comentários #):
 

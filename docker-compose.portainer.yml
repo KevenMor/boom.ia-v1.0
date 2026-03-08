@@ -39,8 +39,10 @@ services:
   proxy:
     image: ghcr.io/kevenmor/boom-ia-proxy:latest
     ports:
+      # Porta 80: acesse por http://ia.agboom.com.br (sem :8081)
+      # Se a porta 80 já estiver em uso na VPS, volte para published: 8081 e use um proxy reverso (ver docker/REVERSE-PROXY-CADDY.md)
       - target: 80
-        published: 8081
+        published: 80
         mode: host
     deploy:
       replicas: 1

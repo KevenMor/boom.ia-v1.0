@@ -87,6 +87,7 @@ export default function Login() {
               <Input
                 id="email"
                 type="email"
+                autoComplete="email"
                 placeholder="admin@empresa.com"
                 required
                 value={email}
@@ -111,6 +112,7 @@ export default function Login() {
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
                   placeholder="••••••••"
                   required
                   value={password}
