@@ -1,21 +1,10 @@
 # =============================================================================
-# Boom IA - Stack Portainer Swarm
+# Boom IA - Stack Portainer Swarm (com pull explícito)
 # =============================================================================
-#
-# REGISTRY: GitHub Container Registry (GHCR)
-#   URL: https://ghcr.io
-#   Imagens (caminho completo):
-#     - ghcr.io/kevenmor/boom-ia-server:latest
-#     - ghcr.io/kevenmor/boom-ia-frontend:latest
-#     - ghcr.io/kevenmor/boom-ia-proxy:latest
-#
-# TOKEN DE ACESSO (imagens privadas no GHCR):
-#   O token fica em ambiente (Portainer > Registries): adicione o registry ghcr.io
-#   com Username e Password (token). Ou use a variável de ambiente do Portainer
-#   se o seu fluxo já definir o token por env.
-#   Ao criar/editar esta stack, em "Registries" selecione o registry ghcr.io.
-#
-# Acesso ao painel: http://IP_DA_VPS:8081
+# Se as imagens já estão públicas e ainda fica 0/1:
+# 1. Remova a stack (Remove stack), depois crie de novo e cole este compose.
+# 2. Em cada serviço, use image sem :latest e force pull (Redeploy).
+# 3. Veja o erro: Services > clique no serviço > Tasks > clique na tarefa falha.
 # =============================================================================
 
 version: '3.8'
@@ -36,6 +25,9 @@ services:
       replicas: 1
       restart_policy:
         condition: any
+      update_config:
+        order: start-first
+        failure_action: rollback
 
   frontend:
     image: ghcr.io/kevenmor/boom-ia-frontend:latest
@@ -47,8 +39,11 @@ services:
   proxy:
     image: ghcr.io/kevenmor/boom-ia-proxy:latest
     ports:
+      # Porta 80: acesse por http://ia.agboom.com.br (DNS apontando para o IP da VPS)
+      # Se a porta 80 já estiver em uso (ex.: Caddy/nginx para SSL), use target: 80 / published: 8081
+      # e configure o proxy externo para encaminhar ia.agboom.com.br para localhost:8081
       - target: 80
-        published: 8081
+        published: 80
         mode: host
     deploy:
       replicas: 1

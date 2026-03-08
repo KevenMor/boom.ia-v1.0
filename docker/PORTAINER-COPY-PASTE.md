@@ -30,7 +30,7 @@ docker build --build-arg VITE_SUPABASE_URL=http://ia.agboom.com.br:8000 --build-
 
 Em **Stacks** → **Add stack** (ou editar a stack) → **Web editor**, apague tudo e cole **o conteúdo do arquivo `docker-compose.portainer.yml`** (sem rede customizada; testado em Swarm). Não preencha "Environment variables".
 
-**Importante:** No Portainer em modo **Swarm** não use rede customizada e não use `build:` — use só este compose com imagens do GHCR. Porta **8081**.
+**Importante:** No Portainer em modo **Swarm** não use rede customizada e não use `build:` — use só este compose com imagens do GHCR. Com a porta **80** publicada no proxy, o painel fica em **http://ia.agboom.com.br** (desde que o DNS aponte para o IP da VPS).
 
 ---
 
@@ -43,7 +43,7 @@ Se precisar alterar depois (ex.: outro Supabase, outro domínio), edite no Web e
 - `API_BASE_URL` e `CORS_ORIGINS`: domínio do painel (ex.: `https://ia.agboom.com.br`)
 - `ENCRYPTION_KEY`: troque em produção por uma chave de 32+ caracteres
 
-Depois clique em **Deploy the stack**. O painel fica em **http://IP_OU_DOMINIO:8081**.
+Depois clique em **Deploy the stack**. Com o compose atual (proxy na porta 80), acesse **http://ia.agboom.com.br** (DNS apontando para o IP da VPS). Se tiver mantido a porta 8081 no compose, use **http://ia.agboom.com.br:8081**.
 
 Na mesma tela da stack, em **Environment variables** (ou “Load from .env file”), adicione **cada variável** ou cole o bloco (sem os comentários #):
 
@@ -61,5 +61,3 @@ CORS_ORIGINS=https://ia.agboom.com.br
 **Ajuste se precisar:**
 - `NEXUS_DB_URL`: se a stack do Supabase tiver outro nome, use `http://NOME_DA_STACK_kong:8000`
 - `ENCRYPTION_KEY`: troque por uma chave de 32+ caracteres em produção
-
-Depois clique em **Deploy the stack**. O painel fica em **http://IP_OU_DOMINIO:8080** (porta 8080 para não conflitar com o Traefik na 80).
