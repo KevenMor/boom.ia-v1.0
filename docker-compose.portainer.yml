@@ -20,7 +20,7 @@ services:
     environment:
       PORT: "3001"
       NODE_ENV: "production"
-      NEXUS_DB_URL: "https://boomsolution-supabase.kgn6uc.easypanel.com"
+      NEXUS_DB_URL: "https://boomsolution-supabase.kgn6uc.easypanel.host"
       NEXUS_SERVICE_ROLE_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJzZXJ2aWNlX3JvbGUiLAogICAgImlzcyI6ICJzdXBhYmFzZS1kZW1vIiwKICAgICJpYXQiOiAxNjQxNzY5MjAwLAogICAgImV4cCI6IDE3OTk1MzU2MDAKfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q"
       NEXUS_DB_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE"
       ENCRYPTION_KEY: "change-me-32-chars-minimum!!"
@@ -34,6 +34,7 @@ services:
         order: start-first
         failure_action: rollback
 
+  # Frontend: imagem pré-buildada. Rebuild com --build-arg VITE_SUPABASE_PUBLISHABLE_KEY=<NEXUS_DB_ANON_KEY>
   frontend:
     image: ghcr.io/kevenmor/boom-ia-frontend:latest
     networks:
