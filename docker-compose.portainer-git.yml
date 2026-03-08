@@ -61,4 +61,5 @@ services:
 
 networks:
   boom_network:
-    driver: bridge
+    driver: overlay
+    attachable: true
