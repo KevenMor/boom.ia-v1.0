@@ -9,8 +9,10 @@ const EDGE_CHAT_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE
 export async function chatRoutes(fastify: FastifyInstance) {
   fastify.post("/chat", async (req: FastifyRequest, reply: FastifyReply) => {
     if (USE_CHAT_LOCAL) {
-      const baseUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
-      const chatLocalUrl = `${baseUrl.replace(/\/+$/, "").replace(/\/api$/, "")}/api/chat-local`;
+      // Usar URL interna (127.0.0.1) para evitar 502 em Docker quando o server chama a si mesmo via URL externa
+      const port = process.env.PORT || "3001";
+      const internalBase = process.env.INTERNAL_API_BASE || `http://127.0.0.1:${port}`;
+      const chatLocalUrl = `${internalBase.replace(/\/+$/, "").replace(/\/api$/, "")}/api/chat-local`;
       const nexusAuth = (req.headers["x-nexus-auth"] as string) || "";
 
       try {
