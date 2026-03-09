@@ -15,6 +15,19 @@ POST /api/supabase-proxy/auth/v1/token ... 502
 
 Acontece quando a **ENCRYPTION_KEY** do serviço **services_boomia** não é a mesma que foi usada para criptografar as chaves dos providers no banco. Solução: usar a mesma ENCRYPTION_KEY em todos os ambientes ou re-salvar as chaves dos providers (Provedores → editar → salvar a API key de novo). O endpoint `/admin/provider-keys` (decrypt) agora retorna mensagem clara em caso de falha.
 
+## Erro "Provider error: 403" no sandbox
+
+O **403** vem da API do provedor de IA (OpenAI ou Gemini), não do nosso servidor. Significa que a **API key** configurada no provedor está **inválida, expirada ou sem permissão** para aquele endpoint/modelo.
+
+**O que fazer:**
+
+1. **Provedores** (menu) → abrir o provedor usado pelo agente (ex.: OpenAI ou Google).
+2. **Atualizar a API key:** editar e colar uma chave válida, depois salvar (a chave será criptografada com a ENCRYPTION_KEY do servidor).
+3. Se usar **chaves por variável de ambiente** (OPENAI_API_KEY / GEMINI_API_KEY no **services_boomia**), conferir se estão corretas e com créditos/plano ativo.
+4. **403** também pode ser plano sem acesso ao modelo (ex.: modelo só para contas pagas) ou base_url errada no provedor — conferir **Base URL** (OpenAI: `https://api.openai.com/v1`, Gemini: `https://generativelanguage.googleapis.com/v1beta`).
+
+O servidor agora envia uma mensagem mais clara para o frontend em caso de 401/403/429 do provedor.
+
 ---
 
 ## O que foi corrigido

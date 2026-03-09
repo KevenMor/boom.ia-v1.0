@@ -6,6 +6,16 @@ import { executeTool, type ToolDef } from "../services/tool-executor.js";
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 const MAX_TOOL_ITERATIONS = 5;
 
+/** Mensagem amigável quando a API do provedor (OpenAI/Gemini) retorna erro HTTP */
+function providerErrorMessage(status: number, errText: string): string {
+  const preview = errText.slice(0, 200).replace(/\s+/g, " ").trim();
+  if (status === 401) return "API key inválida ou expirada (401). Verifique o provedor em Provedores e atualize a chave.";
+  if (status === 403) return "Acesso negado pelo provedor de IA (403). Verifique a API key e permissões em Provedores.";
+  if (status === 429) return "Limite de uso do provedor excedido (429). Tente mais tarde ou verifique o plano/créditos.";
+  if (status >= 500) return `Erro interno do provedor (${status}). Tente novamente em alguns minutos.`;
+  return preview || `Erro do provedor (${status}). Verifique a API key em Provedores.`;
+}
+
 async function getProviderApiKey(
   providerId: string | null,
   supabase: ReturnType<typeof createNexusClient>
@@ -355,8 +365,8 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
 
           if (!dispatcherResp.ok) {
             const errText = await dispatcherResp.text();
-            console.error("[Chat-Local] Dispatcher error:", dispatcherResp.status, errText);
-            sendSse({ error: errText.slice(0, 500) });
+            console.error("[Chat-Local] Dispatcher error:", dispatcherResp.status, errText.slice(0, 200));
+            sendSse({ error: providerErrorMessage(dispatcherResp.status, errText) });
             sendSse("[DONE]");
             reply.raw.end();
             return;
@@ -566,7 +576,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           if (!convResp.ok) {
             const errText = await convResp.text();
             console.error("[Chat-Local] Conversational LLM error:", convResp.status, errText.slice(0, 200));
-            sendSse({ error: errText.slice(0, 500) });
+            sendSse({ error: providerErrorMessage(convResp.status, errText) });
             sendSse("[DONE]");
             reply.raw.end();
             return;
@@ -681,7 +691,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
 
         if (!chatResp.ok) {
           const errText = await chatResp.text();
-          sendSse({ error: errText.slice(0, 500) });
+          sendSse({ error: providerErrorMessage(chatResp.status, errText) });
           reply.raw.end();
           return;
         }
