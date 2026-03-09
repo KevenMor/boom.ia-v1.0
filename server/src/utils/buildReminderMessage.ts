@@ -2,8 +2,6 @@
  * Monta mensagem de lembrete a partir de template.
  * Placeholders: {titulo}, {horario}, {data}, {hora}
  * Formato pt-BR, timezone America/Sao_Paulo.
- *
- * Logica sincronizada com supabase/functions/process-reminders/index.ts
  */
 export function buildReminderMessage(
   template: string,

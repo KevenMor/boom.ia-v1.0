@@ -7,7 +7,9 @@ import {
   getHumanizationConfig,
   applyJitter,
 } from "../services/delivery.js";
+import { sendViaWaha } from "../services/waha.js";
 import { transcribeAudio, isAudioAttachment } from "../services/transcribe.js";
+import { buildReminderMessage } from "../utils/buildReminderMessage.js";
 
 const API_BASE = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
 
@@ -778,5 +780,158 @@ export async function queueRoutes(fastify: FastifyInstance) {
     }
 
     return reply.send({ processed, skipped, total: pending.length });
+  });
+
+  fastify.post("/queue/reminders", async (_req: FastifyRequest, reply: FastifyReply) => {
+    const supabase = createNexusClient();
+
+    const { data: pendingItems, error: fetchErr } = await supabase
+      .from("appointment_reminders")
+      .select("*")
+      .eq("status", "pending")
+      .lte("remind_at", new Date().toISOString())
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (fetchErr) {
+      console.error("[Reminder] Fetch error:", fetchErr.message);
+      return reply.status(500).send({ error: fetchErr.message });
+    }
+
+    if (!pendingItems || pendingItems.length === 0) {
+      return reply.send({ processed: 0, skipped: 0, failed: 0, message: "No pending reminders" });
+    }
+
+    const seen = new Map<string, (typeof pendingItems)[0]>();
+    const duplicateIds: string[] = [];
+    for (const item of pendingItems) {
+      if (seen.has(item.calendar_event_id)) {
+        duplicateIds.push(item.id);
+      } else {
+        seen.set(item.calendar_event_id, item);
+      }
+    }
+
+    if (duplicateIds.length > 0) {
+      console.log(`[Reminder] Cancelling ${duplicateIds.length} duplicate reminder(s)`);
+      await supabase
+        .from("appointment_reminders")
+        .update({ status: "cancelled", updated_at: new Date().toISOString() })
+        .in("id", duplicateIds);
+    }
+
+    const uniqueItems = Array.from(seen.values());
+    console.log(`[Reminder] Processing ${uniqueItems.length} unique reminder(s) (${duplicateIds.length} duplicates cancelled)`);
+
+    let processed = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    const defaultTemplate = "Olá! 😊 Passando para lembrar do seu agendamento de {titulo} hoje às {horario}. Te esperamos! 🙌";
+
+    for (const item of uniqueItems) {
+      const { data: agent } = await supabase
+        .from("agents")
+        .select("id, name, config, status")
+        .eq("id", item.agent_id)
+        .single();
+
+      if (!agent || agent.status !== "active") {
+        await supabase
+          .from("appointment_reminders")
+          .update({ status: "cancelled", updated_at: new Date().toISOString() })
+          .eq("id", item.id);
+        skipped++;
+        continue;
+      }
+
+      const cfg = (agent.config || {}) as Record<string, unknown>;
+      if (!cfg.reminder_enabled) {
+        await supabase
+          .from("appointment_reminders")
+          .update({ status: "cancelled", updated_at: new Date().toISOString() })
+          .eq("id", item.id);
+        skipped++;
+        continue;
+      }
+
+      const hasChatwoot = !!(cfg.chatwoot_url && cfg.chatwoot_api_token && cfg.chatwoot_account_id);
+      const hasWaha = !!(cfg.waha_url && cfg.waha_session);
+
+      if (!hasChatwoot && !hasWaha) {
+        console.warn(`[Reminder] No delivery channel for agent ${agent.id}, cancelling`);
+        await supabase
+          .from("appointment_reminders")
+          .update({ status: "cancelled", updated_at: new Date().toISOString() })
+          .eq("id", item.id);
+        skipped++;
+        continue;
+      }
+
+      const template = (cfg.reminder_template as string) || defaultTemplate;
+      const message = buildReminderMessage(template, item.event_title, item.event_start_at);
+
+      let sent = false;
+
+      if (hasChatwoot && item.chatwoot_conversation_id) {
+        const baseUrl = (cfg.chatwoot_url as string).replace(/\/+$/, "");
+        const msgUrl = `${baseUrl}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${item.chatwoot_conversation_id}/messages`;
+        sent = await sendChatwootTextMessage(msgUrl, cfg.chatwoot_api_token as string, message);
+      }
+
+      if (!sent && hasWaha && item.external_user_id) {
+        const wahaResult = await sendViaWaha(
+          cfg.waha_url as string,
+          (cfg.waha_api_key as string) || "",
+          (cfg.waha_session as string) || "default",
+          item.external_user_id,
+          message
+        );
+        sent = wahaResult.ok;
+      }
+
+      if (sent) {
+        console.log(`[Reminder] Sent reminder for event "${item.event_title}" at ${item.event_start_at}`);
+
+        await supabase
+          .from("appointment_reminders")
+          .update({ status: "sent", updated_at: new Date().toISOString() })
+          .eq("id", item.id);
+
+        if (!item.conversation_id.startsWith("manual-")) {
+          try {
+            await supabase.rpc("save_message", {
+              p_agent_id: agent.id,
+              p_conversation_id: item.conversation_id,
+              p_role: "assistant",
+              p_content: message,
+              p_model: "reminder",
+              p_tokens_input: 0,
+              p_tokens_output: 0,
+              p_latency_ms: 0,
+            });
+          } catch (e) {
+            console.warn("[Reminder] Could not save to history:", (e as Error)?.message);
+          }
+        }
+
+        processed++;
+      } else {
+        console.error(`[Reminder] Failed to send for event "${item.event_title}", marking as failed`);
+        await supabase
+          .from("appointment_reminders")
+          .update({ status: "failed", updated_at: new Date().toISOString() })
+          .eq("id", item.id);
+        failed++;
+      }
+    }
+
+    return reply.send({
+      processed,
+      skipped,
+      failed,
+      duplicatesCancelled: duplicateIds.length,
+      total: uniqueItems.length,
+    });
   });
 }

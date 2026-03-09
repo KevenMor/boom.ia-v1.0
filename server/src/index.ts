@@ -165,6 +165,21 @@ build()
       } catch { /* silent — endpoint logs its own errors */ }
     }, FOLLOWUP_INTERVAL_MS);
     console.log(`[Server] Follow-up cron started (every ${FOLLOWUP_INTERVAL_MS / 1000}s)`);
+
+    const REMINDER_INTERVAL_MS = 60_000;
+    const reminderUrl = `http://127.0.0.1:${PORT}/api/queue/reminders`;
+    setInterval(async () => {
+      try {
+        const resp = await fetch(reminderUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", signal: AbortSignal.timeout(30_000) });
+        if (resp.ok) {
+          const data = await resp.json() as { processed?: number; skipped?: number; failed?: number };
+          if ((data.processed ?? 0) > 0 || (data.skipped ?? 0) > 0 || (data.failed ?? 0) > 0) {
+            console.log("[Reminder-Cron] processed:", data.processed, "skipped:", data.skipped, "failed:", data.failed);
+          }
+        }
+      } catch { /* silent — endpoint logs its own errors */ }
+    }, REMINDER_INTERVAL_MS);
+    console.log(`[Server] Reminder cron started (every ${REMINDER_INTERVAL_MS / 1000}s)`);
   })
   .catch((err) => {
     console.error("[Server] Startup failed:", err?.message || err);

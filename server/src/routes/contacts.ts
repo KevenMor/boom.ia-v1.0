@@ -1,27 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createClient } from "@supabase/supabase-js";
-
-async function sendViaWaha(
-  wahaUrl: string,
-  wahaApiKey: string,
-  wahaSession: string,
-  phone: string,
-  message: string
-): Promise<{ ok: boolean; error?: string }> {
-  const baseUrl = wahaUrl.replace(/\/+$/, "");
-  const chatId = `${phone}@c.us`;
-  try {
-    const resp = await fetch(`${baseUrl}/api/sendText`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...(wahaApiKey ? { "X-Api-Key": wahaApiKey } : {}) },
-      body: JSON.stringify({ session: wahaSession || "default", chatId, text: message }),
-    });
-    if (resp.ok) return { ok: true };
-    return { ok: false, error: await resp.text() };
-  } catch (e: any) {
-    return { ok: false, error: e.message };
-  }
-}
+import { sendViaWaha } from "../services/waha.js";
 
 async function sendViaChatwoot(
   cfg: Record<string, any>,
@@ -275,19 +254,17 @@ export async function contactsRoutes(fastify: FastifyInstance) {
       } else if (hasWaha && externalUserId) {
         const phone = externalUserId.replace(/\D/g, "");
         if (phone.length >= 10) {
-          const wahaBase = (cfg.waha_url as string).replace(/\/+$/, "");
-          const chatId = `${phone}@c.us`;
-          try {
-            const resp = await fetch(`${wahaBase}/api/sendText`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", ...(cfg.waha_api_key ? { "X-Api-Key": cfg.waha_api_key } : {}) },
-              body: JSON.stringify({ session: cfg.waha_session || "default", chatId, text: content.trim() }),
-            });
-            if (resp.ok) {
-              delivered = true;
-              deliveryMethod = "waha";
-            }
-          } catch {}
+          const result = await sendViaWaha(
+            cfg.waha_url as string,
+            cfg.waha_api_key || "",
+            cfg.waha_session || "default",
+            phone,
+            content.trim()
+          );
+          if (result.ok) {
+            delivered = true;
+            deliveryMethod = "waha";
+          }
         }
       }
 

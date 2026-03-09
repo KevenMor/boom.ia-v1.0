@@ -2,7 +2,7 @@
 
 ## Visao geral
 
-O sistema de lembretes envia mensagens aos clientes X minutos antes do horario do agendamento. O lembrete e disparado pela Edge Function `process-reminders` (Supabase).
+O sistema de lembretes envia mensagens aos clientes X minutos antes do horario do agendamento. O lembrete e processado pelo servidor Node.js via cron interno (setInterval a cada 60s).
 
 ## Fluxo
 
@@ -16,25 +16,19 @@ O sistema de lembretes envia mensagens aos clientes X minutos antes do horario d
    - `reminder_minutes_before`: quantos minutos antes enviar (ex.: 60)
    - `reminder_template`: template com placeholders `{titulo}`, `{horario}`, `{data}`, `{hora}`
 
-3. **Edge Function:** `supabase/functions/process-reminders/index.ts` deve ser invocada periodicamente (cron externo). Ela:
+3. **Servidor Node:** A rota `POST /api/queue/reminders` e chamada automaticamente a cada 60 segundos (cron interno em `server/src/index.ts`). Ela:
    - Busca registros com `status = 'pending'` e `remind_at <= now()`
-   - Monta a mensagem com o template
+   - Deduplica por `calendar_event_id`
+   - Monta a mensagem com o template (`buildReminderMessage`)
    - Envia via Chatwoot (se `chatwoot_conversation_id`) ou WAHA (se `external_user_id`)
-   - Atualiza `status` para `sent` ou `failed`
+   - Atualiza `status` para `sent`, `failed` ou `cancelled`
+   - Salva no historico da conversa (exceto eventos manuais com `conversation_id` iniciando em `manual-`)
 
-## Como disparar a Edge Function
+## Arquivos
 
-A funcao **nao** tem cron interno. E necessario configurar um agendador externo:
-
-- **Supabase pg_cron** (se disponivel): criar job que chama a URL da Edge Function a cada 5 minutos
-- **Servico externo** (cron, GitHub Actions, etc.): fazer `POST` para a URL da funcao no intervalo desejado (recomendado: a cada 5 min)
-
-Exemplo de invocacao:
-```bash
-curl -X POST "https://<projeto>.supabase.co/functions/v1/process-reminders" \
-  -H "Authorization: Bearer <anon_key>" \
-  -H "Content-Type: application/json"
-```
+- **Rota:** `server/src/routes/queue.ts` — `POST /queue/reminders`
+- **Cron:** `server/src/index.ts` — setInterval 60s
+- **Template:** `server/src/utils/buildReminderMessage.ts`
 
 ## Testes
 
@@ -43,5 +37,3 @@ Os testes da logica de montagem da mensagem estao em `server/src/utils/buildRemi
 ```sh
 npm run test -- --run server/src/utils/buildReminderMessage.test.ts
 ```
-
-A logica em `server/src/utils/buildReminderMessage.ts` e equivalente a da Edge Function (manter sincronizadas se alterar).

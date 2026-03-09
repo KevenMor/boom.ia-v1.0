@@ -256,18 +256,21 @@ Gere a notificacao organizada.`;
  * Dispara notificação automática via tool enviar_notificacao após criar/cancelar agendamento.
  * Busca a tool send_notification vinculada ao agente e usa a config dela (conversation_id do grupo).
  * Sempre usa fallback com formato BR (DD/MM/AAAA HH:MM), telefone e veículo.
+ * 
+ * Também agenda lembrete em appointment_reminders se reminder_enabled.
  */
 async function sendAgendaNotification(
   agentId: string,
-  agent: { config?: Record<string, unknown> },
+  agent: { config?: Record<string, unknown>; tenant_id?: string },
   toolResult: unknown,
   messages?: Array<{ role: string; content: string }>,
-  externalUserId?: string | null
+  externalUserId?: string | null,
+  conversationId?: string | null
 ): Promise<void> {
   if (!toolResult || typeof toolResult !== "object") return;
   const res = toolResult as {
     action?: string;
-    event?: { title?: string; start_at?: string };
+    event?: { id?: string; title?: string; start_at?: string };
     deleted_event?: { title?: string; start_at?: string };
     telefone_cliente?: string;
     veiculo_interesse?: string;
@@ -295,8 +298,40 @@ async function sendAgendaNotification(
     message = `❌ Agendamento cancelado: ${title}${dataHoraBR ? ` — ${dataHoraBR}` : ""}`;
   }
 
+  const supabase = createNexusClient();
+
+  // Agendar lembrete se reminder_enabled
+  if (isCreated && res.event?.id && conversationId) {
+    const cfg = (agent.config || {}) as Record<string, unknown>;
+    const reminderEnabled = cfg.reminder_enabled as boolean;
+    const reminderMinutesBefore = (cfg.reminder_minutes_before as number) || 60;
+
+    if (reminderEnabled && startAt) {
+      try {
+        const eventStartDate = new Date(startAt);
+        const remindAt = new Date(eventStartDate.getTime() - reminderMinutesBefore * 60 * 1000);
+
+        await supabase.from("appointment_reminders").insert({
+          agent_id: agentId,
+          tenant_id: agent.tenant_id,
+          calendar_event_id: res.event.id,
+          conversation_id: conversationId,
+          external_user_id: externalUserId || "",
+          chatwoot_conversation_id: null,
+          event_title: title,
+          event_start_at: startAt,
+          remind_at: remindAt.toISOString(),
+          status: "pending",
+        });
+
+        console.log(`[Chat-Local] Lembrete agendado para ${remindAt.toISOString()} (${reminderMinutesBefore} min antes)`);
+      } catch (e) {
+        console.warn("[Chat-Local] Erro ao agendar lembrete:", (e as Error)?.message);
+      }
+    }
+  }
+
   try {
-    const supabase = createNexusClient();
 
     const { data: notifTools } = await supabase
       .from("tools")
@@ -778,7 +813,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   content: JSON.stringify(result.success ? result.result : { error: result.error }),
                 });
                 if (tc.function.name === "consultar_agenda" && result.success && result.result) {
-                  sendAgendaNotification(agent_id, agent, result.result, messages, external_user_id).catch(() => {});
+                  sendAgendaNotification(agent_id, agent, result.result, messages, external_user_id, responseConvId).catch(() => {});
                 }
               }
             }
@@ -1215,7 +1250,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             content: JSON.stringify(result.success ? result.result : { error: result.error }),
           });
           if (tc.function.name === "consultar_agenda" && result.success && result.result) {
-            sendAgendaNotification(agent_id, agent, result.result, messages, external_user_id).catch(() => {});
+            sendAgendaNotification(agent_id, agent, result.result, messages, external_user_id, responseConvId).catch(() => {});
           }
         }
       }
