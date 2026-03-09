@@ -107,6 +107,28 @@ export default function CalendarPage() {
     });
   }, [dbEvents]);
 
+  // Lembretes: apenas os cujo evento ainda existe no calendário (evita órfãos)
+  const validReminders = useMemo(() => {
+    if (!pendingReminders || !dbEvents) return pendingReminders ?? [];
+    const eventIds = new Set(dbEvents.map((e) => e.id));
+    return pendingReminders.filter((r) => eventIds.has(r.calendar_event_id));
+  }, [pendingReminders, dbEvents]);
+
+  // Próximos eventos: apenas futuros (start >= agora), ordenados por data
+  const upcomingEvents = useMemo(() => {
+    const now = new Date().toISOString();
+    return events
+      .filter((ev) => {
+        const start = typeof ev.start === "string" ? ev.start : ev.start instanceof Date ? ev.start.toISOString() : "";
+        return start && start >= now;
+      })
+      .sort((a, b) => {
+        const sa = typeof a.start === "string" ? a.start : a.start instanceof Date ? a.start.toISOString() : "";
+        const sb = typeof b.start === "string" ? b.start : b.start instanceof Date ? b.start.toISOString() : "";
+        return (sa || "").localeCompare(sb || "");
+      });
+  }, [events]);
+
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedEventClick, setSelectedEventClick] = useState<EventClickArg | null>(null);
@@ -369,6 +391,14 @@ export default function CalendarPage() {
     if (!editingEventId || !selectedTenantId) return;
     try {
       await deleteEvent.mutateAsync({ id: editingEventId, tenantId: selectedTenantId });
+      // Cancela lembretes pendentes vinculados a este evento
+      await supabase
+        .from("appointment_reminders")
+        .update({ status: "cancelled", updated_at: new Date().toISOString() })
+        .eq("tenant_id", selectedTenantId)
+        .eq("calendar_event_id", editingEventId)
+        .in("status", ["pending"]);
+      refetchReminders();
       toast.success("Evento excluído!");
     } catch (e: any) {
       toast.error(e.message || "Erro ao excluir.");
@@ -529,10 +559,10 @@ export default function CalendarPage() {
               <p className="text-xs text-muted-foreground">Selecione um tenant.</p>
             )}
             {selectedTenantId && pendingReminders === undefined && <p className="text-xs text-muted-foreground">Carregando...</p>}
-            {selectedTenantId && pendingReminders?.length === 0 && (
+            {selectedTenantId && pendingReminders !== undefined && validReminders.length === 0 && (
               <p className="text-xs text-muted-foreground">Nenhum lembrete pendente.</p>
             )}
-            {pendingReminders?.map((r) => (
+            {validReminders.map((r) => (
               <div key={r.id} className="rounded-lg border border-border p-2.5 text-sm">
                 <div className="flex items-start justify-between gap-2">
                   <p className="font-medium text-foreground line-clamp-1">{r.event_title}</p>
@@ -557,7 +587,7 @@ export default function CalendarPage() {
           </CardHeader>
           <CardContent className="space-y-3 max-h-[400px] overflow-y-auto">
             {eventsLoading && <p className="text-xs text-muted-foreground">Carregando...</p>}
-            {events.slice(0, 5).map((ev) => (
+            {upcomingEvents.slice(0, 5).map((ev) => (
               <div key={String(ev.id)} className="space-y-1">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-foreground">{ev.title}</p>
@@ -570,8 +600,8 @@ export default function CalendarPage() {
                 </p>
               </div>
             ))}
-            {!eventsLoading && events.length === 0 && (
-              <p className="text-xs text-muted-foreground">Nenhum evento encontrado.</p>
+            {!eventsLoading && upcomingEvents.length === 0 && (
+              <p className="text-xs text-muted-foreground">Nenhum evento futuro.</p>
             )}
           </CardContent>
         </Card>

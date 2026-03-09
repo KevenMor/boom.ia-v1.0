@@ -23,7 +23,7 @@ export function usePendingReminders(tenantId: string | undefined) {
         .from("appointment_reminders")
         .select("id, calendar_event_id, event_title, event_start_at, remind_at, status, external_user_id, agent_id, created_at")
         .eq("tenant_id", tenantId!)
-        .in("status", ["pending", "sent"])
+        .eq("status", "pending")
         .order("remind_at", { ascending: true })
         .limit(100);
       if (error) throw error;
