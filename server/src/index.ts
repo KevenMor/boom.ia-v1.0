@@ -23,6 +23,19 @@ async function build() {
       : true,
   });
 
+  // Aceitar body vazio quando Content-Type for application/json (ex.: DELETE do Supabase, POST /queue/followups)
+  fastify.addContentTypeParser("application/json", { parseAs: "string" }, (req, body, done) => {
+    if (body === "" || body === undefined || (typeof body === "string" && body.trim() === "")) {
+      done(null, {});
+      return;
+    }
+    try {
+      done(null, JSON.parse(body as string));
+    } catch (e) {
+      done(e as Error, undefined);
+    }
+  });
+
   const extraOrigins = (process.env.CORS_ORIGINS || "")
     .split(",")
     .map((o) => o.trim())
