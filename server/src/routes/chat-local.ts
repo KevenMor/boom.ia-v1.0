@@ -924,6 +924,9 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               content: `Resultados obtidos:\n${naturalToolResultsText}\n\nCom base nesses resultados, responda ao cliente de forma natural e objetiva. NÃO inclua JSON, nomes de ferramentas ou artefatos técnicos.`,
             });
           }
+          // #region agent log
+          fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:929',message:'Mensagens para conversacional (Gemini)',data:{messagesCount:conversationalMessagesClean.length,toolResultsCount:toolResults.length,naturalToolResultsTextPreview:naturalToolResultsText.slice(0,300),lastMessage:conversationalMessagesClean[conversationalMessagesClean.length-1]},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+          // #endregion
 
           const convModel = model;
           const convBody: Record<string, unknown> = {
@@ -1017,8 +1020,14 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   if (delta?.content) {
                     debugDeltaCount++;
                     debugDeltaTotalLen += (delta.content || "").length;
+                    // #region agent log
+                    fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1017',message:'Delta recebido do Gemini',data:{deltaContent:delta.content,deltaLen:delta.content.length,streamFilterBufferBefore:streamFilterBuffer},timestamp:Date.now(),hypothesisId:'H1,H4'})}).catch(()=>{});
+                    // #endregion
                     const { toSend, newBuffer } = filterCommandLinesFromStream(streamFilterBuffer, delta.content);
                     streamFilterBuffer = newBuffer;
+                    // #region agent log
+                    fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1020',message:'Após filterCommandLines',data:{toSend:toSend,toSendLen:toSend.length,newBuffer:newBuffer,wasFiltered:delta.content.length>0&&toSend.length===0},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+                    // #endregion
                     if (toSend) {
                       debugSendCount++;
                       debugSendTotalLen += toSend.length;
@@ -1057,6 +1066,9 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               debugSendCount,
               hint: debugDeltaTotalLen > 0 && debugSendTotalLen === 0 ? "conteúdo filtrado por filterCommandLines" : "modelo retornou vazio ou sem deltas",
             });
+            // #region agent log
+            fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1053',message:'Resposta vazia - iniciando retry',data:{debugDeltaCount,debugDeltaTotalLen,debugSendCount,streamFilterBufferFinal:streamFilterBuffer},timestamp:Date.now(),hypothesisId:'H1,H2,H4'})}).catch(()=>{});
+            // #endregion
             try {
               const retryMessages = conversationalMessagesClean.slice(0, 1).concat(
                 conversationalMessagesClean.filter((m) => m.role === "user" || m.role === "assistant").slice(-4)
@@ -1074,13 +1086,22 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               if (retryResp.ok) {
                 const retryJson = await retryResp.json() as { choices?: Array<{ message?: { content?: string } }> };
                 const retryContent = retryJson.choices?.[0]?.message?.content?.trim();
+                // #region agent log
+                fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1077',message:'Retry response recebido',data:{retryContent:retryContent,retryContentLen:retryContent?.length||0},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+                // #endregion
                 if (retryContent) {
                   const sanitized = sanitizeLLMOutput(retryContent);
+                  // #region agent log
+                  fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1081',message:'Após sanitizeLLMOutput',data:{sanitized:sanitized,sanitizedLen:sanitized.length,wasStripped:retryContent.length>0&&sanitized.length===0},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
+                  // #endregion
                   if (sanitized) {
                     console.log("[Chat-Local] Retry OK, enviando conteúdo sanitizado:", sanitized.slice(0, 80));
                     sendSse({ choices: [{ delta: { content: sanitized } }] });
                   } else {
                     const fallback = fallbackSanitizeForRetry(retryContent);
+                    // #region agent log
+                    fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1089',message:'Fallback sanitize',data:{fallback:fallback,fallbackLen:fallback.length,retryContentPreview:retryContent.slice(0,300)},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
+                    // #endregion
                     if (fallback) {
                       console.log("[Chat-Local] sanitize retornou vazio, usando fallback:", fallback.slice(0, 80));
                       sendSse({ choices: [{ delta: { content: fallback } }] });
@@ -1090,11 +1111,17 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                     }
                   }
                 } else {
+                  // #region agent log
+                  fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1102',message:'Retry retornou vazio',data:{},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+                  // #endregion
                   console.warn("[Chat-Local] Retry também retornou vazio, enviando mensagem neutra");
                   sendSse({ choices: [{ delta: { content: "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?" } }] });
                 }
               } else {
                 const errText = await retryResp.text();
+                // #region agent log
+                fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1111',message:'Retry HTTP falhou',data:{status:retryResp.status,errText:errText.slice(0,200)},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+                // #endregion
                 console.warn("[Chat-Local] Retry falhou:", retryResp.status, errText.slice(0, 150));
                 sendSse({ choices: [{ delta: { content: "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?" } }] });
               }
