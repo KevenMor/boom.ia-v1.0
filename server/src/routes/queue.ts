@@ -842,7 +842,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
         .eq("id", item.agent_id)
         .single();
 
-      if (!agent || agent.status !== "active") {
+      if (!agent || (agent.status !== "active" && agent.status !== "test")) {
         await supabase
           .from("appointment_reminders")
           .update({ status: "cancelled", updated_at: new Date().toISOString() })
