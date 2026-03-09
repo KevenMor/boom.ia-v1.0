@@ -3,6 +3,7 @@ import { createNexusClient } from "../services/supabase.js";
 import { buildSystemPrompt, getDispatcherPrompt } from "../services/prompts/registry.js";
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
 import { filterCommandLinesFromStream } from "../utils/sanitize.js";
+import { formatDateBR, buildFallbackAgendaNotification } from "../utils/agendaNotification.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 const MAX_TOOL_ITERATIONS = 5;
@@ -175,6 +176,82 @@ function sanitizeFunctionName(name: string, _baseUrl: string): string {
 
 const DEFAULT_PARAMS_SCHEMA = { type: "object", properties: {}, required: [] } as const;
 
+const NOTIFICATION_SYSTEM_PROMPT = `Voce monta uma unica mensagem de notificacao interna para a equipe. Inclua obrigatoriamente:
+- Nome do cliente
+- Telefone
+- Data e horario do agendamento no padrao brasileiro (DD/MM/AAAA HH:MM)
+- Veiculo de interesse
+Se o historico ajudar, inclua um resumo muito breve da conversa (1 linha). Termine com "Agendado automaticamente pela IA". Seja conciso e organizado. Nao use markdown. Responda APENAS com o texto da notificacao, sem explicacoes.`;
+
+/**
+ * Chama a LLM para montar a notificacao de agendamento com historico.
+ * Retorna o texto gerado ou null em caso de erro (usar fallback).
+ */
+async function buildNotificationWithLLM(
+  agent: { provider_id?: string | null; model?: string | null },
+  payload: { title: string; start_at: string; telefone_cliente?: string; veiculo_interesse?: string },
+  messages: Array<{ role: string; content: string }>
+): Promise<string | null> {
+  const supabase = createNexusClient();
+  const providerConfig = await getProviderApiKey(agent.provider_id ?? null, supabase);
+  if (!providerConfig?.apiKey) return null;
+
+  const dataHoraBR = formatDateBR(payload.start_at);
+  const historyText = messages
+    .slice(-20)
+    .map((m) => `${m.role === "user" ? "Cliente" : "Assistente"}: ${(m.content || "").slice(0, 300)}`)
+    .join("\n");
+
+  const userContent = `Dados do agendamento:
+- Titulo: ${payload.title}
+- Data/hora (BR): ${dataHoraBR || payload.start_at}
+- Telefone: ${payload.telefone_cliente || "(nao informado)"}
+- Veiculo de interesse: ${payload.veiculo_interesse || "(nao informado)"}
+
+Historico (ultimas mensagens):
+${historyText || "(vazio)"}
+
+Gere a notificacao organizada.`;
+
+  const isGemini = /generativelanguage|googleapis\.com/i.test(providerConfig.baseUrl);
+  const model = isGemini ? "gemini-2.0-flash" : "gpt-4o-mini";
+  const baseUrl = providerConfig.baseUrl.replace(/\/+$/, "");
+  const apiUrl = isGemini && !baseUrl.includes("/openai")
+    ? `${baseUrl}/openai/chat/completions`
+    : `${baseUrl}/chat/completions`;
+
+  try {
+    const resp = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${providerConfig.apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: NOTIFICATION_SYSTEM_PROMPT },
+          { role: "user", content: userContent },
+        ],
+        temperature: 0.3,
+        max_tokens: 500,
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!resp.ok) {
+      console.warn("[Chat-Local] buildNotificationWithLLM falhou:", resp.status, await resp.text().catch(() => ""));
+      return null;
+    }
+    const data = (await resp.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const text = data?.choices?.[0]?.message?.content?.trim();
+    if (!text) return null;
+    return text;
+  } catch (e) {
+    console.warn("[Chat-Local] buildNotificationWithLLM erro:", (e as Error)?.message);
+    return null;
+  }
+}
+
 /**
  * Dispara notificação automática via tool enviar_notificacao após criar/cancelar agendamento.
  * Busca a tool send_notification vinculada ao agente e usa a config dela (conversation_id do grupo).
@@ -182,7 +259,8 @@ const DEFAULT_PARAMS_SCHEMA = { type: "object", properties: {}, required: [] } a
 async function sendAgendaNotification(
   agentId: string,
   agent: { config?: Record<string, unknown> },
-  toolResult: unknown
+  toolResult: unknown,
+  messages?: Array<{ role: string; content: string }>
 ): Promise<void> {
   if (!toolResult || typeof toolResult !== "object") return;
   const res = toolResult as {
@@ -199,19 +277,28 @@ async function sendAgendaNotification(
   const evt = isCreated ? res.event! : res.deleted_event!;
   const title = evt.title || "Agendamento";
   const startAt = evt.start_at || "";
-  const timePart = startAt.includes("T") ? startAt.slice(0, 16).replace("T", " ") : startAt;
+  const dataHoraBR = formatDateBR(startAt);
 
   let message: string;
   if (isCreated) {
-    // Formato claro: Agendamento criado: Visita - Nome - data hora (sem tags duplicadas)
-    const mainLine = `📅 Agendamento criado: ${title}${timePart ? ` - ${timePart}` : ""}`;
-    const lines: string[] = [mainLine];
-    if (res.telefone_cliente) lines.push(`📞 ${res.telefone_cliente}`);
-    if (res.veiculo_interesse) lines.push(`🚗 Interesse: ${res.veiculo_interesse}`);
-    lines.push("✅ Agendado automaticamente pela IA");
-    message = lines.join("\n");
+    const llmText =
+      messages && messages.length > 0
+        ? await buildNotificationWithLLM(
+            agent as { provider_id?: string | null; model?: string | null },
+            {
+              title,
+              start_at: startAt,
+              telefone_cliente: res.telefone_cliente,
+              veiculo_interesse: res.veiculo_interesse,
+            },
+            messages
+          )
+        : null;
+    message =
+      llmText ||
+      buildFallbackAgendaNotification(title, startAt, res.telefone_cliente, res.veiculo_interesse);
   } else {
-    message = `❌ Agendamento cancelado: ${title}${timePart ? ` — ${timePart}` : ""}`;
+    message = `❌ Agendamento cancelado: ${title}${dataHoraBR ? ` — ${dataHoraBR}` : ""}`;
   }
 
   try {
@@ -697,7 +784,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   content: JSON.stringify(result.success ? result.result : { error: result.error }),
                 });
                 if (tc.function.name === "consultar_agenda" && result.success && result.result) {
-                  sendAgendaNotification(agent_id, agent, result.result).catch(() => {});
+                  sendAgendaNotification(agent_id, agent, result.result, messages).catch(() => {});
                 }
               }
             }
@@ -1134,7 +1221,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             content: JSON.stringify(result.success ? result.result : { error: result.error }),
           });
           if (tc.function.name === "consultar_agenda" && result.success && result.result) {
-            sendAgendaNotification(agent_id, agent, result.result).catch(() => {});
+            sendAgendaNotification(agent_id, agent, result.result, messages).catch(() => {});
           }
         }
       }
