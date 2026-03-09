@@ -466,6 +466,10 @@ export async function queueRoutes(fastify: FastifyInstance) {
 
     for (const item of pending) {
       try {
+        // #region agent log
+        fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-start',message:'processing followup item',data:{itemId:item.id,agentId:item.agent_id,conversationId:item.conversation_id,chatwootConvId:item.chatwoot_conversation_id,attempt:item.attempt,scheduledAt:item.scheduled_at},timestamp:Date.now(),hypothesisId:'followup-flow'})}).catch(()=>{});
+        // #endregion
+
         const { data: agent } = await supabase
           .from("agents")
           .select("id, name, provider_id, model, system_prompt, tenant_id, config, status")
@@ -473,6 +477,9 @@ export async function queueRoutes(fastify: FastifyInstance) {
           .single();
 
         if (!agent) {
+          // #region agent log
+          fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-cancel',message:'CANCELLED: agent not found',data:{itemId:item.id,agentId:item.agent_id},timestamp:Date.now(),hypothesisId:'H-agent-missing'})}).catch(()=>{});
+          // #endregion
           await supabase
             .from("follow_up_queue")
             .update({ status: "cancelled", updated_at: new Date().toISOString() })
@@ -480,7 +487,14 @@ export async function queueRoutes(fastify: FastifyInstance) {
           continue;
         }
 
+        // #region agent log
+        fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-agent',message:'agent found',data:{itemId:item.id,agentStatus:agent.status,agentName:agent.name},timestamp:Date.now(),hypothesisId:'followup-flow'})}).catch(()=>{});
+        // #endregion
+
         if (agent.status === "inactive") {
+          // #region agent log
+          fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-cancel',message:'CANCELLED: agent inactive',data:{itemId:item.id,agentStatus:agent.status},timestamp:Date.now(),hypothesisId:'H-inactive'})}).catch(()=>{});
+          // #endregion
           await supabase
             .from("follow_up_queue")
             .update({ status: "cancelled", updated_at: new Date().toISOString() })
@@ -499,6 +513,9 @@ export async function queueRoutes(fastify: FastifyInstance) {
           : (currentHour >= quietStart && currentHour < quietEnd);
 
         if (inQuietHours) {
+          // #region agent log
+          fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-skip',message:'SKIPPED: quiet hours',data:{itemId:item.id,currentHour,quietStart,quietEnd},timestamp:Date.now(),hypothesisId:'H-quiet'})}).catch(()=>{});
+          // #endregion
           skipped++;
           continue;
         }
@@ -517,11 +534,18 @@ export async function queueRoutes(fastify: FastifyInstance) {
               const convData = await convResp.json() as { meta?: { assignee?: { id?: number } } };
               const currentAssigneeId = convData?.meta?.assignee?.id ?? null;
 
+              // #region agent log
+              fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-assignee',message:'Chatwoot assignee check',data:{itemId:item.id,agentStatus:agent.status,currentAssigneeId,testAssigneeId:cfg.test_assignee_id??null,convDataKeys:Object.keys(convData||{})},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+              // #endregion
+
               // CENÁRIO 3: Agente em teste — só enviar follow-up se assignee = test_assignee_id
               if (agent.status === "test") {
                 const testAssigneeId = cfg.test_assignee_id != null ? Number(cfg.test_assignee_id) : null;
                 if (testAssigneeId == null || currentAssigneeId !== testAssigneeId) {
                   console.log(`[FollowUp] Test mode: skipping ${item.id} (assignee ${currentAssigneeId} != test ${testAssigneeId})`);
+                  // #region agent log
+                  fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-cancel',message:'CANCELLED: test mode assignee mismatch',data:{itemId:item.id,currentAssigneeId,testAssigneeId},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+                  // #endregion
                   await supabase
                     .from("follow_up_queue")
                     .update({ status: "cancelled", updated_at: new Date().toISOString() })
@@ -533,6 +557,9 @@ export async function queueRoutes(fastify: FastifyInstance) {
               // CENÁRIO 2: Se conversa tem assignee humano (não é bot), cancelar follow-up
               if (currentAssigneeId && agent.status === "active") {
                 console.log(`[FollowUp] Human assigned (${currentAssigneeId}): cancelling ${item.id}`);
+                // #region agent log
+                fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-cancel',message:'CANCELLED: human assigned (active agent)',data:{itemId:item.id,currentAssigneeId},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+                // #endregion
                 await supabase
                   .from("follow_up_queue")
                   .update({ status: "cancelled", updated_at: new Date().toISOString() })
@@ -572,11 +599,20 @@ export async function queueRoutes(fastify: FastifyInstance) {
         }
 
         // --- CENÁRIO 1: Verificar se houve agendamento confirmado ---
-        const hasConfirmedSchedule = conversationMessages.some((m) =>
+        const confirmedMsgs = conversationMessages.filter((m) =>
           m.role === "assistant" && /confirmad[oa]|agendad[oa]|marcad[oa]|appointment.*confirm/i.test(m.content)
         );
+        const hasConfirmedSchedule = confirmedMsgs.length > 0;
+
+        // #region agent log
+        fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-history',message:'conversation history check',data:{itemId:item.id,totalMessages:conversationMessages.length,lastMsgRole:conversationMessages[conversationMessages.length-1]?.role??null,lastMsgPreview:conversationMessages[conversationMessages.length-1]?.content?.slice(0,80)??null,hasConfirmedSchedule,confirmedMsgPreviews:confirmedMsgs.map(m=>m.content.slice(0,80))},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+        // #endregion
+
         if (hasConfirmedSchedule) {
           console.log(`[FollowUp] Appointment confirmed: cancelling ${item.id}`);
+          // #region agent log
+          fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-cancel',message:'CANCELLED: confirmed schedule regex match',data:{itemId:item.id,confirmedMsgPreviews:confirmedMsgs.map(m=>m.content.slice(0,120))},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+          // #endregion
           await supabase
             .from("follow_up_queue")
             .update({ status: "cancelled", updated_at: new Date().toISOString() })
@@ -588,6 +624,9 @@ export async function queueRoutes(fastify: FastifyInstance) {
         if (lastMsg?.role === "assistant") {
           // No reply from user since our last message — proceed with follow-up
         } else if (lastMsg?.role === "user") {
+          // #region agent log
+          fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-cancel',message:'CANCELLED: last message is from user (user replied)',data:{itemId:item.id,lastMsgPreview:lastMsg.content.slice(0,80)},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+          // #endregion
           await supabase
             .from("follow_up_queue")
             .update({ status: "cancelled", updated_at: new Date().toISOString() })
