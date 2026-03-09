@@ -36,6 +36,14 @@ export function sanitizeLLMOutput(content: string): string {
     /^.*(?:vou (?:verificar|consultar|checar|buscar)|verificando|consultando|buscando).*(?:sistema|estoque|banco).*[:]\s*$/gim,
     ""
   );
+  text = text.replace(
+    /^.*(?:Chamada da ferramenta|Consultando a ferramenta|Vou consultar a ferramenta)\s+(?:consultar_estoque|consultar_agenda|inventory_query)[:\s].*$/gim,
+    ""
+  );
+  text = text.replace(
+    /\b(consultar_estoque|consultar_agenda|inventory_query|calendar_query)\s*[:\s]*\s*\{[^}]*\}/gim,
+    ""
+  );
   text = text.replace(/\n{3,}/g, "\n\n").trim();
   return text;
 }
@@ -47,7 +55,9 @@ export function isCommandLine(line: string): boolean {
   return (
     /^.*ENVIAR_FOTOS?_VEICULOS?[:\s].*$/im.test(t) ||
     /^.*HANDOFF_COMERCIAL.*$/im.test(t) ||
-    /^.*\b(TOOL_CALL|FUNCTION_CALL|ACTION_OUTPUT)[:\s].*$/im.test(t)
+    /^.*\b(TOOL_CALL|FUNCTION_CALL|ACTION_OUTPUT)[:\s].*$/im.test(t) ||
+    /^.*(?:Chamada da ferramenta|Consultando a ferramenta|Vou consultar a ferramenta)\s+(?:consultar_estoque|consultar_agenda|inventory_query)/im.test(t) ||
+    /^.*\b(consultar_estoque|consultar_agenda|inventory_query|calendar_query)\s*[:\s]\s*\{/im.test(t)
   );
 }
 

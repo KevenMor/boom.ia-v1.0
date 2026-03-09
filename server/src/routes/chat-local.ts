@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
 import { buildSystemPrompt, getDispatcherPrompt } from "../services/prompts/registry.js";
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
-import { filterCommandLinesFromStream } from "../utils/sanitize.js";
+import { filterCommandLinesFromStream, sanitizeLLMOutput } from "../utils/sanitize.js";
 import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification } from "../utils/agendaNotification.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
@@ -136,6 +136,52 @@ function extractVehicleEntities(text: string): ExtractedEntities {
   if (kmMatch) result.km = kmMatch[1].replace(/\./g, "");
 
   return result;
+}
+
+/** Converte resultado bruto de tool (JSON) em texto natural para o LLM conversacional. */
+function summarizeToolResult(obj: Record<string, unknown>): string {
+  if (obj.error && typeof obj.error === "string") {
+    return `Erro: ${obj.error}`;
+  }
+  const action = obj.action as string | undefined;
+  if (action === "check_availability") {
+    const slots = obj.available_slots as Record<string, string[]> | undefined;
+    if (!slots || Object.keys(slots).length === 0) {
+      return "Nenhum horário disponível no período consultado.";
+    }
+    const parts: string[] = [];
+    for (const [dateStr, times] of Object.entries(slots)) {
+      if (times && times.length > 0) {
+        const d = dateStr.split("-");
+        const brDate = d.length === 3 ? `${d[2]}/${d[1]}/${d[0]}` : dateStr;
+        parts.push(`${brDate}: ${times.join(", ")}`);
+      }
+    }
+    return parts.length > 0
+      ? `Horários disponíveis:\n${parts.join("\n")}`
+      : "Nenhum horário disponível.";
+  }
+  if (action === "created" || action === "create") {
+    const ev = obj.event as { start_at?: string; title?: string } | undefined;
+    if (ev?.start_at) {
+      const start = ev.start_at.slice(11, 16);
+      const date = ev.start_at.slice(0, 10).split("-").reverse().join("/");
+      return `Agendamento confirmado para ${date} às ${start}.`;
+    }
+    return "Agendamento confirmado com sucesso.";
+  }
+  if (action === "cancelled" || action === "cancel") {
+    return "Agendamento cancelado.";
+  }
+  if (Array.isArray(obj.data) && obj.data.length > 0) {
+    const items = obj.data as Array<{ brand?: string; model?: string; year?: number; price?: number }>;
+    const preview = items.slice(0, 5).map((v) => {
+      const parts = [v.brand, v.model, v.year].filter(Boolean);
+      return parts.join(" ");
+    });
+    return `Encontrados ${items.length} veículo(s): ${preview.join("; ")}${items.length > 5 ? "..." : ""}`;
+  }
+  return JSON.stringify(obj).slice(0, 300);
 }
 
 function isAppraisalContext(messages: Array<{ role: string; content: string }>): boolean {
@@ -576,10 +622,22 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
 
 [CONTEXTO TEMPORAL] Data de hoje (Brasília): ${todayISO}. Use SEMPRE esta data ao gerar start_at para consultar_agenda.
 Quando o cliente ESCOLHER um horário (ex.: "pode ser as 14:00", "14h") após você ter oferecido opções: chame consultar_agenda com action="criar", start_at="${todayISO}T[HORA]:00:00-03:00" (ex.: ${todayISO}T14:00:00-03:00), title="Visita - [nome do cliente]". NUNCA chame só check_availability quando o cliente já escolheu o horário.
+REGRA ABSOLUTA: Se o cliente responde a uma oferta de horários com uma escolha (ex: "pode ser as 14:00", "10h", "amanhã as 10"), a action OBRIGATÓRIA é "criar". Chamar "cancelar" ou "check_availability" nesse cenário é um ERRO CRÍTICO.
 Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado para dia 09/03 às 09:00"). Use esse horário em cancelar: start_at no formato YYYY-MM-DDTHH:mm:ss-03:00 (ano = ano de hoje). Em seguida use criar com o novo horário pedido pelo cliente, também com a data de hoje.`;
 
-          // Entity extraction: detect marca/modelo/ano/km from last user message to help the dispatcher
+          const lastAssistantMsg = [...messages].reverse().find((m) => m.role === "assistant");
           const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+          let schedulingHint = "";
+          if (lastAssistantMsg && lastUserMsg) {
+            const offeredTimes = /\b\d{1,2}[h:]\d{0,2}\b/.test(lastAssistantMsg.content);
+            const userChoseTime = /\b\d{1,2}[h:]\d{0,2}\b/.test(lastUserMsg.content) ||
+              /(pode ser|quero|prefiro|vou|marco|as\s+\d|amanh[aã]\s*(as)?\s*\d)/i.test(lastUserMsg.content);
+            if (offeredTimes && userChoseTime) {
+              schedulingHint = `\n\n[HINT OBRIGATÓRIO] O assistente ofereceu horários e o cliente ESCOLHEU um. Você DEVE chamar consultar_agenda com action="criar". NÃO use "cancelar" nem "check_availability".`;
+            }
+          }
+
+          // Entity extraction: detect marca/modelo/ano/km from last user message to help the dispatcher
           const entities = lastUserMsg ? extractVehicleEntities(lastUserMsg.content) : {};
           const appraisalCtx = isAppraisalContext(messages);
           let entityHint = "";
@@ -596,7 +654,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
 
           const dispatcherMessages = toOpenAIMessages(
-            getDispatcherPrompt(tenantSlug) + dispatcherDateContext + entityHint,
+            getDispatcherPrompt(tenantSlug) + dispatcherDateContext + entityHint + schedulingHint,
             messages
           );
 
@@ -712,26 +770,6 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               tool: tc.function.name,
               args: tc.function.arguments,
             })));
-            // #region agent log
-            const lastUser = messages.filter((m) => m.role === "user").pop();
-            const lastUserContent = lastUser?.content ?? "";
-            for (const tc of phase1ToolCalls) {
-              if (tc.function.name === "consultar_estoque") {
-                fetch("http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "faf2ea" },
-                  body: JSON.stringify({
-                    sessionId: "faf2ea",
-                    location: "chat-local.ts:dispatcher_consultar_estoque",
-                    message: "Dispatcher consultar_estoque: last user message and args",
-                    data: { lastUserMessage: lastUserContent.slice(0, 200), rawArgs: tc.function.arguments, hasTipo: /"tipo"\s*:/.test(tc.function.arguments) },
-                    timestamp: Date.now(),
-                    hypothesisId: "H1",
-                  }),
-                }).catch(() => {});
-              }
-            }
-            // #endregion
           }
 
           let conversationalMessages: typeof dispatcherMessages;
@@ -840,10 +878,19 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             })
             .filter((m): m is NonNullable<typeof m> => m !== null) as Array<{ role: "system" | "user" | "assistant"; content: string }>;
 
+          let naturalToolResultsText = "";
           if (toolResults.length > 0) {
+            naturalToolResultsText = toolResults.map((r) => {
+              try {
+                const obj = JSON.parse(r) as Record<string, unknown>;
+                return summarizeToolResult(obj);
+              } catch {
+                return r;
+              }
+            }).join("\n\n");
             conversationalMessagesClean.push({
               role: "user",
-              content: `[Resultados das ferramentas executadas]:\n${toolResults.join("\n\n")}`,
+              content: `Resultados obtidos:\n${naturalToolResultsText}\n\nCom base nesses resultados, responda ao cliente de forma natural e objetiva. NÃO inclua JSON, nomes de ferramentas ou artefatos técnicos.`,
             });
           }
 
@@ -905,21 +952,10 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
           console.log("[Chat-Local] Conversational LLM response OK, iniciando streaming...");
 
-          // #region agent log
           let debugDeltaCount = 0;
           let debugDeltaTotalLen = 0;
           let debugSendCount = 0;
           let debugSendTotalLen = 0;
-          const debugToolResultsSummary = toolResults.map((r) => {
-            try {
-              const o = JSON.parse(r);
-              return { hasError: !!o.error, preview: (o.error || o.action || "").slice(0, 60) };
-            } catch {
-              return { hasError: false, preview: r.slice(0, 60) };
-            }
-          });
-          fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7948bd'},body:JSON.stringify({sessionId:'7948bd',location:'chat-local.ts:stream-start',message:'conv stream start',data:{toolResultsCount:toolResults.length,toolResultsSummary:debugToolResultsSummary},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-          // #endregion
 
           const convReader = convResp.body!.getReader();
           const convDecoder = new TextDecoder();
@@ -979,7 +1015,6 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 debugSendTotalLen += nqContent.length;
                 sendSse({ choices: [{ delta: { content: nqContent } }] });
               }
-              fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7948bd'},body:JSON.stringify({sessionId:'7948bd',location:'chat-local.ts:stream-done',message:'conv stream done',data:{deltaCount:debugDeltaCount,deltaTotalLen:debugDeltaTotalLen,sendCount:debugSendCount,sendTotalLen:debugSendTotalLen,noContentSent:debugSendTotalLen===0},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
               break;
             }
           }
@@ -990,8 +1025,8 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               const retryMessages = conversationalMessagesClean.slice(0, 1).concat(
                 conversationalMessagesClean.filter((m) => m.role === "user" || m.role === "assistant").slice(-4)
               );
-              if (toolResults.length > 0) {
-                retryMessages.push({ role: "user", content: `[Resultados das ferramentas executadas]:\n${toolResults.join("\n\n")}\n\nResponda ao cliente com base nesses resultados. Seja natural e objetiva.` });
+              if (toolResults.length > 0 && naturalToolResultsText) {
+                retryMessages.push({ role: "user", content: `Resultados obtidos:\n${naturalToolResultsText}\n\nCom base nesses resultados, responda ao cliente de forma natural e objetiva. NÃO inclua JSON, nomes de ferramentas ou artefatos técnicos.` });
               }
               const retryBody = { model: convModel, messages: retryMessages, stream: false, temperature: agent.temperature ?? 0.7 };
               const retryResp = await fetch(convApiUrl, {
@@ -1004,8 +1039,13 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 const retryJson = await retryResp.json() as { choices?: Array<{ message?: { content?: string } }> };
                 const retryContent = retryJson.choices?.[0]?.message?.content?.trim();
                 if (retryContent) {
-                  console.log("[Chat-Local] Retry OK, enviando conteúdo:", retryContent.slice(0, 80));
-                  sendSse({ choices: [{ delta: { content: retryContent } }] });
+                  const sanitized = sanitizeLLMOutput(retryContent);
+                  if (sanitized) {
+                    console.log("[Chat-Local] Retry OK, enviando conteúdo sanitizado:", sanitized.slice(0, 80));
+                    sendSse({ choices: [{ delta: { content: sanitized } }] });
+                  } else {
+                    sendSse({ choices: [{ delta: { content: "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?" } }] });
+                  }
                 } else {
                   console.warn("[Chat-Local] Retry também retornou vazio, enviando mensagem neutra");
                   sendSse({ choices: [{ delta: { content: "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?" } }] });
