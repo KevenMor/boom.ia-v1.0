@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
 import { buildSystemPrompt, getDispatcherPrompt } from "../services/prompts/registry.js";
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
+import { filterCommandLinesFromStream } from "../utils/sanitize.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 const MAX_TOOL_ITERATIONS = 5;
@@ -553,6 +554,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           const convReader = convResp.body!.getReader();
           const convDecoder = new TextDecoder();
           let convBuf = "";
+          let streamFilterBuffer = "";
           let conversationalUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null = null;
 
           while (true) {
@@ -576,13 +578,20 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
                   }
                   const delta = ev.choices?.[0]?.delta;
                   if (delta?.content) {
-                    console.log("[Chat-Local] Streaming content chunk:", delta.content.slice(0, 50));
-                    sendSse({ choices: [{ delta: { content: delta.content } }] });
+                    const { toSend, newBuffer } = filterCommandLinesFromStream(streamFilterBuffer, delta.content);
+                    streamFilterBuffer = newBuffer;
+                    if (toSend) {
+                      console.log("[Chat-Local] Streaming content chunk:", toSend.slice(0, 50));
+                      sendSse({ choices: [{ delta: { content: toSend } }] });
+                    }
                   }
                 } catch { /* skip */ }
               }
             }
-            if (done) break;
+            if (done) {
+              if (streamFilterBuffer) sendSse({ choices: [{ delta: { content: streamFilterBuffer } }] });
+              break;
+            }
           }
 
           const tokenUsagePayload = {
@@ -667,6 +676,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         const decoder = new TextDecoder();
         let buf = "";
         let content = "";
+        let streamFilterBuffer = "";
         const toolCallsAccum: Record<number, { id: string; name: string; args: string }> = {};
         let iterUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null = null;
 
@@ -696,7 +706,9 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
 
                 if (delta?.content) {
                   content += delta.content;
-                  sendSse({ choices: [{ delta: { content: delta.content } }] });
+                  const { toSend, newBuffer } = filterCommandLinesFromStream(streamFilterBuffer, delta.content);
+                  streamFilterBuffer = newBuffer;
+                  if (toSend) sendSse({ choices: [{ delta: { content: toSend } }] });
                 }
 
                 if (delta?.tool_calls) {
@@ -720,7 +732,10 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
               }
             }
           }
-          if (done) break;
+          if (done) {
+            if (streamFilterBuffer) sendSse({ choices: [{ delta: { content: streamFilterBuffer } }] });
+            break;
+          }
         }
 
         if (iterUsage) {

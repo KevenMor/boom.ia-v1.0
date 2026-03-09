@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
-import { stripChatwootNamePrefix } from "../utils/sanitize.js";
+import { stripChatwootNamePrefix, sanitizeLLMOutput } from "../utils/sanitize.js";
 
 const API_BASE = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
 
@@ -382,13 +382,14 @@ export async function queueRoutes(fastify: FastifyInstance) {
       }
 
       const responseConvId = result.responseConvId ?? convId ?? null;
-      if (responseConvId && result.fullContent.trim()) {
+      const sanitizedContent = sanitizeLLMOutput(result.fullContent.trim());
+      if (responseConvId && sanitizedContent) {
         try {
           await supabase.rpc("save_message", {
             p_agent_id: agent_id,
             p_conversation_id: responseConvId,
             p_role: "assistant",
-            p_content: result.fullContent.trim(),
+            p_content: sanitizedContent,
             p_model: null,
             p_tokens_input: 0,
             p_tokens_output: 0,
@@ -399,7 +400,12 @@ export async function queueRoutes(fastify: FastifyInstance) {
         }
       }
 
-      const responseParts = result.responseParts.length > 0 ? result.responseParts : [result.fullContent.trim()];
+      const responseParts =
+        result.responseParts.length > 0
+          ? result.responseParts.map((p) => sanitizeLLMOutput(p.trim())).filter(Boolean)
+          : sanitizedContent
+            ? [sanitizedContent]
+            : [];
 
       fireDeliverMessage(
         baseUrl,
@@ -410,7 +416,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
           external_user_id,
           channel,
           chatwoot_conversation_id,
-          response_text: result.fullContent.trim(),
+          response_text: sanitizedContent,
           response_parts: responseParts,
         }
       ).catch((e) => console.error("[ProcessQueue] deliver-message failed:", e));

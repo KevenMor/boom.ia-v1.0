@@ -42,7 +42,7 @@ async function sendChatwootImagesBatch(
   caption?: string
 ): Promise<boolean> {
   if (!imageUrls.length) return true;
-  const downloads = await Promise.allSettled(
+  const results = await Promise.allSettled(
     imageUrls.map(async (imageUrl) => {
       const parsedUrl = new URL(imageUrl);
       const imgResp = await fetch(imageUrl, {
@@ -52,17 +52,31 @@ async function sendChatwootImagesBatch(
           Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
         },
       });
-      if (!imgResp.ok) return null;
+      if (!imgResp.ok) {
+        console.warn(`[Deliver] Image download failed ${imgResp.status}: ${imageUrl.slice(0, 80)}...`);
+        return null;
+      }
       const blob = await imgResp.blob();
       const filename = parsedUrl.pathname.split("/").pop() || "image.jpg";
-      return { blob, filename };
+      return { blob, filename, url: imageUrl };
     })
   );
 
-  const successfulDownloads = downloads
-    .filter((d): d is PromiseFulfilledResult<{ blob: Blob; filename: string } | null> => d.status === "fulfilled")
+  const successfulDownloads = results
+    .filter((d): d is PromiseFulfilledResult<{ blob: Blob; filename: string; url: string } | null> => d.status === "fulfilled")
     .map((d) => d.value)
-    .filter((d): d is { blob: Blob; filename: string } => d !== null);
+    .filter((d): d is { blob: Blob; filename: string; url: string } => d !== null);
+
+  const failedUrls = imageUrls.filter(
+    (u) => !successfulDownloads.some((d) => d.url === u)
+  );
+  if (failedUrls.length > 0) {
+    console.warn(`[Deliver] ${failedUrls.length}/${imageUrls.length} image(s) failed to download. Trying one-by-one.`);
+    for (const imageUrl of failedUrls) {
+      const ok = await sendChatwootImageMessage(url, apiToken, imageUrl, "");
+      if (!ok) console.warn(`[Deliver] Single-image send failed for: ${imageUrl.slice(0, 80)}...`);
+    }
+  }
 
   if (successfulDownloads.length === 0) {
     for (const u of imageUrls) await sendChatwootTextMessage(url, apiToken, u);
@@ -208,7 +222,16 @@ async function replyToChatwoot(
 ) {
   const baseUrl = chatwootUrl.replace(/\/+$/, "");
   const msgUrl = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}/messages`;
-  const parts = messageParts.length > 0 ? messageParts : [content];
+  const rawParts = messageParts.length > 0 ? messageParts : [content];
+  // Expandir cada part em blocos por parágrafo (linha em branco), para múltiplas bolhas no WhatsApp mesmo sem <<MSG_SPLIT>>
+  const parts = rawParts.flatMap((p) =>
+    p
+      .split(/\n\s*\n/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+  );
+  if (parts.length === 0 && content.trim()) parts.push(content.trim());
+
 
   const startTime = Date.now();
   const MAX_BUDGET_MS = 28000;

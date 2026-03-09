@@ -40,6 +40,30 @@ export function sanitizeLLMOutput(content: string): string {
   return text;
 }
 
+/** Retorna true se a linha é uma linha de comando interno (ex.: ENVIAR_FOTOS_VEICULO: ...) que não deve ser exibida ao usuário. */
+export function isCommandLine(line: string): boolean {
+  const t = (line || "").trim();
+  if (!t) return false;
+  return (
+    /^.*ENVIAR_FOTOS?_VEICULOS?[:\s].*$/im.test(t) ||
+    /^.*HANDOFF_COMERCIAL.*$/im.test(t) ||
+    /^.*\b(TOOL_CALL|FUNCTION_CALL|ACTION_OUTPUT)[:\s].*$/im.test(t)
+  );
+}
+
+/** Dado um buffer de texto e um novo chunk, retorna { toSend, newBuffer }: conteúdo filtrado para enviar e o novo buffer. */
+export function filterCommandLinesFromStream(buffer: string, chunk: string): { toSend: string; newBuffer: string } {
+  let acc = buffer + chunk;
+  let toSend = "";
+  let idx: number;
+  while ((idx = acc.indexOf("\n")) !== -1) {
+    const line = acc.slice(0, idx + 1);
+    acc = acc.slice(idx + 1);
+    if (!isCommandLine(line)) toSend += line;
+  }
+  return { toSend, newBuffer: acc };
+}
+
 export function stripEmojis(content: string): string {
   return content
     .replace(/[\u{1F600}-\u{1F64F}]/gu, "")
