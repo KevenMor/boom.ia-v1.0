@@ -250,7 +250,7 @@ async function executeCalendarQuery(
       return { success: false, result: null, error: "tenant_id não disponível (configure na ferramenta ou no agente)" };
     }
 
-    const calendarArgs = { ...args, tenant_id: tenantId };
+    const calendarArgs: Record<string, unknown> = { ...args, tenant_id: tenantId };
     const action = (calendarArgs.action || "check_availability") as string;
 
     if (action === "check_availability") {
