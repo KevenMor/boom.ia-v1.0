@@ -15,7 +15,7 @@ import { DateInputBR } from "@/components/ui/date-input-br";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Trash2, Clock, CalendarDays, Bell, Phone } from "lucide-react";
+import { Plus, Trash2, Clock, CalendarDays, Bell, MessageSquare, Phone } from "lucide-react";
 import { useTenantContext } from "@/contexts/TenantContext";
 import { useTenants } from "@/hooks/useTenants";
 import { useCalendars, useCreateCalendar } from "@/hooks/useCalendars";
@@ -58,16 +58,10 @@ function extractDate(dateStr: string): string {
   return dateStr.split("T")[0];
 }
 
-function normalizePhoneForReminder(raw: string): string {
-  let phone = raw.replace(/\D/g, "");
-  if (!phone.startsWith("55")) phone = `55${phone}`;
-  return phone;
-}
-
-function displayPhoneFromReminder(raw: string | null | undefined): string {
-  const phone = (raw || "").replace(/\D/g, "");
-  if (phone.startsWith("55") && phone.length >= 12) return phone.slice(2);
-  return phone;
+/** Extrai ID numérico para chatwoot_conversation_id */
+function parseChatwootConvId(raw: string): number | null {
+  const n = parseInt(String(raw).replace(/\D/g, ""), 10);
+  return isNaN(n) ? null : n;
 }
 
 export default function CalendarPage() {
@@ -126,6 +120,7 @@ export default function CalendarPage() {
   const [endTime, setEndTime] = useState("09:00");
   const [allDay, setAllDay] = useState(false);
   const [sendReminder, setSendReminder] = useState(false);
+  const [reminderChatwootConvId, setReminderChatwootConvId] = useState("");
   const [reminderPhone, setReminderPhone] = useState("");
   const [reminderAgentId, setReminderAgentId] = useState("");
 
@@ -173,6 +168,7 @@ export default function CalendarPage() {
     setEndDate(extractDate(info.endStr));
     setEndTime(info.allDay ? "09:00" : extractTime(info.endStr));
     setSendReminder(false);
+    setReminderChatwootConvId("");
     setReminderPhone("");
     setReminderAgentId(reminderAgents.length === 1 ? reminderAgents[0].id : "");
     setDialogOpen(true);
@@ -195,7 +191,7 @@ export default function CalendarPage() {
       // Busca lembrete criado manualmente OU pela IA (qualquer conversation_id)
       const { data: reminder, error } = await supabase
         .from("appointment_reminders")
-        .select("agent_id, external_user_id, status")
+        .select("agent_id, chatwoot_conversation_id, external_user_id, status")
         .eq("tenant_id", selectedTenantId)
         .eq("calendar_event_id", info.event.id)
         .in("status", ["pending", "sent"])
@@ -209,15 +205,22 @@ export default function CalendarPage() {
 
       if (reminder) {
         setSendReminder(true);
-        setReminderPhone(displayPhoneFromReminder(reminder.external_user_id));
+        setReminderChatwootConvId(
+          reminder.chatwoot_conversation_id != null
+            ? String(reminder.chatwoot_conversation_id)
+            : ""
+        );
+        setReminderPhone(reminder.external_user_id || "");
         setReminderAgentId(reminder.agent_id);
       } else {
         setSendReminder(false);
+        setReminderChatwootConvId("");
         setReminderPhone("");
         setReminderAgentId(reminderAgents.length === 1 ? reminderAgents[0].id : "");
       }
     } else {
       setSendReminder(false);
+      setReminderChatwootConvId("");
       setReminderPhone("");
       setReminderAgentId(reminderAgents.length === 1 ? reminderAgents[0].id : "");
     }
@@ -227,8 +230,8 @@ export default function CalendarPage() {
 
   const handleSave = async () => {
     if (!newTitle.trim() || !selectedTenantId || !eventCalendarId) return;
-    if (sendReminder && !reminderPhone.trim()) {
-      toast.error("Informe o WhatsApp do cliente para enviar lembrete.");
+    if (sendReminder && !reminderChatwootConvId.trim() && !reminderPhone.trim()) {
+      toast.error("Informe o ID da conversa Chatwoot ou o número de telefone para enviar lembrete.");
       return;
     }
     if (sendReminder && !reminderAgentId) {
@@ -276,7 +279,8 @@ export default function CalendarPage() {
           const minutesBefore = cfg.reminder_minutes_before || 60;
           const eventStartDate = new Date(finalStart);
           const remindAt = new Date(eventStartDate.getTime() - minutesBefore * 60 * 1000);
-          const phone = normalizePhoneForReminder(reminderPhone);
+          const cwConvId = parseChatwootConvId(reminderChatwootConvId);
+          const extUserId = reminderPhone.trim() || null;
 
           // Busca lembrete existente (manual ou criado pela IA)
           const { data: existingReminder, error: existingErr } = await supabase
@@ -297,7 +301,8 @@ export default function CalendarPage() {
               .from("appointment_reminders")
               .update({
                 agent_id: reminderAgentId,
-                external_user_id: phone,
+                chatwoot_conversation_id: cwConvId,
+                external_user_id: extUserId ?? "",
                 event_title: newTitle,
                 event_start_at: finalStart,
                 remind_at: remindAt.toISOString(),
@@ -321,7 +326,8 @@ export default function CalendarPage() {
                 tenant_id: selectedTenantId,
                 calendar_event_id: eventId,
                 conversation_id: conversationId,
-                external_user_id: phone,
+                external_user_id: extUserId ?? "",
+                chatwoot_conversation_id: cwConvId,
                 event_title: newTitle,
                 event_start_at: finalStart,
                 remind_at: remindAt.toISOString(),
@@ -677,7 +683,20 @@ export default function CalendarPage() {
                       <Input
                         value={reminderPhone}
                         onChange={(e) => setReminderPhone(e.target.value)}
-                        placeholder="11999999999"
+                        placeholder="11999999999 (para agendamento manual)"
+                        className="h-9 font-mono text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">ID conversation Chatwoot</Label>
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <Input
+                        value={reminderChatwootConvId}
+                        onChange={(e) => setReminderChatwootConvId(e.target.value)}
+                        placeholder="12345 (preenchido pela IA ao agendar)"
                         className="h-9 font-mono text-sm"
                       />
                     </div>
@@ -697,9 +716,9 @@ export default function CalendarPage() {
                     </div>
                   )}
 
-                  <p className="text-xs text-muted-foreground">
-                    O lembrete será enviado via WAHA com a antecedência configurada no agente.
-                  </p>
+                    <p className="text-xs text-muted-foreground">
+                      O lembrete será enviado via WAHA (WhatsApp) ou na conversa Chatwoot. Preencha o telefone para agendamento manual ou o ID para agendamentos feitos pela IA.
+                    </p>
                 </div>
               ) : null}
             </div>

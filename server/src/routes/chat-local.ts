@@ -265,7 +265,8 @@ async function sendAgendaNotification(
   toolResult: unknown,
   messages?: Array<{ role: string; content: string }>,
   externalUserId?: string | null,
-  conversationId?: string | null
+  conversationId?: string | null,
+  chatwootConvId?: number | null
 ): Promise<void> {
   if (!toolResult || typeof toolResult !== "object") return;
   const res = toolResult as {
@@ -317,7 +318,7 @@ async function sendAgendaNotification(
           calendar_event_id: res.event.id,
           conversation_id: conversationId,
           external_user_id: externalUserId || "",
-          chatwoot_conversation_id: null,
+          chatwoot_conversation_id: chatwootConvId ?? null,
           event_title: title,
           event_start_at: startAt,
           remind_at: remindAt.toISOString(),
@@ -434,13 +435,14 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           agent_id: string;
           messages: Array<{ role: string; content: string }>;
           conversation_id?: string | null;
+          chatwoot_conversation_id?: number | null;
           attachments?: unknown[];
           external_user_id?: string | null;
         };
       }>,
       reply: FastifyReply
     ) => {
-      const { agent_id, messages, conversation_id, external_user_id } = req.body;
+      const { agent_id, messages, conversation_id, chatwoot_conversation_id, external_user_id } = req.body;
 
       if (!agent_id || !messages || !Array.isArray(messages)) {
         return reply.status(400).send({ error: "agent_id and messages required" });
@@ -813,7 +815,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   content: JSON.stringify(result.success ? result.result : { error: result.error }),
                 });
                 if (tc.function.name === "consultar_agenda" && result.success && result.result) {
-                  sendAgendaNotification(agent_id, agent, result.result, messages, external_user_id, responseConvId).catch(() => {});
+                  sendAgendaNotification(agent_id, agent, result.result, messages, external_user_id, responseConvId, chatwoot_conversation_id).catch(() => {});
                 }
               }
             }
@@ -1250,7 +1252,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             content: JSON.stringify(result.success ? result.result : { error: result.error }),
           });
           if (tc.function.name === "consultar_agenda" && result.success && result.result) {
-            sendAgendaNotification(agent_id, agent, result.result, messages, external_user_id, responseConvId).catch(() => {});
+            sendAgendaNotification(agent_id, agent, result.result, messages, external_user_id, responseConvId, chatwoot_conversation_id).catch(() => {});
           }
         }
       }

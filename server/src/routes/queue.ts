@@ -61,7 +61,8 @@ async function callChatAgent(
   messages: { role: string; content: string }[],
   convId: string | null,
   attachments?: any[],
-  externalUserId?: string | null
+  externalUserId?: string | null,
+  chatwootConvId?: number | null
 ): Promise<{ error: string | null; fullContent: string; responseParts: string[]; responseConvId: string | null }> {
   const chatUrl = `${baseUrl}/api/chat-local`;
   const MAX_RETRIES = 3;
@@ -69,19 +70,22 @@ async function callChatAgent(
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
+      const body: Record<string, unknown> = {
+        agent_id: agentId,
+        messages,
+        conversation_id: convId,
+        attachments,
+        external_user_id: externalUserId,
+      };
+      if (chatwootConvId != null) body.chatwoot_conversation_id = chatwootConvId;
+
       const chatResp = await fetch(chatUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "x-nexus-auth": `Bearer ${nexusKey}`,
         },
-        body: JSON.stringify({
-          agent_id: agentId,
-          messages,
-          conversation_id: convId,
-          attachments,
-          external_user_id: externalUserId,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!chatResp.ok) {
@@ -408,7 +412,8 @@ export async function queueRoutes(fastify: FastifyInstance) {
         messages,
         convId ?? null,
         attachments,
-        external_user_id ?? null
+        external_user_id ?? null,
+        chatwoot_conversation_id ?? null
       );
 
       if (result.error) {
@@ -702,7 +707,8 @@ export async function queueRoutes(fastify: FastifyInstance) {
           messages,
           item.conversation_id,
           undefined,
-          item.external_user_id
+          item.external_user_id,
+          item.chatwoot_conversation_id ?? null
         );
 
         if (chatResult.error) {
