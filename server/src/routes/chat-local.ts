@@ -474,7 +474,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             entityHint = `\n\n[ENTIDADES DETECTADAS na última mensagem do cliente]\n${parts.join("\n")}\nUse EXATAMENTE estas entidades ao montar os argumentos das tools. NÃO invente valores diferentes.`;
           }
           if (appraisalCtx) {
-            entityHint += `\n\n[CONTEXTO DE FLUXO] A última mensagem do assistente pedia dados do veículo do CLIENTE (marca, modelo, ano, km). Isso é APPRAISAL (intent A). Chame consultar_fipe com os dados fornecidos E TAMBÉM consultar_agenda com action "check_availability" e date "${todayISO}" para poder oferecer horários reais ao sugerir visita na loja. NÃO chame consultar_estoque.`;
+            entityHint += `\n\n[CONTEXTO DE FLUXO] A última mensagem do assistente pedia dados do veículo do CLIENTE (marca, modelo, ano, km). Isso é APPRAISAL (intent A). NÃO chame consultar_fipe — avaliação é feita presencialmente pelo time comercial. Se o cliente já forneceu marca+modelo+ano, chame consultar_agenda com action "check_availability" e date "${todayISO}" para oferecer horários reais ao sugerir visita na loja. NÃO chame consultar_estoque.`;
           }
 
           const dispatcherMessages = toOpenAIMessages(
@@ -635,7 +635,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               { type: "dispatcher_tool_calls", tool_names: phase1ToolCalls.map((tc) => tc.function.name), tool_calls_count: phase1ToolCalls.length },
             ];
 
-            const isFipeAlsoCalled = phase1ToolCalls.some((tc) => /consultar_fipe|fipe/i.test(tc.function.name));
+            // consultar_fipe removido do fluxo (v3.5.0) — avaliações são presenciais
 
             for (const tc of phase1ToolCalls) {
               const tool = dispatcherNameToTool.get(tc.function.name);
@@ -662,42 +662,17 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   args = {};
                 }
 
-                // ── Camada 1: Validar args de consultar_fipe ──
+                // ── consultar_fipe removido (v3.5.0) — avaliações são presenciais ──
+                // Se o dispatcher ainda chamar consultar_fipe por engano, rejeitar com mensagem clara
                 const isFipeTool = /consultar_fipe|fipe/i.test(tc.function.name);
                 if (isFipeTool) {
-                  const hasMarca = !!(args.marca || args.brand);
-                  const hasModelo = !!(args.modelo || args.model);
-                  const hasAno = !!(args.ano || args.year);
-                  if (!hasMarca && !hasModelo && !hasAno) {
-                    // Args vazios — tentar preencher com entities extraídas
-                    if (entities.marca) args.marca = entities.marca;
-                    if (entities.modelo) args.modelo = entities.modelo;
-                    if (entities.ano) args.ano = entities.ano;
-                    console.log("[Chat-Local] consultar_fipe: args vazios, preenchidos via entity extraction:", JSON.stringify(args));
-                  }
-                  if (!(args.marca || args.brand) || !(args.modelo || args.model)) {
-                    console.warn("[Chat-Local] consultar_fipe REJEITADO: falta marca ou modelo. args:", JSON.stringify(args));
-                    debugEntries.push({ type: "tool_call", tool: tc.function.name, args, tool_type: "function" });
-                    debugEntries.push({ type: "tool_result", preview: { error: "Faltam parâmetros obrigatórios (marca e modelo)" } });
-                    conversationalMessages.push({
-                      role: "tool",
-                      tool_call_id: tc.id,
-                      content: JSON.stringify({ error: "consultar_fipe requer pelo menos marca e modelo do veículo. Pergunte ao cliente os dados: marca, modelo e ano." }),
-                    });
-                    continue;
-                  }
-                }
-
-                // ── Camada 3: Guard appraisal — bloquear consultar_estoque indevido ──
-                const isEstoqueTool = /consultar_estoque|estoque/i.test(tc.function.name);
-                if (isEstoqueTool && appraisalCtx && isFipeAlsoCalled) {
-                  console.warn("[Chat-Local] consultar_estoque BLOQUEADO: contexto de appraisal detectado. args:", JSON.stringify(args));
+                  console.warn("[Chat-Local] consultar_fipe REJEITADO: ferramenta removida do fluxo (v3.5.0). args:", JSON.stringify(args));
                   debugEntries.push({ type: "tool_call", tool: tc.function.name, args, tool_type: "function" });
-                  debugEntries.push({ type: "tool_result", preview: { error: "Bloqueado: contexto de avaliação do veículo do cliente" } });
+                  debugEntries.push({ type: "tool_result", preview: { error: "consultar_fipe removido — avaliação é presencial" } });
                   conversationalMessages.push({
                     role: "tool",
                     tool_call_id: tc.id,
-                    content: JSON.stringify({ error: "consultar_estoque bloqueado — o cliente está fornecendo dados do PRÓPRIO veículo para avaliação, não buscando estoque." }),
+                    content: JSON.stringify({ error: "consultar_fipe não é mais utilizado. A avaliação do veículo do cliente é feita presencialmente pelo time comercial. Colete os dados do veículo (marca, modelo, ano, km, placa) e conduza para agendamento de visita." }),
                   });
                   continue;
                 }
