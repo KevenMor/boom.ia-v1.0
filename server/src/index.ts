@@ -127,9 +127,86 @@ async function build() {
   return fastify;
 }
 
+// #region agent log
+async function startupDiagnostics() {
+  const nexusUrl = process.env.NEXUS_DB_URL || "(not set)";
+  const hasServiceKey = !!process.env.NEXUS_SERVICE_ROLE_KEY;
+  const hasAnonKey = !!process.env.NEXUS_DB_ANON_KEY;
+  const hasEncKey = !!process.env.ENCRYPTION_KEY;
+  const hasOpenAI = !!process.env.OPENAI_API_KEY;
+  const hasGemini = !!process.env.GEMINI_API_KEY;
+  const openaiLen = process.env.OPENAI_API_KEY?.length || 0;
+  const geminiLen = process.env.GEMINI_API_KEY?.length || 0;
+  const openaiPrefix = process.env.OPENAI_API_KEY?.slice(0, 8) || "(none)";
+
+  console.log("[DBG-7948bd] ENV_CHECK:", JSON.stringify({
+    NEXUS_DB_URL: nexusUrl,
+    hasServiceKey, hasAnonKey, hasEncKey,
+    hasOpenAI, openaiLen, openaiPrefix,
+    hasGemini, geminiLen,
+    CORS_ORIGINS: process.env.CORS_ORIGINS || "(not set)",
+  }));
+
+  // Test DNS resolution
+  try {
+    const { resolve4 } = await import("dns/promises");
+    const host = nexusUrl.replace(/^https?:\/\//, "").replace(/[\/:].*/g, "");
+    const ips = await resolve4(host);
+    console.log("[DBG-7948bd] DNS_RESOLVE:", JSON.stringify({ host, ips }));
+  } catch (e: any) {
+    console.log("[DBG-7948bd] DNS_RESOLVE_FAIL:", JSON.stringify({ error: e?.message }));
+  }
+
+  // Test connectivity to Supabase
+  try {
+    const testUrl = `${nexusUrl.replace(/\/$/, "")}/rest/v1/`;
+    const apikey = process.env.NEXUS_DB_ANON_KEY || process.env.NEXUS_SERVICE_ROLE_KEY || "";
+    console.log("[DBG-7948bd] SUPABASE_CONN_TEST: fetching", testUrl);
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15000);
+    const res = await fetch(testUrl, {
+      headers: { apikey, Authorization: `Bearer ${apikey}` },
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    console.log("[DBG-7948bd] SUPABASE_CONN_OK:", JSON.stringify({ status: res.status, ok: res.ok }));
+  } catch (e: any) {
+    console.log("[DBG-7948bd] SUPABASE_CONN_FAIL:", JSON.stringify({ error: e?.message, code: e?.cause?.code }));
+  }
+
+  // Test OpenAI key validity (simple models endpoint)
+  if (process.env.OPENAI_API_KEY) {
+    try {
+      const res = await fetch("https://api.openai.com/v1/models", {
+        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+        signal: AbortSignal.timeout(10000),
+      });
+      console.log("[DBG-7948bd] OPENAI_KEY_TEST:", JSON.stringify({ status: res.status }));
+    } catch (e: any) {
+      console.log("[DBG-7948bd] OPENAI_KEY_TEST_FAIL:", JSON.stringify({ error: e?.message }));
+    }
+  }
+
+  // Test Gemini key
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${process.env.GEMINI_API_KEY}`, {
+        signal: AbortSignal.timeout(10000),
+      });
+      console.log("[DBG-7948bd] GEMINI_KEY_TEST:", JSON.stringify({ status: res.status }));
+    } catch (e: any) {
+      console.log("[DBG-7948bd] GEMINI_KEY_TEST_FAIL:", JSON.stringify({ error: e?.message }));
+    }
+  }
+}
+// #endregion
+
 build()
   .then((app) => app.listen({ port: PORT, host: "0.0.0.0" }))
-  .then(() => console.log(`[Server] Listening on http://0.0.0.0:${PORT}`))
+  .then(() => {
+    console.log(`[Server] Listening on http://0.0.0.0:${PORT}`);
+    startupDiagnostics();
+  })
   .catch((err) => {
     console.error("[Server] Startup failed:", err?.message || err);
     if (err?.stack) console.error(err.stack);
