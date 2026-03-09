@@ -57,6 +57,7 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
   const [blockGap, setBlockGap] = useState(1200);
   const [debounceMs, setDebounceMs] = useState(0);
   const [dispatcherProviderId, setDispatcherProviderId] = useState("");
+  const [dispatcherModel, setDispatcherModel] = useState("");
   const [chatwootUrl, setChatwootUrl] = useState("");
   const [chatwootApiToken, setChatwootApiToken] = useState("");
   const [chatwootAccountId, setChatwootAccountId] = useState("");
@@ -87,6 +88,7 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
       setBlockGap(((cfg as any).block_gap_ms ?? 2000) / 1000);
       setDebounceMs(((cfg as any).message_debounce_ms ?? 3000) / 1000);
       setDispatcherProviderId((cfg as any).dispatcher_provider_id ?? "");
+      setDispatcherModel((cfg as any).dispatcher_model ?? "");
       setChatwootUrl((cfg as any).chatwoot_url ?? "");
       setChatwootApiToken((cfg as any).chatwoot_api_token ?? "");
       setChatwootAccountId((cfg as any).chatwoot_account_id ?? "");
@@ -116,6 +118,7 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
           chatwoot_url: chatwootUrl || undefined, chatwoot_api_token: chatwootApiToken || undefined,
           chatwoot_account_id: chatwootAccountId || undefined,
           dispatcher_provider_id: dispatcherProviderId || undefined,
+          dispatcher_model: dispatcherModel || undefined,
           followup_enabled: followupEnabled,
           followup_max_attempts: followupMaxAttempts,
           followup_intervals: followupIntervals,
@@ -304,6 +307,30 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
                 {(providers ?? []).map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
               </SelectContent>
             </Select>
+
+            {dispatcherProviderId && (() => {
+              const dp = (providers ?? []).find((p) => p.id === dispatcherProviderId);
+              const dpModels = dp ? getModelsForProvider(dp.name) : [];
+              return dpModels.length > 0 ? (
+                <div className="mt-2">
+                  <Label className="text-xs text-muted-foreground">Modelo do Dispatcher</Label>
+                  <Select
+                    value={dispatcherModel || "_default"}
+                    onValueChange={(v) => setDispatcherModel(v === "_default" ? "" : v)}
+                  >
+                    <SelectTrigger className="h-11 rounded-lg bg-background border-border mt-1">
+                      <SelectValue placeholder="Padrão do provider" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_default">Padrão ({dp?.model_default || "gpt-4o-mini"})</SelectItem>
+                      {dpModels.map((m) => (
+                        <SelectItem key={m.value} value={m.value}>{m.label} — {m.description}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null;
+            })()}
           </div>
 
           {/* Chatwoot */}

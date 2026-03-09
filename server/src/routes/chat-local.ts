@@ -85,6 +85,72 @@ function toOpenAIMessages(
   return result;
 }
 
+// ── Entity extraction helpers ──────────────────────────────────────────────
+
+const KNOWN_BRANDS: Record<string, string> = {
+  chevrolet: "Chevrolet", chevy: "Chevrolet", gm: "Chevrolet",
+  volkswagen: "Volkswagen", vw: "Volkswagen",
+  fiat: "Fiat", ford: "Ford", honda: "Honda",
+  hyundai: "Hyundai", toyota: "Toyota", renault: "Renault",
+  nissan: "Nissan", jeep: "Jeep", mitsubishi: "Mitsubishi",
+  peugeot: "Peugeot", citroen: "Citroën", kia: "Kia",
+  bmw: "BMW", "mercedes-benz": "Mercedes-Benz", mercedes: "Mercedes-Benz",
+  audi: "Audi", volvo: "Volvo", porsche: "Porsche",
+  land: "Land Rover", range: "Range Rover", jaguar: "Jaguar",
+  subaru: "Subaru", suzuki: "Suzuki", chery: "Chery",
+  caoa: "CAOA Chery", byd: "BYD", ram: "RAM", dodge: "Dodge",
+  mini: "Mini", lexus: "Lexus", alfa: "Alfa Romeo",
+};
+
+interface ExtractedEntities {
+  marca?: string;
+  modelo?: string;
+  ano?: number;
+  km?: string;
+}
+
+function extractVehicleEntities(text: string): ExtractedEntities {
+  const lower = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const result: ExtractedEntities = {};
+
+  for (const [key, brand] of Object.entries(KNOWN_BRANDS)) {
+    const idx = lower.indexOf(key);
+    if (idx !== -1) {
+      result.marca = brand;
+      const afterBrand = text.slice(idx + key.length).trim();
+      const modelMatch = afterBrand.match(/^[\s]*([A-Za-zÀ-ÿ0-9]+(?:[\s]+[A-Za-zÀ-ÿ0-9]+)?)/i);
+      if (modelMatch) {
+        const raw = modelMatch[1].trim();
+        const yearTest = /^(19|20)\d{2}$/.test(raw);
+        if (!yearTest && raw.length > 1) result.modelo = raw;
+      }
+      break;
+    }
+  }
+
+  const yearMatch = text.match(/\b(19\d{2}|20[0-3]\d)\b/);
+  if (yearMatch) result.ano = parseInt(yearMatch[1], 10);
+
+  const kmMatch = text.match(/(\d[\d.]*)\s*(?:mil\s*)?km/i);
+  if (kmMatch) result.km = kmMatch[1].replace(/\./g, "");
+
+  return result;
+}
+
+function isAppraisalContext(messages: Array<{ role: string; content: string }>): boolean {
+  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+  if (!lastAssistant) return false;
+  const lower = lastAssistant.content.toLowerCase();
+  return (
+    (lower.includes("marca") && lower.includes("modelo")) ||
+    lower.includes("quilometragem") ||
+    lower.includes("avalia") ||
+    lower.includes("pre-avalia") ||
+    lower.includes("detalhes do seu carro") ||
+    lower.includes("dados do seu")
+  );
+}
+
 /**
  * Sanitiza nome de função para OpenAI e Gemini.
  * OpenAI exige: ^[a-zA-Z0-9_-]+$
@@ -366,7 +432,9 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         if (dispatcherConfig) {
           console.log("[Chat-Local] Dual-provider: dispatcher (tools) + conversacional");
           const { openaiTools: dispatcherTools, nameToTool: dispatcherNameToTool } = buildOpenAITools(tools, dispatcherConfig.baseUrl);
-          const dispatcherModel = (agentConfig.dispatcher_model as string) || "gpt-4o-mini";
+          const dispatcherModel = (agentConfig.dispatcher_model as string)
+            || (tenantSettings.dispatcher_model as string)
+            || "gpt-4o-mini";
 
           const todayISO = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
           const dispatcherDateContext = `
@@ -375,8 +443,25 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
 Quando o cliente ESCOLHER um horário (ex.: "pode ser as 14:00", "14h") após você ter oferecido opções: chame consultar_agenda com action="criar", start_at="${todayISO}T[HORA]:00:00-03:00" (ex.: ${todayISO}T14:00:00-03:00), title="Visita - [nome do cliente]". NUNCA chame só check_availability quando o cliente já escolheu o horário.
 Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado para dia 09/03 às 09:00"). Use esse horário em cancelar: start_at no formato YYYY-MM-DDTHH:mm:ss-03:00 (ano = ano de hoje). Em seguida use criar com o novo horário pedido pelo cliente, também com a data de hoje.`;
 
+          // Entity extraction: detect marca/modelo/ano/km from last user message to help the dispatcher
+          const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+          const entities = lastUserMsg ? extractVehicleEntities(lastUserMsg.content) : {};
+          const appraisalCtx = isAppraisalContext(messages);
+          let entityHint = "";
+          if (entities.marca || entities.modelo || entities.ano || entities.km) {
+            const parts: string[] = [];
+            if (entities.marca) parts.push(`Marca: ${entities.marca}`);
+            if (entities.modelo) parts.push(`Modelo: ${entities.modelo}`);
+            if (entities.ano) parts.push(`Ano: ${entities.ano}`);
+            if (entities.km) parts.push(`KM: ${entities.km}`);
+            entityHint = `\n\n[ENTIDADES DETECTADAS na última mensagem do cliente]\n${parts.join("\n")}\nUse EXATAMENTE estas entidades ao montar os argumentos das tools. NÃO invente valores diferentes.`;
+          }
+          if (appraisalCtx) {
+            entityHint += `\n\n[CONTEXTO DE FLUXO] A última mensagem do assistente pedia dados do veículo do CLIENTE (marca, modelo, ano, km). Isso é APPRAISAL (intent A). NÃO chame consultar_estoque — chame APENAS consultar_fipe com os dados fornecidos.`;
+          }
+
           const dispatcherMessages = toOpenAIMessages(
-            getDispatcherPrompt(tenantSlug) + dispatcherDateContext,
+            getDispatcherPrompt(tenantSlug) + dispatcherDateContext + entityHint,
             messages
           );
 
@@ -533,6 +618,8 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               { type: "dispatcher_tool_calls", tool_names: phase1ToolCalls.map((tc) => tc.function.name), tool_calls_count: phase1ToolCalls.length },
             ];
 
+            const isFipeAlsoCalled = phase1ToolCalls.some((tc) => /consultar_fipe|fipe/i.test(tc.function.name));
+
             for (const tc of phase1ToolCalls) {
               const tool = dispatcherNameToTool.get(tc.function.name);
               if (!tool) {
@@ -557,6 +644,47 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 } catch {
                   args = {};
                 }
+
+                // ── Camada 1: Validar args de consultar_fipe ──
+                const isFipeTool = /consultar_fipe|fipe/i.test(tc.function.name);
+                if (isFipeTool) {
+                  const hasMarca = !!(args.marca || args.brand);
+                  const hasModelo = !!(args.modelo || args.model);
+                  const hasAno = !!(args.ano || args.year);
+                  if (!hasMarca && !hasModelo && !hasAno) {
+                    // Args vazios — tentar preencher com entities extraídas
+                    if (entities.marca) args.marca = entities.marca;
+                    if (entities.modelo) args.modelo = entities.modelo;
+                    if (entities.ano) args.ano = entities.ano;
+                    console.log("[Chat-Local] consultar_fipe: args vazios, preenchidos via entity extraction:", JSON.stringify(args));
+                  }
+                  if (!(args.marca || args.brand) || !(args.modelo || args.model)) {
+                    console.warn("[Chat-Local] consultar_fipe REJEITADO: falta marca ou modelo. args:", JSON.stringify(args));
+                    debugEntries.push({ type: "tool_call", tool: tc.function.name, args, tool_type: "function" });
+                    debugEntries.push({ type: "tool_result", preview: { error: "Faltam parâmetros obrigatórios (marca e modelo)" } });
+                    conversationalMessages.push({
+                      role: "tool",
+                      tool_call_id: tc.id,
+                      content: JSON.stringify({ error: "consultar_fipe requer pelo menos marca e modelo do veículo. Pergunte ao cliente os dados: marca, modelo e ano." }),
+                    });
+                    continue;
+                  }
+                }
+
+                // ── Camada 3: Guard appraisal — bloquear consultar_estoque indevido ──
+                const isEstoqueTool = /consultar_estoque|estoque/i.test(tc.function.name);
+                if (isEstoqueTool && appraisalCtx && isFipeAlsoCalled) {
+                  console.warn("[Chat-Local] consultar_estoque BLOQUEADO: contexto de appraisal detectado. args:", JSON.stringify(args));
+                  debugEntries.push({ type: "tool_call", tool: tc.function.name, args, tool_type: "function" });
+                  debugEntries.push({ type: "tool_result", preview: { error: "Bloqueado: contexto de avaliação do veículo do cliente" } });
+                  conversationalMessages.push({
+                    role: "tool",
+                    tool_call_id: tc.id,
+                    content: JSON.stringify({ error: "consultar_estoque bloqueado — o cliente está fornecendo dados do PRÓPRIO veículo para avaliação, não buscando estoque." }),
+                  });
+                  continue;
+                }
+
                 console.log("[Chat-Local] Executando tool:", tc.function.name, "| args:", JSON.stringify(args));
                 debugEntries.push({ type: "tool_call", tool: tc.function.name, args, tool_type: "function" });
                 const result = await executeTool(tool, args, agent_id);

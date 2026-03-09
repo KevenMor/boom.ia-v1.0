@@ -110,6 +110,7 @@ export default function EditAgent() {
   const [debounceMs, setDebounceMs] = useState(0);
   const [dispatcherPrompt, setDispatcherPrompt] = useState("");
   const [dispatcherProviderId, setDispatcherProviderId] = useState("");
+  const [dispatcherModel, setDispatcherModel] = useState("");
   const [chatwootUrl, setChatwootUrl] = useState("");
   const [chatwootApiToken, setChatwootApiToken] = useState("");
   const [chatwootAccountId, setChatwootAccountId] = useState("");
@@ -153,6 +154,7 @@ export default function EditAgent() {
       setDebounceMs(((cfg as any).message_debounce_ms ?? 3000) / 1000);
       setDispatcherPrompt((cfg as any).dispatcher_prompt ?? "");
       setDispatcherProviderId((cfg as any).dispatcher_provider_id ?? "");
+      setDispatcherModel((cfg as any).dispatcher_model ?? "");
       setChatwootUrl((cfg as any).chatwoot_url ?? "");
       setChatwootApiToken((cfg as any).chatwoot_api_token ?? "");
       setChatwootAccountId((cfg as any).chatwoot_account_id ?? "");
@@ -192,6 +194,7 @@ export default function EditAgent() {
           block_gap_ms: Math.round(blockGap * 1000), message_debounce_ms: Math.round(debounceMs * 1000),
           dispatcher_prompt: dispatcherPrompt || undefined,
           dispatcher_provider_id: dispatcherProviderId || undefined,
+          dispatcher_model: dispatcherModel || undefined,
           chatwoot_url: chatwootUrl || undefined, chatwoot_api_token: chatwootApiToken || undefined,
           chatwoot_account_id: chatwootAccountId || undefined,
           waha_url: wahaUrl || undefined, waha_api_key: wahaApiKey || undefined,
@@ -426,6 +429,30 @@ export default function EditAgent() {
                 ))}
               </SelectContent>
             </Select>
+
+            {dispatcherProviderId && (() => {
+              const dp = (providers ?? []).find((p) => p.id === dispatcherProviderId);
+              const dpModels = dp ? getModelsForProvider(dp.name) : [];
+              return dpModels.length > 0 ? (
+                <div className="mt-3">
+                  <Label className="text-xs text-muted-foreground">Modelo do Dispatcher</Label>
+                  <Select
+                    value={dispatcherModel || "_default"}
+                    onValueChange={(v) => setDispatcherModel(v === "_default" ? "" : v)}
+                  >
+                    <SelectTrigger className="h-11 rounded-lg bg-background border-border mt-1">
+                      <SelectValue placeholder="Padrão do provider" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_default">Padrão ({dp?.model_default || "gpt-4o-mini"})</SelectItem>
+                      {dpModels.map((m) => (
+                        <SelectItem key={m.value} value={m.value}>{m.label} — {m.description}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null;
+            })()}
           </div>
 
           {/* Dispatcher Prompt — managed in code per tenant */}
