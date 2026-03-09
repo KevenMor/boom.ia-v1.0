@@ -1,11 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { formatDateBR, buildFallbackAgendaNotification } from "./agendaNotification.js";
+import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification } from "./agendaNotification.js";
 
 describe("formatDateBR", () => {
-  it("formata ISO para DD/MM/AAAA HH:MM", () => {
+  it("formata ISO para dia_semana DD/MM/AAAA, HH:MM", () => {
     const result = formatDateBR("2026-03-09T15:00:00-03:00");
-    expect(result).toMatch(/\d{2}\/\d{2}\/\d{4}/);
-    expect(result).toMatch(/\d{2}:\d{2}/);
+    expect(result).toMatch(/\w+\.\s\d{2}\/\d{2}\/\d{4},\s\d{2}:\d{2}/);
+    expect(result).toContain("09/03/2026");
+    expect(result).toContain("15:00");
   });
 
   it("retorna string vazia para input vazio", () => {
@@ -14,61 +15,69 @@ describe("formatDateBR", () => {
 });
 
 describe("buildFallbackAgendaNotification", () => {
-  it("inclui nome, telefone, data BR e veiculo de interesse", () => {
+  it("formata notificacao multiline com nome, data BR, telefone e veiculo", () => {
     const result = buildFallbackAgendaNotification(
-      "Visita - Keven - Audi A3",
+      "Visita - Keven",
       "2026-03-09T15:00:00-03:00",
-      "11999999999",
-      "Audi A3 Sedan 2020"
+      "15998023871",
+      "Yamaha XTZ Lander 250 azul"
     );
 
+    expect(result).toContain("📅 Agendamento criado:");
     expect(result).toContain("Keven");
-    expect(result).toContain("11999999999");
-    expect(result).toContain("Audi A3 Sedan 2020");
-    expect(result).toMatch(/\d{2}\/\d{2}\/\d{4}/);
-    expect(result).toContain("Agendado automaticamente pela IA");
+    expect(result).toContain("09/03/2026");
+    expect(result).toContain("15:00");
+    expect(result).toContain("📞 +5515998023871");
+    expect(result).toContain("🚗 Interesse: Yamaha XTZ Lander 250 azul");
+    expect(result).toContain("✅ Agendado automaticamente pela IA");
+
+    const lines = result.split("\n");
+    expect(lines[0]).toBe("📅 Agendamento criado:");
+    expect(lines[1]).toBe("Keven");
+    expect(lines[lines.length - 1]).toBe("✅ Agendado automaticamente pela IA");
   });
 
-  it("extrai nome do titulo no formato Visita - Nome", () => {
+  it("formata telefone com +55", () => {
     const result = buildFallbackAgendaNotification(
-      "Visita - Maria Silva",
-      "2026-03-10T10:00:00-03:00"
+      "Visita - Maria",
+      "2026-03-10T10:00:00-03:00",
+      "5515999887766"
     );
-    expect(result).toContain("Maria Silva");
+    expect(result).toContain("📞 +5515999887766");
   });
 
-  it("usa titulo completo quando nao segue padrao Visita - Nome", () => {
-    const result = buildFallbackAgendaNotification(
-      "Reuniao geral",
-      "2026-03-11T14:00:00-03:00"
-    );
-    expect(result).toContain("Reuniao geral");
-  });
-
-  it("sempre inclui telefone e veiculo (nao informado quando vazio)", () => {
+  it("omite telefone e veiculo quando nao informados", () => {
     const result = buildFallbackAgendaNotification(
       "Visita - Joao",
       "2026-03-12T09:00:00-03:00"
     );
     expect(result).toContain("Joao");
-    expect(result).toContain("📞");
-    expect(result).toContain("🚗");
-    expect(result).toContain("(nao informado)");
+    expect(result).not.toContain("📞");
+    expect(result).not.toContain("🚗");
   });
 
-  it("extrai veiculo das mensagens quando nao informado no tool", () => {
-    const messages = [
-      { role: "user", content: "Quero ver um Corolla 2022" },
-      { role: "assistant", content: "Ok, vou agendar" },
-    ];
+  it("nao contem formato americano YYYY-MM-DD", () => {
     const result = buildFallbackAgendaNotification(
-      "Visita - Maria",
-      "2026-03-12T10:00:00-03:00",
-      undefined,
-      undefined,
-      messages
+      "Visita - Keven",
+      "2026-03-09T17:00:00-03:00",
+      "15998023871"
     );
-    expect(result).toContain("Corolla 2022");
-    expect(result).toMatch(/\d{2}\/\d{2}\/\d{4}/);
+    expect(result).not.toContain("2026-03-09");
+    expect(result).toContain("09/03/2026");
+  });
+});
+
+describe("buildCancelNotification", () => {
+  it("formata cancelamento multiline com nome e data BR", () => {
+    const result = buildCancelNotification(
+      "Visita - Keven",
+      "2026-03-09T15:00:00-03:00"
+    );
+
+    expect(result).toContain("❌ Agendamento cancelado:");
+    expect(result).toContain("Keven");
+    expect(result).toContain("09/03/2026");
+    expect(result).toContain("15:00");
+    expect(result).not.toContain("2026-03-09");
   });
 });

@@ -3,7 +3,7 @@ import { createNexusClient } from "../services/supabase.js";
 import { buildSystemPrompt, getDispatcherPrompt } from "../services/prompts/registry.js";
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
 import { filterCommandLinesFromStream } from "../utils/sanitize.js";
-import { formatDateBR, buildFallbackAgendaNotification } from "../utils/agendaNotification.js";
+import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification } from "../utils/agendaNotification.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 const MAX_TOOL_ITERATIONS = 5;
@@ -295,7 +295,7 @@ async function sendAgendaNotification(
       messages
     );
   } else {
-    message = `❌ Agendamento cancelado: ${title}${dataHoraBR ? ` — ${dataHoraBR}` : ""}`;
+    message = buildCancelNotification(title, startAt);
   }
 
   const supabase = createNexusClient();

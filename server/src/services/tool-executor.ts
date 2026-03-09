@@ -369,8 +369,6 @@ async function executeCalendarQuery(
       const date = (calendarArgs.date as string) || new Date().toISOString().slice(0, 10);
       const daysAhead = (calendarArgs.days_ahead as number) || 3;
       const slotDuration = (calendarArgs.slot_duration_minutes as number) || 60;
-      const businessStart = 8;
-      const businessEnd = 18;
 
       const { data: calendars, error: calErr } = await supabase
         .from("calendars")
@@ -406,7 +404,10 @@ async function executeCalendarQuery(
         const current = new Date(startDate);
         current.setDate(current.getDate() + d);
         const dayOfWeek = current.getDay();
-        if (dayOfWeek === 0 || dayOfWeek === 6) continue;
+        if (dayOfWeek === 0) continue; // domingo fechado
+
+        const businessStart = 9;
+        const businessEnd = dayOfWeek === 6 ? 13 : 18.5; // sab 9-13, seg-sex 9-18:30
 
         const dayStr = current.toISOString().slice(0, 10);
         const dayEvents = (events || []).filter(
