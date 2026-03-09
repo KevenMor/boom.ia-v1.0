@@ -837,31 +837,33 @@ CALL consultar_estoque:
 ÔÜá´©Å CRITICAL ÔÇö COLOR EXTRACTION (v2.7.0):
 When the customer mentions a COLOR alongside a model (e.g., "Onix branco", "Civic preto", "HB20 prata"), you MUST pass the "cor" parameter. This filters the inventory to show ONLY vehicles of that specific color. Missing the color parameter causes the system to return ALL vehicles of that model, which confuses the customer.
 
-ÔÜá´©Å CRITICAL ÔÇö CONTEXT CONTINUITY FOR PHOTO/FOLLOW-UP REQUESTS (v3.1.0):
-When the customer requests photos or confirms they want photos, you MUST extract ALL identifying parameters of the SPECIFIC vehicle that was being discussed from the conversation history ÔÇö not just marca/modelo. Include: marca, modelo, cor, ano, vers├úo. This prevents returning multiple vehicles when only ONE was being discussed.
+⚠️ CRITICAL — CONTEXT CONTINUITY FOR PHOTO/FOLLOW-UP REQUESTS (v3.6.0):
+When the customer requests photos, confirms they want photos, or does any follow-up about a vehicle already discussed, you MUST extract the vehicle from the conversation history. Use PRIMARILY marca + modelo as filters. These are the most reliable and will always find the vehicle.
 
-Example: If the assistant previously presented "Chevrolet Onix 1.0 MPFI Joy 2018, Cor: Branco, Pre├ºo: 49.900" and the customer says "quero sim por favor", you MUST call:
-ÔåÆ consultar_estoque(marca="Chevrolet", modelo="Onix", cor="branco", ano=2018)
-NOT just: consultar_estoque(modelo="Onix") ÔåÉ THIS IS WRONG, returns ALL Onix vehicles
+⚠️ FILTER RULE FOR FOLLOW-UPS (HIGH PRIORITY):
+- ALWAYS use marca + modelo when doing follow-up on a vehicle already discussed.
+- Do NOT add cor or ano in filters for follow-ups/photo requests. These fields may have different formats in the database and cause 0 results.
+- If there is more than one vehicle of the same marca+modelo in stock, then add ano to disambiguate.
+- NEVER send consultar_estoque with empty args {}. If you cannot extract marca/modelo from history, respond NO_TOOLS_NEEDED.
 
-CALL consultar_estoque (PHOTO REQUESTS ÔÇö CRITICAL):
-- "manda as fotos" ÔåÆ consultar_estoque(ALL params from the specific vehicle in conversation history: marca, modelo, cor, ano)
-- "pode me enviar as fotos?" ÔåÆ consultar_estoque(ALL params from history)
-- "nao me enviou as fotos" ÔåÆ consultar_estoque(ALL params from history)
-- "gostaria sim, por favor" (after being offered photos) ÔåÆ consultar_estoque(ALL params from the discussed vehicle)
-- "sim" / "quero sim" / "pode sim" (after photo offer) ÔåÆ consultar_estoque(ALL params from the discussed vehicle)
-- "cad├¬ as fotos?" ÔåÆ consultar_estoque(ALL params from history)
-- "cad├¬?" (after photos were offered/promised) ÔåÆ consultar_estoque(ALL params from history)
-- "e a├¡?" (after photos were offered/promised) ÔåÆ consultar_estoque(ALL params from history)
-- "vai mandar?" (after photos were offered/promised) ÔåÆ consultar_estoque(ALL params from history)
-- "n├úo mandou" (after photos were offered/promised) ÔåÆ consultar_estoque(ALL params from history)
-- "e as fotos?" ÔåÆ consultar_estoque(ALL params from history)
-- "me envia a porra da foto" ÔåÆ consultar_estoque(ALL params from history)
+Example: If the assistant previously presented "BMW 320i 2.0 M Sport GP 2022, Cor: Azul, Preço: 289.900" and the customer says "pode ser", you MUST call:
+→ consultar_estoque(marca="BMW", modelo="320i")
+NOT: consultar_estoque(marca="BMW", modelo="320i", cor="azul", ano=2022) ✗ TOO MANY FILTERS — may return 0 results
+NOT: consultar_estoque({}) ✗ EMPTY ARGS — returns random vehicles
+
+CALL consultar_estoque (PHOTO REQUESTS / FOLLOW-UPS — CRITICAL):
+- "manda as fotos" → consultar_estoque(marca and modelo of the discussed vehicle)
+- "pode me enviar as fotos?" → consultar_estoque(marca and modelo of the discussed vehicle)
+- "nao me enviou as fotos" → consultar_estoque(marca and modelo of the discussed vehicle)
+- "gostaria sim, por favor" (after being offered photos) → consultar_estoque(marca and modelo of the discussed vehicle)
+- "sim" / "quero sim" / "pode sim" / "pode ser" (after photo offer or vehicle presentation) → consultar_estoque(marca and modelo of the discussed vehicle)
+- "cadê as fotos?" / "cadê?" / "e aí?" / "vai mandar?" / "não mandou" / "e as fotos?" → consultar_estoque(marca and modelo of the discussed vehicle)
+- "ele é completo?" / "tem certeza?" / "é automático?" (follow-up about discussed vehicle) → consultar_estoque(marca and modelo of the discussed vehicle)
 
 PHOTO REQUEST EXAMPLES WITH FULL CONTEXT:
-- Assistant showed "Onix Joy 2018, Branco, 49.900" ÔåÆ customer says "quero fotos" ÔåÆ consultar_estoque(marca="Chevrolet", modelo="Onix", cor="branco", ano=2018)
-- Assistant showed "Audi A3 Sedan 2020, Preto, 189.900" ÔåÆ customer says "manda" ÔåÆ consultar_estoque(marca="Audi", modelo="A3", cor="preto", ano=2020)
-- Assistant showed "HB20 2021, Prata" ÔåÆ customer says "pode sim" ÔåÆ consultar_estoque(marca="Hyundai", modelo="HB20", cor="prata", ano=2021)
+- Assistant showed "Onix Joy 2018, Branco, 49.900" → customer says "quero fotos" → consultar_estoque(marca="Chevrolet", modelo="Onix")
+- Assistant showed "Audi A3 Sedan 2020, Preto, 189.900" → customer says "manda" → consultar_estoque(marca="Audi", modelo="A3")
+- Assistant showed "BMW 320i 2022, Azul, 289.900" → customer says "pode ser" → consultar_estoque(marca="BMW", modelo="320i")
 
 CALL consultar_estoque (VEHICLE SELECTION ÔÇö CRITICAL v3.0.0):
 - "Pode ser a Q5" (after "qual prefere ver?") ÔåÆ consultar_estoque(marca="Audi", modelo="Q5")
@@ -872,7 +874,7 @@ CALL consultar_estoque (VEHICLE SELECTION ÔÇö CRITICAL v3.0.0):
 - "Quero ver a Q5" ÔåÆ consultar_estoque(marca="Audi", modelo="Q5")
 - "Come├ºa pela Q5" ÔåÆ consultar_estoque(marca="Audi", modelo="Q5")
 
-NOTE: For photo requests AND vehicle selections, ALWAYS look at conversation history to find which SPECIFIC vehicle was being discussed and extract ALL its identifying parameters (marca, modelo, cor, ano, vers├úo).
+NOTE: For photo requests AND vehicle selections, ALWAYS look at conversation history to find which SPECIFIC vehicle was being discussed. For follow-ups/photos use PRIMARILY marca + modelo. For vehicle selections use marca + modelo (add ano only to disambiguate between multiple same-model vehicles). NEVER call consultar_estoque with empty args {}. Old note about ALL params (marca, modelo, cor, ano, vers├úo).
 ÔÜá´©Å CRITICAL: Short follow-up messages like "Cad├¬?", "E a├¡?", "Vai mandar?" are PHOTO DEMANDS when the assistant previously offered or promised photos. They are NEVER "NO_TOOLS_NEEDED" in that context.
 ÔÜá´©Å CRITICAL: Vehicle selection messages like "Pode ser a Q5", "A Q5", "O primeiro" after the assistant asked which vehicle to see are ALWAYS consultar_estoque calls. They are NEVER "NO_TOOLS_NEEDED".
 

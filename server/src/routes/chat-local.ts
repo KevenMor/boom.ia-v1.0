@@ -653,26 +653,8 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             entityHint += `\n\n[CONTEXTO DE FLUXO] A última mensagem do assistente pedia dados do veículo do CLIENTE (marca, modelo, ano, km). Isso é APPRAISAL (intent A). NÃO chame consultar_fipe — avaliação é feita presencialmente pelo time comercial. Se o cliente já forneceu marca+modelo+ano, chame consultar_agenda com action "check_availability" e date "${todayISO}" para oferecer horários reais ao sugerir visita na loja. NÃO chame consultar_estoque.`;
           }
 
-          let vehicleContextHint = "";
-          if (!entities.marca && !entities.modelo) {
-            const assistantMessages = messages.filter((m) => m.role === "assistant" && (m.content?.length ?? 0) > 30);
-            for (let i = assistantMessages.length - 1; i >= 0 && i >= assistantMessages.length - 3; i--) {
-              const historyEntities = extractVehicleEntities(assistantMessages[i].content);
-              if (historyEntities.marca || historyEntities.modelo) {
-                const parts: string[] = [];
-                if (historyEntities.marca) parts.push(`marca="${historyEntities.marca}"`);
-                if (historyEntities.modelo) parts.push(`modelo="${historyEntities.modelo}"`);
-                if (historyEntities.ano) parts.push(`ano=${historyEntities.ano}`);
-                if (parts.length > 0) {
-                  vehicleContextHint = `\n\n[CONTEXTO DE VEÍCULO] O último veículo discutido na conversa é: ${parts.join(", ")}. Se for necessário chamar consultar_estoque, use OBRIGATORIAMENTE esses filtros. NÃO envie consultar_estoque com args vazios {}.`;
-                }
-                break;
-              }
-            }
-          }
-
           const dispatcherMessages = toOpenAIMessages(
-            getDispatcherPrompt(tenantSlug) + dispatcherDateContext + entityHint + schedulingHint + vehicleContextHint,
+            getDispatcherPrompt(tenantSlug) + dispatcherDateContext + entityHint + schedulingHint,
             messages
           );
 
@@ -847,6 +829,19 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                     role: "tool",
                     tool_call_id: tc.id,
                     content: JSON.stringify({ error: "consultar_fipe não é mais utilizado. A avaliação do veículo do cliente é feita presencialmente pelo time comercial. Colete os dados do veículo (marca, modelo, ano, km, placa) e conduza para agendamento de visita." }),
+                  });
+                  continue;
+                }
+
+                const isEstoqueEmpty = tc.function.name === "consultar_estoque" && Object.keys(args).length === 0;
+                if (isEstoqueEmpty) {
+                  console.warn("[Chat-Local] consultar_estoque BLOQUEADO: args vazios {}. Dispatcher deve extrair marca/modelo do histórico.");
+                  debugEntries.push({ type: "tool_call", tool: tc.function.name, args, tool_type: "function" });
+                  debugEntries.push({ type: "tool_result", preview: { error: "consultar_estoque rejeitado — args vazios" } });
+                  conversationalMessages.push({
+                    role: "tool",
+                    tool_call_id: tc.id,
+                    content: JSON.stringify({ error: "consultar_estoque chamado com args vazios {}. Você DEVE especificar pelo menos marca ou modelo. Analise o histórico da conversa para identificar o veículo discutido." }),
                   });
                   continue;
                 }
@@ -1296,6 +1291,17 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             args = JSON.parse(tc.function.arguments || "{}");
           } catch {
             args = {};
+          }
+
+          const isEstoqueEmptySP = tc.function.name === "consultar_estoque" && Object.keys(args).length === 0;
+          if (isEstoqueEmptySP) {
+            console.warn("[Chat-Local] consultar_estoque BLOQUEADO (single-provider): args vazios {}.");
+            llmMessages.push({
+              role: "tool",
+              tool_call_id: tc.id,
+              content: JSON.stringify({ error: "consultar_estoque chamado com args vazios {}. Você DEVE especificar pelo menos marca ou modelo. Analise o histórico da conversa para identificar o veículo discutido." }),
+            });
+            continue;
           }
 
           console.log("[Chat-Local] Executando tool (single-provider):", tc.function.name, "| args:", JSON.stringify(args));
