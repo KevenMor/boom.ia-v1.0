@@ -3,6 +3,7 @@ import { createNexusClient } from "../services/supabase.js";
 import { buildSystemPrompt, getDispatcherPrompt } from "../services/prompts/registry.js";
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
 import { filterCommandLinesFromStream } from "../utils/sanitize.js";
+import { sendChatwootPrivateNote } from "../services/delivery.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 const MAX_TOOL_ITERATIONS = 5;
@@ -108,6 +109,33 @@ function sanitizeFunctionName(name: string, _baseUrl: string): string {
 }
 
 const DEFAULT_PARAMS_SCHEMA = { type: "object", properties: {}, required: [] } as const;
+
+/**
+ * Se a tool foi consultar_agenda com action "created", envia nota privada no Chatwoot (só equipe vê).
+ * Não bloqueia o stream; falhas são apenas logadas.
+ */
+function sendAgendamentoCreatedNotification(
+  agent: { config?: Record<string, unknown> },
+  conversationId: string | null,
+  toolResult: unknown
+): void {
+  if (!conversationId || !toolResult || typeof toolResult !== "object") return;
+  const res = toolResult as { action?: string; event?: { title?: string; start_at?: string } };
+  if (res.action !== "created" || !res.event) return;
+  const cfg = (agent.config || {}) as Record<string, string>;
+  const cwUrl = cfg.chatwoot_url;
+  const cwToken = cfg.chatwoot_api_token;
+  const cwAccountId = cfg.chatwoot_account_id;
+  if (!cwUrl || !cwToken || !cwAccountId) return;
+  const title = res.event.title || "Agendamento";
+  const startAt = res.event.start_at
+    ? new Date(res.event.start_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
+    : "";
+  const content = `Agendamento criado: ${title}${startAt ? ` — ${startAt}` : ""}`;
+  sendChatwootPrivateNote(cwUrl, cwToken, cwAccountId, conversationId, content).catch((e) =>
+    console.warn("[Chat-Local] Falha ao enviar notificação de agendamento:", e)
+  );
+}
 
 function normalizeParametersSchema(params: unknown): Record<string, unknown> {
   if (!params || typeof params !== "object") return { ...DEFAULT_PARAMS_SCHEMA };
@@ -463,6 +491,9 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
                   tool_call_id: tc.id,
                   content: JSON.stringify(result.success ? result.result : { error: result.error }),
                 });
+                if (tc.function.name === "consultar_agenda" && result.success && result.result) {
+                  sendAgendamentoCreatedNotification(agent, responseConvId, result.result);
+                }
               }
             }
             sendSse({ debug: debugEntries });
@@ -816,6 +847,9 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
             tool_call_id: tc.id,
             content: JSON.stringify(result.success ? result.result : { error: result.error }),
           });
+          if (tc.function.name === "consultar_agenda" && result.success && result.result) {
+            sendAgendamentoCreatedNotification(agent, responseConvId, result.result);
+          }
         }
       }
 

@@ -157,6 +157,36 @@ async function setChatwootTyping(
   }
 }
 
+/**
+ * Envia uma nota privada no Chatwoot (só a equipe vê).
+ * Usada para notificações automáticas (ex.: agendamento criado).
+ */
+async function sendChatwootPrivateNote(
+  chatwootUrl: string,
+  apiToken: string,
+  accountId: string | number,
+  conversationId: string | number,
+  content: string
+): Promise<boolean> {
+  try {
+    const baseUrl = chatwootUrl.replace(/\/+$/, "");
+    const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}/messages`;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", api_access_token: apiToken },
+      body: JSON.stringify({ content, message_type: "outgoing", private: true }),
+    });
+    if (!resp.ok) {
+      console.error("[Deliver] Private note error", resp.status, await resp.text());
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error("[Deliver] Private note exception:", e);
+    return false;
+  }
+}
+
 function applyJitter(ms: number): number {
   return Math.round(ms * (0.7 + Math.random() * 0.6));
 }
@@ -294,4 +324,4 @@ async function replyToChatwoot(
   }
 }
 
-export { extractImagesFromMarkdown, sendChatwootTextMessage, sendChatwootImageMessage, sendChatwootMediaMessage, getHumanizationConfig, replyToChatwoot, applyJitter };
+export { extractImagesFromMarkdown, sendChatwootTextMessage, sendChatwootImageMessage, sendChatwootMediaMessage, sendChatwootPrivateNote, getHumanizationConfig, replyToChatwoot, applyJitter };

@@ -336,13 +336,31 @@ async function executeCalendarQuery(
     }
 
     if (action === "criar" || action === "create") {
-      const title = calendarArgs.title as string;
-      const startAt = calendarArgs.start_at as string;
-      const durationMin = (calendarArgs.duration_minutes as number) || 60;
+      const title = String(calendarArgs.title || calendarArgs.titulo || "").trim();
+      const startAtRaw = calendarArgs.start_at ?? calendarArgs.start ?? calendarArgs.date_time;
+      const startAt = typeof startAtRaw === "string" ? startAtRaw.trim() : "";
 
-      if (!title || !startAt) {
-        return { success: false, result: null, error: "Missing title or start_at" };
+      if (!title) {
+        console.warn("[Tool] consultar_agenda criar: falta title/titulo. Recebido:", Object.keys(calendarArgs).filter((k) => k !== "tenant_id").join(", "));
+        return { success: false, result: null, error: "Falta o título do agendamento (title ou titulo). Ex.: title=\"Visita - Nome do cliente\"." };
       }
+      if (!startAt) {
+        console.warn("[Tool] consultar_agenda criar: falta start_at. Recebido:", Object.keys(calendarArgs).filter((k) => k !== "tenant_id").join(", "));
+        return { success: false, result: null, error: "Falta data/hora de início (start_at). Use formato ISO: YYYY-MM-DDTHH:mm:ss ou YYYY-MM-DDTHH:mm:ss-03:00. Ex.: start_at=\"2026-03-09T13:00:00-03:00\"." };
+      }
+
+      let startDt: Date;
+      const normalized = startAt.includes("T") ? startAt : `${startAt}T09:00:00`;
+      startDt = new Date(normalized);
+      if (Number.isNaN(startDt.getTime())) {
+        return { success: false, result: null, error: `Data/hora inválida: "${startAt.slice(0, 30)}...". Use formato: YYYY-MM-DDTHH:mm:ss ou YYYY-MM-DDTHH:mm:ss-03:00.` };
+      }
+      const now = new Date();
+      if (startDt.getTime() < now.getTime() - 60000) {
+        return { success: false, result: null, error: `Data/hora no passado (${startDt.toISOString().slice(0, 16)}). Use uma data e horário futuros no formato YYYY-MM-DDTHH:mm:ss-03:00.` };
+      }
+
+      const durationMin = (calendarArgs.duration_minutes as number) || 60;
 
       const { data: cals } = await supabase
         .from("calendars")
@@ -355,7 +373,6 @@ async function executeCalendarQuery(
         return { success: false, result: null, error: "No calendar found" };
       }
 
-      const startDt = new Date(startAt);
       const endDt = new Date(startDt.getTime() + durationMin * 60000);
 
       const { data: created, error: insErr } = await supabase
