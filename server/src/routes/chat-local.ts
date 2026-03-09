@@ -653,8 +653,26 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             entityHint += `\n\n[CONTEXTO DE FLUXO] A última mensagem do assistente pedia dados do veículo do CLIENTE (marca, modelo, ano, km). Isso é APPRAISAL (intent A). NÃO chame consultar_fipe — avaliação é feita presencialmente pelo time comercial. Se o cliente já forneceu marca+modelo+ano, chame consultar_agenda com action "check_availability" e date "${todayISO}" para oferecer horários reais ao sugerir visita na loja. NÃO chame consultar_estoque.`;
           }
 
+          let vehicleContextHint = "";
+          if (!entities.marca && !entities.modelo) {
+            const assistantMessages = messages.filter((m) => m.role === "assistant" && (m.content?.length ?? 0) > 30);
+            for (let i = assistantMessages.length - 1; i >= 0 && i >= assistantMessages.length - 3; i--) {
+              const historyEntities = extractVehicleEntities(assistantMessages[i].content);
+              if (historyEntities.marca || historyEntities.modelo) {
+                const parts: string[] = [];
+                if (historyEntities.marca) parts.push(`marca="${historyEntities.marca}"`);
+                if (historyEntities.modelo) parts.push(`modelo="${historyEntities.modelo}"`);
+                if (historyEntities.ano) parts.push(`ano=${historyEntities.ano}`);
+                if (parts.length > 0) {
+                  vehicleContextHint = `\n\n[CONTEXTO DE VEÍCULO] O último veículo discutido na conversa é: ${parts.join(", ")}. Se for necessário chamar consultar_estoque, use OBRIGATORIAMENTE esses filtros. NÃO envie consultar_estoque com args vazios {}.`;
+                }
+                break;
+              }
+            }
+          }
+
           const dispatcherMessages = toOpenAIMessages(
-            getDispatcherPrompt(tenantSlug) + dispatcherDateContext + entityHint + schedulingHint,
+            getDispatcherPrompt(tenantSlug) + dispatcherDateContext + entityHint + schedulingHint + vehicleContextHint,
             messages
           );
 
