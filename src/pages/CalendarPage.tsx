@@ -141,6 +141,11 @@ export default function CalendarPage() {
     });
   }, [agents]);
 
+  // Reset sendReminder quando não há agentes configurados (evita estado inconsistente)
+  useEffect(() => {
+    if (reminderAgents.length === 0 && sendReminder) setSendReminder(false);
+  }, [reminderAgents.length, sendReminder]);
+
   // New calendar dialog
   const [newCalDialogOpen, setNewCalDialogOpen] = useState(false);
   const [newCalName, setNewCalName] = useState("");
@@ -600,57 +605,59 @@ export default function CalendarPage() {
               </Select>
             </div>
 
-            {/* Reminder section — só aparece se houver agente com reminder_enabled */}
-            {reminderAgents.length > 0 ? (
-              <div className="space-y-3 rounded-lg border border-border p-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Bell className="h-4 w-4 text-primary" />
-                    <Label className="text-sm font-medium">Enviar lembrete</Label>
-                  </div>
-                  <Switch checked={sendReminder} onCheckedChange={setSendReminder} />
+            {/* Reminder section — sempre visível; desabilitada quando não há agente com reminder_enabled */}
+            <div className="space-y-3 rounded-lg border border-border p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Bell className="h-4 w-4 text-primary" />
+                  <Label className="text-sm font-medium">Enviar lembrete</Label>
                 </div>
-
-                {sendReminder && (
-                  <div className="space-y-3 pt-1">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">WhatsApp do cliente</Label>
-                      <div className="flex items-center gap-2">
-                        <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <Input
-                          value={reminderPhone}
-                          onChange={(e) => setReminderPhone(e.target.value)}
-                          placeholder="11999999999"
-                          className="h-9 font-mono text-sm"
-                        />
-                      </div>
-                    </div>
-
-                    {reminderAgents.length > 1 && (
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground">Agente</Label>
-                        <Select value={reminderAgentId} onValueChange={setReminderAgentId}>
-                          <SelectTrigger className="h-9"><SelectValue placeholder="Selecione o agente" /></SelectTrigger>
-                          <SelectContent>
-                            {reminderAgents.map((a) => (
-                              <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-
-                    <p className="text-xs text-muted-foreground">
-                      O lembrete será enviado via WAHA com a antecedência configurada no agente.
-                    </p>
-                  </div>
-                )}
+                <Switch
+                  checked={sendReminder}
+                  onCheckedChange={setSendReminder}
+                  disabled={reminderAgents.length === 0}
+                />
               </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Para enviar lembretes: Agentes → Editar agente → Lembrete de Agendamento → ative &quot;Enviar lembrete&quot;. O agente deve estar ativo ou em teste. Verifique se o tenant selecionado está correto.
-              </p>
-            )}
+
+              {reminderAgents.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Para enviar lembretes: Agentes → Editar agente → Lembrete de Agendamento → ative &quot;Enviar lembrete&quot;. O agente deve estar ativo ou em teste. Verifique se o tenant selecionado está correto.
+                </p>
+              ) : sendReminder ? (
+                <div className="space-y-3 pt-1">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">WhatsApp do cliente</Label>
+                    <div className="flex items-center gap-2">
+                      <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <Input
+                        value={reminderPhone}
+                        onChange={(e) => setReminderPhone(e.target.value)}
+                        placeholder="11999999999"
+                        className="h-9 font-mono text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {reminderAgents.length > 1 && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Agente</Label>
+                      <Select value={reminderAgentId} onValueChange={setReminderAgentId}>
+                        <SelectTrigger className="h-9"><SelectValue placeholder="Selecione o agente" /></SelectTrigger>
+                        <SelectContent>
+                          {reminderAgents.map((a) => (
+                            <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-muted-foreground">
+                    O lembrete será enviado via WAHA com a antecedência configurada no agente.
+                  </p>
+                </div>
+              ) : null}
+            </div>
           </div>
           <DialogFooter className="gap-2">
             {editingEventId && (
