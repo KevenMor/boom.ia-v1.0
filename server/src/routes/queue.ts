@@ -503,6 +503,48 @@ export async function queueRoutes(fastify: FastifyInstance) {
           continue;
         }
 
+        // --- CENÁRIO 2 e 3: Verificar assignee atual no Chatwoot ---
+        if (item.chatwoot_conversation_id && cfg.chatwoot_url && cfg.chatwoot_api_token && cfg.chatwoot_account_id) {
+          try {
+            const chatwootBase = cfg.chatwoot_url.replace(/\/+$/, "");
+            const convUrl = `${chatwootBase}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${item.chatwoot_conversation_id}`;
+            const convResp = await fetch(convUrl, {
+              headers: { api_access_token: cfg.chatwoot_api_token },
+              signal: AbortSignal.timeout(10_000),
+            });
+
+            if (convResp.ok) {
+              const convData = await convResp.json() as { meta?: { assignee?: { id?: number } } };
+              const currentAssigneeId = convData?.meta?.assignee?.id ?? null;
+
+              // CENÁRIO 3: Agente em teste — só enviar follow-up se assignee = test_assignee_id
+              if (agent.status === "test") {
+                const testAssigneeId = cfg.test_assignee_id != null ? Number(cfg.test_assignee_id) : null;
+                if (testAssigneeId == null || currentAssigneeId !== testAssigneeId) {
+                  console.log(`[FollowUp] Test mode: skipping ${item.id} (assignee ${currentAssigneeId} != test ${testAssigneeId})`);
+                  await supabase
+                    .from("follow_up_queue")
+                    .update({ status: "cancelled", updated_at: new Date().toISOString() })
+                    .eq("id", item.id);
+                  continue;
+                }
+              }
+
+              // CENÁRIO 2: Se conversa tem assignee humano (não é bot), cancelar follow-up
+              if (currentAssigneeId && agent.status === "active") {
+                console.log(`[FollowUp] Human assigned (${currentAssigneeId}): cancelling ${item.id}`);
+                await supabase
+                  .from("follow_up_queue")
+                  .update({ status: "cancelled", updated_at: new Date().toISOString() })
+                  .eq("id", item.id);
+                continue;
+              }
+            }
+          } catch (e: any) {
+            console.warn("[FollowUp] Chatwoot assignee check failed:", e.message);
+          }
+        }
+
         const { data: tenant } = await supabase
           .from("tenants")
           .select("slug")
@@ -527,6 +569,19 @@ export async function queueRoutes(fastify: FastifyInstance) {
           } catch (e: any) {
             console.warn("[FollowUp] Could not load history:", e.message);
           }
+        }
+
+        // --- CENÁRIO 1: Verificar se houve agendamento confirmado ---
+        const hasConfirmedSchedule = conversationMessages.some((m) =>
+          m.role === "assistant" && /confirmad[oa]|agendad[oa]|marcad[oa]|appointment.*confirm/i.test(m.content)
+        );
+        if (hasConfirmedSchedule) {
+          console.log(`[FollowUp] Appointment confirmed: cancelling ${item.id}`);
+          await supabase
+            .from("follow_up_queue")
+            .update({ status: "cancelled", updated_at: new Date().toISOString() })
+            .eq("id", item.id);
+          continue;
         }
 
         const lastMsg = conversationMessages[conversationMessages.length - 1];
