@@ -40,15 +40,17 @@ async function getProviderApiKey(
           console.log("[Chat-Local] Chave descriptografada com sucesso, length:", apiKey.length);
         } catch (err) {
           console.error("[Chat-Local] Falha ao descriptografar chave do provider:", providerId, err);
-          apiKey = openaiKey || geminiKey || "";
+          const isGemini = /generativelanguage|googleapis/i.test(provider.base_url || "");
+          apiKey = isGemini ? (geminiKey || openaiKey || "") : (openaiKey || geminiKey || "");
           if (apiKey) {
-            console.log("[Chat-Local] Usando fallback de env var, length:", apiKey.length);
+            console.log("[Chat-Local] Usando fallback de env var, length:", apiKey.length, "isGemini:", isGemini);
           }
         }
       } else {
-        apiKey = openaiKey || geminiKey || "";
+        const isGemini = /generativelanguage|googleapis/i.test(provider.base_url || "");
+        apiKey = isGemini ? (geminiKey || openaiKey || "") : (openaiKey || geminiKey || "");
         if (apiKey) {
-          console.log("[Chat-Local] Usando chave de env var (sem encryption), length:", apiKey.length);
+          console.log("[Chat-Local] Usando chave de env var (sem encryption), length:", apiKey.length, "isGemini:", isGemini);
         }
       }
       const baseUrl = (provider.base_url || "https://api.openai.com/v1").replace(/\/+$/, "");
