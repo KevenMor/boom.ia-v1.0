@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, useCallback } from "react";
+import { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -86,7 +86,7 @@ export default function CalendarPage() {
   }, [calendars, selectedCalendarId]);
 
   const { data: dbEvents, isLoading: eventsLoading } = useCalendarEvents(selectedTenantId || undefined, activeCalendarIds);
-  const { data: agents } = useAgents(selectedTenantId || undefined);
+  const { data: agents, refetch: refetchAgents } = useAgents(selectedTenantId || undefined);
   const createEvent = useCreateCalendarEvent();
   const updateEvent = useUpdateCalendarEvent();
   const deleteEvent = useDeleteCalendarEvent();
@@ -126,12 +126,18 @@ export default function CalendarPage() {
   const [reminderPhone, setReminderPhone] = useState("");
   const [reminderAgentId, setReminderAgentId] = useState("");
 
-  // Agents with reminders enabled
+  // Refetch agents ao abrir o modal (para pegar config atualizado apos editar agente)
+  useEffect(() => {
+    if (dialogOpen) refetchAgents();
+  }, [dialogOpen, refetchAgents]);
+
+  // Agents with reminders enabled (active ou test, com reminder_enabled no config)
   const reminderAgents = useMemo(() => {
     if (!agents) return [];
     return agents.filter(a => {
-      const cfg = (a.config || {}) as Record<string, any>;
-      return a.status === "active" && cfg.reminder_enabled;
+      const cfg = (a.config || {}) as Record<string, unknown>;
+      const enabled = cfg.reminder_enabled === true || cfg.reminder_enabled === "true";
+      return (a.status === "active" || a.status === "test") && enabled;
     });
   }, [agents]);
 
@@ -594,8 +600,8 @@ export default function CalendarPage() {
               </Select>
             </div>
 
-            {/* Reminder section */}
-            {reminderAgents.length > 0 && (
+            {/* Reminder section — só aparece se houver agente com reminder_enabled */}
+            {reminderAgents.length > 0 ? (
               <div className="space-y-3 rounded-lg border border-border p-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -640,6 +646,10 @@ export default function CalendarPage() {
                   </div>
                 )}
               </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Para enviar lembretes: Agentes → Editar agente → Lembrete de Agendamento → ative &quot;Enviar lembrete&quot;. O agente deve estar ativo ou em teste. Verifique se o tenant selecionado está correto.
+              </p>
             )}
           </div>
           <DialogFooter className="gap-2">
