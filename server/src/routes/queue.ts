@@ -52,8 +52,7 @@ async function callChatAgent(
   messages: { role: string; content: string }[],
   convId: string | null,
   attachments?: any[],
-  externalUserId?: string | null,
-  chatwootConversationId?: number | null
+  externalUserId?: string | null
 ): Promise<{ error: string | null; fullContent: string; responseParts: string[]; responseConvId: string | null }> {
   const chatUrl = `${baseUrl}/api/chat-local`;
   const MAX_RETRIES = 3;
@@ -71,7 +70,6 @@ async function callChatAgent(
           agent_id: agentId,
           messages,
           conversation_id: convId,
-          chatwoot_conversation_id: chatwootConversationId ?? undefined,
           attachments,
           external_user_id: externalUserId,
         }),
@@ -375,8 +373,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
         messages,
         convId ?? null,
         attachments,
-        external_user_id ?? null,
-        chatwoot_conversation_id ?? null
+        external_user_id ?? null
       );
 
       if (result.error) {
