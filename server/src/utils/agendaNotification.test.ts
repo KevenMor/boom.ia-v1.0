@@ -45,13 +45,30 @@ describe("buildFallbackAgendaNotification", () => {
     expect(result).toContain("Reuniao geral");
   });
 
-  it("funciona sem telefone e veiculo (opcionais)", () => {
+  it("sempre inclui telefone e veiculo (nao informado quando vazio)", () => {
     const result = buildFallbackAgendaNotification(
       "Visita - Joao",
       "2026-03-12T09:00:00-03:00"
     );
     expect(result).toContain("Joao");
-    expect(result).not.toContain("📞");
-    expect(result).not.toContain("🚗");
+    expect(result).toContain("📞");
+    expect(result).toContain("🚗");
+    expect(result).toContain("(nao informado)");
+  });
+
+  it("extrai veiculo das mensagens quando nao informado no tool", () => {
+    const messages = [
+      { role: "user", content: "Quero ver um Corolla 2022" },
+      { role: "assistant", content: "Ok, vou agendar" },
+    ];
+    const result = buildFallbackAgendaNotification(
+      "Visita - Maria",
+      "2026-03-12T10:00:00-03:00",
+      undefined,
+      undefined,
+      messages
+    );
+    expect(result).toContain("Corolla 2022");
+    expect(result).toMatch(/\d{2}\/\d{2}\/\d{4}/);
   });
 });

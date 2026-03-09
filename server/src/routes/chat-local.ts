@@ -255,12 +255,14 @@ Gere a notificacao organizada.`;
 /**
  * Dispara notificação automática via tool enviar_notificacao após criar/cancelar agendamento.
  * Busca a tool send_notification vinculada ao agente e usa a config dela (conversation_id do grupo).
+ * Sempre usa fallback com formato BR (DD/MM/AAAA HH:MM), telefone e veículo.
  */
 async function sendAgendaNotification(
   agentId: string,
   agent: { config?: Record<string, unknown> },
   toolResult: unknown,
-  messages?: Array<{ role: string; content: string }>
+  messages?: Array<{ role: string; content: string }>,
+  externalUserId?: string | null
 ): Promise<void> {
   if (!toolResult || typeof toolResult !== "object") return;
   const res = toolResult as {
@@ -281,22 +283,14 @@ async function sendAgendaNotification(
 
   let message: string;
   if (isCreated) {
-    const llmText =
-      messages && messages.length > 0
-        ? await buildNotificationWithLLM(
-            agent as { provider_id?: string | null; model?: string | null },
-            {
-              title,
-              start_at: startAt,
-              telefone_cliente: res.telefone_cliente,
-              veiculo_interesse: res.veiculo_interesse,
-            },
-            messages
-          )
-        : null;
-    message =
-      llmText ||
-      buildFallbackAgendaNotification(title, startAt, res.telefone_cliente, res.veiculo_interesse);
+    const telefone = res.telefone_cliente?.trim() || externalUserId?.trim() || undefined;
+    message = buildFallbackAgendaNotification(
+      title,
+      startAt,
+      telefone,
+      res.veiculo_interesse,
+      messages
+    );
   } else {
     message = `❌ Agendamento cancelado: ${title}${dataHoraBR ? ` — ${dataHoraBR}` : ""}`;
   }
@@ -411,7 +405,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const { agent_id, messages, conversation_id } = req.body;
+      const { agent_id, messages, conversation_id, external_user_id } = req.body;
 
       if (!agent_id || !messages || !Array.isArray(messages)) {
         return reply.status(400).send({ error: "agent_id and messages required" });
@@ -784,7 +778,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   content: JSON.stringify(result.success ? result.result : { error: result.error }),
                 });
                 if (tc.function.name === "consultar_agenda" && result.success && result.result) {
-                  sendAgendaNotification(agent_id, agent, result.result, messages).catch(() => {});
+                  sendAgendaNotification(agent_id, agent, result.result, messages, external_user_id).catch(() => {});
                 }
               }
             }
@@ -1221,7 +1215,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             content: JSON.stringify(result.success ? result.result : { error: result.error }),
           });
           if (tc.function.name === "consultar_agenda" && result.success && result.result) {
-            sendAgendaNotification(agent_id, agent, result.result, messages).catch(() => {});
+            sendAgendaNotification(agent_id, agent, result.result, messages, external_user_id).catch(() => {});
           }
         }
       }
