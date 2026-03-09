@@ -56,6 +56,12 @@ async function build() {
   fastify.register(inventoryRoutes, { prefix: "/api" });
   fastify.register(contactsRoutes, { prefix: "/api" });
 
+  // #region agent log
+  fastify.addHook("onRequest", async (request) => {
+    console.log("[DBG-7948bd] REQ:", JSON.stringify({ method: request.method, url: request.url, ip: request.ip }));
+  });
+  // #endregion
+
   fastify.get("/health", async () => ({ ok: true, timestamp: new Date().toISOString() }));
 
   // Proxy Supabase (auth, rest) para evitar CORS: frontend chama /api/supabase-proxy/* -> NEXUS_DB_URL/*
@@ -174,26 +180,35 @@ async function startupDiagnostics() {
     console.log("[DBG-7948bd] SUPABASE_CONN_FAIL:", JSON.stringify({ error: e?.message, code: e?.cause?.code }));
   }
 
-  // Probe internal Docker hostnames to find Supabase Kong
-  const candidates = [
-    "http://boomsolution-supabase-kong:8000",
-    "http://boomsolution_supabase_kong:8000",
-    "http://boomsolution-supabase:8000",
-    "http://boomsolution_supabase:8000",
-    "http://boomsolution-supabase-kong:80",
-    "http://kong:8000",
-  ];
-  const apikey = process.env.NEXUS_DB_ANON_KEY || process.env.NEXUS_SERVICE_ROLE_KEY || "";
-  for (const base of candidates) {
-    try {
-      const res = await fetch(`${base}/rest/v1/`, {
-        headers: { apikey, Authorization: `Bearer ${apikey}` },
-        signal: AbortSignal.timeout(3000),
-      });
-      console.log("[DBG-7948bd] INTERNAL_PROBE_OK:", JSON.stringify({ base, status: res.status }));
-    } catch (e: any) {
-      console.log("[DBG-7948bd] INTERNAL_PROBE_FAIL:", JSON.stringify({ base, error: e?.message?.slice(0, 80) }));
+  // Discover own hostname on Docker network
+  try {
+    const os = await import("os");
+    const ifaces = os.networkInterfaces();
+    const myIps = Object.values(ifaces).flat().filter((i: any) => i && !i.internal && i.family === "IPv4").map((i: any) => i.address);
+    console.log("[DBG-7948bd] MY_IPS:", JSON.stringify(myIps));
+
+    const { resolve4 } = await import("dns/promises");
+    const serverNames = [
+      "services_boomia",
+      "conexoesapp_services_boomia",
+      "conexoesapp-services_boomia",
+      "conexoesapp-services-boomia",
+      "conexoesapp_services-boomia",
+      "conexoesapp_servicesboomia",
+      "services-boomia",
+      "servicesboomia",
+    ];
+    for (const name of serverNames) {
+      try {
+        const ips = await resolve4(name);
+        const match = ips.some((ip: string) => myIps.includes(ip));
+        console.log("[DBG-7948bd] SELF_DNS:", JSON.stringify({ name, ips, isMe: match }));
+      } catch (e: any) {
+        console.log("[DBG-7948bd] SELF_DNS_FAIL:", JSON.stringify({ name, err: e?.code || e?.message }));
+      }
     }
+  } catch (e: any) {
+    console.log("[DBG-7948bd] SELF_DNS_ERROR:", e?.message);
   }
 
   // Test OpenAI key validity (simple models endpoint)
