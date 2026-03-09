@@ -42,6 +42,7 @@ async function sendChatwootImagesBatch(
   caption?: string
 ): Promise<boolean> {
   if (!imageUrls.length) return true;
+  console.warn(`[Deliver] sendChatwootImagesBatch: attempting ${imageUrls.length} image(s)`);
   const results = await Promise.allSettled(
     imageUrls.map(async (imageUrl) => {
       const parsedUrl = new URL(imageUrl);
@@ -83,6 +84,7 @@ async function sendChatwootImagesBatch(
     return false;
   }
 
+  console.warn(`[Deliver] sendChatwootImagesBatch: sending ${successfulDownloads.length}/${imageUrls.length} image(s) in one message`);
   const formData = new FormData();
   if (caption && caption.trim()) formData.append("content", caption.trim());
   formData.append("message_type", "outgoing");
@@ -173,7 +175,9 @@ function getHumanizationConfig(cfg: Record<string, any>): HumanizationConfig {
   };
 }
 
-const MAX_IMAGES_PER_BATCH = 10;
+const MAX_IMAGES_PER_BATCH = 1;
+/** Delay entre cada foto enviada ao Chatwoot/WhatsApp (ms), para dar tempo de processar e evitar que só as primeiras sejam entregues. */
+const IMAGE_BLOCK_DELAY_MS = 2200;
 
 interface ConsolidatedPart {
   type: "text" | "images";
@@ -250,21 +254,27 @@ async function replyToChatwoot(
 
   const consolidated = consolidateImageParts(parts);
 
+  const totalImageUrls = consolidated
+    .filter((b) => b.type === "images" && b.imageUrls?.length)
+    .reduce((acc, b) => acc + (b.imageUrls?.length ?? 0), 0);
+  if (totalImageUrls > 0) {
+    console.warn(`[Deliver] replyToChatwoot: total image URLs to send=${totalImageUrls}, blocks=${consolidated.filter((b) => b.type === "images").length}`);
+  }
+
   for (let i = 0; i < consolidated.length; i++) {
     const block = consolidated[i];
+    const isLast = i === consolidated.length - 1;
 
     if (block.type === "images" && block.imageUrls?.length) {
       const urls = block.imageUrls;
-      if (urls.length <= MAX_IMAGES_PER_BATCH) {
-        await sendChatwootImagesBatch(msgUrl, apiToken, urls, "");
-      } else {
-        for (let j = 0; j < urls.length; j += MAX_IMAGES_PER_BATCH) {
-          const chunk = urls.slice(j, j + MAX_IMAGES_PER_BATCH);
-          await sendChatwootImagesBatch(msgUrl, apiToken, chunk, "");
-          if (j + MAX_IMAGES_PER_BATCH < urls.length && hasTimeBudget()) {
-            await safeDelay(applyJitter(1000));
-          }
+      for (let j = 0; j < urls.length; j++) {
+        await sendChatwootImagesBatch(msgUrl, apiToken, [urls[j]], "");
+        if (j < urls.length - 1 && hasTimeBudget()) {
+          await safeDelay(applyJitter(IMAGE_BLOCK_DELAY_MS));
         }
+      }
+      if (!isLast && hasTimeBudget()) {
+        await safeDelay(applyJitter(IMAGE_BLOCK_DELAY_MS));
       }
     } else if (block.type === "text" && block.content) {
       if (humanization.typingDelayMs > 0 && hasTimeBudget()) {
@@ -277,7 +287,6 @@ async function replyToChatwoot(
       }
     }
 
-    const isLast = i === consolidated.length - 1;
     if (!isLast && hasTimeBudget()) {
       const gapMs = humanization.blockGapMs > 0 ? applyJitter(humanization.blockGapMs) : 2000;
       await safeDelay(gapMs);
