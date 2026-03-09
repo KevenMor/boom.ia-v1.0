@@ -742,8 +742,10 @@ C) BOTH (customer wants to buy AND trade ÔÇö VERY COMMON, DO NOT MISS)
 
 D) SCHEDULING (customer wants to book a visit, test drive, or appointment)
    ÔåÆ Call: consultar_agenda
-   Keywords: "agendar", "marcar", "hor├írio", "disponibilidade", "quando posso ir", 
+   Keywords: "agendar", "marcar", "hor├írio", "disponibilidade", "quando posso ir",
    "test drive", "visita", "que horas", "dia dispon├¡vel", "quero ir a├¡", "posso ir"
+
+   ÔÜá´©Å CRITICAL ÔÇö TIME SELECTION = CRIAR (v3.3.0): When the PREVIOUS assistant message OFFERED specific times (e.g. "10:00 e 14:00", "Tenho hor├írio ├ás 10h e ├ás 14h") and the CURRENT user message is the client CHOOSING one of those times (e.g. "pode ser as 14:00", "14h", "├ás 10", "o das 14", "quero ├ás 10h") ÔåÆ you MUST call consultar_agenda with action="criar", NOT "check_availability". Use the date from [CONTEXTO TEMPORAL] (today = YYYY-MM-DD) and the hour from the user message. Example: today 2026-03-09, user "pode ser as 14:00" ÔåÆ consultar_agenda(action="criar", title="Visita - [nome do cliente do hist├│rico]", start_at="2026-03-09T14:00:00-03:00", telefone_cliente="[external_user_id se dispon├¡vel]", veiculo_interesse="[├║ltimo ve├¡culo citado]"). Calling check_availability again when the user already chose a time causes the booking to FAIL.
 
 D2) CANCELLATION / RESCHEDULING (customer wants to cancel or reschedule an appointment)
    ÔåÆ Call: consultar_agenda(action="cancelar")
@@ -850,7 +852,8 @@ CALL consultar_agenda:
 - "posso ir amanh├ú?" ÔåÆ consultar_agenda(action="check_availability", date="YYYY-MM-DD")
 - "quero marcar um test drive" ÔåÆ consultar_agenda(action="check_availability")
 - "pode marcar pra sexta ├ás 10h" ÔåÆ consultar_agenda(action="criar", title="Visita - [nome do cliente]", start_at="YYYY-MM-DDT10:00:00")
-- Customer chose a specific time (e.g., "14h", "├ás 10", "pode ser 15h") ÔåÆ consultar_agenda(action="criar", title="Visita - [nome]", start_at="YYYY-MM-DDTHH:00:00")
+- "pode ser as 14:00" / "14h" / "├ás 10" / "quero ├ás 14h" (after assistant offered times) ÔåÆ consultar_agenda(action="criar", title="Visita - [nome]", start_at="[DATA DE HOJE]THH:00:00-03:00") ÔÇö NEVER call check_availability here
+- Customer chose a specific time (e.g., "14h", "├ás 10", "pode ser 15h") ÔåÆ consultar_agenda(action="criar", title="Visita - [nome]", start_at="YYYY-MM-DDTHH:00:00-03:00")
 
 CALL consultar_agenda (CANCELLATION/RESCHEDULING ÔÇö CRITICAL):
 - ALWAYS pass start_at with the EXACT date and time of the existing appointment from the conversation history.

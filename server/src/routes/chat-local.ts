@@ -371,7 +371,8 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           const todayISO = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
           const dispatcherDateContext = `
 
-[CONTEXTO TEMPORAL] Data de hoje (Brasília): ${todayISO}. Use SEMPRE este ano e data ao gerar start_at para consultar_agenda.
+[CONTEXTO TEMPORAL] Data de hoje (Brasília): ${todayISO}. Use SEMPRE esta data ao gerar start_at para consultar_agenda.
+Quando o cliente ESCOLHER um horário (ex.: "pode ser as 14:00", "14h") após você ter oferecido opções: chame consultar_agenda com action="criar", start_at="${todayISO}T[HORA]:00:00-03:00" (ex.: ${todayISO}T14:00:00-03:00), title="Visita - [nome do cliente]". NUNCA chame só check_availability quando o cliente já escolheu o horário.
 Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado para dia 09/03 às 09:00"). Use esse horário em cancelar: start_at no formato YYYY-MM-DDTHH:mm:ss-03:00 (ano = ano de hoje). Em seguida use criar com o novo horário pedido pelo cliente, também com a data de hoje.`;
 
           const dispatcherMessages = toOpenAIMessages(
