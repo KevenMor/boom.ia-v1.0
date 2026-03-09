@@ -16,6 +16,27 @@ function normalizeForSearch(str: string): string {
     .trim();
 }
 
+const COLOR_SYNONYM_GROUPS: string[][] = [
+  ["cinza", "prata", "grafite", "chumbo", "gray", "grey", "silver"],
+  ["branco", "white", "perola", "perolizado"],
+  ["preto", "black", "onix"],
+  ["vermelho", "red", "rubi", "bordo", "vinho"],
+  ["azul", "blue", "marinho"],
+  ["bege", "champagne", "dourado", "gold", "areia"],
+  ["marrom", "bronze", "brown", "terra"],
+  ["verde", "green"],
+];
+
+function getColorSynonyms(cor: string): string[] {
+  const norm = normalizeForSearch(cor);
+  for (const group of COLOR_SYNONYM_GROUPS) {
+    if (group.some((c) => norm.includes(c) || c.includes(norm))) {
+      return group;
+    }
+  }
+  return [norm];
+}
+
 async function executeInventoryQuery(
   supabase: ReturnType<typeof createNexusClient>,
   agentId: string,
@@ -47,8 +68,29 @@ async function executeInventoryQuery(
     const faixaPreco = (args.faixa_preco || args.faixaPreco) as string | undefined;
     const precoMin = args.preco_min ?? args.precoMin;
     const precoMax = args.preco_max ?? args.precoMax;
-    const tipo = (args.tipo || args.modelo || args.model) as string | undefined;
+    const tipoRaw = (args.tipo || args.modelo || args.model) as string | undefined;
     const cambio = (args.cambio || args.transmission) as string | undefined;
+    // #region agent log
+    const colorSynonyms = cor ? getColorSynonyms(cor) : [];
+    fetch("http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "faf2ea" },
+      body: JSON.stringify({
+        sessionId: "faf2ea",
+        location: "tool-executor.ts:executeInventoryQuery:entry",
+        message: "consultar_estoque args parsed",
+        data: { argsKeys: Object.keys(args), marca, modelo, cor, colorSynonyms, tipoRaw, ano, cambio },
+        timestamp: Date.now(),
+        hypothesisId: "H_COLOR",
+      }),
+    }).catch(() => {});
+    // #endregion
+    // Mapeia sinônimos de tipo para o valor aceito pelo filtro (caminhonete/picape -> pickup)
+    const tipoMapped =
+      tipoRaw && ["caminhonete", "picape", "pickup"].includes(normalizeForSearch(tipoRaw))
+        ? "pickup"
+        : tipoRaw;
+    const tipo = tipoMapped;
 
     // Normaliza valor numérico: se for número pequeno (< 1000) e o texto tiver "mil", trata como milhares
     function parsePriceValue(val: number | string, strContext?: string): number {
@@ -63,9 +105,6 @@ async function executeInventoryQuery(
     }
     if (modelo && !["suv", "sedan", "hatch", "pickup"].includes(normalizeForSearch(modelo))) {
       query = query.ilike("model", `%${modelo}%`);
-    }
-    if (cor) {
-      query = query.ilike("color", `%${cor}%`);
     }
     if (ano) {
       const yearNum = typeof ano === "string" ? parseInt(ano, 10) : ano;
@@ -97,6 +136,38 @@ async function executeInventoryQuery(
       photos: string | unknown;
       detail_url: string;
     }>;
+
+    let corFallbackUsed = false;
+    let corOriginal = cor;
+    if (cor) {
+      const synonyms = getColorSynonyms(cor);
+      const colorFiltered = vehicles.filter((v) => {
+        const vColorNorm = normalizeForSearch(v.color || "");
+        return synonyms.some((s) => vColorNorm.includes(s) || s.includes(vColorNorm));
+      });
+      if (colorFiltered.length > 0) {
+        vehicles = colorFiltered;
+      } else if (vehicles.length > 0) {
+        corFallbackUsed = true;
+      } else {
+        vehicles = [];
+      }
+    }
+
+    // #region agent log
+    fetch("http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "faf2ea" },
+      body: JSON.stringify({
+        sessionId: "faf2ea",
+        location: "tool-executor.ts:executeInventoryQuery:afterColorFilter",
+        message: "After color filter",
+        data: { corFallbackUsed, corOriginal: cor, vehicleCount: vehicles.length, vehicleColors: vehicles.map((v) => v.color).slice(0, 10) },
+        timestamp: Date.now(),
+        hypothesisId: "H_COLOR_FALLBACK",
+      }),
+    }).catch(() => {});
+    // #endregion
 
     // Faixa de preço: preco_min/preco_max (numéricos) ou faixa_preco (string "até X", "X a Y", "entre X e Y mil")
     let minPrice: number | null = null;
@@ -190,17 +261,28 @@ async function executeInventoryQuery(
       .map((url) => `![foto](${url})`)
       .join("\n");
 
+    let hint: string;
+    if (formatted.length > 0) {
+      const baseHint = photosMarkdown
+        ? `ESTOQUE ATUAL (${formatted.length} veículo(s)). O cliente pediu fotos: inclua na sua resposta EXATAMENTE o conteúdo de photos_markdown (as imagens em markdown).`
+        : `ESTOQUE ATUAL (${formatted.length} veículo(s)): Use os dados acima. Para fotos, inclua na resposta markdown: ![foto](URL) para cada URL em photos.`;
+      if (corFallbackUsed && corOriginal) {
+        const availableColors = [...new Set(formatted.map((v) => v.cor).filter(Boolean))];
+        hint = `${baseHint}\nNOTA: O cliente pediu na cor "${corOriginal}", mas não temos nessa cor exata. Temos o mesmo modelo nas cores: ${availableColors.join(", ")}. Informe o cliente que não há na cor "${corOriginal}" mas apresente as opções disponíveis com entusiasmo.`;
+      } else {
+        hint = baseHint;
+      }
+    } else {
+      hint = "Nenhum veículo encontrado com os filtros informados.";
+    }
+
     return {
       success: true,
       result: {
         vehicles: formatted,
         total: formatted.length,
         ...(photosMarkdown && { photos_markdown: photosMarkdown }),
-        _hint: formatted.length > 0
-          ? photosMarkdown
-            ? `ESTOQUE ATUAL (${formatted.length} veículo(s)). O cliente pediu fotos: inclua na sua resposta EXATAMENTE o conteúdo de photos_markdown (as imagens em markdown).`
-            : `ESTOQUE ATUAL (${formatted.length} veículo(s)): Use os dados acima. Para fotos, inclua na resposta markdown: ![foto](URL) para cada URL em photos.`
-          : "Nenhum veículo encontrado com os filtros informados.",
+        _hint: hint,
       },
     };
   } catch (e: unknown) {

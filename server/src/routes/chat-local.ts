@@ -491,6 +491,26 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               tool: tc.function.name,
               args: tc.function.arguments,
             })));
+            // #region agent log
+            const lastUser = messages.filter((m) => m.role === "user").pop();
+            const lastUserContent = lastUser?.content ?? "";
+            for (const tc of phase1ToolCalls) {
+              if (tc.function.name === "consultar_estoque") {
+                fetch("http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "faf2ea" },
+                  body: JSON.stringify({
+                    sessionId: "faf2ea",
+                    location: "chat-local.ts:dispatcher_consultar_estoque",
+                    message: "Dispatcher consultar_estoque: last user message and args",
+                    data: { lastUserMessage: lastUserContent.slice(0, 200), rawArgs: tc.function.arguments, hasTipo: /"tipo"\s*:/.test(tc.function.arguments) },
+                    timestamp: Date.now(),
+                    hypothesisId: "H1",
+                  }),
+                }).catch(() => {});
+              }
+            }
+            // #endregion
           }
 
           let conversationalMessages: typeof dispatcherMessages;
