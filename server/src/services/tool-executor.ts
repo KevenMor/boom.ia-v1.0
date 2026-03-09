@@ -230,6 +230,34 @@ async function executeFipeQuery(args: Record<string, unknown>): Promise<ToolExec
   }
 }
 
+/**
+ * Preserva o horário local ao salvar no banco.
+ * Se vem "2026-03-09T09:00:00-03:00", salva "2026-03-09T09:00:00" (sem offset) — o calendário exibe 09:00.
+ * Evita que toISOString() converta para UTC (+3h no caso de BRT).
+ */
+function toLocalIso(startAt: string, durationMin: number): { start: string; end: string } {
+  const offsetMatch = startAt.match(/([+-]\d{2}):?(\d{2})$/);
+  let localStr: string;
+  if (offsetMatch) {
+    localStr = startAt.replace(/([+-]\d{2}):?(\d{2})$/, "");
+  } else if (startAt.endsWith("Z")) {
+    localStr = startAt.replace("Z", "");
+  } else {
+    localStr = startAt.includes("T") ? startAt : `${startAt}T09:00:00`;
+  }
+  if (!localStr.includes("T")) localStr += "T09:00:00";
+  const parts = localStr.split("T");
+  const datePart = parts[0];
+  const timePart = parts[1] || "09:00:00";
+  const [hh, mm, ss] = timePart.split(":").map(Number);
+  const totalMinEnd = (hh || 0) * 60 + (mm || 0) + durationMin;
+  const endH = Math.floor(totalMinEnd / 60) % 24;
+  const endM = totalMinEnd % 60;
+  const startIso = `${datePart}T${String(hh || 0).padStart(2, "0")}:${String(mm || 0).padStart(2, "0")}:${String(ss || 0).padStart(2, "0")}`;
+  const endIso = `${datePart}T${String(endH).padStart(2, "0")}:${String(endM).padStart(2, "0")}:00`;
+  return { start: startIso, end: endIso };
+}
+
 async function executeCalendarQuery(
   supabase: ReturnType<typeof createNexusClient>,
   tool: { tenant_id?: string; execution_config?: Record<string, unknown> },
@@ -349,9 +377,8 @@ async function executeCalendarQuery(
         return { success: false, result: null, error: "Falta data/hora de início (start_at). Use formato ISO: YYYY-MM-DDTHH:mm:ss ou YYYY-MM-DDTHH:mm:ss-03:00. Ex.: start_at=\"2026-03-09T13:00:00-03:00\"." };
       }
 
-      let startDt: Date;
       const normalized = startAt.includes("T") ? startAt : `${startAt}T09:00:00`;
-      startDt = new Date(normalized);
+      const startDt = new Date(normalized);
       if (Number.isNaN(startDt.getTime())) {
         return { success: false, result: null, error: `Data/hora inválida: "${startAt.slice(0, 30)}...". Use formato: YYYY-MM-DDTHH:mm:ss ou YYYY-MM-DDTHH:mm:ss-03:00.` };
       }
@@ -373,7 +400,7 @@ async function executeCalendarQuery(
         return { success: false, result: null, error: "No calendar found" };
       }
 
-      const endDt = new Date(startDt.getTime() + durationMin * 60000);
+      const localIso = toLocalIso(startAt, durationMin);
 
       const { data: created, error: insErr } = await supabase
         .from("calendar_events")
@@ -381,8 +408,8 @@ async function executeCalendarQuery(
           calendar_id: calendarId,
           tenant_id: calendarArgs.tenant_id,
           title,
-          start_at: startDt.toISOString(),
-          end_at: endDt.toISOString(),
+          start_at: localIso.start,
+          end_at: localIso.end,
         })
         .select()
         .maybeSingle();
@@ -391,6 +418,96 @@ async function executeCalendarQuery(
         return { success: false, result: null, error: insErr.message };
       }
       return { success: true, result: { action: "created", event: created } };
+    }
+
+    if (action === "cancelar" || action === "cancel" || action === "delete") {
+      const startAtRaw = calendarArgs.start_at ?? calendarArgs.start ?? calendarArgs.date_time;
+      const clientName = String(calendarArgs.client_name || calendarArgs.titulo || calendarArgs.title || "").trim().toLowerCase();
+      const eventId = calendarArgs.event_id as string | undefined;
+
+      const { data: calendars } = await supabase
+        .from("calendars")
+        .select("id")
+        .eq("tenant_id", tenantId)
+        .limit(10);
+      const calendarIds = (calendars || []).map((c: { id: string }) => c.id);
+      if (calendarIds.length === 0) {
+        return { success: false, result: null, error: "No calendars found for tenant" };
+      }
+
+      let matchedEvent: { id: string; title?: string; start_at?: string } | null = null;
+
+      if (eventId) {
+        const { data } = await supabase
+          .from("calendar_events")
+          .select("id, title, start_at")
+          .eq("id", eventId)
+          .in("calendar_id", calendarIds)
+          .maybeSingle();
+        matchedEvent = data;
+      }
+
+      if (!matchedEvent && startAtRaw) {
+        const startStr = typeof startAtRaw === "string" ? startAtRaw.trim() : "";
+        if (startStr) {
+          const localStart = toLocalIso(startStr, 0).start;
+          const startDate = localStart.slice(0, 10);
+          const startHour = localStart.slice(11, 16);
+          const { data: dayEvents } = await supabase
+            .from("calendar_events")
+            .select("id, title, start_at")
+            .in("calendar_id", calendarIds)
+            .gte("start_at", `${startDate}T00:00:00`)
+            .lte("start_at", `${startDate}T23:59:59`)
+            .order("start_at", { ascending: true });
+
+          if (dayEvents && dayEvents.length > 0) {
+            matchedEvent = dayEvents.find((e: { start_at?: string; title?: string }) => {
+              const evHour = (e.start_at || "").slice(11, 16);
+              if (evHour === startHour) return true;
+              if (clientName && (e.title || "").toLowerCase().includes(clientName)) return true;
+              return false;
+            }) || null;
+            if (!matchedEvent && clientName) {
+              matchedEvent = dayEvents.find((e: { title?: string }) =>
+                (e.title || "").toLowerCase().includes(clientName)
+              ) || null;
+            }
+          }
+        }
+      }
+
+      if (!matchedEvent && clientName) {
+        const today = new Date().toISOString().slice(0, 10);
+        const { data: futureEvents } = await supabase
+          .from("calendar_events")
+          .select("id, title, start_at")
+          .in("calendar_id", calendarIds)
+          .gte("start_at", `${today}T00:00:00`)
+          .order("start_at", { ascending: true })
+          .limit(50);
+        if (futureEvents) {
+          matchedEvent = futureEvents.find((e: { title?: string }) =>
+            (e.title || "").toLowerCase().includes(clientName)
+          ) || null;
+        }
+      }
+
+      if (!matchedEvent) {
+        console.warn("[Tool] consultar_agenda cancelar: evento não encontrado. Args:", JSON.stringify({ startAtRaw, clientName, eventId }));
+        return { success: false, result: null, error: "Evento não encontrado na agenda. Informe start_at (data/hora exata do agendamento) ou event_id para cancelar." };
+      }
+
+      const { error: delErr } = await supabase
+        .from("calendar_events")
+        .delete()
+        .eq("id", matchedEvent.id);
+
+      if (delErr) {
+        return { success: false, result: null, error: delErr.message };
+      }
+      console.log("[Tool] consultar_agenda cancelar: removido evento", matchedEvent.id, matchedEvent.title, matchedEvent.start_at);
+      return { success: true, result: { action: "cancelled", deleted_event: matchedEvent } };
     }
 
     return {

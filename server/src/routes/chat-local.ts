@@ -111,29 +111,37 @@ function sanitizeFunctionName(name: string, _baseUrl: string): string {
 const DEFAULT_PARAMS_SCHEMA = { type: "object", properties: {}, required: [] } as const;
 
 /**
- * Se a tool foi consultar_agenda com action "created", envia nota privada no Chatwoot (só equipe vê).
- * Não bloqueia o stream; falhas são apenas logadas.
+ * Envia nota privada no Chatwoot ao criar/cancelar agendamento (só equipe vê).
+ * Usa chatwootConversationId (ID numérico do Chatwoot) quando disponível.
  */
-function sendAgendamentoCreatedNotification(
+function sendAgendaNotification(
   agent: { config?: Record<string, unknown> },
-  conversationId: string | null,
+  chatwootConversationId: number | string | null | undefined,
   toolResult: unknown
 ): void {
-  if (!conversationId || !toolResult || typeof toolResult !== "object") return;
-  const res = toolResult as { action?: string; event?: { title?: string; start_at?: string } };
-  if (res.action !== "created" || !res.event) return;
+  if (!toolResult || typeof toolResult !== "object") return;
+  const res = toolResult as { action?: string; event?: { title?: string; start_at?: string }; deleted_event?: { title?: string; start_at?: string } };
+  const isCreated = res.action === "created" && res.event;
+  const isCancelled = res.action === "cancelled" && res.deleted_event;
+  if (!isCreated && !isCancelled) return;
   const cfg = (agent.config || {}) as Record<string, string>;
   const cwUrl = cfg.chatwoot_url;
   const cwToken = cfg.chatwoot_api_token;
   const cwAccountId = cfg.chatwoot_account_id;
   if (!cwUrl || !cwToken || !cwAccountId) return;
-  const title = res.event.title || "Agendamento";
-  const startAt = res.event.start_at
-    ? new Date(res.event.start_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
-    : "";
-  const content = `Agendamento criado: ${title}${startAt ? ` — ${startAt}` : ""}`;
-  sendChatwootPrivateNote(cwUrl, cwToken, cwAccountId, conversationId, content).catch((e) =>
-    console.warn("[Chat-Local] Falha ao enviar notificação de agendamento:", e)
+  if (!chatwootConversationId) {
+    console.warn("[Chat-Local] Notificação agenda: sem chatwoot_conversation_id, pulando");
+    return;
+  }
+  const evt = isCreated ? res.event! : res.deleted_event!;
+  const title = evt.title || "Agendamento";
+  const startAt = evt.start_at || "";
+  const timePart = startAt.includes("T") ? startAt.slice(0, 16).replace("T", " ") : startAt;
+  const prefix = isCreated ? "Agendamento criado" : "Agendamento cancelado";
+  const content = `${prefix}: ${title}${timePart ? ` — ${timePart}` : ""}`;
+  console.log("[Chat-Local] Enviando nota privada Chatwoot:", { cwConvId: chatwootConversationId, content });
+  sendChatwootPrivateNote(cwUrl, cwToken, cwAccountId, chatwootConversationId, content).catch((e) =>
+    console.warn("[Chat-Local] Falha ao enviar notificação de agenda:", e)
   );
 }
 
@@ -181,13 +189,14 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           agent_id: string;
           messages: Array<{ role: string; content: string }>;
           conversation_id?: string | null;
+          chatwoot_conversation_id?: number | null;
           attachments?: unknown[];
           external_user_id?: string | null;
         };
       }>,
       reply: FastifyReply
     ) => {
-      const { agent_id, messages, conversation_id } = req.body;
+      const { agent_id, messages, conversation_id, chatwoot_conversation_id } = req.body;
 
       if (!agent_id || !messages || !Array.isArray(messages)) {
         return reply.status(400).send({ error: "agent_id and messages required" });
@@ -492,7 +501,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
                   content: JSON.stringify(result.success ? result.result : { error: result.error }),
                 });
                 if (tc.function.name === "consultar_agenda" && result.success && result.result) {
-                  sendAgendamentoCreatedNotification(agent, responseConvId, result.result);
+                  sendAgendaNotification(agent, chatwoot_conversation_id, result.result);
                 }
               }
             }
@@ -848,7 +857,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
             content: JSON.stringify(result.success ? result.result : { error: result.error }),
           });
           if (tc.function.name === "consultar_agenda" && result.success && result.result) {
-            sendAgendamentoCreatedNotification(agent, responseConvId, result.result);
+            sendAgendaNotification(agent, chatwoot_conversation_id, result.result);
           }
         }
       }
