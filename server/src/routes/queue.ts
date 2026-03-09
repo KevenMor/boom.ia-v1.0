@@ -7,6 +7,7 @@ import {
   getHumanizationConfig,
   applyJitter,
 } from "../services/delivery.js";
+import { transcribeAudio, isAudioAttachment } from "../services/transcribe.js";
 
 const API_BASE = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
 
@@ -267,6 +268,32 @@ export async function queueRoutes(fastify: FastifyInstance) {
       const hasAttachments = Array.isArray(attachments) && attachments.length > 0;
       if (!finalMessage && !hasAttachments) {
         return reply.status(400).send({ error: "No message to process" });
+      }
+
+      if (hasAttachments) {
+        const audioAttachments = (attachments as any[]).filter(isAudioAttachment);
+        if (audioAttachments.length > 0) {
+          console.log("[ProcessQueue] Transcribing", audioAttachments.length, "audio attachment(s)...");
+          const transcriptions = await Promise.all(
+            audioAttachments.map((a: any) => transcribeAudio(a.data_url))
+          );
+          const transcribedTexts = transcriptions
+            .filter((t) => t.text)
+            .map((t) => t.text);
+          if (transcribedTexts.length > 0) {
+            const audioText = transcribedTexts.join("\n");
+            console.log("[ProcessQueue] Transcription result:", audioText.slice(0, 120));
+            finalMessage = finalMessage
+              ? `${finalMessage}\n[Áudio transcrito]: ${audioText}`
+              : `[Áudio transcrito]: ${audioText}`;
+          } else {
+            const errors = transcriptions.filter((t) => t.error).map((t) => t.error);
+            console.warn("[ProcessQueue] Audio transcription failed:", errors);
+            if (!finalMessage) {
+              finalMessage = "[O cliente enviou um áudio que não pôde ser transcrito. Peça para repetir por texto.]";
+            }
+          }
+        }
       }
 
       if (!finalMessage && hasAttachments) {
