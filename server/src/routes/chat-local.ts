@@ -613,9 +613,14 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         if (dispatcherConfig) {
           console.log("[Chat-Local] Dual-provider: dispatcher (tools) + conversacional");
           const { openaiTools: dispatcherTools, nameToTool: dispatcherNameToTool } = buildOpenAITools(tools, dispatcherConfig.baseUrl);
-          const dispatcherModel = (agentConfig.dispatcher_model as string)
+          let dispatcherModel = (agentConfig.dispatcher_model as string)
             || (tenantSettings.dispatcher_model as string)
-            || "gpt-4o-mini";
+            || "gpt-4o";
+          if (dispatcherModel === "gpt-4o-mini") {
+            dispatcherModel = "gpt-4o";
+            console.log("[Chat-Local] Dispatcher upgrade: gpt-4o-mini -> gpt-4o (maior inteligência para tool calls)");
+          }
+          console.log("[Chat-Local] Dispatcher model:", dispatcherModel);
 
           const todayISO = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
           const dispatcherDateContext = `
@@ -835,15 +840,28 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
 
                 const isEstoqueEmpty = tc.function.name === "consultar_estoque" && Object.keys(args).length === 0;
                 if (isEstoqueEmpty) {
-                  console.warn("[Chat-Local] consultar_estoque BLOQUEADO: args vazios {}. Dispatcher deve extrair marca/modelo do histórico.");
-                  debugEntries.push({ type: "tool_call", tool: tc.function.name, args, tool_type: "function" });
-                  debugEntries.push({ type: "tool_result", preview: { error: "consultar_estoque rejeitado — args vazios" } });
-                  conversationalMessages.push({
-                    role: "tool",
-                    tool_call_id: tc.id,
-                    content: JSON.stringify({ error: "consultar_estoque chamado com args vazios {}. Você DEVE especificar pelo menos marca ou modelo. Analise o histórico da conversa para identificar o veículo discutido." }),
-                  });
-                  continue;
+                  const recentText = messages
+                    .slice(-8)
+                    .map((m) => (m.content ?? ""))
+                    .join("\n");
+                  const fallbackEntities = extractVehicleEntities(recentText);
+                  if (fallbackEntities.marca || fallbackEntities.modelo) {
+                    args = { ...args };
+                    if (fallbackEntities.marca) args.marca = fallbackEntities.marca;
+                    if (fallbackEntities.modelo) args.modelo = fallbackEntities.modelo;
+                    if (fallbackEntities.ano) args.ano = fallbackEntities.ano;
+                    console.log("[Chat-Local] consultar_estoque args vazios: fallback extraiu do histórico:", JSON.stringify(args));
+                  } else {
+                    console.warn("[Chat-Local] consultar_estoque BLOQUEADO: args vazios e nenhum veículo no histórico.");
+                    debugEntries.push({ type: "tool_call", tool: tc.function.name, args, tool_type: "function" });
+                    debugEntries.push({ type: "tool_result", preview: { error: "consultar_estoque rejeitado — args vazios" } });
+                    conversationalMessages.push({
+                      role: "tool",
+                      tool_call_id: tc.id,
+                      content: JSON.stringify({ error: "consultar_estoque chamado com args vazios {}. Você DEVE especificar pelo menos marca ou modelo. Analise o histórico da conversa para identificar o veículo discutido." }),
+                    });
+                    continue;
+                  }
                 }
 
                 console.log("[Chat-Local] Executando tool:", tc.function.name, "| args:", JSON.stringify(args));
@@ -1295,13 +1313,26 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
 
           const isEstoqueEmptySP = tc.function.name === "consultar_estoque" && Object.keys(args).length === 0;
           if (isEstoqueEmptySP) {
-            console.warn("[Chat-Local] consultar_estoque BLOQUEADO (single-provider): args vazios {}.");
-            llmMessages.push({
-              role: "tool",
-              tool_call_id: tc.id,
-              content: JSON.stringify({ error: "consultar_estoque chamado com args vazios {}. Você DEVE especificar pelo menos marca ou modelo. Analise o histórico da conversa para identificar o veículo discutido." }),
-            });
-            continue;
+            const recentTextSP = messages
+              .slice(-8)
+              .map((m) => (m.content ?? ""))
+              .join("\n");
+            const fallbackEntitiesSP = extractVehicleEntities(recentTextSP);
+            if (fallbackEntitiesSP.marca || fallbackEntitiesSP.modelo) {
+              args = { ...args };
+              if (fallbackEntitiesSP.marca) args.marca = fallbackEntitiesSP.marca;
+              if (fallbackEntitiesSP.modelo) args.modelo = fallbackEntitiesSP.modelo;
+              if (fallbackEntitiesSP.ano) args.ano = fallbackEntitiesSP.ano;
+              console.log("[Chat-Local] consultar_estoque args vazios (single-provider): fallback extraiu do histórico:", JSON.stringify(args));
+            } else {
+              console.warn("[Chat-Local] consultar_estoque BLOQUEADO (single-provider): args vazios e nenhum veículo no histórico.");
+              llmMessages.push({
+                role: "tool",
+                tool_call_id: tc.id,
+                content: JSON.stringify({ error: "consultar_estoque chamado com args vazios {}. Você DEVE especificar pelo menos marca ou modelo. Analise o histórico da conversa para identificar o veículo discutido." }),
+              });
+              continue;
+            }
           }
 
           console.log("[Chat-Local] Executando tool (single-provider):", tc.function.name, "| args:", JSON.stringify(args));
