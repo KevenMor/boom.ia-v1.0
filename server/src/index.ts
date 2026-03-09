@@ -16,7 +16,12 @@ const PORT = parseInt(process.env.PORT || "3001", 10);
 console.log("[Server] Starting... PORT=%s NODE_ENV=%s", PORT, process.env.NODE_ENV);
 
 async function build() {
-  const fastify = Fastify({ logger: true });
+  const isProduction = process.env.NODE_ENV === "production";
+  const fastify = Fastify({
+    logger: isProduction
+      ? { level: "warn", serializers: { req: (req) => ({ method: req.method, url: req.url }), res: (res) => ({ statusCode: res.statusCode }) } }
+      : true,
+  });
 
   const extraOrigins = (process.env.CORS_ORIGINS || "")
     .split(",")
