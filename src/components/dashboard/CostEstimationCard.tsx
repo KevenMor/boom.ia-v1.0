@@ -15,11 +15,12 @@ function fmtBrl(usd: number): string {
 }
 
 export function CostEstimationCard({ events, loading }: Props) {
+  const tz = "America/Sao_Paulo";
   const now = new Date();
-  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const today = now.toLocaleDateString("en-CA", { timeZone: tz });
   const getLocalDate = (iso: string) => {
     const d = new Date(iso);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return d.toLocaleDateString("en-CA", { timeZone: tz });
   };
 
   const todayEvents = events.filter((e) => getLocalDate(e.created_at) === today);

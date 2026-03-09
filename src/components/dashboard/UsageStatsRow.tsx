@@ -19,14 +19,15 @@ export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
     );
   }
 
+  const tz = "America/Sao_Paulo";
   const now = new Date();
-  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  const yesterday = new Date(now.getTime() - 86400000);
-  const yesterdayStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, "0")}-${String(yesterday.getDate()).padStart(2, "0")}`;
+  const today = now.toLocaleDateString("en-CA", { timeZone: tz });
+  const yesterdayDate = new Date(now.getTime() - 86400000);
+  const yesterdayStr = yesterdayDate.toLocaleDateString("en-CA", { timeZone: tz });
 
   const getLocalDate = (iso: string) => {
     const d = new Date(iso);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return d.toLocaleDateString("en-CA", { timeZone: tz });
   };
 
   const normalizeSummaryDay = (day: string) => day.slice(0, 10);

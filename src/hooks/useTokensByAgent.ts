@@ -51,14 +51,51 @@ export function useTokensByAgent(days = 7, tenantId?: string | null) {
       since.setDate(since.getDate() - days);
 
       let query = nexusDb
-        .from("usage_events")
-        .select("agent_id, provider, model, prompt_tokens, completion_tokens, total_tokens, latency_ms, tool_calls_count, phase")
+        .from("agent_token_usage")
+        .select("agent_id, provider, model, prompt_tokens, completion_tokens, total_tokens, metadata, message_role")
         .gte("created_at", since.toISOString())
+        .order("created_at", { ascending: false })
         .limit(10000);
-      if (tenantId) query = query.eq("tenant_id", tenantId);
-      const { data: events, error } = await query;
 
+      const { data: rows, error } = await query;
       if (error) throw error;
+
+      let usage = (rows ?? []) as Array<{
+        agent_id: string;
+        provider: string;
+        model: string;
+        prompt_tokens: number;
+        completion_tokens: number;
+        total_tokens: number;
+        metadata: Record<string, unknown> | null;
+        message_role: string;
+      }>;
+
+      if (tenantId && usage.length > 0) {
+        const agentIds = [...new Set(usage.map((r) => r.agent_id).filter(Boolean))];
+        const { data: agents } = await nexusDb
+          .from("agents")
+          .select("id, tenant_id")
+          .in("id", agentIds);
+        const tenantAgentIds = new Set(
+          (agents ?? []).filter((a: { tenant_id: string }) => a.tenant_id === tenantId).map((a: { id: string }) => a.id)
+        );
+        if (tenantAgentIds.size > 0) {
+          usage = usage.filter((r) => tenantAgentIds.has(r.agent_id));
+        }
+      }
+
+      const events = usage.map((r) => ({
+        agent_id: r.agent_id,
+        provider: r.provider,
+        model: r.model,
+        prompt_tokens: r.prompt_tokens ?? 0,
+        completion_tokens: r.completion_tokens ?? 0,
+        total_tokens: r.total_tokens ?? (r.prompt_tokens ?? 0) + (r.completion_tokens ?? 0),
+        latency_ms: null as number | null,
+        tool_calls_count: r.message_role === "dual_provider" && r.metadata?.dispatcher ? 1 : 0,
+        phase: r.message_role,
+      }));
 
       // Load agents for name mapping
       const { data: agents } = await nexusDb
