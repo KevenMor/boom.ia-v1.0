@@ -174,6 +174,28 @@ async function startupDiagnostics() {
     console.log("[DBG-7948bd] SUPABASE_CONN_FAIL:", JSON.stringify({ error: e?.message, code: e?.cause?.code }));
   }
 
+  // Probe internal Docker hostnames to find Supabase Kong
+  const candidates = [
+    "http://boomsolution-supabase-kong:8000",
+    "http://boomsolution_supabase_kong:8000",
+    "http://boomsolution-supabase:8000",
+    "http://boomsolution_supabase:8000",
+    "http://boomsolution-supabase-kong:80",
+    "http://kong:8000",
+  ];
+  const apikey = process.env.NEXUS_DB_ANON_KEY || process.env.NEXUS_SERVICE_ROLE_KEY || "";
+  for (const base of candidates) {
+    try {
+      const res = await fetch(`${base}/rest/v1/`, {
+        headers: { apikey, Authorization: `Bearer ${apikey}` },
+        signal: AbortSignal.timeout(3000),
+      });
+      console.log("[DBG-7948bd] INTERNAL_PROBE_OK:", JSON.stringify({ base, status: res.status }));
+    } catch (e: any) {
+      console.log("[DBG-7948bd] INTERNAL_PROBE_FAIL:", JSON.stringify({ base, error: e?.message?.slice(0, 80) }));
+    }
+  }
+
   // Test OpenAI key validity (simple models endpoint)
   if (process.env.OPENAI_API_KEY) {
     try {
