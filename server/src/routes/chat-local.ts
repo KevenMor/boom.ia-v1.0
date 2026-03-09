@@ -367,7 +367,17 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           console.log("[Chat-Local] Dual-provider: dispatcher (tools) + conversacional");
           const { openaiTools: dispatcherTools, nameToTool: dispatcherNameToTool } = buildOpenAITools(tools, dispatcherConfig.baseUrl);
           const dispatcherModel = (agentConfig.dispatcher_model as string) || "gpt-4o-mini";
-          const dispatcherMessages = toOpenAIMessages(getDispatcherPrompt(tenantSlug), messages);
+
+          const todayISO = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+          const dispatcherDateContext = `
+
+[CONTEXTO TEMPORAL] Data de hoje (Brasília): ${todayISO}. Use SEMPRE este ano e data ao gerar start_at para consultar_agenda.
+Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado para dia 09/03 às 09:00"). Use esse horário em cancelar: start_at no formato YYYY-MM-DDTHH:mm:ss-03:00 (ano = ano de hoje). Em seguida use criar com o novo horário pedido pelo cliente, também com a data de hoje.`;
+
+          const dispatcherMessages = toOpenAIMessages(
+            getDispatcherPrompt(tenantSlug) + dispatcherDateContext,
+            messages
+          );
 
           const dispatcherBody: Record<string, unknown> = {
             model: dispatcherModel,

@@ -750,6 +750,7 @@ D2) CANCELLATION / RESCHEDULING (customer wants to cancel or reschedule an appoi
    "tive um imprevisto", "preciso mudar", "trocar o hor├írio", "mudar a data", "adiar"
    ÔåÆ Extract the appointment date/time or patient name from conversation history.
    ÔåÆ For RESCHEDULING ("remarcar"): call action="cancelar" FIRST. The conversational model will then ask for the new time.
+   ÔåÆ CRITICAL: When the user says "remarcar para [horário]" or "mudar para [horário]", you MUST extract from the CONVERSATION HISTORY the LAST confirmed appointment (e.g. "confirmado para dia 09/03 às 09:00") and pass that as start_at for cancelar in ISO format (YYYY-MM-DDTHH:mm:ss-03:00) using the CURRENT YEAR. Then call criar with the NEW time the user requested, also with the current date. Use the [CONTEXTO TEMPORAL] date provided in the system message.
 
 E) CONVERSATIONAL (no vehicle/stock/fipe/scheduling request)
    ÔåÆ Return: NO_TOOLS_NEEDED
