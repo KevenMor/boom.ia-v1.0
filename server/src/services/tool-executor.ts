@@ -233,11 +233,24 @@ async function executeFipeQuery(args: Record<string, unknown>): Promise<ToolExec
 async function executeCalendarQuery(
   supabase: ReturnType<typeof createNexusClient>,
   tool: { tenant_id?: string; execution_config?: Record<string, unknown> },
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  agentId: string
 ): Promise<ToolExecutionResult> {
   try {
-    const calendarArgs = { ...args };
-    if (tool.tenant_id) calendarArgs.tenant_id = tool.tenant_id;
+    let tenantId = tool.tenant_id;
+    if (!tenantId && agentId) {
+      const { data: agent } = await supabase
+        .from("agents")
+        .select("tenant_id")
+        .eq("id", agentId)
+        .single();
+      tenantId = agent?.tenant_id ?? undefined;
+    }
+    if (!tenantId) {
+      return { success: false, result: null, error: "tenant_id não disponível (configure na ferramenta ou no agente)" };
+    }
+
+    const calendarArgs = { ...args, tenant_id: tenantId };
     const action = (calendarArgs.action || "check_availability") as string;
 
     if (action === "check_availability") {
@@ -246,7 +259,6 @@ async function executeCalendarQuery(
       const slotDuration = (calendarArgs.slot_duration_minutes as number) || 60;
       const businessStart = 8;
       const businessEnd = 18;
-      const tenantId = calendarArgs.tenant_id as string;
 
       const { data: calendars, error: calErr } = await supabase
         .from("calendars")
@@ -422,7 +434,7 @@ export async function executeTool(
       return executeFipeQuery(args);
 
     case "calendar_query":
-      return executeCalendarQuery(supabase, tool, args);
+      return executeCalendarQuery(supabase, tool, args, agentId);
 
     case "nearest_unit":
       return executeNearestUnit(args);
