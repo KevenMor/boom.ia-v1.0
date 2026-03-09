@@ -636,6 +636,22 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           }
           console.log("[Chat-Local] Conversational LLM response OK, iniciando streaming...");
 
+          // #region agent log
+          let debugDeltaCount = 0;
+          let debugDeltaTotalLen = 0;
+          let debugSendCount = 0;
+          let debugSendTotalLen = 0;
+          const debugToolResultsSummary = toolResults.map((r) => {
+            try {
+              const o = JSON.parse(r);
+              return { hasError: !!o.error, preview: (o.error || o.action || "").slice(0, 60) };
+            } catch {
+              return { hasError: false, preview: r.slice(0, 60) };
+            }
+          });
+          fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7948bd'},body:JSON.stringify({sessionId:'7948bd',location:'chat-local.ts:stream-start',message:'conv stream start',data:{toolResultsCount:toolResults.length,toolResultsSummary:debugToolResultsSummary},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
+
           const convReader = convResp.body!.getReader();
           const convDecoder = new TextDecoder();
           let convBuf = "";
@@ -663,9 +679,13 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
                   }
                   const delta = ev.choices?.[0]?.delta;
                   if (delta?.content) {
+                    debugDeltaCount++;
+                    debugDeltaTotalLen += (delta.content || "").length;
                     const { toSend, newBuffer } = filterCommandLinesFromStream(streamFilterBuffer, delta.content);
                     streamFilterBuffer = newBuffer;
                     if (toSend) {
+                      debugSendCount++;
+                      debugSendTotalLen += toSend.length;
                       console.log("[Chat-Local] Streaming content chunk:", toSend.slice(0, 50));
                       sendSse({ choices: [{ delta: { content: toSend } }] });
                     }
@@ -674,9 +694,20 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
               }
             }
             if (done) {
-              if (streamFilterBuffer) sendSse({ choices: [{ delta: { content: streamFilterBuffer } }] });
+              if (streamFilterBuffer) {
+                debugSendCount++;
+                debugSendTotalLen += streamFilterBuffer.length;
+                sendSse({ choices: [{ delta: { content: streamFilterBuffer } }] });
+              }
+              fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7948bd'},body:JSON.stringify({sessionId:'7948bd',location:'chat-local.ts:stream-done',message:'conv stream done',data:{deltaCount:debugDeltaCount,deltaTotalLen:debugDeltaTotalLen,sendCount:debugSendCount,sendTotalLen:debugSendTotalLen,noContentSent:debugSendTotalLen===0},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
               break;
             }
+          }
+
+          if (debugSendTotalLen === 0) {
+            const fallbackMsg = "Não consegui concluir o agendamento agora. Por favor, me informe uma data e horário futuros (por exemplo: amanhã às 10h ou próxima segunda às 14h) para eu tentar novamente.";
+            sendSse({ choices: [{ delta: { content: fallbackMsg } }] });
+            fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7948bd'},body:JSON.stringify({sessionId:'7948bd',location:'chat-local.ts:fallback',message:'sent fallback message',data:{reason:'noContentSent'},timestamp:Date.now(),hypothesisId:'C'})}).catch(()=>{});
           }
 
           const tokenUsagePayload = {
