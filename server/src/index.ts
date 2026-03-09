@@ -136,6 +136,22 @@ build()
   .then((app) => app.listen({ port: PORT, host: "0.0.0.0" }))
   .then(() => {
     console.log(`[Server] Listening on http://0.0.0.0:${PORT}`);
+
+    const FOLLOWUP_INTERVAL_MS = 60_000;
+    const followupUrl = `http://127.0.0.1:${PORT}/api/queue/followups`;
+
+    setInterval(async () => {
+      try {
+        const resp = await fetch(followupUrl, { method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(30_000) });
+        if (resp.ok) {
+          const data = await resp.json() as { processed?: number; skipped?: number };
+          if ((data.processed ?? 0) > 0 || (data.skipped ?? 0) > 0) {
+            console.log("[FollowUp-Cron] processed:", data.processed, "skipped:", data.skipped);
+          }
+        }
+      } catch { /* silent — endpoint logs its own errors */ }
+    }, FOLLOWUP_INTERVAL_MS);
+    console.log(`[Server] Follow-up cron started (every ${FOLLOWUP_INTERVAL_MS / 1000}s)`);
   })
   .catch((err) => {
     console.error("[Server] Startup failed:", err?.message || err);

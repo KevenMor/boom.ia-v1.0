@@ -1,6 +1,12 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
 import { stripChatwootNamePrefix, sanitizeLLMOutput } from "../utils/sanitize.js";
+import { getFollowupPrompt } from "../services/prompts/registry.js";
+import {
+  sendChatwootTextMessage,
+  getHumanizationConfig,
+  applyJitter,
+} from "../services/delivery.js";
 
 const API_BASE = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
 
@@ -430,8 +436,218 @@ export async function queueRoutes(fastify: FastifyInstance) {
   );
 
   fastify.post("/queue/followups", async (_req: FastifyRequest, reply: FastifyReply) => {
-    return reply.status(501).send({
-      error: "process-followups: implementar lógica completa (cron de follow-ups)",
-    });
+    const supabase = createNexusClient();
+    const baseUrl = API_BASE.replace(/\/+$/, "").replace(/\/api$/, "") || `http://localhost:${process.env.PORT || 3001}`;
+    const nexusKey = process.env.NEXUS_SERVICE_ROLE_KEY || process.env.NEXUS_DB_ANON_KEY;
+
+    if (!nexusKey) {
+      return reply.status(500).send({ error: "Missing server config" });
+    }
+
+    const { data: pending, error: fetchErr } = await supabase
+      .from("follow_up_queue")
+      .select("*")
+      .eq("status", "pending")
+      .lte("scheduled_at", new Date().toISOString())
+      .order("scheduled_at", { ascending: true })
+      .limit(20);
+
+    if (fetchErr) {
+      console.error("[FollowUp] Failed to fetch pending:", fetchErr.message);
+      return reply.status(500).send({ error: fetchErr.message });
+    }
+
+    if (!pending || pending.length === 0) {
+      return reply.send({ processed: 0 });
+    }
+
+    let processed = 0;
+    let skipped = 0;
+
+    for (const item of pending) {
+      try {
+        const { data: agent } = await supabase
+          .from("agents")
+          .select("id, name, provider_id, model, system_prompt, tenant_id, config, status")
+          .eq("id", item.agent_id)
+          .single();
+
+        if (!agent) {
+          await supabase
+            .from("follow_up_queue")
+            .update({ status: "cancelled", updated_at: new Date().toISOString() })
+            .eq("id", item.id);
+          continue;
+        }
+
+        if (agent.status === "inactive") {
+          await supabase
+            .from("follow_up_queue")
+            .update({ status: "cancelled", updated_at: new Date().toISOString() })
+            .eq("id", item.id);
+          continue;
+        }
+
+        const cfg = (agent.config || {}) as Record<string, any>;
+
+        const quietStart = Number(cfg.followup_quiet_start ?? 23);
+        const quietEnd = Number(cfg.followup_quiet_end ?? 7);
+        const nowBrasilia = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+        const currentHour = nowBrasilia.getHours();
+        const inQuietHours = quietStart > quietEnd
+          ? (currentHour >= quietStart || currentHour < quietEnd)
+          : (currentHour >= quietStart && currentHour < quietEnd);
+
+        if (inQuietHours) {
+          skipped++;
+          continue;
+        }
+
+        const { data: tenant } = await supabase
+          .from("tenants")
+          .select("slug")
+          .eq("id", agent.tenant_id)
+          .single();
+
+        const tenantSlug = tenant?.slug ?? null;
+
+        let conversationMessages: { role: string; content: string }[] = [];
+        if (item.conversation_id) {
+          try {
+            const { data: history } = await supabase.rpc("load_conversation_messages", {
+              p_agent_id: item.agent_id,
+              p_conversation_id: item.conversation_id,
+            });
+            if (history && Array.isArray(history)) {
+              conversationMessages = history.slice(-20).map((m: any) => ({
+                role: m.role === "tool" ? "system" : m.role,
+                content: (m.content as string) || "",
+              }));
+            }
+          } catch (e: any) {
+            console.warn("[FollowUp] Could not load history:", e.message);
+          }
+        }
+
+        const lastMsg = conversationMessages[conversationMessages.length - 1];
+        if (lastMsg?.role === "assistant") {
+          // No reply from user since our last message — proceed with follow-up
+        } else if (lastMsg?.role === "user") {
+          await supabase
+            .from("follow_up_queue")
+            .update({ status: "cancelled", updated_at: new Date().toISOString() })
+            .eq("id", item.id);
+          continue;
+        }
+
+        const attempt = item.attempt || 1;
+        const maxAttempts = item.max_attempts || 3;
+        const intervals: number[] = (() => {
+          try {
+            const raw = item.intervals_minutes;
+            return Array.isArray(raw) ? raw : JSON.parse(raw);
+          } catch {
+            return [10, 20, 30];
+          }
+        })();
+
+        let followupPrompt = getFollowupPrompt(tenantSlug);
+        if (!followupPrompt) {
+          followupPrompt = `[SISTEMA INTERNO - FOLLOW-UP]\nEscreva uma mensagem curta de follow-up (tentativa {attempt} de {max_attempts}). Seja natural, breve (1-2 frases) e use o contexto da conversa.`;
+        }
+        followupPrompt = followupPrompt
+          .replace(/\{attempt\}/g, String(attempt))
+          .replace(/\{max_attempts\}/g, String(maxAttempts));
+
+        const messages = [
+          ...conversationMessages,
+          { role: "user", content: followupPrompt },
+        ];
+
+        const chatResult = await callChatAgent(
+          baseUrl,
+          nexusKey,
+          item.agent_id,
+          messages,
+          item.conversation_id,
+          undefined,
+          item.external_user_id
+        );
+
+        if (chatResult.error) {
+          console.error("[FollowUp] LLM failed for", item.id, chatResult.error.slice(0, 200));
+          continue;
+        }
+
+        const followupText = sanitizeLLMOutput(chatResult.fullContent.trim());
+        if (!followupText) {
+          console.warn("[FollowUp] Empty response for", item.id);
+          continue;
+        }
+
+        if (item.conversation_id) {
+          try {
+            await supabase.rpc("save_message", {
+              p_agent_id: item.agent_id,
+              p_conversation_id: item.conversation_id,
+              p_role: "assistant",
+              p_content: followupText,
+              p_model: "followup",
+              p_tokens_input: 0,
+              p_tokens_output: 0,
+              p_latency_ms: null,
+            });
+          } catch (e: any) {
+            console.warn("[FollowUp] Save message failed:", e.message);
+          }
+        }
+
+        if (item.chatwoot_conversation_id && cfg.chatwoot_url && cfg.chatwoot_api_token && cfg.chatwoot_account_id) {
+          const chatwootBase = cfg.chatwoot_url.replace(/\/+$/, "");
+          const msgUrl = `${chatwootBase}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${item.chatwoot_conversation_id}/messages`;
+          const humanization = getHumanizationConfig(cfg);
+
+          if (humanization.typingDelayMs > 0) {
+            await new Promise((r) => setTimeout(r, applyJitter(humanization.typingDelayMs)));
+          }
+
+          const sent = await sendChatwootTextMessage(msgUrl, cfg.chatwoot_api_token, followupText);
+          if (!sent) {
+            console.error("[FollowUp] Chatwoot send failed for", item.id);
+          }
+        }
+
+        await supabase
+          .from("follow_up_queue")
+          .update({ status: "sent", updated_at: new Date().toISOString() })
+          .eq("id", item.id);
+
+        if (attempt < maxAttempts) {
+          const nextDelay = intervals[attempt] || intervals[intervals.length - 1] || 30;
+          try {
+            await supabase.rpc("schedule_followup", {
+              p_agent_id: item.agent_id,
+              p_conversation_id: item.conversation_id,
+              p_external_user_id: item.external_user_id,
+              p_channel: item.channel,
+              p_chatwoot_conversation_id: item.chatwoot_conversation_id,
+              p_attempt: attempt + 1,
+              p_max_attempts: maxAttempts,
+              p_intervals_minutes: JSON.stringify(intervals),
+              p_delay_minutes: nextDelay,
+            });
+          } catch (e: any) {
+            console.warn("[FollowUp] Schedule next attempt failed:", e.message);
+          }
+        }
+
+        processed++;
+        console.log(`[FollowUp] Sent attempt ${attempt}/${maxAttempts} for conversation ${item.conversation_id}`);
+      } catch (e: any) {
+        console.error("[FollowUp] Error processing item", item.id, e.message);
+      }
+    }
+
+    return reply.send({ processed, skipped, total: pending.length });
   });
 }
