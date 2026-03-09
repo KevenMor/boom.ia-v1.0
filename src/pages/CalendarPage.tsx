@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { DateInputBR } from "@/components/ui/date-input-br";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -20,6 +21,7 @@ import { useTenants } from "@/hooks/useTenants";
 import { useCalendars, useCreateCalendar } from "@/hooks/useCalendars";
 import { useCalendarEvents, useCreateCalendarEvent, useUpdateCalendarEvent, useDeleteCalendarEvent } from "@/hooks/useCalendarEvents";
 import { useAgents } from "@/hooks/useAgents";
+import { usePendingReminders } from "@/hooks/usePendingReminders";
 import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
 import { toast } from "sonner";
 import type { Calendar } from "@/types/calendar";
@@ -87,6 +89,7 @@ export default function CalendarPage() {
 
   const { data: dbEvents, isLoading: eventsLoading } = useCalendarEvents(selectedTenantId || undefined, activeCalendarIds);
   const { data: agents, refetch: refetchAgents } = useAgents(selectedTenantId || undefined);
+  const { data: pendingReminders, refetch: refetchReminders } = usePendingReminders(selectedTenantId || undefined);
   const createEvent = useCreateCalendarEvent();
   const updateEvent = useUpdateCalendarEvent();
   const deleteEvent = useDeleteCalendarEvent();
@@ -126,10 +129,13 @@ export default function CalendarPage() {
   const [reminderPhone, setReminderPhone] = useState("");
   const [reminderAgentId, setReminderAgentId] = useState("");
 
-  // Refetch agents ao abrir o modal (para pegar config atualizado apos editar agente)
+  // Refetch agents e lembretes ao abrir o modal (para pegar config atualizado apos editar agente)
   useEffect(() => {
-    if (dialogOpen) refetchAgents();
-  }, [dialogOpen, refetchAgents]);
+    if (dialogOpen) {
+      refetchAgents();
+      refetchReminders();
+    }
+  }, [dialogOpen, refetchAgents, refetchReminders]);
 
   // Agents with reminders enabled (active ou test, com reminder_enabled no config)
   const reminderAgents = useMemo(() => {
@@ -186,12 +192,12 @@ export default function CalendarPage() {
     setEndTime(info.event.allDay ? "09:00" : extractTime(info.event.endStr || info.event.startStr));
 
     if (selectedTenantId) {
+      // Busca lembrete criado manualmente OU pela IA (qualquer conversation_id)
       const { data: reminder, error } = await supabase
         .from("appointment_reminders")
         .select("agent_id, external_user_id, status")
         .eq("tenant_id", selectedTenantId)
         .eq("calendar_event_id", info.event.id)
-        .eq("conversation_id", `manual-${info.event.id}`)
         .in("status", ["pending", "sent"])
         .order("created_at", { ascending: false })
         .limit(1)
@@ -272,12 +278,13 @@ export default function CalendarPage() {
           const remindAt = new Date(eventStartDate.getTime() - minutesBefore * 60 * 1000);
           const phone = normalizePhoneForReminder(reminderPhone);
 
+          // Busca lembrete existente (manual ou criado pela IA)
           const { data: existingReminder, error: existingErr } = await supabase
             .from("appointment_reminders")
             .select("id")
             .eq("tenant_id", selectedTenantId)
             .eq("calendar_event_id", eventId)
-            .eq("conversation_id", conversationId)
+            .in("status", ["pending", "sent"])
             .order("created_at", { ascending: false })
             .limit(1)
             .maybeSingle();
@@ -304,6 +311,7 @@ export default function CalendarPage() {
               toast.error("Evento salvo, mas erro ao atualizar lembrete.");
             } else {
               toast.success("Lembrete atualizado! 🔔");
+              refetchReminders();
             }
           } else {
             const { error: remInsertErr } = await supabase
@@ -325,20 +333,23 @@ export default function CalendarPage() {
               toast.error("Evento salvo, mas erro ao agendar lembrete.");
             } else {
               toast.success("Lembrete agendado! 🔔");
+              refetchReminders();
             }
           }
         } else if (editingEventId) {
+          // Cancela lembrete (manual ou criado pela IA)
           const { error: remCancelErr } = await supabase
             .from("appointment_reminders")
             .update({ status: "cancelled", updated_at: new Date().toISOString() })
             .eq("tenant_id", selectedTenantId)
             .eq("calendar_event_id", eventId)
-            .eq("conversation_id", conversationId)
-            .neq("status", "cancelled");
+            .in("status", ["pending", "sent"]);
 
           if (remCancelErr) {
             console.error("Reminder cancel error:", remCancelErr);
             toast.error("Evento salvo, mas erro ao cancelar lembrete.");
+          } else {
+            refetchReminders();
           }
         }
       }
@@ -501,6 +512,40 @@ export default function CalendarPage() {
         </Card>
 
         <Card>
+          <CardHeader className="flex-row items-center justify-between pb-2">
+            <CardTitle className="text-base flex items-center gap-1.5">
+              <Bell className="h-4 w-4 text-primary" />
+              Lembretes agendados
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 max-h-[280px] overflow-y-auto">
+            {!selectedTenantId && (
+              <p className="text-xs text-muted-foreground">Selecione um tenant.</p>
+            )}
+            {selectedTenantId && pendingReminders === undefined && <p className="text-xs text-muted-foreground">Carregando...</p>}
+            {selectedTenantId && pendingReminders?.length === 0 && (
+              <p className="text-xs text-muted-foreground">Nenhum lembrete pendente.</p>
+            )}
+            {pendingReminders?.map((r) => (
+              <div key={r.id} className="rounded-lg border border-border p-2.5 text-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-medium text-foreground line-clamp-1">{r.event_title}</p>
+                  <Badge variant={r.status === "sent" ? "secondary" : "default"} className="text-[10px] shrink-0">
+                    {r.status === "sent" ? "Enviado" : "Pendente"}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Envio: {formatDateTimeBR(r.remind_at)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Evento: {formatDateTimeBR(r.event_start_at)}
+                </p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Próximos Eventos</CardTitle>
           </CardHeader>
@@ -559,7 +604,7 @@ export default function CalendarPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Data início</Label>
-                <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                <DateInputBR value={startDate} onChange={setStartDate} placeholder="DD/MM/AAAA" />
               </div>
               <div className="space-y-2">
                 <Label>Hora início</Label>
@@ -569,7 +614,7 @@ export default function CalendarPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Data fim</Label>
-                <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                <DateInputBR value={endDate} onChange={setEndDate} placeholder="DD/MM/AAAA" />
               </div>
               <div className="space-y-2">
                 <Label>Hora fim</Label>

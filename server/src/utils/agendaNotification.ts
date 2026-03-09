@@ -3,32 +3,21 @@
  * Usado por chat-local ao criar/cancelar eventos.
  */
 
-const WEEKDAYS_PT: Record<number, string> = {
-  0: "dom.",
-  1: "seg.",
-  2: "ter.",
-  3: "qua.",
-  4: "qui.",
-  5: "sex.",
-  6: "sáb.",
-};
-
 /** Formata data/hora em padrao brasileiro: seg., DD/MM/AAAA, HH:MM (America/Sao_Paulo) */
 export function formatDateBR(isoDate: string): string {
   if (!isoDate) return "";
   try {
     const d = new Date(isoDate);
-    const brStr = d.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" });
-    const br = new Date(brStr);
-
-    const weekday = WEEKDAYS_PT[br.getDay()] || "";
-    const day = String(br.getDate()).padStart(2, "0");
-    const month = String(br.getMonth() + 1).padStart(2, "0");
-    const year = br.getFullYear();
-    const hour = String(br.getHours()).padStart(2, "0");
-    const min = String(br.getMinutes()).padStart(2, "0");
-
-    return `${weekday} ${day}/${month}/${year}, ${hour}:${min}`;
+    return new Intl.DateTimeFormat("pt-BR", {
+      timeZone: "America/Sao_Paulo",
+      weekday: "short",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(d);
   } catch {
     return isoDate;
   }

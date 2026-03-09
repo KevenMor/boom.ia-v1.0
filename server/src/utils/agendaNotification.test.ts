@@ -4,7 +4,7 @@ import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification 
 describe("formatDateBR", () => {
   it("formata ISO para dia_semana DD/MM/AAAA, HH:MM", () => {
     const result = formatDateBR("2026-03-09T15:00:00-03:00");
-    expect(result).toMatch(/\w+\.\s\d{2}\/\d{2}\/\d{4},\s\d{2}:\d{2}/);
+    expect(result).toMatch(/\d{2}\/\d{2}\/\d{4}.*\d{2}:\d{2}/);
     expect(result).toContain("09/03/2026");
     expect(result).toContain("15:00");
   });

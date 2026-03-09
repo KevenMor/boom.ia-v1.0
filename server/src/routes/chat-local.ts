@@ -179,7 +179,7 @@ const DEFAULT_PARAMS_SCHEMA = { type: "object", properties: {}, required: [] } a
 const NOTIFICATION_SYSTEM_PROMPT = `Voce monta uma unica mensagem de notificacao interna para a equipe. Inclua obrigatoriamente:
 - Nome do cliente
 - Telefone
-- Data e horario do agendamento no padrao brasileiro (DD/MM/AAAA HH:MM)
+- Data e horario do agendamento SEMPRE no padrao brasileiro: DD/MM/AAAA, HH:MM (ex: 09/03/2026, 15:00). NUNCA use MM/DD/AAAA.
 - Veiculo de interesse
 Se o historico ajudar, inclua um resumo muito breve da conversa (1 linha). Termine com "Agendado automaticamente pela IA". Seja conciso e organizado. Nao use markdown. Responda APENAS com o texto da notificacao, sem explicacoes.`;
 
