@@ -194,29 +194,6 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       const tools = (toolsData || []) as ToolDef[];
       const hasInventoryTool = tools.some((t) => t.tool_type === "inventory_query");
 
-      // #region agent log
-      const _dbg = (loc: string, msg: string, data: Record<string, unknown>) => {
-        fetch("http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "16c3c6" },
-          body: JSON.stringify({ sessionId: "16c3c6", location: loc, message: msg, data, timestamp: Date.now() }),
-        }).catch(() => {});
-      };
-      _dbg("chat-local:tools-loaded", "raw tools from DB", {
-        count: tools.length,
-        tools: tools.map((t, i) => {
-          const fd = t.function_def as Record<string, unknown> | null;
-          const p = fd?.parameters;
-          return {
-            idx: i,
-            name: fd?.name,
-            paramsIsNull: p == null,
-            paramsTypeField: p != null && typeof p === "object" ? (p as Record<string, unknown>).type : "n/a",
-          };
-        }),
-      });
-      // #endregion
-
       const systemPrompt = buildSystemPrompt(
         agent.system_prompt || "",
         tenantSlug,
@@ -239,12 +216,6 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       let model = agent.model || "gpt-4o-mini";
       const { openaiTools, nameToTool } = buildOpenAITools(tools, providerConfig.baseUrl);
       const useTools = openaiTools.length > 0;
-      // #region agent log
-      _dbg("chat-local:main-tools", "buildOpenAITools output (conversational)", {
-        baseUrl: providerConfig.baseUrl,
-        tools: openaiTools.map((t, i) => ({ idx: i, name: t.function.name, paramsType: t.function.parameters?.type })),
-      });
-      // #endregion
       const isGeminiProvider = /generativelanguage|googleapis\.com\/v1beta/i.test(providerConfig.baseUrl);
 
       // Gemini 3 e 2.5 (thinking) exigem thought_signature em function calls - não suportado.
@@ -312,12 +283,6 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         if (dispatcherConfig) {
           console.log("[Chat-Local] Dual-provider: dispatcher (tools) + conversacional");
           const { openaiTools: dispatcherTools, nameToTool: dispatcherNameToTool } = buildOpenAITools(tools, dispatcherConfig.baseUrl);
-          // #region agent log
-          _dbg("chat-local:dispatcher-tools", "buildOpenAITools for dispatcher (OpenAI)", {
-            baseUrl: dispatcherConfig.baseUrl,
-            tools: dispatcherTools.map((t, i) => ({ idx: i, name: t.function.name, paramsType: t.function.parameters?.type, nameMatch: /^[a-zA-Z0-9_-]+$/.test(t.function.name) })),
-          });
-          // #endregion
           const dispatcherModel = (agentConfig.dispatcher_model as string) || "gpt-4o-mini";
           const dispatcherMessages = toOpenAIMessages(getDispatcherPrompt(tenantSlug), messages);
 
