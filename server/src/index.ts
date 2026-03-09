@@ -142,7 +142,7 @@ build()
 
     setInterval(async () => {
       try {
-        const resp = await fetch(followupUrl, { method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(30_000) });
+        const resp = await fetch(followupUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", signal: AbortSignal.timeout(30_000) });
         if (resp.ok) {
           const data = await resp.json() as { processed?: number; skipped?: number };
           if ((data.processed ?? 0) > 0 || (data.skipped ?? 0) > 0) {
