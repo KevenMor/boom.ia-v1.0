@@ -185,7 +185,13 @@ async function sendAgendaNotification(
   toolResult: unknown
 ): Promise<void> {
   if (!toolResult || typeof toolResult !== "object") return;
-  const res = toolResult as { action?: string; event?: { title?: string; start_at?: string }; deleted_event?: { title?: string; start_at?: string } };
+  const res = toolResult as {
+    action?: string;
+    event?: { title?: string; start_at?: string };
+    deleted_event?: { title?: string; start_at?: string };
+    telefone_cliente?: string;
+    veiculo_interesse?: string;
+  };
   const isCreated = res.action === "created" && res.event;
   const isCancelled = res.action === "cancelled" && res.deleted_event;
   if (!isCreated && !isCancelled) return;
@@ -194,8 +200,19 @@ async function sendAgendaNotification(
   const title = evt.title || "Agendamento";
   const startAt = evt.start_at || "";
   const timePart = startAt.includes("T") ? startAt.slice(0, 16).replace("T", " ") : startAt;
-  const prefix = isCreated ? "📅 Agendamento criado" : "❌ Agendamento cancelado";
-  const message = `${prefix}: ${title}${timePart ? ` — ${timePart}` : ""}`;
+
+  let message: string;
+  if (isCreated) {
+    // Formato claro: Agendamento criado: Visita - Nome - data hora (sem tags duplicadas)
+    const mainLine = `📅 Agendamento criado: ${title}${timePart ? ` - ${timePart}` : ""}`;
+    const lines: string[] = [mainLine];
+    if (res.telefone_cliente) lines.push(`📞 ${res.telefone_cliente}`);
+    if (res.veiculo_interesse) lines.push(`🚗 Interesse: ${res.veiculo_interesse}`);
+    lines.push("✅ Agendado automaticamente pela IA");
+    message = lines.join("\n");
+  } else {
+    message = `❌ Agendamento cancelado: ${title}${timePart ? ` — ${timePart}` : ""}`;
+  }
 
   try {
     const supabase = createNexusClient();
@@ -457,7 +474,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             entityHint = `\n\n[ENTIDADES DETECTADAS na última mensagem do cliente]\n${parts.join("\n")}\nUse EXATAMENTE estas entidades ao montar os argumentos das tools. NÃO invente valores diferentes.`;
           }
           if (appraisalCtx) {
-            entityHint += `\n\n[CONTEXTO DE FLUXO] A última mensagem do assistente pedia dados do veículo do CLIENTE (marca, modelo, ano, km). Isso é APPRAISAL (intent A). NÃO chame consultar_estoque — chame APENAS consultar_fipe com os dados fornecidos.`;
+            entityHint += `\n\n[CONTEXTO DE FLUXO] A última mensagem do assistente pedia dados do veículo do CLIENTE (marca, modelo, ano, km). Isso é APPRAISAL (intent A). Chame consultar_fipe com os dados fornecidos E TAMBÉM consultar_agenda com action "check_availability" e date "${todayISO}" para poder oferecer horários reais ao sugerir visita na loja. NÃO chame consultar_estoque.`;
           }
 
           const dispatcherMessages = toOpenAIMessages(
@@ -858,11 +875,12 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 debugSendTotalLen += streamFilterBuffer.length;
                 sendSse({ choices: [{ delta: { content: streamFilterBuffer } }] });
               }
-              // Primeiro contato: fluxo boas-vindas → vídeo (no delivery) → pergunta do nome
+              // Primeiro contato: pergunta do nome só se NÃO tiver vídeo de boas-vindas (quando tem vídeo, o delivery envia texto → vídeo → pergunta do nome, evitando duplicata)
               const isFirstContact = messages.filter((m) => m.role === "assistant").length === 0;
               const agentCfg = (agent?.config || {}) as Record<string, unknown>;
+              const hasWelcomeVideo = !!(agentCfg.welcome_video_url as string)?.trim();
               const nameQuestion = (agentCfg.welcome_name_question as string) || "Como posso te chamar?";
-              if (isFirstContact && nameQuestion) {
+              if (isFirstContact && nameQuestion && !hasWelcomeVideo) {
                 const nqContent = "\n\n" + nameQuestion;
                 debugSendCount++;
                 debugSendTotalLen += nqContent.length;
@@ -1051,8 +1069,9 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             if (streamFilterBuffer) sendSse({ choices: [{ delta: { content: streamFilterBuffer } }] });
             const isFirstContact = messages.filter((m) => m.role === "assistant").length === 0;
             const agentCfgSingle = (agent?.config || {}) as Record<string, unknown>;
+            const hasWelcomeVideoSingle = !!(agentCfgSingle.welcome_video_url as string)?.trim();
             const nameQuestionSingle = (agentCfgSingle.welcome_name_question as string) || "Como posso te chamar?";
-            if (isFirstContact && nameQuestionSingle) {
+            if (isFirstContact && nameQuestionSingle && !hasWelcomeVideoSingle) {
               const nqContentSingle = "\n\n" + nameQuestionSingle;
               content += nqContentSingle;
               sendSse({ choices: [{ delta: { content: nqContentSingle } }] });

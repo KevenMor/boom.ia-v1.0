@@ -501,7 +501,17 @@ async function executeCalendarQuery(
       if (insErr) {
         return { success: false, result: null, error: insErr.message };
       }
-      return { success: true, result: { action: "created", event: created } };
+      const telefoneCliente = calendarArgs.telefone_cliente != null ? String(calendarArgs.telefone_cliente).trim() : undefined;
+      const veiculoInteresse = calendarArgs.veiculo_interesse != null ? String(calendarArgs.veiculo_interesse).trim() : undefined;
+      return {
+        success: true,
+        result: {
+          action: "created",
+          event: created,
+          ...(telefoneCliente && { telefone_cliente: telefoneCliente }),
+          ...(veiculoInteresse && { veiculo_interesse: veiculoInteresse }),
+        },
+      };
     }
 
     if (action === "cancelar" || action === "cancel" || action === "delete") {
