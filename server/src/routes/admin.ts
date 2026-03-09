@@ -143,8 +143,16 @@ export async function adminRoutes(fastify: FastifyInstance) {
             detail: fetchError?.message,
           });
         }
-        const decrypted = await decrypt(provider.api_key_encrypted, encryptionKey);
-        return reply.send({ api_key: decrypted });
+        try {
+          const decrypted = await decrypt(provider.api_key_encrypted, encryptionKey);
+          return reply.send({ api_key: decrypted });
+        } catch (err) {
+          fastify.log.warn({ err, provider_id }, "Decrypt failed for provider key");
+          return reply.status(500).send({
+            error: "Decryption failed",
+            detail: "ENCRYPTION_KEY may not match the key used to encrypt this provider. Ensure ENCRYPTION_KEY is the same in all environments.",
+          });
+        }
       }
 
       return reply.status(400).send({ error: "Invalid action" });
