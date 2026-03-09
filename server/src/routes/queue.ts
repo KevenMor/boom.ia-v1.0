@@ -413,19 +413,27 @@ export async function queueRoutes(fastify: FastifyInstance) {
             ? [sanitizedContent]
             : [];
 
-      fireDeliverMessage(
-        baseUrl,
-        authKey,
-        {
-          agent_id,
-          conversation_id: responseConvId,
-          external_user_id,
-          channel,
-          chatwoot_conversation_id,
-          response_text: sanitizedContent,
-          response_parts: responseParts,
+      const isFirstReply = conversationMessages.filter((m) => m.role === "assistant").length === 0;
+      const deliverBody: Record<string, unknown> = {
+        agent_id,
+        conversation_id: responseConvId,
+        external_user_id,
+        channel,
+        chatwoot_conversation_id,
+        response_text: sanitizedContent,
+        response_parts: responseParts,
+      };
+      if (isFirstReply) {
+        const { data: agentRow } = await supabase.from("agents").select("config").eq("id", agent_id).maybeSingle();
+        const cfg = (agentRow?.config || {}) as Record<string, unknown>;
+        if (cfg.welcome_video_url && typeof cfg.welcome_video_url === "string") {
+          deliverBody.welcome_video_url = cfg.welcome_video_url;
         }
-      ).catch((e) => console.error("[ProcessQueue] deliver-message failed:", e));
+      }
+
+      fireDeliverMessage(baseUrl, authKey, deliverBody).catch((e) =>
+        console.error("[ProcessQueue] deliver-message failed:", e)
+      );
 
       return reply.send({
         status: "processed",

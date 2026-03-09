@@ -64,8 +64,9 @@ export function useConversationMessages(agentId: string | null, conversationId: 
 
 /** Load and merge messages from multiple conversation IDs (unified contact view) */
 export function useMultiConversationMessages(agentId: string | null, conversationIds: string[]) {
+  const stableKey = conversationIds.slice().sort().join(",");
   return useQuery({
-    queryKey: ["multi-conversation-messages", agentId, ...conversationIds],
+    queryKey: ["multi-conversation-messages", agentId, stableKey],
     queryFn: async () => {
       if (!agentId || conversationIds.length === 0) return [];
       const results = await Promise.all(

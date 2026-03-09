@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { MessageSquare, Bot, ArrowLeft, Search, Send, Paperclip, Smile, CheckCheck, Bug, Trash2, Mic, Phone, Hash, Clock, Users, UserPlus } from "lucide-react";
 import { DebugBlock } from "@/components/sandbox/DebugBlock";
 import { callAPI } from "@/lib/api-client";
@@ -63,7 +63,7 @@ export default function Conversations() {
 
   const { data: conversations, isLoading: convsLoading } = useConversations(selectedAgentId);
 
-  const { deduplicatedConversations, contactConvIds } = (() => {
+  const { deduplicatedConversations, contactConvIds } = useMemo(() => {
     if (!conversations) return { deduplicatedConversations: [] as typeof conversations, contactConvIds: new Map<string, string[]>() };
     const contactMap = new Map<string, (typeof conversations)[number]>();
     const idsMap = new Map<string, string[]>();
@@ -124,9 +124,12 @@ export default function Conversations() {
       }
     }
     return { deduplicatedConversations: Array.from(contactMap.values()), contactConvIds: idsMap };
-  })();
+  }, [conversations]);
 
-  const selectedConvIds = selectedContactKey ? (contactConvIds.get(selectedContactKey) ?? []) : [];
+  const selectedConvIds = useMemo(
+    () => selectedContactKey ? (contactConvIds.get(selectedContactKey) ?? []) : [],
+    [selectedContactKey, contactConvIds]
+  );
   const selectedConv = deduplicatedConversations.find((c) => {
     const key = c.contact_name || c.external_user_id || c.id;
     return selectedContactKey && (contactConvIds.get(selectedContactKey) ?? []).includes(c.id);

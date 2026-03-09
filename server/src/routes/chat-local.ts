@@ -858,15 +858,55 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 debugSendTotalLen += streamFilterBuffer.length;
                 sendSse({ choices: [{ delta: { content: streamFilterBuffer } }] });
               }
+              // Primeiro contato: fluxo boas-vindas → vídeo (no delivery) → pergunta do nome
+              const isFirstContact = messages.filter((m) => m.role === "assistant").length === 0;
+              const agentCfg = (agent?.config || {}) as Record<string, unknown>;
+              const nameQuestion = (agentCfg.welcome_name_question as string) || "Como posso te chamar?";
+              if (isFirstContact && nameQuestion) {
+                const nqContent = "\n\n" + nameQuestion;
+                debugSendCount++;
+                debugSendTotalLen += nqContent.length;
+                sendSse({ choices: [{ delta: { content: nqContent } }] });
+              }
               fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7948bd'},body:JSON.stringify({sessionId:'7948bd',location:'chat-local.ts:stream-done',message:'conv stream done',data:{deltaCount:debugDeltaCount,deltaTotalLen:debugDeltaTotalLen,sendCount:debugSendCount,sendTotalLen:debugSendTotalLen,noContentSent:debugSendTotalLen===0},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
               break;
             }
           }
 
           if (debugSendTotalLen === 0) {
-            const fallbackMsg = "Não consegui concluir o agendamento agora. Por favor, me informe uma data e horário futuros (por exemplo: amanhã às 10h ou próxima segunda às 14h) para eu tentar novamente.";
-            sendSse({ choices: [{ delta: { content: fallbackMsg } }] });
-            fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7948bd'},body:JSON.stringify({sessionId:'7948bd',location:'chat-local.ts:fallback',message:'sent fallback message',data:{reason:'noContentSent'},timestamp:Date.now(),hypothesisId:'C'})}).catch(()=>{});
+            console.warn("[Chat-Local] Resposta vazia do conversacional, tentando retry simplificado...");
+            try {
+              const retryMessages = conversationalMessagesClean.slice(0, 1).concat(
+                conversationalMessagesClean.filter((m) => m.role === "user" || m.role === "assistant").slice(-4)
+              );
+              if (toolResults.length > 0) {
+                retryMessages.push({ role: "user", content: `[Resultados das ferramentas executadas]:\n${toolResults.join("\n\n")}\n\nResponda ao cliente com base nesses resultados. Seja natural e objetiva.` });
+              }
+              const retryBody = { model: convModel, messages: retryMessages, stream: false, temperature: agent.temperature ?? 0.7 };
+              const retryResp = await fetch(convApiUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${providerConfig.apiKey}` },
+                body: JSON.stringify(retryBody),
+                signal: AbortSignal.timeout(30000),
+              });
+              if (retryResp.ok) {
+                const retryJson = await retryResp.json() as { choices?: Array<{ message?: { content?: string } }> };
+                const retryContent = retryJson.choices?.[0]?.message?.content?.trim();
+                if (retryContent) {
+                  console.log("[Chat-Local] Retry OK, enviando conteúdo:", retryContent.slice(0, 80));
+                  sendSse({ choices: [{ delta: { content: retryContent } }] });
+                } else {
+                  console.warn("[Chat-Local] Retry também retornou vazio, enviando mensagem neutra");
+                  sendSse({ choices: [{ delta: { content: "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?" } }] });
+                }
+              } else {
+                console.warn("[Chat-Local] Retry falhou:", retryResp.status);
+                sendSse({ choices: [{ delta: { content: "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?" } }] });
+              }
+            } catch (retryErr) {
+              console.error("[Chat-Local] Retry error:", retryErr);
+              sendSse({ choices: [{ delta: { content: "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?" } }] });
+            }
           }
 
           const tokenUsagePayload = {
@@ -1009,6 +1049,14 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
           if (done) {
             if (streamFilterBuffer) sendSse({ choices: [{ delta: { content: streamFilterBuffer } }] });
+            const isFirstContact = messages.filter((m) => m.role === "assistant").length === 0;
+            const agentCfgSingle = (agent?.config || {}) as Record<string, unknown>;
+            const nameQuestionSingle = (agentCfgSingle.welcome_name_question as string) || "Como posso te chamar?";
+            if (isFirstContact && nameQuestionSingle) {
+              const nqContentSingle = "\n\n" + nameQuestionSingle;
+              content += nqContentSingle;
+              sendSse({ choices: [{ delta: { content: nqContentSingle } }] });
+            }
             break;
           }
         }

@@ -111,6 +111,8 @@ export default function EditAgent() {
   const [dispatcherPrompt, setDispatcherPrompt] = useState("");
   const [dispatcherProviderId, setDispatcherProviderId] = useState("");
   const [dispatcherModel, setDispatcherModel] = useState("");
+  const [welcomeVideoUrl, setWelcomeVideoUrl] = useState("");
+  const [welcomeNameQuestion, setWelcomeNameQuestion] = useState("");
   const [chatwootUrl, setChatwootUrl] = useState("");
   const [chatwootApiToken, setChatwootApiToken] = useState("");
   const [chatwootAccountId, setChatwootAccountId] = useState("");
@@ -155,6 +157,8 @@ export default function EditAgent() {
       setDispatcherPrompt((cfg as any).dispatcher_prompt ?? "");
       setDispatcherProviderId((cfg as any).dispatcher_provider_id ?? "");
       setDispatcherModel((cfg as any).dispatcher_model ?? "");
+      setWelcomeVideoUrl((cfg as any).welcome_video_url ?? "");
+      setWelcomeNameQuestion((cfg as any).welcome_name_question ?? "");
       setChatwootUrl((cfg as any).chatwoot_url ?? "");
       setChatwootApiToken((cfg as any).chatwoot_api_token ?? "");
       setChatwootAccountId((cfg as any).chatwoot_account_id ?? "");
@@ -195,6 +199,8 @@ export default function EditAgent() {
           dispatcher_prompt: dispatcherPrompt || undefined,
           dispatcher_provider_id: dispatcherProviderId || undefined,
           dispatcher_model: dispatcherModel || undefined,
+          welcome_video_url: welcomeVideoUrl || undefined,
+          welcome_name_question: welcomeNameQuestion || undefined,
           chatwoot_url: chatwootUrl || undefined, chatwoot_api_token: chatwootApiToken || undefined,
           chatwoot_account_id: chatwootAccountId || undefined,
           waha_url: wahaUrl || undefined, waha_api_key: wahaApiKey || undefined,
@@ -531,6 +537,37 @@ export default function EditAgent() {
             <p className="text-xs text-muted-foreground">
               {debounceMs > 0 ? `Aguarda ${debounceMs}s após a última mensagem para consolidar` : "Desativado — responde cada mensagem individualmente"}
             </p>
+          </div>
+        </div>
+
+        {/* Boas-vindas (vídeo + pergunta do nome) */}
+        <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+          <h3 className="text-base font-semibold text-foreground">Boas-vindas (primeiro contato)</h3>
+          <p className="text-xs text-muted-foreground">
+            No primeiro contato o assistente envia o texto de boas-vindas, depois o vídeo (se preenchido) e em seguida pergunta o nome.
+          </p>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-sm text-muted-foreground">URL do vídeo da loja</Label>
+              <Input
+                type="url"
+                placeholder="https://exemplo.com/loja.mp4"
+                value={welcomeVideoUrl}
+                onChange={(e) => setWelcomeVideoUrl(e.target.value)}
+                className="h-11 rounded-lg bg-background border-border mt-1 font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Link público do vídeo (MP4). O sistema baixa e envia como arquivo. Deixe vazio para não enviar vídeo.</p>
+            </div>
+            <div>
+              <Label className="text-sm text-muted-foreground">Pergunta do nome (opcional)</Label>
+              <Input
+                type="text"
+                placeholder="Como posso te chamar?"
+                value={welcomeNameQuestion}
+                onChange={(e) => setWelcomeNameQuestion(e.target.value)}
+                className="h-11 rounded-lg bg-background border-border mt-1"
+              />
+            </div>
           </div>
         </div>
 
