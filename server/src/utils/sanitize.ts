@@ -48,6 +48,20 @@ export function sanitizeLLMOutput(content: string): string {
   return text;
 }
 
+/**
+ * Fallback quando sanitizeLLMOutput retorna vazio mas o conteúdo parece texto conversacional.
+ * Remove apenas linhas de comando explícitas e retorna o resto, ou "" se não sobrar nada útil.
+ */
+export function fallbackSanitizeForRetry(content: string): string {
+  const t = (content || "").trim();
+  if (!t) return "";
+  if (t.startsWith("{") && t.endsWith("}")) return "";
+  const lines = t.split("\n");
+  const kept = lines.filter((line) => !isCommandLine(line + "\n"));
+  const result = kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return result || "";
+}
+
 /** Retorna true se a linha é uma linha de comando interno (ex.: ENVIAR_FOTOS_VEICULO: ...) que não deve ser exibida ao usuário. */
 export function isCommandLine(line: string): boolean {
   const t = (line || "").trim();

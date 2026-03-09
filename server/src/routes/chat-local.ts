@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
 import { buildSystemPrompt, getDispatcherPrompt } from "../services/prompts/registry.js";
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
-import { filterCommandLinesFromStream, sanitizeLLMOutput } from "../utils/sanitize.js";
+import { filterCommandLinesFromStream, sanitizeLLMOutput, fallbackSanitizeForRetry } from "../utils/sanitize.js";
 import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification } from "../utils/agendaNotification.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
@@ -1051,7 +1051,12 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
 
           if (debugSendTotalLen === 0) {
-            console.warn("[Chat-Local] Resposta vazia do conversacional, tentando retry simplificado...");
+            console.warn("[Chat-Local] Resposta vazia do conversacional", {
+              debugDeltaCount,
+              debugDeltaTotalLen,
+              debugSendCount,
+              hint: debugDeltaTotalLen > 0 && debugSendTotalLen === 0 ? "conteúdo filtrado por filterCommandLines" : "modelo retornou vazio ou sem deltas",
+            });
             try {
               const retryMessages = conversationalMessagesClean.slice(0, 1).concat(
                 conversationalMessagesClean.filter((m) => m.role === "user" || m.role === "assistant").slice(-4)
@@ -1075,14 +1080,22 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                     console.log("[Chat-Local] Retry OK, enviando conteúdo sanitizado:", sanitized.slice(0, 80));
                     sendSse({ choices: [{ delta: { content: sanitized } }] });
                   } else {
-                    sendSse({ choices: [{ delta: { content: "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?" } }] });
+                    const fallback = fallbackSanitizeForRetry(retryContent);
+                    if (fallback) {
+                      console.log("[Chat-Local] sanitize retornou vazio, usando fallback:", fallback.slice(0, 80));
+                      sendSse({ choices: [{ delta: { content: fallback } }] });
+                    } else {
+                      console.warn("[Chat-Local] sanitize retornou vazio, retryContent preview:", retryContent.slice(0, 200));
+                      sendSse({ choices: [{ delta: { content: "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?" } }] });
+                    }
                   }
                 } else {
                   console.warn("[Chat-Local] Retry também retornou vazio, enviando mensagem neutra");
                   sendSse({ choices: [{ delta: { content: "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?" } }] });
                 }
               } else {
-                console.warn("[Chat-Local] Retry falhou:", retryResp.status);
+                const errText = await retryResp.text();
+                console.warn("[Chat-Local] Retry falhou:", retryResp.status, errText.slice(0, 150));
                 sendSse({ choices: [{ delta: { content: "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?" } }] });
               }
             } catch (retryErr) {
