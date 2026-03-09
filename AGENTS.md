@@ -31,6 +31,12 @@ Conclusão: na VPS sobe o **build do projeto** no sentido de **imagens já build
 
 ---
 
+## Paridade dev ↔ produção
+
+**Regra:** Server e frontend devem ser deployados juntos. Se só o server for atualizado, a produção terá frontend antigo (e vice-versa). Ver `docs/DEV-PROD-PARIDADE.md`.
+
+---
+
 ## Arquivos relevantes
 
 - **Stack Portainer (Web editor):** `docker-compose.portainer.yml`

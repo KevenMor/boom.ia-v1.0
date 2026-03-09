@@ -12,7 +12,10 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build:docker:server": "docker build -f Dockerfile.server -t ghcr.io/kevenmor/boom-ia-server:latest .",
+    "build:docker:frontend": "docker build -f Dockerfile -t ghcr.io/kevenmor/boom-ia-frontend:latest .",
+    "build:docker:all": "npm run build:docker:server && npm run build:docker:frontend"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.20",
