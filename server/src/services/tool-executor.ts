@@ -263,9 +263,7 @@ async function executeInventoryQuery(
 
     let hint: string;
     if (formatted.length > 0) {
-      const baseHint = photosMarkdown
-        ? `ESTOQUE ATUAL (${formatted.length} veículo(s)). O cliente pediu fotos: inclua na sua resposta EXATAMENTE o conteúdo de photos_markdown (as imagens em markdown).`
-        : `ESTOQUE ATUAL (${formatted.length} veículo(s)): Use os dados acima. Para fotos, inclua na resposta markdown: ![foto](URL) para cada URL em photos.`;
+      const baseHint = `ESTOQUE ATUAL (${formatted.length} veículo(s)). Fotos disponíveis em photos_markdown — NÃO inclua fotos agora. Liste APENAS dados em texto (modelo, ano, km, preço, cor) e pergunte se o cliente quer ver fotos. Quando o cliente PEDIR ou ACEITAR ver fotos, aí sim inclua o conteúdo de photos_markdown na resposta junto com ENVIAR_FOTOS_VEICULO.`;
       if (corFallbackUsed && corOriginal) {
         const availableColors = [...new Set(formatted.map((v) => v.cor).filter(Boolean))];
         hint = `${baseHint}\nNOTA: O cliente pediu na cor "${corOriginal}", mas não temos nessa cor exata. Temos o mesmo modelo nas cores: ${availableColors.join(", ")}. Informe o cliente que não há na cor "${corOriginal}" mas apresente as opções disponíveis com entusiasmo.`;
@@ -275,6 +273,10 @@ async function executeInventoryQuery(
     } else {
       hint = "Nenhum veículo encontrado com os filtros informados.";
     }
+
+    // #region agent log
+    fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'tool-executor.ts:hint',message:'inventory hint sent to LLM',data:{hintPreview:hint.slice(0,120),hasPhotosMarkdown:!!photosMarkdown,vehicleCount:formatted.length},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
 
     return {
       success: true,

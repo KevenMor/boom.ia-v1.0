@@ -291,22 +291,41 @@ async function replyToChatwoot(
     console.warn(`[Deliver] replyToChatwoot: total image URLs to send=${totalImageUrls}, blocks=${consolidated.filter((b) => b.type === "images").length}`);
   }
 
+  // #region agent log
+  fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'delivery.ts:consolidated',message:'consolidated parts order',data:{totalParts:consolidated.length,types:consolidated.map(b=>b.type),imageCounts:consolidated.map(b=>b.imageUrls?.length??0),textPreviews:consolidated.map(b=>b.content?.slice(0,60)??null),totalImageUrls},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+
+  let prevBlockWasImages = false;
+  let prevImageCount = 0;
+
   for (let i = 0; i < consolidated.length; i++) {
     const block = consolidated[i];
     const isLast = i === consolidated.length - 1;
 
     if (block.type === "images" && block.imageUrls?.length) {
       const urls = block.imageUrls;
+      // #region agent log
+      fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'delivery.ts:imageBlock',message:'sending image block',data:{blockIdx:i,imageCount:urls.length,budgetRemaining:MAX_BUDGET_MS-(Date.now()-startTime)},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+      // #endregion
       for (let j = 0; j < urls.length; j++) {
         await sendChatwootImagesBatch(msgUrl, apiToken, [urls[j]], "");
-        if (j < urls.length - 1 && hasTimeBudget()) {
+        if (j < urls.length - 1) {
           await safeDelay(applyJitter(IMAGE_BLOCK_DELAY_MS));
         }
       }
-      if (!isLast && hasTimeBudget()) {
-        await safeDelay(applyJitter(IMAGE_BLOCK_DELAY_MS));
+      prevBlockWasImages = true;
+      prevImageCount = urls.length;
+      if (!isLast) {
+        const postImageDelay = Math.max(IMAGE_BLOCK_DELAY_MS, prevImageCount * 800);
+        // #region agent log
+        fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'delivery.ts:postImageDelay',message:'waiting after image block before next part',data:{blockIdx:i,postImageDelay,prevImageCount,budgetRemaining:MAX_BUDGET_MS-(Date.now()-startTime)},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+        // #endregion
+        await new Promise((resolve) => setTimeout(resolve, postImageDelay));
       }
     } else if (block.type === "text" && block.content) {
+      // #region agent log
+      fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'delivery.ts:textBlock',message:'sending text block',data:{blockIdx:i,textPreview:block.content.slice(0,60),prevBlockWasImages,prevImageCount,budgetRemaining:MAX_BUDGET_MS-(Date.now()-startTime)},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+      // #endregion
       if (humanization.typingDelayMs > 0 && hasTimeBudget()) {
         await setChatwootTyping(chatwootUrl, apiToken, accountId, conversationId, "on");
         await safeDelay(applyJitter(humanization.typingDelayMs));
@@ -315,6 +334,8 @@ async function replyToChatwoot(
       if (humanization.typingDelayMs > 0) {
         setChatwootTyping(chatwootUrl, apiToken, accountId, conversationId, "off").catch(() => {});
       }
+      prevBlockWasImages = false;
+      prevImageCount = 0;
     }
 
     if (!isLast && hasTimeBudget()) {
