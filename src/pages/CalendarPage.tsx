@@ -298,8 +298,10 @@ export default function CalendarPage() {
       toast.error("Selecione o agente para enviar o lembrete.");
       return;
     }
-    const finalStart = allDay ? `${startDate}T00:00:00` : `${startDate}T${startTime}:00`;
-    const finalEnd = allDay ? `${endDate}T23:59:59` : `${endDate}T${endTime}:00`;
+    // Horário do formulário = Brasília (-03:00); sem timezone o Postgres/JS interpreta errado
+    const tz = "-03:00";
+    const finalStart = allDay ? `${startDate}T00:00:00${tz}` : `${startDate}T${startTime}:00${tz}`;
+    const finalEnd = allDay ? `${endDate}T23:59:59${tz}` : `${endDate}T${endTime}:00${tz}`;
 
     try {
       let eventId = editingEventId;
