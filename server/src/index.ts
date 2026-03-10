@@ -90,11 +90,15 @@ async function build() {
       for (const [k, v] of Object.entries(request.headers)) {
         if (v && !["host", "connection", "content-length"].includes(k.toLowerCase())) headers[k] = Array.isArray(v) ? v[0] : v;
       }
-      // Override apikey and Authorization with the correct Nexus key
+      // Override apikey with the correct Nexus key
       // so the frontend can use any anon key (e.g. Lovable Cloud's) and the proxy fixes it
       if (nexusAnonKey) {
+        const keySource = process.env.NEXUS_DB_ANON_KEY ? "NEXUS_DB_ANON_KEY" : "NEXUS_SERVICE_ROLE_KEY";
+        request.log.info({ keySource, keyPrefix: nexusAnonKey.slice(0, 20) + "...", targetUrl }, "Supabase proxy: overriding apikey");
         headers["apikey"] = nexusAnonKey;
         headers["authorization"] = `Bearer ${nexusAnonKey}`;
+      } else {
+        request.log.warn("Supabase proxy: NO nexus key found, forwarding original headers");
       }
       try {
         const body = ["POST", "PUT", "PATCH"].includes(request.method) && request.body ? JSON.stringify(request.body) : undefined;
