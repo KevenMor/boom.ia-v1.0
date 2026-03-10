@@ -36,10 +36,22 @@ async function build() {
     }
   });
 
-  const extraOrigins = (process.env.CORS_ORIGINS || "")
+  const extraOriginsRaw = (process.env.CORS_ORIGINS || "")
     .split(",")
     .map((o) => o.trim())
     .filter(Boolean);
+
+  const extraOrigins = extraOriginsRaw.map((origin) => {
+    // Suporte a wildcard no env, ex.: https://*.lovable.app
+    if (origin.includes("*")) {
+      const escaped = origin
+        .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+        .replace(/\*/g, ".*");
+      return new RegExp(`^${escaped}$`);
+    }
+    return origin;
+  });
+
   await fastify.register(cors, {
     origin: [
       "http://localhost:5173",
