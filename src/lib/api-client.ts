@@ -1,12 +1,13 @@
-// Em dev (localhost) usa /api relativo (proxy do Vite); em produção usa o domínio da API.
-const isLocalhost =
+// Detecta se realmente roda em localhost (window.location, não VITE_API_URL)
+const isTrulyLocal =
   typeof window !== "undefined" &&
   /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(window.location.origin);
 
-const API_BASE =
-  typeof window !== "undefined"
-    ? (isLocalhost ? "/api" : (import.meta.env.VITE_API_URL || "https://api.agboom.com.br/api"))
-    : (import.meta.env.VITE_API_URL || "http://localhost:3001/api");
+const PROD_API = "https://ia.agboom.com.br/api";
+
+const API_BASE = isTrulyLocal
+  ? "/api"
+  : PROD_API;
 
 export function getApiBase(): string {
   return API_BASE.replace(/\/+$/, "");

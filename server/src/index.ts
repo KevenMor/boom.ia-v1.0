@@ -49,6 +49,7 @@ async function build() {
       /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|172\.\d+\.\d+\.\d+)(:\d+)?$/,
       /\.lovable\.dev$/,
       /\.lovable\.app$/,
+      /\.lovableproject\.com$/,
       ...extraOrigins,
     ],
     credentials: true,
