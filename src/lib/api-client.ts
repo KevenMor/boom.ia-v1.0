@@ -3,7 +3,8 @@ const isTrulyLocal =
   typeof window !== "undefined" &&
   /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(window.location.origin);
 
-const PROD_API = "https://api.agboom.com.br/api";
+const DEFAULT_PROD_API = "https://ia.agboom.com.br/api";
+const PROD_API = (import.meta.env.VITE_API_URL as string | undefined)?.trim() || DEFAULT_PROD_API;
 
 const API_BASE = isTrulyLocal
   ? "/api"
