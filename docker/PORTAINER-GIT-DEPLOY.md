@@ -10,7 +10,7 @@ Use este método se você quer que o Portainer **clone o repositório** e faça 
 2. **Name**: `boom-ia` (ou outro nome)
 3. **Build method**: **Git repository**
 4. Preencha:
-   - **Repository URL**: `https://github.com/KevenMor/boom.ia-v1.0`
+   - **Repository URL**: `https://github.com/KevenMor/boom-agents.git`
    - **Repository reference**: `main`
    - **Compose path**: `docker-compose.portainer-git.yml`
 5. Ative **Repository authentication**:

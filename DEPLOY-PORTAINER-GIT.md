@@ -25,7 +25,7 @@ No Portainer:
 2. Escolha **Git Repository**
 3. Preencha:
    - **Name:** `boom_ia`
-   - **Repository URL:** `https://github.com/KevenMor/boom.ia-v1.0`
+   - **Repository URL:** `https://github.com/KevenMor/boom-agents.git`
    - **Repository reference:** `main`
    - **Compose path:** `docker-compose.portainer-git-traefik.yml`
    

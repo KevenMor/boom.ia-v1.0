@@ -3,7 +3,7 @@
 #
 # No Portainer:
 #   1. Stacks > Add stack > Git repository
-#   2. Repository URL: https://github.com/KevenMor/boom.ia-v1.0
+#   2. Repository URL: https://github.com/KevenMor/boom-agents.git
 #   3. Repository reference: main
 #   4. Compose path: docker-compose.portainer-git-traefik.yml
 #   5. Repository authentication:
