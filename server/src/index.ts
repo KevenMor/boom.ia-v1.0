@@ -70,6 +70,7 @@ async function build() {
     allowedHeaders: [
       "authorization",
       "x-client-info",
+      "x-supabase-api-version",
       "apikey",
       "content-type",
       "x-nexus-auth",
