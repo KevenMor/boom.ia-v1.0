@@ -26,18 +26,11 @@ export function formatDateBR(isoDate: string): string {
   if (!isoDate) return "";
   try {
     let toParse = isoDate.trim();
-    // Se tem +00:00 (banco retornou horário que era local como UTC), tratar como Brasília
-    if (/\+00:00$/.test(toParse)) {
-      toParse = toParse.replace(/\+00:00$/, "") + "-03:00";
-    }
-    // Se não tem timezone (ex.: 2026-03-10T10:00:00), adicionar -03:00
-    else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\s|$)/.test(toParse) && !/Z|[+-]\d{2}:?\d{2}$/.test(toParse)) {
+    // Z ou +00:00 = UTC correto; não alterar (ex.: 17:00Z = 14:00 BRT)
+    // Se não tem timezone (ex.: 2026-03-10T10:00:00), adicionar -03:00 (tratar como Brasília)
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\s|$)/.test(toParse) && !/Z|[+-]\d{2}:?\d{2}$/.test(toParse)) {
       toParse = toParse.replace(/\s*$/, "") + "-03:00";
     }
-    // Z = UTC correto; não alterar (ex.: 17:00Z = 14:00 BRT)
-    // #region agent log
-    fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ad5eb6'},body:JSON.stringify({sessionId:'ad5eb6',location:'agendaNotification.ts:formatDateBR',message:'antes de Date()',data:{original:isoDate,toParse},timestamp:Date.now(),hypothesisId:'H_PARSE'})}).catch(()=>{});
-    // #endregion
     const d = new Date(toParse);
     return new Intl.DateTimeFormat("pt-BR", {
       timeZone: "America/Sao_Paulo",

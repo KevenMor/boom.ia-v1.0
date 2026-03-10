@@ -604,7 +604,7 @@ export default function CalendarPage() {
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-foreground">{ev.title}</p>
                   <Badge variant="secondary" className="text-[10px]">
-                    {typeof ev.start === "string" ? formatDateTimeBRAsBrasilia(ev.start) : ev.start instanceof Date ? formatDateTimeBRAsBrasilia(ev.start.toISOString()) : ""}
+                    {typeof ev.start === "string" ? formatDateTimeBR(ev.start) : ev.start instanceof Date ? formatDateTimeBR(ev.start.toISOString()) : ""}
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">

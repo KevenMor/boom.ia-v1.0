@@ -15,10 +15,10 @@ describe("formatDateBR", () => {
     expect(result).toContain("10:00");
   });
 
-  it("trata ISO com +00:00 (UTC) como Brasilia (evita 07:00 quando era 10:00 local)", () => {
-    const result = formatDateBR("2026-03-10T10:00:00+00:00");
+  it("trata +00:00 como UTC (17:00 UTC = 14:00 BRT)", () => {
+    const result = formatDateBR("2026-03-10T17:00:00+00:00");
     expect(result).toContain("10/03/2026");
-    expect(result).toContain("10:00");
+    expect(result).toContain("14:00");
   });
 
   it("formata ISO com Z (UTC correto) em horário de São Paulo", () => {

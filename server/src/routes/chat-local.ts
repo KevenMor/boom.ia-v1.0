@@ -174,9 +174,11 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
   if (action === "created" || action === "create") {
     const ev = obj.event as { start_at?: string; title?: string } | undefined;
     if (ev?.start_at) {
-      const start = ev.start_at.slice(11, 16);
-      const date = ev.start_at.slice(0, 10).split("-").reverse().join("/");
-      return `Agendamento confirmado para ${date} às ${start}.`;
+      const formatted = formatDateBR(ev.start_at);
+      const parts = formatted.split(", ");
+      const date = parts[1] ?? ev.start_at.slice(0, 10).split("-").reverse().join("/");
+      const time = parts[2] ?? ev.start_at.slice(11, 16);
+      return `Agendamento confirmado para ${date} às ${time}.`;
     }
     return "Agendamento confirmado com sucesso.";
   }
