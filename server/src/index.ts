@@ -10,6 +10,7 @@ import { toolsRoutes } from "./routes/tools.js";
 import { adminRoutes } from "./routes/admin.js";
 import { inventoryRoutes } from "./routes/inventory.js";
 import { contactsRoutes } from "./routes/contacts.js";
+import { demoRoutes } from "./routes/demo.js";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 
@@ -73,6 +74,7 @@ async function build() {
   fastify.register(adminRoutes, { prefix: "/api" });
   fastify.register(inventoryRoutes, { prefix: "/api" });
   fastify.register(contactsRoutes, { prefix: "/api" });
+  fastify.register(demoRoutes, { prefix: "/api" });
 
   fastify.get("/health", async () => ({ ok: true, timestamp: new Date().toISOString() }));
 
@@ -144,6 +146,9 @@ async function build() {
 
   return fastify;
 }
+
+/** Exportado para testes (inject) sem abrir porta. */
+export { build };
 
 build()
   .then((app) => app.listen({ port: PORT, host: "0.0.0.0" }))

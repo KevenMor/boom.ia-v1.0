@@ -5,8 +5,14 @@ import ReactMarkdown from "react-markdown";
 import { AudioRecorder } from "@/components/sandbox/AudioRecorder";
 import { AttachmentPreview, classifyFile, type AttachmentFile } from "@/components/sandbox/AttachmentPreview";
 import { extractVideos, VideoPlayer, UserMediaPreview, type UserAttachmentMeta } from "@/components/sandbox/MediaBubble";
-import { nexusDb, getSupabaseBaseUrl } from "@/integrations/supabase/nexus-client";
+import { nexusDb } from "@/integrations/supabase/nexus-client";
 import { format } from "date-fns";
+
+/** Base da API no backend Node (sem Edge Functions). Em dev/prod usa o mesmo host com /api. */
+function getApiBase(): string {
+  if (typeof window === "undefined") return import.meta.env.VITE_API_URL ?? "";
+  return "";
+}
 
 type Msg = {
   role: "user" | "assistant";
@@ -15,7 +21,6 @@ type Msg = {
   userAttachments?: UserAttachmentMeta[];
 };
 
-const CHAT_URL = `${getSupabaseBaseUrl()}/functions/v1/chat-agent`;
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 
 function extractImages(content: string): { text: string; images: string[] } {
@@ -76,6 +81,7 @@ interface AgentPublicInfo {
 export default function PublicSandbox() {
   const { agentId } = useParams<{ agentId: string }>();
   const [agent, setAgent] = useState<AgentPublicInfo | null>(null);
+  const [loadError, setLoadError] = useState<{ status?: number; message?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
   const [password, setPassword] = useState("");
@@ -94,25 +100,35 @@ export default function PublicSandbox() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Load agent public info via edge function (no auth required)
+  // Carrega dados públicos do agente via backend Node (sem Edge Functions)
   useEffect(() => {
     if (!agentId) return;
+    setLoadError(null);
     (async () => {
       try {
-        const url = `${getSupabaseBaseUrl()}/functions/v1/public-agent-info?agent_id=${agentId}`;
-        const resp = await fetch(url, {
-          headers: {
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-        });
-        if (!resp.ok) throw new Error(`Status ${resp.status}`);
-        const data = await resp.json();
+        const url = `${getApiBase()}/api/demo/public-agent-info?agent_id=${encodeURIComponent(agentId)}`;
+        const resp = await fetch(url);
+        const bodyText = await resp.text();
+        if (!resp.ok) {
+          let errMsg = `Status ${resp.status}`;
+          try {
+            const json = JSON.parse(bodyText);
+            if (json?.error) errMsg = json.error;
+          } catch {}
+          setLoadError({ status: resp.status, message: errMsg });
+          console.warn("[PublicSandbox] public-agent-info failed:", resp.status, bodyText.slice(0, 200));
+          setAgent(null);
+          return;
+        }
+        const data = JSON.parse(bodyText);
         setAgent(data as AgentPublicInfo);
         // If no password configured, skip gate
         if (!data?.config?.sandbox_password) {
           setAuthenticated(true);
         }
-      } catch {
+      } catch (e) {
+        setLoadError({ message: (e as Error)?.message ?? "Erro de rede" });
+        console.warn("[PublicSandbox] public-agent-info error:", e);
         setAgent(null);
       } finally {
         setLoading(false);
@@ -206,11 +222,11 @@ export default function PublicSandbox() {
         nexusToken = session?.access_token;
       } catch {}
 
-      const resp = await fetch(CHAT_URL, {
+      const chatUrl = `${getApiBase()}/api/chat`;
+      const resp = await fetch(chatUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           ...(nexusToken ? { "x-nexus-auth": `Bearer ${nexusToken}` } : {}),
         },
         body: JSON.stringify(body),
@@ -308,6 +324,15 @@ export default function PublicSandbox() {
 
   // ─── Agent not found ─────────
   if (!agent) {
+    const is404 = loadError?.status === 404;
+    const is5xx = loadError?.status && loadError.status >= 500;
+    const hint = is404
+      ? "Verifique se o link está correto e se o agente existe."
+      : is5xx
+        ? "Serviço temporariamente indisponível. Tente novamente em instantes."
+        : loadError?.message
+          ? loadError.message
+          : "Agente não encontrado ou link inválido.";
     return (
       <div className="flex items-center justify-center bg-background px-4" style={{ minHeight: '100dvh' }}>
         <div className="text-center space-y-3">
@@ -315,6 +340,7 @@ export default function PublicSandbox() {
             <Lock className="h-7 w-7 text-muted-foreground" />
           </div>
           <p className="text-muted-foreground">Agente não encontrado ou link inválido.</p>
+          <p className="text-sm text-muted-foreground/80">{hint}</p>
         </div>
       </div>
     );
