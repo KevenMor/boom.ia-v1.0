@@ -59,7 +59,7 @@ async function executeInventoryQuery(
       .select("id, external_id, brand, model, version, year, price, mileage, color, transmission, fuel_type, photo_url, photos, detail_url, description")
       .eq("tenant_id", tenantId)
       .eq("status", "available")
-      .limit(20);
+      .limit(50);
 
     const marca = (args.marca || args.brand) as string | undefined;
     const modelo = (args.modelo || args.model) as string | undefined;
@@ -117,6 +117,37 @@ async function executeInventoryQuery(
       return asThousands ? n * 1000 : n;
     }
 
+    // Parse faixa de preço ANTES da query para aplicar filtro no banco
+    let minPrice: number | null = null;
+    let maxPrice: number | null = null;
+    if (precoMin != null && precoMin !== "") {
+      const n = parsePriceValue(precoMin as number | string, String(faixaPreco || ""));
+      if (n > 0) minPrice = n;
+    }
+    if (precoMax != null && precoMax !== "") {
+      const n = parsePriceValue(precoMax as number | string, String(faixaPreco || ""));
+      if (n > 0) maxPrice = n;
+    }
+    if (faixaPreco && minPrice == null && maxPrice == null) {
+      const s = String(faixaPreco).trim();
+      const ateMatch = s.match(/(?:ate|até)\s*(\d+)\s*(mil)?/i);
+      if (ateMatch) {
+        maxPrice = parsePriceValue(ateMatch[1], ateMatch[2] || "");
+      } else {
+        const rangeMatch = s.match(/(?:entre\s+)?(\d+)\s*(?:a|e|até)\s*(\d+)\s*(mil)?/i) || s.match(/(\d+)\s*[-–]\s*(\d+)\s*(mil)?/i);
+        if (rangeMatch) {
+          minPrice = parsePriceValue(rangeMatch[1], rangeMatch[3] || "");
+          maxPrice = parsePriceValue(rangeMatch[2], rangeMatch[3] || "");
+        } else {
+          const singleNum = s.match(/(\d+)/);
+          if (singleNum) {
+            const val = parsePriceValue(singleNum[1], s);
+            if (val > 0) maxPrice = val;
+          }
+        }
+      }
+    }
+
     if (marca) {
       query = query.ilike("brand", `%${marca}%`);
     }
@@ -133,6 +164,28 @@ async function executeInventoryQuery(
     const cambioIsMotorizacao = cambio && MOTORIZACAO_KEYWORDS.some((k) => normalizeForSearch(cambio).includes(k));
     if (cambio && !cambioIsMotorizacao) {
       query = query.ilike("transmission", `%${cambio}%`);
+    }
+
+    // Tipo (sedan, SUV, hatch, pickup): filtro na query via model/version — não existe coluna tipo
+    if (tipo && ["suv", "sedan", "hatch", "pickup"].includes(normalizeForSearch(tipo))) {
+      const tipoNorm = normalizeForSearch(tipo);
+      const pattern = `%${tipoNorm}%`;
+      query = query.or(`model.ilike.${pattern},version.ilike.${pattern}`);
+    }
+
+    // Motorização (turbo, TSI, etc.): filtro na query via model/version
+    if (motorizacaoFinal) {
+      const motNorm = normalizeForSearch(motorizacaoFinal);
+      const pattern = `%${motNorm}%`;
+      query = query.or(`model.ilike.${pattern},version.ilike.${pattern}`);
+    }
+
+    // Faixa de preço na query
+    if (maxPrice != null && maxPrice > 0) {
+      query = query.lte("price", maxPrice);
+    }
+    if (minPrice != null && minPrice > 0) {
+      query = query.gte("price", minPrice);
     }
 
     const { data: rows, error } = await query;
@@ -187,64 +240,6 @@ async function executeInventoryQuery(
       }),
     }).catch(() => {});
     // #endregion
-
-    // Faixa de preço: preco_min/preco_max (numéricos) ou faixa_preco (string "até X", "X a Y", "entre X e Y mil")
-    let minPrice: number | null = null;
-    let maxPrice: number | null = null;
-    if (precoMin != null && precoMin !== "") {
-      const n = parsePriceValue(precoMin as number | string, String(faixaPreco || ""));
-      if (n > 0) minPrice = n;
-    }
-    if (precoMax != null && precoMax !== "") {
-      const n = parsePriceValue(precoMax as number | string, String(faixaPreco || ""));
-      if (n > 0) maxPrice = n;
-    }
-    if (faixaPreco && minPrice == null && maxPrice == null) {
-      const s = String(faixaPreco).trim();
-      // "até 150000" ou "até 150 mil"
-      const ateMatch = s.match(/(?:ate|até)\s*(\d+)\s*(mil)?/i);
-      if (ateMatch) {
-        maxPrice = parsePriceValue(ateMatch[1], ateMatch[2] || "");
-      } else {
-        // "100 a 130", "100 a 130 mil", "entre 100 e 130 mil"
-        const rangeMatch = s.match(/(?:entre\s+)?(\d+)\s*(?:a|e|até)\s*(\d+)\s*(mil)?/i) || s.match(/(\d+)\s*[-–]\s*(\d+)\s*(mil)?/i);
-        if (rangeMatch) {
-          minPrice = parsePriceValue(rangeMatch[1], rangeMatch[3] || "");
-          maxPrice = parsePriceValue(rangeMatch[2], rangeMatch[3] || "");
-        } else {
-          const singleNum = s.match(/(\d+)/);
-          if (singleNum) {
-            const val = parsePriceValue(singleNum[1], s);
-            if (val > 0) maxPrice = val;
-          }
-        }
-      }
-    }
-    if (minPrice != null || maxPrice != null) {
-      vehicles = vehicles.filter((v) => {
-        if (v.price == null) return false;
-        if (minPrice != null && v.price < minPrice) return false;
-        if (maxPrice != null && v.price > maxPrice) return false;
-        return true;
-      });
-    }
-
-    if (tipo && ["suv", "sedan", "hatch", "pickup"].includes(normalizeForSearch(tipo))) {
-      const tipoNorm = normalizeForSearch(tipo);
-      vehicles = vehicles.filter((v) => {
-        const modelNorm = normalizeForSearch(v.model);
-        const versionNorm = normalizeForSearch(v.version || "");
-        return modelNorm.includes(tipoNorm) || versionNorm.includes(tipoNorm);
-      });
-    }
-
-    if (motorizacaoFinal) {
-      const motNorm = normalizeForSearch(motorizacaoFinal);
-      vehicles = vehicles.filter((v) => {
-        const versionNorm = normalizeForSearch(v.version || "");
-        return versionNorm.includes(motNorm);
-      });
-    }
 
     const formatted = vehicles.map((v) => {
       let photos: string[] = [];
