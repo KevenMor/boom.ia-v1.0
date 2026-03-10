@@ -3,7 +3,7 @@ const isTrulyLocal =
   typeof window !== "undefined" &&
   /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(window.location.origin);
 
-const PROD_API = "https://ia.agboom.com.br/api";
+const PROD_API = "https://api.agboom.com.br/api";
 
 const API_BASE = isTrulyLocal
   ? "/api"
