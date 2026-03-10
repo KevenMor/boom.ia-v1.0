@@ -116,6 +116,54 @@ async function build() {
     });
   }
 
+  // Diagnostic endpoint — remove after debugging
+  fastify.get("/api/debug/auth-test", async (_req, reply) => {
+    const nexusUrl = process.env.NEXUS_DB_URL;
+    const anonKey = process.env.NEXUS_DB_ANON_KEY;
+    const serviceKey = process.env.NEXUS_SERVICE_ROLE_KEY;
+    if (!nexusUrl) return reply.code(500).send({ error: "NEXUS_DB_URL not set" });
+
+    const base = nexusUrl.replace(/\/$/, "");
+    const tokenUrl = `${base}/auth/v1/token?grant_type=password`;
+    const testEmail = "contato@agboom.com.br";
+    const testPassword = "123456";
+
+    const results: Record<string, unknown> = {
+      nexusUrl: base,
+      hasAnonKey: !!anonKey,
+      hasServiceKey: !!serviceKey,
+      anonKeyPrefix: anonKey?.slice(0, 30) + "...",
+    };
+
+    // Test with anon key
+    if (anonKey) {
+      try {
+        const res = await fetch(tokenUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", apikey: anonKey, Authorization: `Bearer ${anonKey}` },
+          body: JSON.stringify({ email: testEmail, password: testPassword }),
+        });
+        const text = await res.text();
+        results.anonKeyAuth = { status: res.status, body: text.slice(0, 300) };
+      } catch (e) { results.anonKeyAuth = { error: String(e) }; }
+    }
+
+    // Test with service role key
+    if (serviceKey) {
+      try {
+        const res = await fetch(tokenUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+          body: JSON.stringify({ email: testEmail, password: testPassword }),
+        });
+        const text = await res.text();
+        results.serviceKeyAuth = { status: res.status, body: text.slice(0, 300) };
+      } catch (e) { results.serviceKeyAuth = { error: String(e) }; }
+    }
+
+    return results;
+  });
+
   fastify.get("/api/health/nexus", async (_req, reply) => {
     const url = process.env.NEXUS_DB_URL;
     const apikey = process.env.NEXUS_DB_ANON_KEY || process.env.NEXUS_SERVICE_ROLE_KEY;
