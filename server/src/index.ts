@@ -55,6 +55,18 @@ async function build() {
     return origin;
   });
 
+  const corsAllowedHeaders = [
+    "Content-Type",
+    "Authorization",
+    "apikey",
+    "x-client-info",
+    "x-supabase-api-version",
+    "x-supabase-client-platform",
+    "x-supabase-client-platform-version",
+    "x-supabase-client-runtime",
+    "x-supabase-client-runtime-version",
+  ];
+
   await fastify.register(cors, {
     origin: [
       "http://localhost:5173",
@@ -69,9 +81,7 @@ async function build() {
     ],
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    // Deixa o plugin refletir automaticamente Access-Control-Request-Headers
-    // para evitar bloqueio por novos headers do supabase-js/browser.
-    allowedHeaders: undefined,
+    allowedHeaders: corsAllowedHeaders,
   });
 
   fastify.register(chatRoutes, { prefix: "/api" });
