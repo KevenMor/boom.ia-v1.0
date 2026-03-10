@@ -330,12 +330,18 @@ export async function toolsRoutes(fastify: FastifyInstance) {
             if (insErr) {
               result = { error: "Failed to create event", detail: insErr.message };
             } else {
-              const ev = created as { start_at?: string; end_at?: string } | undefined;
+              const ev = created as Record<string, unknown> & { start_at?: string; end_at?: string };
+              const startBr = ev?.start_at ? formatDateBR(ev.start_at) : undefined;
+              const endBr = ev?.end_at ? formatDateBR(ev.end_at) : undefined;
               result = {
                 action: "created",
-                event: created,
-                start_at_br: ev?.start_at ? formatDateBR(ev.start_at) : undefined,
-                end_at_br: ev?.end_at ? formatDateBR(ev.end_at) : undefined,
+                event: {
+                  ...ev,
+                  start_at: startBr ?? ev.start_at,
+                  end_at: endBr ?? ev.end_at,
+                },
+                start_at_br: startBr,
+                end_at_br: endBr,
               };
             }
           } else {

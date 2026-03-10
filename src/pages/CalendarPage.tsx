@@ -58,6 +58,28 @@ function formatDateTimeBRAsBrasilia(dateStr: string | undefined): string {
   });
 }
 
+/** Converte ISO UTC para ISO BRT (-03:00) para o FullCalendar exibir corretamente. */
+function utcToBrasiliaISO(isoDate: string | undefined): string {
+  if (!isoDate) return "";
+  try {
+    const d = new Date(isoDate);
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Sao_Paulo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }).formatToParts(d);
+    const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "00";
+    return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}:${get("second")}-03:00`;
+  } catch {
+    return isoDate;
+  }
+}
+
 function extractTime(dateStr: string): string {
   if (!dateStr) return "08:00";
   if (dateStr.includes("T")) {
@@ -103,16 +125,18 @@ export default function CalendarPage() {
   const deleteEvent = useDeleteCalendarEvent();
   const createCalendar = useCreateCalendar();
 
-  // Map DB events to FullCalendar format
+  // Map DB events to FullCalendar format (converte UTC → BRT para exibição correta)
   const events: EventInput[] = useMemo(() => {
     if (!dbEvents) return [];
     return dbEvents.map((ev) => {
       const colorDef = EVENT_COLORS[ev.color] || EVENT_COLORS.primary;
+      const start = ev.all_day ? ev.start_at : utcToBrasiliaISO(ev.start_at);
+      const end = ev.all_day ? (ev.end_at || undefined) : (ev.end_at ? utcToBrasiliaISO(ev.end_at) : undefined);
       return {
         id: ev.id,
         title: ev.title,
-        start: ev.start_at,
-        end: ev.end_at || undefined,
+        start,
+        end,
         allDay: ev.all_day,
         backgroundColor: colorDef.bg,
         borderColor: colorDef.border,
