@@ -83,6 +83,7 @@ async function build() {
   fastify.register(adminRoutes, { prefix: "/api" });
   fastify.register(inventoryRoutes, { prefix: "/api" });
   fastify.register(contactsRoutes, { prefix: "/api" });
+  fastify.register(authRoutes, { prefix: "/api" });
 
   fastify.get("/health", async () => ({ ok: true, timestamp: new Date().toISOString(), started_at: SERVER_STARTED_AT, build_id: SERVER_BUILD_ID }));
   fastify.get("/api/version", async () => ({ ok: true, started_at: SERVER_STARTED_AT, build_id: SERVER_BUILD_ID }));
