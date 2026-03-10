@@ -585,10 +585,10 @@ export default function CalendarPage() {
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Envio: {formatDateTimeBRAsBrasilia(r.remind_at)}
+                  Envio: {formatDateTimeBR(r.remind_at)}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Evento: {formatDateTimeBRAsBrasilia(r.event_start_at)}
+                  Evento: {formatDateTimeBR(r.event_start_at)}
                 </p>
               </div>
             ))}
