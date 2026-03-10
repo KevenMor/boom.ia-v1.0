@@ -74,9 +74,9 @@ async function executeInventoryQuery(
     const colorSynonyms = cor ? getColorSynonyms(cor) : [];
     fetch("http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "faf2ea" },
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "ad5eb6" },
       body: JSON.stringify({
-        sessionId: "faf2ea",
+        sessionId: "ad5eb6",
         location: "tool-executor.ts:executeInventoryQuery:entry",
         message: "consultar_estoque args parsed",
         data: { argsKeys: Object.keys(args), marca, modelo, cor, colorSynonyms, tipoRaw, ano, cambio },
@@ -157,9 +157,9 @@ async function executeInventoryQuery(
     // #region agent log
     fetch("http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "faf2ea" },
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "ad5eb6" },
       body: JSON.stringify({
-        sessionId: "faf2ea",
+        sessionId: "ad5eb6",
         location: "tool-executor.ts:executeInventoryQuery:afterColorFilter",
         message: "After color filter",
         data: { corFallbackUsed, corOriginal: cor, vehicleCount: vehicles.length, vehicleColors: vehicles.map((v) => v.color).slice(0, 10) },
@@ -236,6 +236,10 @@ async function executeInventoryQuery(
         photos = [v.photo_url];
       }
 
+      const vehiclePhotosMarkdown = (photos.length ? photos : [v.photo_url].filter(Boolean))
+        .map((url) => `![foto](${url})`)
+        .join("\n");
+
       const fullName = [v.brand, v.model, v.version].filter(Boolean).join(" ");
       return {
         id: v.id,
@@ -252,18 +256,28 @@ async function executeInventoryQuery(
         photo_url: v.photo_url,
         photos,
         detail_url: v.detail_url,
+        photos_markdown: vehiclePhotosMarkdown || undefined,
       };
     });
 
-    const photosMarkdown = formatted
-      .flatMap((v) => (v.photos && v.photos.length ? v.photos : v.photo_url ? [v.photo_url] : []))
-      .filter(Boolean)
-      .map((url) => `![foto](${url})`)
-      .join("\n");
+    // Um único blob só quando há 1 veículo; com 2+ veículos não enviamos blob global para evitar enviar fotos de todos
+    const photosMarkdown =
+      formatted.length === 1 && formatted[0].photos_markdown
+        ? formatted[0].photos_markdown
+        : formatted.length > 1
+          ? null
+          : formatted
+              .flatMap((v) => (v.photos && v.photos.length ? v.photos : v.photo_url ? [v.photo_url] : []))
+              .filter(Boolean)
+              .map((url) => `![foto](${url})`)
+              .join("\n");
 
     let hint: string;
     if (formatted.length > 0) {
-      const baseHint = `ESTOQUE ATUAL (${formatted.length} veículo(s)). Fotos disponíveis em photos_markdown — NÃO inclua fotos agora. Liste APENAS dados em texto (modelo, ano, km, preço, cor) e pergunte se o cliente quer ver fotos. Quando o cliente PEDIR ou ACEITAR ver fotos, aí sim inclua o conteúdo de photos_markdown na resposta junto com ENVIAR_FOTOS_VEICULO.`;
+      const baseHint =
+        formatted.length > 1
+          ? `ESTOQUE ATUAL (${formatted.length} veículo(s)). Cada veículo tem seu próprio bloco "Fotos do veículo ... (id: ...)" abaixo. NÃO inclua fotos agora. Liste APENAS dados em texto (modelo, ano, km, preço, cor) e pergunte se o cliente quer ver fotos. Quando o cliente PEDIR ou ACEITAR ver fotos de UM veículo, inclua na sua resposta APENAS o bloco de fotos DESSE veículo (o que tiver o id indicado em ENVIAR_FOTOS_VEICULO: nome | id: uuid) e a linha ENVIAR_FOTOS_VEICULO. Nunca inclua fotos de outros veículos.`
+          : `ESTOQUE ATUAL (${formatted.length} veículo(s)). Fotos disponíveis em photos_markdown — NÃO inclua fotos agora. Liste APENAS dados em texto (modelo, ano, km, preço, cor) e pergunte se o cliente quer ver fotos. Quando o cliente PEDIR ou ACEITAR ver fotos, aí sim inclua o conteúdo de photos_markdown na resposta junto com ENVIAR_FOTOS_VEICULO.`;
       if (corFallbackUsed && corOriginal) {
         const availableColors = [...new Set(formatted.map((v) => v.cor).filter(Boolean))];
         hint = `${baseHint}\nNOTA: O cliente pediu na cor "${corOriginal}", mas não temos nessa cor exata. Temos o mesmo modelo nas cores: ${availableColors.join(", ")}. Informe o cliente que não há na cor "${corOriginal}" mas apresente as opções disponíveis com entusiasmo.`;
@@ -275,7 +289,7 @@ async function executeInventoryQuery(
     }
 
     // #region agent log
-    fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'tool-executor.ts:hint',message:'inventory hint sent to LLM',data:{hintPreview:hint.slice(0,120),hasPhotosMarkdown:!!photosMarkdown,vehicleCount:formatted.length},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ad5eb6'},body:JSON.stringify({sessionId:'ad5eb6',location:'tool-executor.ts:consultar_estoque_result',message:'photos_markdown: global vs per-vehicle',data:{vehicleCount:formatted.length,hasGlobalPhotosMarkdown:!!photosMarkdown,perVehiclePhotosMarkdown:formatted.map(v=>({id:v.id,hasMarkdown:!!v.photos_markdown}))},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
     // #endregion
 
     return {

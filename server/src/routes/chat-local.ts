@@ -174,7 +174,7 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
     return "Agendamento cancelado.";
   }
   // consultar_estoque: incluir resumo dos veículos E photos_markdown para o LLM poder enviar as fotos
-  const vehicles = obj.vehicles as Array<{ nome_completo?: string; ano?: number; preco?: number; km?: number; cor?: string }> | undefined;
+  const vehicles = obj.vehicles as Array<{ id?: string; nome_completo?: string; ano?: number; preco?: number; km?: number; cor?: string; photos_markdown?: string }> | undefined;
   const photosMarkdown = obj.photos_markdown as string | undefined;
   if (Array.isArray(vehicles) && vehicles.length > 0) {
     const lines: string[] = [];
@@ -184,7 +184,18 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
       lines.push("- " + parts.join(", "));
     }
     if (vehicles.length > 10) lines.push(`... e mais ${vehicles.length - 10} veículo(s).`);
-    if (photosMarkdown && photosMarkdown.trim()) {
+    const withPerVehiclePhotos = vehicles.some((v) => v.photos_markdown && v.photos_markdown.trim());
+    if (withPerVehiclePhotos) {
+      lines.push("");
+      lines.push("FOTOS (quando o cliente pedir ou aceitar ver fotos, inclua na sua resposta APENAS o bloco do veículo escolhido — use ENVIAR_FOTOS_VEICULO: nome | id: uuid):");
+      for (const v of vehicles) {
+        if (v.photos_markdown && v.photos_markdown.trim()) {
+          lines.push("");
+          lines.push(`--- Fotos do veículo: ${v.nome_completo ?? "?"} (id: ${v.id ?? "?"}) ---`);
+          lines.push(v.photos_markdown);
+        }
+      }
+    } else if (photosMarkdown && photosMarkdown.trim()) {
       lines.push("");
       lines.push("FOTOS (copie o bloco abaixo literalmente na sua resposta quando o cliente pedir ou aceitar ver fotos):");
       lines.push(photosMarkdown);
