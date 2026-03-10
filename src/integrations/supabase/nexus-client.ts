@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 const isTrulyLocal = typeof window !== "undefined" && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(window.location.origin);
 
 // Origem da API (Easypanel em produção)
-const PROD_API_ORIGIN = "https://ia.agboom.com.br";
+const PROD_API_ORIGIN = "https://api.agboom.com.br";
 
 const proxyBase = isTrulyLocal
   ? (import.meta.env.VITE_SUPABASE_PROXY_URL || "/api/supabase-proxy")
