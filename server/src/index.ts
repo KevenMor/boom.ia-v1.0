@@ -48,6 +48,7 @@ async function build() {
       "http://127.0.0.1:8080",
       /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|172\.\d+\.\d+\.\d+)(:\d+)?$/,
       /\.lovable\.dev$/,
+      /\.lovable\.app$/,
       ...extraOrigins,
     ],
     credentials: true,
