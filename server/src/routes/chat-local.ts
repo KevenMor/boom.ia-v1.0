@@ -369,6 +369,9 @@ async function sendAgendaNotification(
   const evt = isCreated ? res.event! : res.deleted_event!;
   const title = evt.title || "Agendamento";
   const startAt = evt.start_at || "";
+  // #region agent log
+  fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ad5eb6'},body:JSON.stringify({sessionId:'ad5eb6',location:'chat-local.ts:sendAgendaNotification',message:'start_at do evento antes de formatDateBR',data:{isCreated,isCancelled,startAt,startAtLength:startAt.length,hasOffset:!!startAt.match(/[+-]\d{2}:?\d{2}$/),hasZ:startAt.endsWith('Z')},timestamp:Date.now(),hypothesisId:'H_TIMEZONE'})}).catch(()=>{});
+  // #endregion
   const dataHoraBR = formatDateBR(startAt);
 
   let message: string;

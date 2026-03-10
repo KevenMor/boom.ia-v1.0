@@ -15,6 +15,12 @@ describe("formatDateBR", () => {
     expect(result).toContain("10:00");
   });
 
+  it("trata ISO com +00:00 (UTC) como Brasilia (evita 07:00 quando era 10:00 local)", () => {
+    const result = formatDateBR("2026-03-10T10:00:00+00:00");
+    expect(result).toContain("10/03/2026");
+    expect(result).toContain("10:00");
+  });
+
   it("retorna string vazia para input vazio", () => {
     expect(formatDateBR("")).toBe("");
   });
