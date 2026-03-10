@@ -315,6 +315,7 @@ export default function CalendarPage() {
           const minutesBefore = cfg.reminder_minutes_before || 60;
           const eventStartDate = new Date(finalStart);
           const remindAt = new Date(eventStartDate.getTime() - minutesBefore * 60 * 1000);
+          const eventStartAtISO = eventStartDate.toISOString();
           const cwConvId = parseChatwootConvId(reminderChatwootConvId);
           const extUserId = reminderPhone.trim() || null;
 
@@ -340,7 +341,7 @@ export default function CalendarPage() {
                 chatwoot_conversation_id: cwConvId,
                 external_user_id: extUserId ?? "",
                 event_title: newTitle,
-                event_start_at: finalStart,
+                event_start_at: eventStartAtISO,
                 remind_at: remindAt.toISOString(),
                 status: "pending",
                 updated_at: new Date().toISOString(),
@@ -365,7 +366,7 @@ export default function CalendarPage() {
                 external_user_id: extUserId ?? "",
                 chatwoot_conversation_id: cwConvId,
                 event_title: newTitle,
-                event_start_at: finalStart,
+                event_start_at: eventStartAtISO,
                 remind_at: remindAt.toISOString(),
                 status: "pending",
               });
