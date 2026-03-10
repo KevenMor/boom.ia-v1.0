@@ -138,6 +138,11 @@ function extractVehicleEntities(text: string): ExtractedEntities {
   return result;
 }
 
+/** Formata valor em reais no padrão brasileiro (ex.: R$ 127.900,00). */
+function formatCurrencyBR(value: number): string {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
 /** Converte resultado bruto de tool (JSON) em texto natural para o LLM conversacional. */
 function summarizeToolResult(obj: Record<string, unknown>): string {
   if (obj.error && typeof obj.error === "string") {
@@ -179,13 +184,14 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
     return "Agendamento cancelado.";
   }
   // consultar_estoque: incluir resumo dos veículos E photos_markdown para o LLM poder enviar as fotos
-  const vehicles = obj.vehicles as Array<{ id?: string; nome_completo?: string; ano?: number; preco?: number; km?: number; cor?: string; photos_markdown?: string }> | undefined;
+  const vehicles = obj.vehicles as Array<{ id?: string; nome_completo?: string; ano?: number; preco?: number; preco_formatado?: string; km?: number; cor?: string; photos_markdown?: string }> | undefined;
   const photosMarkdown = obj.photos_markdown as string | undefined;
   if (Array.isArray(vehicles) && vehicles.length > 0) {
     const lines: string[] = [];
     lines.push(`ESTOQUE ATUAL (${vehicles.length} veículo(s)):`);
     for (const v of vehicles.slice(0, 10)) {
-      const parts = [v.nome_completo, v.ano, v.km != null ? `${v.km} km` : null, v.preco != null ? `R$ ${v.preco}` : null, v.cor].filter(Boolean);
+      const precoStr = v.preco_formatado ?? (v.preco != null ? formatCurrencyBR(v.preco) : null);
+      const parts = [v.nome_completo, v.ano, v.km != null ? `${v.km} km` : null, precoStr, v.cor].filter(Boolean);
       lines.push("- " + parts.join(", "));
     }
     if (vehicles.length > 10) lines.push(`... e mais ${vehicles.length - 10} veículo(s).`);

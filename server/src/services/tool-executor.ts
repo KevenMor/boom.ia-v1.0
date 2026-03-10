@@ -241,6 +241,8 @@ async function executeInventoryQuery(
         .join("\n");
 
       const fullName = [v.brand, v.model, v.version].filter(Boolean).join(" ");
+      const precoFormatado =
+        v.price != null ? v.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : undefined;
       return {
         id: v.id,
         external_id: (v as { external_id?: string }).external_id,
@@ -250,6 +252,7 @@ async function executeInventoryQuery(
         versao: v.version,
         ano: v.year,
         preco: v.price,
+        preco_formatado: precoFormatado,
         km: v.mileage,
         cor: v.color,
         cambio: v.transmission,
