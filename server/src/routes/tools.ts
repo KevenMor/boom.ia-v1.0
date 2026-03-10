@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
 import { runFipeQuery } from "../services/fipe.js";
 import { runFindNearestUnit } from "../services/find-nearest-unit.js";
+import { formatDateBR } from "../utils/agendaNotification.js";
 
 export async function toolsRoutes(fastify: FastifyInstance) {
   fastify.post("/tools/fipe", async (req: FastifyRequest, reply: FastifyReply) => {
@@ -329,7 +330,13 @@ export async function toolsRoutes(fastify: FastifyInstance) {
             if (insErr) {
               result = { error: "Failed to create event", detail: insErr.message };
             } else {
-              result = { action: "created", event: created };
+              const ev = created as { start_at?: string; end_at?: string } | undefined;
+              result = {
+                action: "created",
+                event: created,
+                start_at_br: ev?.start_at ? formatDateBR(ev.start_at) : undefined,
+                end_at_br: ev?.end_at ? formatDateBR(ev.end_at) : undefined,
+              };
             }
           } else {
             result = {
