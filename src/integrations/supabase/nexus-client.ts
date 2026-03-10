@@ -4,8 +4,10 @@ import { createClient } from "@supabase/supabase-js";
 const isTrulyLocal = typeof window !== "undefined" && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(window.location.origin);
 
 const configuredApiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
-const PROD_API_ORIGIN = configuredApiUrl
-  ? configuredApiUrl.replace(/\/api\/?$/, "").replace(/\/$/, "")
+const configuredIsLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(configuredApiUrl || "");
+const safeApiUrl = !isTrulyLocal && configuredIsLocalhost ? undefined : configuredApiUrl;
+const PROD_API_ORIGIN = safeApiUrl
+  ? safeApiUrl.replace(/\/api\/?$/, "").replace(/\/$/, "")
   : "https://ia.agboom.com.br";
 
 const proxyBase = isTrulyLocal
