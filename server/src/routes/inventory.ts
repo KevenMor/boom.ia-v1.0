@@ -90,8 +90,14 @@ function parseListingPage(html: string): VehicleCard[] {
   return vehicles;
 }
 
-function parseDetailPage(html: string): { photos: string[]; features: string[]; optionals: string[] } {
+function parseDetailPage(html: string): {
+  photos: string[];
+  description: string;
+  features: string[];
+  optionals: string[];
+} {
   const photos: string[] = [];
+  let description = "";
   const features: string[] = [];
   const optionals: string[] = [];
 
@@ -107,25 +113,51 @@ function parseDetailPage(html: string): { photos: string[]; features: string[]; 
     photos.unshift(featuredMatch[1]);
   }
 
-  const featSection = html.match(/Características<\/strong>\s*<ul[^>]*>([\s\S]*?)<\/ul>/);
+  // Descrição: texto em "Informações do Veículo" (pode estar em <p>, <div> ou após </strong>)
+  const descMatch =
+    html.match(/Informações do Veículo[\s\S]*?<p>\s*"?([^"]*)"?\s*<\/p>/i) ||
+    html.match(/Informações do Veículo[\s\S]*?<p>([^<]*)<\/p>/i) ||
+    html.match(/Informações do Veículo<\/strong>\s*<br>\s*<p>"?([^"]*)"?<\/p>/i) ||
+    html.match(/Informa[çc][oõ]es do Ve[ií]culo<\/strong>[\s\S]*?>([^<]+)</) ||
+    html.match(/Informa[çc][oõ]es do Ve[ií]culo<\/strong>\s*([^<]{15,})/);
+  if (descMatch) {
+    description = (descMatch[1] || "")
+      .replace(/^["']|["']$/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  // Características: <ul> com itens (fa-check ou <li>)
+  const featSection = html.match(/Características<\/strong>\s*<ul[^>]*>([\s\S]*?)<\/ul>/i);
   if (featSection) {
-    const featRegex = /fa-check"><\/i>\s*([^<]+)/g;
-    let fm;
-    while ((fm = featRegex.exec(featSection[1])) !== null) {
-      features.push(fm[1].trim());
-    }
+    extractListItems(featSection[1], features);
   }
 
-  const optSection = html.match(/Opcionais<\/strong>\s*<ul[^>]*>([\s\S]*?)<\/ul>/);
+  // Opcionais: <ul> com itens (fa-check ou <li>)
+  const optSection = html.match(/Opcionais<\/strong>\s*<ul[^>]*>([\s\S]*?)<\/ul>/i);
   if (optSection) {
-    const optRegex = /fa-check"><\/i>\s*([^<]+)/g;
-    let om;
-    while ((om = optRegex.exec(optSection[1])) !== null) {
-      optionals.push(om[1].trim());
-    }
+    extractListItems(optSection[1], optionals);
   }
 
-  return { photos, features, optionals };
+  return { photos, description, features, optionals };
+}
+
+function extractListItems(html: string, out: string[]): void {
+  // Padrão 1: fa-check"></i> texto
+  const checkRegex = /fa-check"><\/i>\s*([^<]+)/g;
+  let m;
+  while ((m = checkRegex.exec(html)) !== null) {
+    const t = m[1].trim();
+    if (t && !out.includes(t)) out.push(t);
+  }
+  // Padrão 2: <li>texto</li> (fallback se não encontrou fa-check)
+  if (out.length === 0) {
+    const liRegex = /<li[^>]*>([\s\S]*?)<\/li>/g;
+    while ((m = liRegex.exec(html)) !== null) {
+      const t = m[1].replace(/<[^>]+>/g, "").trim();
+      if (t && !out.includes(t)) out.push(t);
+    }
+  }
 }
 
 export async function inventoryRoutes(fastify: FastifyInstance) {
@@ -155,6 +187,8 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
       async function processVehicle(vehicle: VehicleCard) {
         let photos: string[] = vehicle.photo_url ? [vehicle.photo_url] : [];
         let description = "";
+        const features: string[] = [];
+        const optionals: string[] = [];
 
         try {
           const controller = new AbortController();
@@ -167,7 +201,9 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
             const detailHtml = await detailResp.text();
             const detail = parseDetailPage(detailHtml);
             if (detail.photos.length > 0) photos = detail.photos;
-            description = [...detail.features, ...detail.optionals].join(", ");
+            description = detail.description;
+            features.push(...detail.features);
+            optionals.push(...detail.optionals);
           }
         } catch (e) {
           console.warn(`Detail fetch timeout/error for ${vehicle.external_id}`);
@@ -190,7 +226,7 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
           detail_url: vehicle.detail_url,
           description,
           status: "available",
-          raw_data: JSON.stringify({ photos }),
+          raw_data: JSON.stringify({ photos, features, optionals }),
           last_synced_at: new Date().toISOString(),
         };
 

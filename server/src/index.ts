@@ -37,6 +37,11 @@ async function build() {
     }
   });
 
+  // Aceitar POST sem body (ex.: cron-job.org chamando /inventory/sync) — evita 415 Unsupported Media Type
+  const emptyBody = (_req: unknown, _body: unknown, done: (err: Error | null, body?: object) => void) => done(null, {});
+  fastify.addContentTypeParser("text/plain", { parseAs: "string" }, emptyBody);
+  fastify.addContentTypeParser("application/x-www-form-urlencoded", { parseAs: "string" }, emptyBody);
+
   const extraOrigins = (process.env.CORS_ORIGINS || "")
     .split(",")
     .map((o) => o.trim())

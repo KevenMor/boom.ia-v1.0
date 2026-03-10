@@ -56,7 +56,7 @@ async function executeInventoryQuery(
 
     let query = supabase
       .from("inventory")
-      .select("id, external_id, brand, model, version, year, price, mileage, color, transmission, fuel_type, photo_url, photos, detail_url, description")
+      .select("id, external_id, brand, model, version, year, price, mileage, color, transmission, fuel_type, photo_url, photos, detail_url, description, raw_data")
       .eq("tenant_id", tenantId)
       .eq("status", "available")
       .limit(50);
@@ -214,6 +214,8 @@ async function executeInventoryQuery(
       photo_url: string;
       photos: string | unknown;
       detail_url: string;
+      description?: string;
+      raw_data?: { photos?: string[]; features?: string[]; optionals?: string[] };
     }>;
 
     let corFallbackUsed = false;
@@ -272,6 +274,7 @@ async function executeInventoryQuery(
       const fullName = [v.brand, v.model, v.version].filter(Boolean).join(" ");
       const precoFormatado =
         v.price != null ? v.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : undefined;
+      const raw = v.raw_data as { features?: string[]; optionals?: string[] } | undefined;
       return {
         id: v.id,
         external_id: (v as { external_id?: string }).external_id,
@@ -289,6 +292,9 @@ async function executeInventoryQuery(
         photos,
         detail_url: v.detail_url,
         photos_markdown: vehiclePhotosMarkdown || undefined,
+        descricao: v.description || undefined,
+        caracteristicas: raw?.features ?? [],
+        opcionais: raw?.optionals ?? [],
       };
     });
 
