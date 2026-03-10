@@ -70,6 +70,17 @@ async function executeInventoryQuery(
     const precoMax = args.preco_max ?? args.precoMax;
     const tipoRaw = (args.tipo || args.modelo || args.model) as string | undefined;
     const cambio = (args.cambio || args.transmission) as string | undefined;
+    const motorizacao = (args.motorizacao || args.engine) as string | undefined;
+
+    const MOTORIZACAO_KEYWORDS = ["turbo", "aspirado", "tsi", "tfsi", "tdi", "gdi", "mpi"];
+    let motorizacaoFinal = motorizacao;
+    if (!motorizacaoFinal && modelo) {
+      const modeloNorm = normalizeForSearch(modelo);
+      if (MOTORIZACAO_KEYWORDS.some((k) => modeloNorm.includes(k))) {
+        motorizacaoFinal = modelo;
+      }
+    }
+
     // #region agent log
     const colorSynonyms = cor ? getColorSynonyms(cor) : [];
     fetch("http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4", {
@@ -103,7 +114,8 @@ async function executeInventoryQuery(
     if (marca) {
       query = query.ilike("brand", `%${marca}%`);
     }
-    if (modelo && !["suv", "sedan", "hatch", "pickup"].includes(normalizeForSearch(modelo))) {
+    const skipModelFilter = ["suv", "sedan", "hatch", "pickup", ...MOTORIZACAO_KEYWORDS];
+    if (modelo && !skipModelFilter.some((k) => normalizeForSearch(modelo).includes(k))) {
       query = query.ilike("model", `%${modelo}%`);
     }
     if (ano) {
@@ -216,6 +228,14 @@ async function executeInventoryQuery(
         const modelNorm = normalizeForSearch(v.model);
         const versionNorm = normalizeForSearch(v.version || "");
         return modelNorm.includes(tipoNorm) || versionNorm.includes(tipoNorm);
+      });
+    }
+
+    if (motorizacaoFinal) {
+      const motNorm = normalizeForSearch(motorizacaoFinal);
+      vehicles = vehicles.filter((v) => {
+        const versionNorm = normalizeForSearch(v.version || "");
+        return versionNorm.includes(motNorm);
       });
     }
 
