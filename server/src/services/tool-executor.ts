@@ -16,6 +16,18 @@ function normalizeForSearch(str: string): string {
     .trim();
 }
 
+/** Decodifica entidades HTML para exibição limpa (&#225; → á, &copy; → ©) */
+function decodeHtmlEntities(s: string): string {
+  return s
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)))
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&copy;/g, "©");
+}
+
 const COLOR_SYNONYM_GROUPS: string[][] = [
   ["cinza", "prata", "grafite", "chumbo", "gray", "grey", "silver"],
   ["branco", "white", "perola", "perolizado"],
@@ -275,6 +287,8 @@ async function executeInventoryQuery(
       const precoFormatado =
         v.price != null ? v.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : undefined;
       const raw = v.raw_data as { features?: string[]; optionals?: string[] } | undefined;
+      const features = (raw?.features ?? []).map(decodeHtmlEntities);
+      const optionals = (raw?.optionals ?? []).map(decodeHtmlEntities);
       return {
         id: v.id,
         external_id: (v as { external_id?: string }).external_id,
@@ -286,15 +300,19 @@ async function executeInventoryQuery(
         preco: v.price,
         preco_formatado: precoFormatado,
         km: v.mileage,
-        cor: v.color,
-        cambio: v.transmission,
+        cor: v.color ? decodeHtmlEntities(v.color) : v.color,
+        cambio: v.transmission ? decodeHtmlEntities(v.transmission) : v.transmission,
         photo_url: v.photo_url,
         photos,
         detail_url: v.detail_url,
         photos_markdown: vehiclePhotosMarkdown || undefined,
-        descricao: v.description || undefined,
-        caracteristicas: raw?.features ?? [],
-        opcionais: raw?.optionals ?? [],
+        descricao: (() => {
+          const d = v.description ? decodeHtmlEntities(v.description) : "";
+          if (!d || /^(&copy;|©)\s*PPL Motors|pplmotors\.(co|com\.br)\s*$/i.test(d) || /^EMPTY$/i.test(d)) return undefined;
+          return d;
+        })(),
+        caracteristicas: features,
+        opcionais,
       };
     });
 

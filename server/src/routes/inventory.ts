@@ -25,6 +25,29 @@ function parsePrice(raw: string): number | null {
   return isNaN(n) ? null : n;
 }
 
+/** Decodifica entidades HTML (&#225; → á, &#231; → ç) para exibição limpa */
+function decodeHtmlEntities(s: string): string {
+  return s
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)))
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&copy;/g, "©");
+}
+
+/** Descrição inválida (placeholder, copyright, URL) — trata como vazia */
+function isInvalidDescription(s: string): boolean {
+  const t = s.trim();
+  if (!t) return true;
+  if (/^EMPTY$/i.test(t)) return true;
+  if (/^(&copy;|©)\s*PPL Motors/i.test(t)) return true;
+  if (/pplmotors\.(co|com\.br)\s*$/i.test(t) && t.length < 80) return true;
+  if (/^https?:\/\/[^\s]+$/i.test(t)) return true;
+  return false;
+}
+
 function parseListingPage(html: string): VehicleCard[] {
   const vehicles: VehicleCard[] = [];
   const items = html.split('<div class="result-item">').slice(1);
@@ -49,20 +72,20 @@ function parseListingPage(html: string): VehicleCard[] {
       let model = "";
       const titleMatch = item.match(/result-item-title[^>]*>[\s\S]*?<a[^>]*>\s*([\s\S]*?)<\/a>/i);
       if (titleMatch) {
-        const titleText = titleMatch[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        const titleText = decodeHtmlEntities(titleMatch[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
         const parts = titleText.split(/\s+/);
         brand = parts[0] || "";
         model = parts.slice(1).join(" ") || "";
       }
 
       const versionMatch = item.match(/versaoVeiculo[^>]*>([^<]+)/);
-      const version = versionMatch ? versionMatch[1].trim() : "";
+      const version = versionMatch ? decodeHtmlEntities(versionMatch[1].trim()) : "";
 
       const priceMatch = item.match(/class="price"[^>]*>[\s\S]*?<\/span>\s*([^<]+)/);
       const price = priceMatch ? parsePrice(priceMatch[1]) : null;
 
       const fuelMatch = item.match(/vehicle-age[^>]*>([^<]+)/);
-      const fuel_type = fuelMatch ? fuelMatch[1].trim() : "";
+      const fuel_type = fuelMatch ? decodeHtmlEntities(fuelMatch[1].trim()) : "";
 
       const yearMatch = item.match(/<span>Ano<\/span>\s*<p>(\d+)<\/p>/);
       const kmMatch = item.match(/<span>Km<\/span>\s*<p>(\d+)<\/p>/);
@@ -77,8 +100,8 @@ function parseListingPage(html: string): VehicleCard[] {
         price,
         year: yearMatch ? parseInt(yearMatch[1]) : null,
         mileage: kmMatch ? parseInt(kmMatch[1]) : null,
-        color: colorMatch ? colorMatch[1].trim() : "",
-        transmission: transMatch ? transMatch[1].trim() : "",
+        color: colorMatch ? decodeHtmlEntities(colorMatch[1].trim()) : "",
+        transmission: transMatch ? decodeHtmlEntities(transMatch[1].trim()) : "",
         fuel_type,
         photo_url,
         detail_url,
@@ -121,10 +144,12 @@ function parseDetailPage(html: string): {
     html.match(/Informa[çc][oõ]es do Ve[ií]culo<\/strong>[\s\S]*?>([^<]+)</) ||
     html.match(/Informa[çc][oõ]es do Ve[ií]culo<\/strong>\s*([^<]{15,})/);
   if (descMatch) {
-    description = (descMatch[1] || "")
-      .replace(/^["']|["']$/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
+    description = decodeHtmlEntities(
+      (descMatch[1] || "")
+        .replace(/^["']|["']$/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+    );
   }
 
   // Características: <ul> com itens (fa-check ou <li>)
@@ -143,19 +168,21 @@ function parseDetailPage(html: string): {
 }
 
 function extractListItems(html: string, out: string[]): void {
+  const add = (t: string) => {
+    const decoded = decodeHtmlEntities(t);
+    if (decoded && !out.includes(decoded)) out.push(decoded);
+  };
   // Padrão 1: fa-check"></i> texto
   const checkRegex = /fa-check"><\/i>\s*([^<]+)/g;
   let m;
   while ((m = checkRegex.exec(html)) !== null) {
-    const t = m[1].trim();
-    if (t && !out.includes(t)) out.push(t);
+    add(m[1].trim());
   }
   // Padrão 2: <li>texto</li> (fallback se não encontrou fa-check)
   if (out.length === 0) {
     const liRegex = /<li[^>]*>([\s\S]*?)<\/li>/g;
     while ((m = liRegex.exec(html)) !== null) {
-      const t = m[1].replace(/<[^>]+>/g, "").trim();
-      if (t && !out.includes(t)) out.push(t);
+      add(m[1].replace(/<[^>]+>/g, "").trim());
     }
   }
 }
@@ -201,7 +228,7 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
             const detailHtml = await detailResp.text();
             const detail = parseDetailPage(detailHtml);
             if (detail.photos.length > 0) photos = detail.photos;
-            description = detail.description;
+            description = isInvalidDescription(detail.description) ? "" : detail.description;
             features.push(...detail.features);
             optionals.push(...detail.optionals);
           }
