@@ -8,7 +8,7 @@ const configuredIsLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)
 const safeApiUrl = !isTrulyLocal && configuredIsLocalhost ? undefined : configuredApiUrl;
 const PROD_API_ORIGIN = safeApiUrl
   ? safeApiUrl.replace(/\/api\/?$/, "").replace(/\/$/, "")
-  : "https://ia.agboom.com.br";
+  : "https://api.agboom.com.br";
 
 const proxyBase = isTrulyLocal
   ? (import.meta.env.VITE_SUPABASE_PROXY_URL || "/api/supabase-proxy")
