@@ -12,8 +12,10 @@ import { inventoryRoutes } from "./routes/inventory.js";
 import { contactsRoutes } from "./routes/contacts.js";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
+const SERVER_STARTED_AT = new Date().toISOString();
+const SERVER_BUILD_ID = process.env.APP_BUILD_ID || process.env.GIT_COMMIT_SHA || "dev";
 
-console.log("[Server] Starting... PORT=%s NODE_ENV=%s", PORT, process.env.NODE_ENV);
+console.log("[Server] Starting... PORT=%s NODE_ENV=%s BUILD_ID=%s", PORT, process.env.NODE_ENV, SERVER_BUILD_ID);
 
 async function build() {
   const isProduction = process.env.NODE_ENV === "production";
