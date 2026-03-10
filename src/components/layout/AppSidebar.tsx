@@ -22,6 +22,7 @@ import {
   PanelLeftOpen,
   CalendarDays,
   BarChart3,
+  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebar } from "@/contexts/SidebarContext";
@@ -54,6 +55,7 @@ const navGroups: NavGroup[] = [
       { to: "/conversations", icon: MessageSquare, label: "Chat ao Vivo" },
       { to: "/agents", icon: Bot, label: "Agentes" },
       { to: "/calendar", icon: CalendarDays, label: "Agenda" },
+      { to: "/followups", icon: Bell, label: "Follow-ups" },
     ],
   },
   {

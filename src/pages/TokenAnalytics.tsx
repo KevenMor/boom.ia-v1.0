@@ -20,6 +20,7 @@ import {
   useTokenUsageByDay,
   useTokenUsageByAgent,
   useTokenUsageByModel,
+  getModelDisplayName,
 } from "@/hooks/useAgentTokenUsage";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -166,19 +167,35 @@ export default function TokenAnalytics() {
                     nameKey="model"
                     cx="50%"
                     cy="50%"
-                    outerRadius={90}
-                    label={({ model, total_tokens }) => `${model?.slice(0, 12) ?? "?"} (${(total_tokens / 1000).toFixed(0)}k)`}
+                    outerRadius={80}
+                    label={({ model, total_tokens }) => {
+                      const name = getModelDisplayName(model);
+                      const k = (total_tokens / 1000).toFixed(0);
+                      return `${name} (${k}k)`;
+                    }}
+                    labelLine={{ stroke: "hsl(var(--border))" }}
                   >
-                    {(byModel ?? []).map((_, i) => (
-                      <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                    {(byModel ?? []).map((entry, i) => (
+                      <Cell key={entry.model} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                     ))}
                   </Pie>
                   <Tooltip
                     contentStyle={{ backgroundColor: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }}
-                    formatter={(value: number, name: string, props: { payload: { estimated_cost_usd: number } }) => [
-                      `${value.toLocaleString()} tokens (~$${props.payload.estimated_cost_usd.toFixed(4)})`,
-                      name,
-                    ]}
+                    formatter={(value: number, _name: string, props: { payload: { model: string; total_tokens: number; requests: number; estimated_cost_usd: number } }) => {
+                      const name = getModelDisplayName(props.payload.model);
+                      return [
+                        `${props.payload.total_tokens.toLocaleString()} tokens · ${props.payload.requests} chamadas · ~$${props.payload.estimated_cost_usd.toFixed(4)}`,
+                        name,
+                      ];
+                    }}
+                  />
+                  <Legend
+                    formatter={(value, entry: { payload?: { model: string; total_tokens: number } }) => {
+                      const name = getModelDisplayName(entry.payload?.model ?? value);
+                      const k = entry.payload?.total_tokens != null ? ` (${(entry.payload.total_tokens / 1000).toFixed(0)}k)` : "";
+                      return `${name}${k}`;
+                    }}
+                    wrapperStyle={{ fontSize: "12px" }}
                   />
                 </PieChart>
               </ResponsiveContainer>

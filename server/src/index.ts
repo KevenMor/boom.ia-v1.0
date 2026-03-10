@@ -157,12 +157,18 @@ build()
       try {
         const resp = await fetch(followupUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", signal: AbortSignal.timeout(30_000) });
         if (resp.ok) {
-          const data = await resp.json() as { processed?: number; skipped?: number };
-          if ((data.processed ?? 0) > 0 || (data.skipped ?? 0) > 0) {
-            console.log("[FollowUp-Cron] processed:", data.processed, "skipped:", data.skipped);
+          const data = await resp.json() as { processed?: number; skipped?: number; total?: number };
+          const processed = data.processed ?? 0;
+          const skipped = data.skipped ?? 0;
+          if (processed > 0 || skipped > 0) {
+            console.log("[FollowUp-Cron] processed:", processed, "skipped:", skipped);
+          } else if ((data.total ?? 0) > 0) {
+            console.log("[FollowUp-Cron] tick: no items processed (pending may have been cancelled/skipped by rules)");
           }
         }
-      } catch { /* silent — endpoint logs its own errors */ }
+      } catch (e) {
+        console.warn("[FollowUp-Cron] request failed:", (e as Error)?.message ?? e);
+      }
     }, FOLLOWUP_INTERVAL_MS);
     console.log(`[Server] Follow-up cron started (every ${FOLLOWUP_INTERVAL_MS / 1000}s)`);
 

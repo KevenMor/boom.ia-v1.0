@@ -231,6 +231,46 @@ async function fireDeliverMessage(
 }
 
 export async function queueRoutes(fastify: FastifyInstance) {
+  fastify.get(
+    "/queue/followups/list",
+    async (
+      req: FastifyRequest<{ Querystring: { tenant_id?: string } }>,
+      reply: FastifyReply
+    ) => {
+      const tenantId = req.query.tenant_id;
+      if (!tenantId) {
+        return reply.status(400).send({ error: "tenant_id is required" });
+      }
+      const supabase = createNexusClient();
+      const { data: agents, error: agentsErr } = await supabase
+        .from("agents")
+        .select("id")
+        .eq("tenant_id", tenantId);
+      if (agentsErr) {
+        return reply.status(500).send({ error: agentsErr.message });
+      }
+      const agentIds = (agents ?? []).map((a: { id: string }) => a.id);
+      if (agentIds.length === 0) {
+        return reply.send([]);
+      }
+      const { data: rows, error: listErr } = await supabase
+        .from("follow_up_queue")
+        .select("id, agent_id, conversation_id, external_user_id, channel, chatwoot_conversation_id, attempt, max_attempts, scheduled_at, status, created_at, updated_at, agents(id, name)")
+        .in("agent_id", agentIds)
+        .order("scheduled_at", { ascending: true })
+        .limit(500);
+      if (listErr) {
+        return reply.status(500).send({ error: listErr.message });
+      }
+      const list = (rows ?? []).map((r: any) => ({
+        ...r,
+        agent_name: r.agents?.name ?? null,
+        agents: undefined,
+      }));
+      return reply.send(list);
+    }
+  );
+
   fastify.post(
     "/queue/process",
     async (

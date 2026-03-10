@@ -49,6 +49,33 @@ const MODEL_COSTS: Record<string, { input: number; output: number }> = {
   "gemini-3-flash-preview": { input: 0.075, output: 0.3 },
 };
 
+/** Normaliza o nome do modelo para agrupar variantes (ex: _gpt-4o-mini e gpt-4o-mini no mesmo bucket). */
+export function normalizeModelKey(raw: string | null | undefined): string {
+  if (raw == null || raw === "") return "unknown";
+  const s = String(raw).trim().replace(/^_+|_+$/g, "").toLowerCase();
+  if (!s) return "unknown";
+  if (s.includes("gpt-4o-mini")) return "gpt-4o-mini";
+  if (s.includes("gpt-4o") && s.includes("gem")) return "gpt-4o-gem";
+  if (s.includes("gpt-4o")) return "gpt-4o";
+  if (s.includes("gemini-2.0-flash")) return "gemini-2.0-flash";
+  if (s.includes("gemini-3-flash")) return "gemini-3-flash-preview";
+  if (s.includes("gemini")) return s;
+  return s;
+}
+
+/** Nome amigável para exibição no gráfico. */
+export function getModelDisplayName(normalizedKey: string): string {
+  const labels: Record<string, string> = {
+    "gpt-4o-mini": "GPT-4o Mini",
+    "gpt-4o": "GPT-4o",
+    "gpt-4o-gem": "GPT-4o + Gemini",
+    "gemini-2.0-flash": "Gemini 2.0 Flash",
+    "gemini-3-flash-preview": "Gemini 3 Flash",
+    unknown: "Outro",
+  };
+  return labels[normalizedKey] ?? normalizedKey;
+}
+
 function estimateCost(prompt: number, completion: number, model: string): number {
   const lower = model.toLowerCase();
   let cost = MODEL_COSTS["gpt-4o-mini"];
@@ -164,7 +191,7 @@ export function useTokenUsageByModel(days = 30, tenantId?: string | null) {
   const { data: usage, ...rest } = useAgentTokenUsage(days, tenantId);
 
   const byModel = (usage ?? []).reduce<Record<string, TokenUsageByModel>>((acc, row) => {
-    const key = row.model || "unknown";
+    const key = normalizeModelKey(row.model);
     const cur = acc[key] || {
       model: key,
       prompt_tokens: 0,

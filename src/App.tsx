@@ -26,6 +26,7 @@ import SettingsPage from "@/pages/SettingsPage";
 import PromptsPage from "@/pages/PromptsPage";
 import ProfilePage from "@/pages/ProfilePage";
 import CalendarPage from "@/pages/CalendarPage";
+import FollowUpsPage from "@/pages/FollowUpsPage";
 import TokenAnalytics from "@/pages/TokenAnalytics";
 import PublicSandbox from "@/pages/PublicSandbox";
 import NotFound from "@/pages/NotFound";
@@ -60,6 +61,7 @@ const App = () => (
               <Route path="/agents/:agentId/sandbox" element={<AgentSandbox />} />
               <Route path="/conversations" element={<Conversations />} />
               <Route path="/calendar" element={<CalendarPage />} />
+              <Route path="/followups" element={<FollowUpsPage />} />
               <Route path="/tools" element={<Tools />} />
               <Route path="/tools/:toolId/edit" element={<EditTool />} />
               <Route path="/providers" element={<Providers />} />
