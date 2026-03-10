@@ -23,6 +23,12 @@ import {
   DISPATCHER_PROMPT as PH_DISPATCHER,
   FOLLOWUP_PROMPT as PH_FOLLOWUP,
 } from "./pet-home.js";
+import {
+  SYSTEM_PROMPT as DR_IURI_SYSTEM,
+  COMMUNICATION_RULES as DR_IURI_COMM_RULES,
+  DISPATCHER_PROMPT as DR_IURI_DISPATCHER,
+  FOLLOWUP_PROMPT as DR_IURI_FOLLOWUP,
+} from "./dr-iuri.js";
 
 /**
  * Configura?�?�o de prompt por tenant.
@@ -100,6 +106,15 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     alwaysInjectCommRules: true,
     version: "v1.2.1",
     description: "Tia Ana ��� Atendente Pet Home (Hotel e Creche para Cachorros Sorocaba/SP)",
+  },
+  "dr-iuri": {
+    systemPrompt: DR_IURI_SYSTEM,
+    communicationRules: DR_IURI_COMM_RULES,
+    dispatcherPrompt: DR_IURI_DISPATCHER,
+    followupPrompt: DR_IURI_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.0",
+    description: "Camila — Assistente Dr. Iuri (Otomodelação Salvador/BA)",
   },
 };
 
