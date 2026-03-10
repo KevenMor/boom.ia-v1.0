@@ -114,9 +114,9 @@ async function executeInventoryQuery(
       }),
     }).catch(() => {});
     // #endregion
-    // Mapeia sinônimos de tipo para o valor aceito pelo filtro (caminhonete/picape -> pickup)
+    // Mapeia sinônimos de tipo para o valor aceito pelo filtro (caminhonete/picape/pikup -> pickup)
     const tipoMapped =
-      tipoRaw && ["caminhonete", "picape", "pickup"].includes(normalizeForSearch(tipoRaw))
+      tipoRaw && ["caminhonete", "picape", "pickup", "pikup"].includes(normalizeForSearch(tipoRaw))
         ? "pickup"
         : tipoRaw;
     const tipo = tipoMapped;
@@ -178,12 +178,11 @@ async function executeInventoryQuery(
       query = query.ilike("transmission", `%${cambio}%`);
     }
 
-    // Tipo (sedan, SUV, hatch, pickup): filtro na query via model/version — não existe coluna tipo
-    // PostgREST: usar asterisco como wildcard e aspas duplas no padrão
+    // Tipo (sedan, SUV, hatch, pickup): filtro via model, version e description
     if (tipo && ["suv", "sedan", "hatch", "pickup"].includes(normalizeForSearch(tipo))) {
       const tipoNorm = normalizeForSearch(tipo);
       const pattern = `"*${tipoNorm}*"`;
-      query = query.or(`model.ilike.${pattern},version.ilike.${pattern}`);
+      query = query.or(`model.ilike.${pattern},version.ilike.${pattern},description.ilike.${pattern}`);
     }
 
     // Motorização (turbo, TSI, etc.): filtro na query via model/version
