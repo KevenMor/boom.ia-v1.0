@@ -12,9 +12,12 @@ export function formatDateBR(isoDate: string): string {
   if (!isoDate) return "";
   try {
     let toParse = isoDate.trim();
-    // Se tem +00:00 (UTC), substituir por -03:00 (Brasilia) para exibir hora local correta
+    // Se tem +00:00 (UTC) ou Z, REMOVER (banco salva sem tz, mas Supabase adiciona +00:00 ao retornar)
+    // e tratar como horário local de Brasília
     if (/\+00:00$/.test(toParse)) {
-      toParse = toParse.replace(/\+00:00$/, "-03:00");
+      toParse = toParse.replace(/\+00:00$/, "") + "-03:00";
+    } else if (toParse.endsWith("Z")) {
+      toParse = toParse.replace(/Z$/, "") + "-03:00";
     }
     // Se não tem timezone (ex.: 2026-03-10T10:00:00), adicionar -03:00
     if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\s|$)/.test(toParse) && !/Z|[+-]\d{2}:?\d{2}$/.test(toParse)) {

@@ -283,6 +283,9 @@ async function buildNotificationWithLLM(
   if (!providerConfig?.apiKey) return null;
 
   const dataHoraBR = formatDateBR(payload.start_at);
+  // #region agent log
+  fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ad5eb6'},body:JSON.stringify({sessionId:'ad5eb6',location:'chat-local.ts:buildNotificationWithLLM',message:'dataHoraBR formatado',data:{startAtOriginal:payload.start_at,dataHoraBR},timestamp:Date.now(),hypothesisId:'H_LLM_INPUT'})}).catch(()=>{});
+  // #endregion
   const historyText = messages
     .slice(-20)
     .map((m) => `${m.role === "user" ? "Cliente" : "Assistente"}: ${(m.content || "").slice(0, 300)}`)
@@ -298,6 +301,9 @@ Historico (ultimas mensagens):
 ${historyText || "(vazio)"}
 
 Gere a notificacao organizada.`;
+  // #region agent log
+  fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ad5eb6'},body:JSON.stringify({sessionId:'ad5eb6',location:'chat-local.ts:buildNotificationWithLLM:userContent',message:'userContent enviado para LLM',data:{userContentPreview:userContent.slice(0,400)},timestamp:Date.now(),hypothesisId:'H_LLM_PROMPT'})}).catch(()=>{});
+  // #endregion
 
   const isGemini = /generativelanguage|googleapis\.com/i.test(providerConfig.baseUrl);
   const model = isGemini ? "gemini-2.0-flash" : "gpt-4o-mini";
