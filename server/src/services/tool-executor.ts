@@ -312,7 +312,7 @@ async function executeInventoryQuery(
           return d;
         })(),
         caracteristicas: features,
-        opcionais,
+        opcionais: optionals,
       };
     });
 
