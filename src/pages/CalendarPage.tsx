@@ -44,6 +44,20 @@ function formatDateTimeBR(dateStr: string | undefined): string {
   });
 }
 
+/** Para Lembretes e Próximos Eventos: trata data em UTC (+00:00/Z) como horário de Brasília na exibição. */
+function formatDateTimeBRAsBrasilia(dateStr: string | undefined): string {
+  if (!dateStr) return "";
+  let s = dateStr.trim();
+  if (s.endsWith("Z")) s = s.replace(/Z$/, "-03:00");
+  else if (/\+00:00$/.test(s)) s = s.replace(/\+00:00$/, "-03:00");
+  const d = new Date(s);
+  return d.toLocaleString("pt-BR", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+    timeZone: "America/Sao_Paulo",
+  });
+}
+
 function extractTime(dateStr: string): string {
   if (!dateStr) return "08:00";
   if (dateStr.includes("T")) {
@@ -571,10 +585,10 @@ export default function CalendarPage() {
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Envio: {formatDateTimeBR(r.remind_at)}
+                  Envio: {formatDateTimeBRAsBrasilia(r.remind_at)}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Evento: {formatDateTimeBR(r.event_start_at)}
+                  Evento: {formatDateTimeBRAsBrasilia(r.event_start_at)}
                 </p>
               </div>
             ))}
@@ -592,7 +606,7 @@ export default function CalendarPage() {
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-foreground">{ev.title}</p>
                   <Badge variant="secondary" className="text-[10px]">
-                    {typeof ev.start === "string" ? formatDateTimeBR(ev.start) : ""}
+                    {typeof ev.start === "string" ? formatDateTimeBRAsBrasilia(ev.start) : ev.start instanceof Date ? formatDateTimeBRAsBrasilia(ev.start.toISOString()) : ""}
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
