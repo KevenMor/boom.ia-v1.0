@@ -67,18 +67,10 @@ async function build() {
       ...extraOrigins,
     ],
     credentials: true,
-    allowedHeaders: [
-      "authorization",
-      "x-client-info",
-      "x-supabase-api-version",
-      "apikey",
-      "content-type",
-      "x-nexus-auth",
-      "x-supabase-client-platform",
-      "x-supabase-client-platform-version",
-      "x-supabase-client-runtime",
-      "x-supabase-client-runtime-version",
-    ],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    // Deixa o plugin refletir automaticamente Access-Control-Request-Headers
+    // para evitar bloqueio por novos headers do supabase-js/browser.
+    allowedHeaders: undefined,
   });
 
   fastify.register(chatRoutes, { prefix: "/api" });
