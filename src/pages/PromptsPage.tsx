@@ -114,7 +114,7 @@ export default function PromptsPage() {
     setLoadingDetail(true);
     try {
       const detail = await callAPI<Record<string, unknown>>(`/admin/prompts?slug=${slug}`, { method: "GET" });
-      setSelectedDetail(detail);
+      setSelectedDetail(detail as unknown as TenantDetail);
     } catch (err: any) {
       toast.error("Erro ao carregar detalhes: " + (err.message || ""));
     } finally {
