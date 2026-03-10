@@ -1156,13 +1156,16 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               supabase.rpc("cancel_pending_followups", {
                 p_agent_id: agent_id,
                 p_conversation_id: responseConvId,
-              }).then(({ data: cancelled }) => {
-                if (cancelled != null && (cancelled as number) > 0) {
-                  console.log("[Chat-Local] Follow-up(s) cancelado(s) no handoff:", cancelled);
+              }).then(
+                ({ data: cancelled }) => {
+                  if (cancelled != null && (cancelled as number) > 0) {
+                    console.log("[Chat-Local] Follow-up(s) cancelado(s) no handoff:", cancelled);
+                  }
+                },
+                (e: unknown) => {
+                  console.warn("[Chat-Local] Erro ao cancelar follow-up no handoff:", (e as Error)?.message);
                 }
-              }).catch((e) => {
-                console.warn("[Chat-Local] Erro ao cancelar follow-up no handoff:", (e as Error)?.message);
-              });
+              );
             }
           }
 
@@ -1412,13 +1415,16 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               supabase.rpc("cancel_pending_followups", {
                 p_agent_id: agent_id,
                 p_conversation_id: responseConvId,
-              }).then(({ data: cancelled }) => {
-                if (cancelled != null && (cancelled as number) > 0) {
-                  console.log("[Chat-Local] Follow-up(s) cancelado(s) no handoff (single-provider):", cancelled);
+              }).then(
+                ({ data: cancelled }) => {
+                  if (cancelled != null && (cancelled as number) > 0) {
+                    console.log("[Chat-Local] Follow-up(s) cancelado(s) no handoff (single-provider):", cancelled);
+                  }
+                },
+                (e: unknown) => {
+                  console.warn("[Chat-Local] Erro ao cancelar follow-up no handoff (single-provider):", (e as Error)?.message);
                 }
-              }).catch((e) => {
-                console.warn("[Chat-Local] Erro ao cancelar follow-up no handoff (single-provider):", (e as Error)?.message);
-              });
+              );
             }
           }
           if (singleProviderUsageAccum.total_tokens > 0) {
