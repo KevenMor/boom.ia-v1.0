@@ -85,9 +85,16 @@ async function build() {
     fastify.all("/api/supabase-proxy/*", async (request, reply) => {
       const suffix = (request.url.split("?")[0].replace(/^\/api\/supabase-proxy\/?/, "") || "") + (request.url.includes("?") ? "?" + request.url.split("?")[1] : "");
       const targetUrl = `${base}/${suffix}`.replace(/([^:]\/)\/+/g, "$1");
+      const nexusAnonKey = process.env.NEXUS_DB_ANON_KEY || process.env.NEXUS_SERVICE_ROLE_KEY || "";
       const headers: Record<string, string> = {};
       for (const [k, v] of Object.entries(request.headers)) {
         if (v && !["host", "connection", "content-length"].includes(k.toLowerCase())) headers[k] = Array.isArray(v) ? v[0] : v;
+      }
+      // Override apikey and Authorization with the correct Nexus key
+      // so the frontend can use any anon key (e.g. Lovable Cloud's) and the proxy fixes it
+      if (nexusAnonKey) {
+        headers["apikey"] = nexusAnonKey;
+        headers["authorization"] = `Bearer ${nexusAnonKey}`;
       }
       try {
         const body = ["POST", "PUT", "PATCH"].includes(request.method) && request.body ? JSON.stringify(request.body) : undefined;
