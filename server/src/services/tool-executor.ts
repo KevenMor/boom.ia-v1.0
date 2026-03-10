@@ -503,6 +503,8 @@ async function executeCalendarQuery(
       }
 
       const localIso = toLocalIso(startAt, durationMin);
+      const startAtBR = localIso.start + "-03:00";
+      const endAtBR = localIso.end + "-03:00";
 
       const { data: created, error: insErr } = await supabase
         .from("calendar_events")
@@ -510,8 +512,8 @@ async function executeCalendarQuery(
           calendar_id: calendarId,
           tenant_id: calendarArgs.tenant_id,
           title,
-          start_at: localIso.start,
-          end_at: localIso.end,
+          start_at: startAtBR,
+          end_at: endAtBR,
         })
         .select()
         .maybeSingle();

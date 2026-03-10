@@ -4,6 +4,20 @@
  */
 
 /**
+ * Converte data/hora para ISO com fuso de Brasília (-03:00).
+ * Usado ao gravar em colunas TIMESTAMPTZ para que o instante armazenado seja o correto (ex.: 14:00 BRT).
+ * Entrada sem fuso ou com +00:00 é tratada como horário local de Brasília.
+ */
+export function toBrasiliaISO(isoDate: string): string {
+  if (!isoDate) return "";
+  let s = isoDate.trim();
+  if (/\+00:00$/.test(s)) s = s.replace(/\+00:00$/, "") + "-03:00";
+  else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\s|$)/.test(s) && !/Z|[+-]\d{2}:?\d{2}$/.test(s))
+    s = s.replace(/\s*$/, "") + "-03:00";
+  return s;
+}
+
+/**
  * Formata data/hora em padrao brasileiro: seg., DD/MM/AAAA, HH:MM (America/Sao_Paulo).
  * Se isoDate nao tiver fuso (ex.: 2026-03-10T10:00:00), e tratado como horario de Brasilia (-03:00),
  * para nao exibir 07:00 quando o agendamento foi salvo como 10:00 local.
@@ -12,17 +26,15 @@ export function formatDateBR(isoDate: string): string {
   if (!isoDate) return "";
   try {
     let toParse = isoDate.trim();
-    // Se tem +00:00 (UTC) ou Z, REMOVER (banco salva sem tz, mas Supabase adiciona +00:00 ao retornar)
-    // e tratar como horário local de Brasília
+    // Se tem +00:00 (banco retornou horário que era local como UTC), tratar como Brasília
     if (/\+00:00$/.test(toParse)) {
       toParse = toParse.replace(/\+00:00$/, "") + "-03:00";
-    } else if (toParse.endsWith("Z")) {
-      toParse = toParse.replace(/Z$/, "") + "-03:00";
     }
     // Se não tem timezone (ex.: 2026-03-10T10:00:00), adicionar -03:00
-    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\s|$)/.test(toParse) && !/Z|[+-]\d{2}:?\d{2}$/.test(toParse)) {
+    else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\s|$)/.test(toParse) && !/Z|[+-]\d{2}:?\d{2}$/.test(toParse)) {
       toParse = toParse.replace(/\s*$/, "") + "-03:00";
     }
+    // Z = UTC correto; não alterar (ex.: 17:00Z = 14:00 BRT)
     // #region agent log
     fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ad5eb6'},body:JSON.stringify({sessionId:'ad5eb6',location:'agendaNotification.ts:formatDateBR',message:'antes de Date()',data:{original:isoDate,toParse},timestamp:Date.now(),hypothesisId:'H_PARSE'})}).catch(()=>{});
     // #endregion

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification, buildHandoffNotification, extractClientNameFromMessages } from "./agendaNotification.js";
+import { formatDateBR, toBrasiliaISO, buildFallbackAgendaNotification, buildCancelNotification, buildHandoffNotification, extractClientNameFromMessages } from "./agendaNotification.js";
 
 describe("formatDateBR", () => {
   it("formata ISO com offset para dia_semana DD/MM/AAAA, HH:MM", () => {
@@ -21,8 +21,30 @@ describe("formatDateBR", () => {
     expect(result).toContain("10:00");
   });
 
+  it("formata ISO com Z (UTC correto) em horário de São Paulo", () => {
+    const result = formatDateBR("2026-03-10T17:00:00.000Z");
+    expect(result).toContain("10/03/2026");
+    expect(result).toContain("14:00");
+  });
+
   it("retorna string vazia para input vazio", () => {
     expect(formatDateBR("")).toBe("");
+  });
+});
+
+describe("toBrasiliaISO", () => {
+  it("adiciona -03:00 quando não há timezone", () => {
+    expect(toBrasiliaISO("2026-03-10T14:00:00")).toBe("2026-03-10T14:00:00-03:00");
+  });
+  it("substitui +00:00 por -03:00", () => {
+    expect(toBrasiliaISO("2026-03-10T14:00:00+00:00")).toBe("2026-03-10T14:00:00-03:00");
+  });
+  it("retorna vazio para string vazia", () => {
+    expect(toBrasiliaISO("")).toBe("");
+  });
+  it("não altera string que já tem -03:00", () => {
+    const s = "2026-03-10T14:00:00-03:00";
+    expect(toBrasiliaISO(s)).toBe(s);
   });
 });
 

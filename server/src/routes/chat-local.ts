@@ -3,7 +3,7 @@ import { createNexusClient } from "../services/supabase.js";
 import { buildSystemPrompt, getDispatcherPrompt } from "../services/prompts/registry.js";
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
 import { filterCommandLinesFromStream, sanitizeLLMOutput, fallbackSanitizeForRetry } from "../utils/sanitize.js";
-import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification, buildHandoffNotification, extractClientNameFromMessages } from "../utils/agendaNotification.js";
+import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification, buildHandoffNotification, extractClientNameFromMessages, toBrasiliaISO } from "../utils/agendaNotification.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 const MAX_TOOL_ITERATIONS = 5;
@@ -466,7 +466,8 @@ async function sendAgendaNotification(
 
     if (reminderEnabled && startAt) {
       try {
-        const eventStartDate = new Date(startAt);
+        const eventStartAtBR = toBrasiliaISO(startAt);
+        const eventStartDate = new Date(eventStartAtBR);
         const remindAt = new Date(eventStartDate.getTime() - reminderMinutesBefore * 60 * 1000);
 
         await supabase.from("appointment_reminders").insert({
@@ -477,7 +478,7 @@ async function sendAgendaNotification(
           external_user_id: externalUserId || "",
           chatwoot_conversation_id: chatwootConvId ?? null,
           event_title: title,
-          event_start_at: startAt,
+          event_start_at: eventStartAtBR,
           remind_at: remindAt.toISOString(),
           status: "pending",
         });
@@ -1151,6 +1152,18 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             sendHandoffNotification(agent_id, agent, messages, external_user_id).catch((e) => {
               console.warn("[Chat-Local] Erro ao enviar notificação de handoff:", (e as Error)?.message);
             });
+            if (responseConvId) {
+              supabase.rpc("cancel_pending_followups", {
+                p_agent_id: agent_id,
+                p_conversation_id: responseConvId,
+              }).then(({ data: cancelled }) => {
+                if (cancelled != null && (cancelled as number) > 0) {
+                  console.log("[Chat-Local] Follow-up(s) cancelado(s) no handoff:", cancelled);
+                }
+              }).catch((e) => {
+                console.warn("[Chat-Local] Erro ao cancelar follow-up no handoff:", (e as Error)?.message);
+              });
+            }
           }
 
           if (debugSendTotalLen === 0) {
@@ -1395,6 +1408,18 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             sendHandoffNotification(agent_id, agent, messages, external_user_id).catch((e) => {
               console.warn("[Chat-Local] Erro ao enviar notificação de handoff (single-provider):", (e as Error)?.message);
             });
+            if (responseConvId) {
+              supabase.rpc("cancel_pending_followups", {
+                p_agent_id: agent_id,
+                p_conversation_id: responseConvId,
+              }).then(({ data: cancelled }) => {
+                if (cancelled != null && (cancelled as number) > 0) {
+                  console.log("[Chat-Local] Follow-up(s) cancelado(s) no handoff (single-provider):", cancelled);
+                }
+              }).catch((e) => {
+                console.warn("[Chat-Local] Erro ao cancelar follow-up no handoff (single-provider):", (e as Error)?.message);
+              });
+            }
           }
           if (singleProviderUsageAccum.total_tokens > 0) {
             sendSse({ token_usage: { single: { ...singleProviderUsageAccum, model } } });
