@@ -10,6 +10,7 @@ import { toolsRoutes } from "./routes/tools.js";
 import { adminRoutes } from "./routes/admin.js";
 import { inventoryRoutes } from "./routes/inventory.js";
 import { contactsRoutes } from "./routes/contacts.js";
+import { authRoutes } from "./routes/auth.js";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 const SERVER_STARTED_AT = new Date().toISOString();
@@ -82,6 +83,7 @@ async function build() {
   fastify.register(adminRoutes, { prefix: "/api" });
   fastify.register(inventoryRoutes, { prefix: "/api" });
   fastify.register(contactsRoutes, { prefix: "/api" });
+  fastify.register(authRoutes, { prefix: "/api" });
 
   fastify.get("/health", async () => ({ ok: true, timestamp: new Date().toISOString(), started_at: SERVER_STARTED_AT, build_id: SERVER_BUILD_ID }));
   fastify.get("/api/version", async () => ({ ok: true, started_at: SERVER_STARTED_AT, build_id: SERVER_BUILD_ID }));
