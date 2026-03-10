@@ -17,29 +17,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Listen first, then get session
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
+    let subscription: { unsubscribe: () => void } | null = null;
+
+    try {
+      const { data } = supabase.auth.onAuthStateChange((_event, sess) => {
+        console.log("[Auth] state change:", _event, !!sess);
+        setSession(sess);
         setLoading(false);
-      }
-    );
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+      });
+      subscription = data.subscription;
+    } catch (err) {
+      console.error("[Auth] onAuthStateChange failed:", err);
       setLoading(false);
-    });
+    }
 
-    return () => subscription.unsubscribe();
+    supabase.auth.getSession()
+      .then(({ data: { session: sess } }) => {
+        console.log("[Auth] getSession result:", !!sess);
+        setSession(sess);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error("[Auth] getSession failed:", err);
+        setLoading(false);
+      });
+
+    return () => {
+      subscription?.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error as Error | null };
+    try {
+      console.log("[Auth] signIn attempt for:", email);
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) console.error("[Auth] signIn error:", error.message);
+      return { error: error as Error | null };
+    } catch (err) {
+      console.error("[Auth] signIn exception:", err);
+      return { error: err as Error };
+    }
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error("[Auth] signOut error:", err);
+    }
   };
 
   return (
