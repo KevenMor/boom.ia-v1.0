@@ -2,11 +2,17 @@ import { describe, it, expect } from "vitest";
 import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification } from "./agendaNotification.js";
 
 describe("formatDateBR", () => {
-  it("formata ISO para dia_semana DD/MM/AAAA, HH:MM", () => {
+  it("formata ISO com offset para dia_semana DD/MM/AAAA, HH:MM", () => {
     const result = formatDateBR("2026-03-09T15:00:00-03:00");
     expect(result).toMatch(/\d{2}\/\d{2}\/\d{4}.*\d{2}:\d{2}/);
     expect(result).toContain("09/03/2026");
     expect(result).toContain("15:00");
+  });
+
+  it("trata ISO sem timezone como Brasilia (evita 07:00 quando salvo 10:00)", () => {
+    const result = formatDateBR("2026-03-10T10:00:00");
+    expect(result).toContain("10/03/2026");
+    expect(result).toContain("10:00");
   });
 
   it("retorna string vazia para input vazio", () => {

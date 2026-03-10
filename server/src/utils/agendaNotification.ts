@@ -3,11 +3,19 @@
  * Usado por chat-local ao criar/cancelar eventos.
  */
 
-/** Formata data/hora em padrao brasileiro: seg., DD/MM/AAAA, HH:MM (America/Sao_Paulo) */
+/**
+ * Formata data/hora em padrao brasileiro: seg., DD/MM/AAAA, HH:MM (America/Sao_Paulo).
+ * Se isoDate nao tiver fuso (ex.: 2026-03-10T10:00:00), e tratado como horario de Brasilia (-03:00),
+ * para nao exibir 07:00 quando o agendamento foi salvo como 10:00 local.
+ */
 export function formatDateBR(isoDate: string): string {
   if (!isoDate) return "";
   try {
-    const d = new Date(isoDate);
+    let toParse = isoDate.trim();
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\s|$)/.test(toParse) && !/Z|[+-]\d{2}:?\d{2}$/.test(toParse)) {
+      toParse = toParse.replace(/\s*$/, "") + "-03:00";
+    }
+    const d = new Date(toParse);
     return new Intl.DateTimeFormat("pt-BR", {
       timeZone: "America/Sao_Paulo",
       weekday: "short",
