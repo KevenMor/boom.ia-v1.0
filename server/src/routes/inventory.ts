@@ -136,11 +136,12 @@ function parseDetailPage(html: string): {
     photos.unshift(featuredMatch[1]);
   }
 
-  // Descrição: texto em "Informações do Veículo" (pode estar em <p>, <div> ou após </strong>)
+  // Descrição: texto em "Informações do Veículo"
+  // Estrutura real do site: </strong><br />Texto aqui...</p>
   const descMatch =
+    html.match(/Informa[çc][oõ]es do Ve[ií]culo<\/strong>\s*<br\s*\/?>\s*([^<]+?)\s*<\/p>/i) ||
     html.match(/Informações do Veículo[\s\S]*?<p>\s*"?([^"]*)"?\s*<\/p>/i) ||
     html.match(/Informações do Veículo[\s\S]*?<p>([^<]*)<\/p>/i) ||
-    html.match(/Informações do Veículo<\/strong>\s*<br>\s*<p>"?([^"]*)"?<\/p>/i) ||
     html.match(/Informa[çc][oõ]es do Ve[ií]culo<\/strong>[\s\S]*?>([^<]+)</) ||
     html.match(/Informa[çc][oõ]es do Ve[ií]culo<\/strong>\s*([^<]{15,})/);
   if (descMatch) {
