@@ -588,9 +588,6 @@ export default function CalendarPage() {
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Envio: {formatDateTimeBR(r.remind_at)}
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  Evento: {formatDateTimeBR(r.event_start_at)}
-                </p>
               </div>
             ))}
           </CardContent>
