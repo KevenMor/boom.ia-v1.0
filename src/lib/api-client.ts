@@ -3,7 +3,7 @@ const isTrulyLocal =
   typeof window !== "undefined" &&
   /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(window.location.origin);
 
-const DEFAULT_PROD_API = "https://api.agboom.com.br/api";
+const DEFAULT_PROD_API = "https://conexoesapp-server-boomia-lb.kgn6uc.easypanel.host/api";
 const configuredApiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
 const configuredIsLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(configuredApiUrl || "");
 const PROD_API = !isTrulyLocal && configuredIsLocalhost
