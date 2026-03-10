@@ -77,6 +77,34 @@ function extractVeiculoFromMessages(messages: Array<{ role: string; content: str
 }
 
 /**
+ * Extrai nome do cliente das ultimas mensagens (ex.: apos pergunta "Como posso te chamar?" ou junto com CPF/dados).
+ */
+export function extractClientNameFromMessages(messages: Array<{ role: string; content: string }>): string | undefined {
+  const recent = messages.slice(-15);
+  const cpfPattern = /\d{3}\s*\.?\s*\d{3}\s*\.?\s*\d{3}\s*[-.]?\s*\d{2}/;
+  for (let i = recent.length - 1; i >= 0; i--) {
+    const m = recent[i];
+    if (m?.role !== "user") continue;
+    const text = (m.content || "").trim();
+    if (!text || text.length < 3) continue;
+    const line = text.split(/\n/)[0];
+    if (cpfPattern.test(line)) {
+    const beforeCpf = line.split(cpfPattern)[0].trim();
+    const words = beforeCpf.split(/\s+/).filter((w) => w.length > 1 && !/^\d+$/.test(w));
+    if (words.length >= 2 && words.length <= 4) {
+      const name = words.length >= 3 ? words.slice(-2).join(" ") : words.join(" ");
+      return name.replace(/[,.]/g, "").trim();
+    }
+    }
+    if (line.length >= 2 && line.length <= 60 && !cpfPattern.test(line) && !/^\d+$/.test(line)) {
+      const words = line.split(/\s+/).filter((w) => w.length > 0);
+      if (words.length >= 1 && words.length <= 4 && words.every((w) => /^[A-Za-zÀ-ÿ]+$/.test(w))) return line.trim();
+    }
+  }
+  return undefined;
+}
+
+/**
  * Formata telefone com +55 se necessario.
  */
 function formatPhone(phone: string): string {
@@ -142,5 +170,35 @@ export function buildCancelNotification(
     nomeCliente,
     dataHoraBR || startAt,
   ];
+  return lines.join("\n");
+}
+
+/**
+ * Monta notificacao de HANDOFF para time comercial (cliente aguardando atendimento).
+ * Mesmo padrao do agendamento: nome, telefone, veiculo de interesse.
+ * Formato:
+ *   Cliente aguardando atendimento:
+ *   Nome
+ *   +55...
+ *   Interesse: ...
+ *   Encaminhado automaticamente pela IA
+ */
+export function buildHandoffNotification(
+  nomeCliente: string,
+  telefoneCliente?: string,
+  veiculoInteresse?: string,
+  messages?: Array<{ role: string; content: string }>
+): string {
+  const nome = (nomeCliente || "").trim() || "Cliente";
+  const telefone = telefoneCliente?.trim() ? formatPhone(telefoneCliente.trim()) : undefined;
+  const veiculo = veiculoInteresse?.trim() || (messages ? extractVeiculoFromMessages(messages) : undefined);
+
+  const lines: string[] = [
+    "Cliente aguardando atendimento:",
+    nome,
+  ];
+  if (telefone) lines.push(`📞 ${telefone}`);
+  if (veiculo) lines.push(`🚗 Interesse: ${veiculo}`);
+  lines.push("✅ Encaminhado automaticamente pela IA");
   return lines.join("\n");
 }

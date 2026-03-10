@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification } from "./agendaNotification.js";
+import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification, buildHandoffNotification, extractClientNameFromMessages } from "./agendaNotification.js";
 
 describe("formatDateBR", () => {
   it("formata ISO com offset para dia_semana DD/MM/AAAA, HH:MM", () => {
@@ -76,6 +76,30 @@ describe("buildFallbackAgendaNotification", () => {
     );
     expect(result).not.toContain("2026-03-09");
     expect(result).toContain("09/03/2026");
+  });
+});
+
+describe("buildHandoffNotification", () => {
+  it("formata notificacao com nome, telefone e interesse", () => {
+    const result = buildHandoffNotification(
+      "Henrique Carvalho",
+      "159998023871",
+      "Chevrolet Onix Joy"
+    );
+    expect(result).toContain("Cliente aguardando atendimento:");
+    expect(result).toContain("Henrique Carvalho");
+    expect(result).toContain("📞");
+    expect(result).toContain("Interesse: Chevrolet Onix Joy");
+    expect(result).toContain("Encaminhado automaticamente pela IA");
+  });
+});
+
+describe("extractClientNameFromMessages", () => {
+  it("extrai nome antes do CPF", () => {
+    const messages = [
+      { role: "user", content: "Itau Henrique Carvalho 000.001.001-45 05/03/1997" },
+    ];
+    expect(extractClientNameFromMessages(messages)).toBe("Henrique Carvalho");
   });
 });
 

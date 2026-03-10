@@ -3,7 +3,7 @@ import { createNexusClient } from "../services/supabase.js";
 import { buildSystemPrompt, getDispatcherPrompt } from "../services/prompts/registry.js";
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
 import { filterCommandLinesFromStream, sanitizeLLMOutput, fallbackSanitizeForRetry } from "../utils/sanitize.js";
-import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification } from "../utils/agendaNotification.js";
+import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification, buildHandoffNotification, extractClientNameFromMessages } from "../utils/agendaNotification.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 const MAX_TOOL_ITERATIONS = 5;
@@ -351,6 +351,68 @@ Gere a notificacao organizada.`;
  * 
  * Também agenda lembrete em appointment_reminders se reminder_enabled.
  */
+async function sendNotificationToGroup(
+  agentId: string,
+  agent: { config?: Record<string, unknown>; tenant_id?: string },
+  message: string
+): Promise<void> {
+  const supabase = createNexusClient();
+  try {
+    const { data: notifTools } = await supabase
+      .from("tools")
+      .select("id, tool_type, execution_config")
+      .eq("tool_type", "send_notification")
+      .limit(10);
+
+    if (!notifTools || notifTools.length === 0) {
+      console.warn("[Chat-Local] Nenhuma tool send_notification encontrada");
+      return;
+    }
+
+    const { data: agentToolLinks } = await supabase
+      .from("agent_tools")
+      .select("tool_id")
+      .eq("agent_id", agentId);
+    const linkedToolIds = new Set((agentToolLinks || []).map((l: { tool_id: string }) => l.tool_id));
+
+    const notifTool = notifTools.find((t: { id: string }) => linkedToolIds.has(t.id)) || notifTools[0];
+    const execCfg = (notifTool.execution_config || {}) as Record<string, unknown>;
+    const targetConvId = execCfg.conversation_id;
+
+    if (!targetConvId) {
+      console.warn("[Chat-Local] Tool send_notification sem conversation_id configurado");
+      return;
+    }
+
+    const cfg = (agent.config || {}) as Record<string, string>;
+    const cwUrl = cfg.chatwoot_url;
+    const cwToken = cfg.chatwoot_api_token;
+    const cwAccountId = cfg.chatwoot_account_id;
+
+    if (!cwUrl || !cwToken || !cwAccountId) {
+      console.warn("[Chat-Local] Chatwoot não configurado no agente para notificação");
+      return;
+    }
+
+    const baseUrl = cwUrl.replace(/\/+$/, "");
+    const msgUrl = `${baseUrl}/api/v1/accounts/${cwAccountId}/conversations/${targetConvId}/messages`;
+
+    const resp = await fetch(msgUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", api_access_token: cwToken },
+      body: JSON.stringify({ content: message, message_type: "outgoing", private: false }),
+    });
+
+    if (!resp.ok) {
+      console.error("[Chat-Local] Notificação falhou:", resp.status, await resp.text());
+    } else {
+      console.log("[Chat-Local] Notificação enviada com sucesso para conversa", targetConvId);
+    }
+  } catch (e) {
+    console.warn("[Chat-Local] Erro ao enviar notificação:", e);
+  }
+}
+
 async function sendAgendaNotification(
   agentId: string,
   agent: { config?: Record<string, unknown>; tenant_id?: string },
@@ -427,63 +489,27 @@ async function sendAgendaNotification(
     }
   }
 
-  try {
+  await sendNotificationToGroup(agentId, agent, message);
+}
 
-    const { data: notifTools } = await supabase
-      .from("tools")
-      .select("id, tool_type, execution_config")
-      .eq("tool_type", "send_notification")
-      .limit(10);
-
-    if (!notifTools || notifTools.length === 0) {
-      console.warn("[Chat-Local] Nenhuma tool send_notification encontrada");
-      return;
-    }
-
-    const { data: agentToolLinks } = await supabase
-      .from("agent_tools")
-      .select("tool_id")
-      .eq("agent_id", agentId);
-    const linkedToolIds = new Set((agentToolLinks || []).map((l: { tool_id: string }) => l.tool_id));
-
-    const notifTool = notifTools.find((t: { id: string }) => linkedToolIds.has(t.id)) || notifTools[0];
-    const execCfg = (notifTool.execution_config || {}) as Record<string, unknown>;
-    const targetConvId = execCfg.conversation_id;
-
-    if (!targetConvId) {
-      console.warn("[Chat-Local] Tool send_notification sem conversation_id configurado");
-      return;
-    }
-
-    const cfg = (agent.config || {}) as Record<string, string>;
-    const cwUrl = cfg.chatwoot_url;
-    const cwToken = cfg.chatwoot_api_token;
-    const cwAccountId = cfg.chatwoot_account_id;
-
-    if (!cwUrl || !cwToken || !cwAccountId) {
-      console.warn("[Chat-Local] Chatwoot não configurado no agente para notificação");
-      return;
-    }
-
-    const baseUrl = cwUrl.replace(/\/+$/, "");
-    const msgUrl = `${baseUrl}/api/v1/accounts/${cwAccountId}/conversations/${targetConvId}/messages`;
-
-    console.log("[Chat-Local] Enviando notificação agenda para grupo:", { targetConvId, message });
-
-    const resp = await fetch(msgUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", api_access_token: cwToken },
-      body: JSON.stringify({ content: message, message_type: "outgoing", private: false }),
-    });
-
-    if (!resp.ok) {
-      console.error("[Chat-Local] Notificação agenda falhou:", resp.status, await resp.text());
-    } else {
-      console.log("[Chat-Local] Notificação agenda enviada com sucesso para conversa", targetConvId);
-    }
-  } catch (e) {
-    console.warn("[Chat-Local] Erro ao enviar notificação de agenda:", e);
-  }
+/**
+ * Dispara notificação de handoff (cliente aguardando atendimento) quando o assistente usa HANDOFF_COMERCIAL.
+ * Mesmo padrão do agendamento: nome, telefone, veículo de interesse.
+ */
+async function sendHandoffNotification(
+  agentId: string,
+  agent: { config?: Record<string, unknown>; tenant_id?: string },
+  messages: Array<{ role: string; content: string }>,
+  externalUserId?: string | null
+): Promise<void> {
+  const nomeCliente = extractClientNameFromMessages(messages);
+  const message = buildHandoffNotification(
+    nomeCliente || "Cliente",
+    externalUserId?.trim() || undefined,
+    undefined,
+    messages
+  );
+  await sendNotificationToGroup(agentId, agent, message);
 }
 
 function normalizeParametersSchema(params: unknown): Record<string, unknown> {
@@ -1054,6 +1080,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           const convDecoder = new TextDecoder();
           let convBuf = "";
           let streamFilterBuffer = "";
+          let convFullContent = "";
           let conversationalUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null = null;
 
           while (true) {
@@ -1077,6 +1104,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   }
                   const delta = ev.choices?.[0]?.delta;
                   if (delta?.content) {
+                    convFullContent += delta.content;
                     debugDeltaCount++;
                     debugDeltaTotalLen += (delta.content || "").length;
                     // #region agent log
@@ -1098,6 +1126,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               }
             }
             if (done) {
+              convFullContent += streamFilterBuffer;
               if (streamFilterBuffer) {
                 debugSendCount++;
                 debugSendTotalLen += streamFilterBuffer.length;
@@ -1116,6 +1145,12 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               }
               break;
             }
+          }
+
+          if (/HANDOFF_COMERCIAL/i.test(convFullContent)) {
+            sendHandoffNotification(agent_id, agent, messages, external_user_id).catch((e) => {
+              console.warn("[Chat-Local] Erro ao enviar notificação de handoff:", (e as Error)?.message);
+            });
           }
 
           if (debugSendTotalLen === 0) {
@@ -1356,6 +1391,11 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
         fullContent += content;
 
         if (toolCalls.length === 0) {
+          if (/HANDOFF_COMERCIAL/i.test(fullContent)) {
+            sendHandoffNotification(agent_id, agent, messages, external_user_id).catch((e) => {
+              console.warn("[Chat-Local] Erro ao enviar notificação de handoff (single-provider):", (e as Error)?.message);
+            });
+          }
           if (singleProviderUsageAccum.total_tokens > 0) {
             sendSse({ token_usage: { single: { ...singleProviderUsageAccum, model } } });
             try {
