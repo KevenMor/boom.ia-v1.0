@@ -96,8 +96,8 @@ function CollapsibleGroup({
     <div>
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[10px] font-semibold uppercase text-white/25 transition-colors hover:text-white/45"
-        style={{ letterSpacing: '0.15em' }}
+        className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/30 transition-colors hover:text-white/50"
+        style={{ letterSpacing: '0.12em' }}
       >
         <span className="flex-1 text-start">{group.label}</span>
         <ChevronRight
@@ -124,10 +124,10 @@ function CollapsibleGroup({
                   to={item.to}
                   onClick={onLinkClick}
                   className={cn(
-                    "group relative flex items-center gap-3 rounded-full px-3 py-2 text-sm font-medium transition-all duration-200",
+                    "group relative flex items-center gap-3 rounded-r-lg px-3 py-2 text-sm font-medium transition-all duration-200 border-l-4",
                     isActive
-                      ? "bg-sidebar-primary/20 text-white shadow-[inset_0_0_0_1px_hsl(var(--sidebar-primary)/0.3)]"
-                      : "text-white/60 hover:bg-white/8 hover:text-white"
+                      ? "border-l-sidebar-primary bg-sidebar-accent/60 text-white"
+                      : "border-l-transparent text-white/60 hover:bg-white/8 hover:text-white"
                   )}
                 >
                   <item.icon
@@ -212,9 +212,9 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
                   onClick={onLinkClick}
                   title={item.label}
                   className={cn(
-                    "flex items-center justify-center rounded-full p-2 transition-all duration-200",
+                    "flex items-center justify-center rounded-lg p-2 transition-all duration-200",
                     isActive
-                      ? "bg-sidebar-primary/20 text-white shadow-[inset_0_0_0_1px_hsl(var(--sidebar-primary)/0.3)]"
+                      ? "bg-sidebar-accent/60 text-sidebar-primary"
                       : "text-white/60 hover:bg-white/8 hover:text-white"
                   )}
                 >

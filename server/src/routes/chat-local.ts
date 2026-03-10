@@ -468,24 +468,35 @@ async function sendAgendaNotification(
 
     if (reminderEnabled && startAt) {
       try {
-        const eventStartAtBR = toBrasiliaISO(startAt);
-        const eventStartDate = new Date(eventStartAtBR);
-        const remindAt = new Date(eventStartDate.getTime() - reminderMinutesBefore * 60 * 1000);
+        const { data: existingReminder } = await supabase
+          .from("appointment_reminders")
+          .select("id")
+          .eq("calendar_event_id", res.event.id)
+          .eq("status", "pending")
+          .limit(1)
+          .maybeSingle();
+        if (existingReminder) {
+          console.log("[Chat-Local] Lembrete já existente para evento", res.event.id);
+        } else {
+          const eventStartAtBR = toBrasiliaISO(startAt);
+          const eventStartDate = new Date(eventStartAtBR);
+          const remindAt = new Date(eventStartDate.getTime() - reminderMinutesBefore * 60 * 1000);
 
-        await supabase.from("appointment_reminders").insert({
-          agent_id: agentId,
-          tenant_id: agent.tenant_id,
-          calendar_event_id: res.event.id,
-          conversation_id: conversationId,
-          external_user_id: externalUserId || "",
-          chatwoot_conversation_id: chatwootConvId ?? null,
-          event_title: title,
-          event_start_at: eventStartAtBR,
-          remind_at: remindAt.toISOString(),
-          status: "pending",
-        });
+          await supabase.from("appointment_reminders").insert({
+            agent_id: agentId,
+            tenant_id: agent.tenant_id,
+            calendar_event_id: res.event.id,
+            conversation_id: conversationId,
+            external_user_id: externalUserId || "",
+            chatwoot_conversation_id: chatwootConvId ?? null,
+            event_title: title,
+            event_start_at: eventStartAtBR,
+            remind_at: remindAt.toISOString(),
+            status: "pending",
+          });
 
-        console.log(`[Chat-Local] Lembrete agendado para ${remindAt.toISOString()} (${reminderMinutesBefore} min antes)`);
+          console.log(`[Chat-Local] Lembrete agendado para ${remindAt.toISOString()} (${reminderMinutesBefore} min antes)`);
+        }
       } catch (e) {
         console.warn("[Chat-Local] Erro ao agendar lembrete:", (e as Error)?.message);
       }
@@ -884,6 +895,8 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               { type: "dispatcher_tool_calls", tool_names: phase1ToolCalls.map((tc) => tc.function.name), tool_calls_count: phase1ToolCalls.length },
             ];
 
+            const agendaCriarCache = new Map<string, { result: unknown; success: boolean }>();
+
             // consultar_fipe removido do fluxo (v3.5.0) — avaliações são presenciais
 
             for (const tc of phase1ToolCalls) {
@@ -952,6 +965,26 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   }
                 }
 
+                const agendaAction = String(args.action ?? "check_availability");
+                const isAgendaCriar = tc.function.name === "consultar_agenda" && (agendaAction === "criar" || agendaAction === "create");
+                if (isAgendaCriar) {
+                  const startAt = String(args.start_at ?? args.start ?? args.date_time ?? "").trim();
+                  const title = String(args.title ?? args.titulo ?? "").trim();
+                  const dedupeKey = `${startAt}|${title}`;
+                  const cached = agendaCriarCache.get(dedupeKey);
+                  if (cached) {
+                    console.log("[Chat-Local] consultar_agenda(criar) duplicada ignorada:", dedupeKey);
+                    debugEntries.push({ type: "tool_call", tool: tc.function.name, args, tool_type: "function" });
+                    debugEntries.push({ type: "tool_result", preview: cached.success ? cached.result : { error: cached.result } });
+                    conversationalMessages.push({
+                      role: "tool",
+                      tool_call_id: tc.id,
+                      content: JSON.stringify(cached.success ? cached.result : { error: cached.result }),
+                    });
+                    continue;
+                  }
+                }
+
                 console.log("[Chat-Local] Executando tool:", tc.function.name, "| args:", JSON.stringify(args));
                 debugEntries.push({ type: "tool_call", tool: tc.function.name, args, tool_type: "function" });
                 const result = await executeTool(tool, args, agent_id);
@@ -971,8 +1004,19 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   tool_call_id: tc.id,
                   content: JSON.stringify(result.success ? result.result : { error: result.error }),
                 });
-                if (tc.function.name === "consultar_agenda" && result.success && result.result) {
-                  sendAgendaNotification(agent_id, agent, result.result, messages, external_user_id, responseConvId, chatwoot_conversation_id).catch(() => {});
+                if (tc.function.name === "consultar_agenda") {
+                  const agendaActionDone = String(args.action ?? "check_availability");
+                  if (agendaActionDone === "criar" || agendaActionDone === "create") {
+                    const startAt = String(args.start_at ?? args.start ?? args.date_time ?? "").trim();
+                    const title = String(args.title ?? args.titulo ?? "").trim();
+                    agendaCriarCache.set(`${startAt}|${title}`, {
+                      result: result.success ? result.result : result.error,
+                      success: result.success,
+                    });
+                  }
+                  if (result.success && result.result) {
+                    sendAgendaNotification(agent_id, agent, result.result, messages, external_user_id, responseConvId, chatwoot_conversation_id).catch(() => {});
+                  }
                 }
               }
             }
@@ -1466,6 +1510,8 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
         };
         llmMessages.push(assistantMsg);
 
+        const agendaCriarCacheSP = new Map<string, { result: unknown; success: boolean }>();
+
         for (const tc of toolCalls) {
           const tool = nameToTool.get(tc.function.name);
           if (!tool) {
@@ -1509,6 +1555,24 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }
           }
 
+          const agendaActionSP = String(args.action ?? "check_availability");
+          const isAgendaCriarSP = tc.function.name === "consultar_agenda" && (agendaActionSP === "criar" || agendaActionSP === "create");
+          if (isAgendaCriarSP) {
+            const startAt = String(args.start_at ?? args.start ?? args.date_time ?? "").trim();
+            const title = String(args.title ?? args.titulo ?? "").trim();
+            const dedupeKey = `${startAt}|${title}`;
+            const cached = agendaCriarCacheSP.get(dedupeKey);
+            if (cached) {
+              console.log("[Chat-Local] consultar_agenda(criar) duplicada ignorada (single-provider):", dedupeKey);
+              llmMessages.push({
+                role: "tool",
+                tool_call_id: tc.id,
+                content: JSON.stringify(cached.success ? cached.result : { error: cached.result }),
+              });
+              continue;
+            }
+          }
+
           console.log("[Chat-Local] Executando tool (single-provider):", tc.function.name, "| args:", JSON.stringify(args));
           const result = await executeTool(tool, args, agent_id);
           const resultPreview = result.success
@@ -1520,8 +1584,19 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             tool_call_id: tc.id,
             content: JSON.stringify(result.success ? result.result : { error: result.error }),
           });
-          if (tc.function.name === "consultar_agenda" && result.success && result.result) {
-            sendAgendaNotification(agent_id, agent, result.result, messages, external_user_id, responseConvId, chatwoot_conversation_id).catch(() => {});
+          if (tc.function.name === "consultar_agenda") {
+            const agendaActionDoneSP = String(args.action ?? "check_availability");
+            if (agendaActionDoneSP === "criar" || agendaActionDoneSP === "create") {
+              const startAt = String(args.start_at ?? args.start ?? args.date_time ?? "").trim();
+              const title = String(args.title ?? args.titulo ?? "").trim();
+              agendaCriarCacheSP.set(`${startAt}|${title}`, {
+                result: result.success ? result.result : result.error,
+                success: result.success,
+              });
+            }
+            if (result.success && result.result) {
+              sendAgendaNotification(agent_id, agent, result.result, messages, external_user_id, responseConvId, chatwoot_conversation_id).catch(() => {});
+            }
           }
         }
       }

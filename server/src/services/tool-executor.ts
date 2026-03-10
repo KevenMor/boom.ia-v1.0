@@ -506,6 +506,20 @@ async function executeCalendarQuery(
       const startAtBR = localIso.start + "-03:00";
       const endAtBR = localIso.end + "-03:00";
 
+      const { data: conflicting } = await supabase
+        .from("calendar_events")
+        .select("id, title, start_at")
+        .eq("calendar_id", calendarId)
+        .lt("start_at", endAtBR)
+        .gt("end_at", startAtBR);
+      if (conflicting && conflicting.length > 0) {
+        return {
+          success: false,
+          result: null,
+          error: "Horário já ocupado. Use check_availability para ver slots livres.",
+        };
+      }
+
       const { data: created, error: insErr } = await supabase
         .from("calendar_events")
         .insert({

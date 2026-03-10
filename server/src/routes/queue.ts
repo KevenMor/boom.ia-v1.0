@@ -671,16 +671,21 @@ export async function queueRoutes(fastify: FastifyInstance) {
               }
 
               // CENÁRIO 2: Se conversa tem assignee humano (não é bot), cancelar follow-up
+              // Com agent_assignee_id: cancelar só se assignee != agent_assignee_id
               if (currentAssigneeId && agent.status === "active") {
-                console.log(`[FollowUp] Human assigned (${currentAssigneeId}): cancelling ${item.id}`);
-                // #region agent log
-                fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-cancel',message:'CANCELLED: human assigned (active agent)',data:{itemId:item.id,currentAssigneeId},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
-                // #endregion
-                await supabase
-                  .from("follow_up_queue")
-                  .update({ status: "cancelled", cancel_reason: "human_assigned", updated_at: new Date().toISOString() })
-                  .eq("id", item.id);
-                continue;
+                const agentAssigneeId = cfg.agent_assignee_id != null ? Number(cfg.agent_assignee_id) : null;
+                const isAgentOwnConversation = agentAssigneeId != null && currentAssigneeId === agentAssigneeId;
+                if (!isAgentOwnConversation) {
+                  console.log(`[FollowUp] Human assigned (${currentAssigneeId}): cancelling ${item.id}`);
+                  // #region agent log
+                  fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-cancel',message:'CANCELLED: human assigned (active agent)',data:{itemId:item.id,currentAssigneeId},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+                  // #endregion
+                  await supabase
+                    .from("follow_up_queue")
+                    .update({ status: "cancelled", cancel_reason: "human_assigned", updated_at: new Date().toISOString() })
+                    .eq("id", item.id);
+                  continue;
+                }
               }
             }
           } catch (e: any) {

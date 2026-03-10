@@ -45,7 +45,7 @@ export function AppHeader() {
   const title = getTitle(location.pathname);
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-background/70 backdrop-blur-xl px-4 md:px-6">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background px-4 md:px-6">
       <div className="flex items-center gap-3">
         {isMobile && (
           <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={() => setMobileOpen(true)}>

@@ -279,7 +279,11 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           cfg.test_assignee_id != null &&
           chatwoot.assigneeId === Number(cfg.test_assignee_id);
 
-        if (chatwoot.assigneeId && !isTestWithMatchingAssignee) {
+        const agentAssigneeId = cfg.agent_assignee_id != null ? Number(cfg.agent_assignee_id) : null;
+        const isAgentOwnConversation = agentAssigneeId != null && chatwoot.assigneeId === agentAssigneeId;
+        const shouldBlockForHuman = chatwoot.assigneeId && !isTestWithMatchingAssignee && !isAgentOwnConversation;
+
+        if (shouldBlockForHuman) {
           try {
             const { data: newConvId } = await supabase.rpc("find_or_create_webhook_conversation", {
               p_agent_id: agentId,

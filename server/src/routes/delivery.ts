@@ -76,6 +76,23 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
         const msgUrl = `${baseUrl}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${chatwoot_conversation_id}/messages`;
         const humanization = getHumanizationConfig(cfg);
 
+        const agentAssigneeId = cfg.agent_assignee_id != null ? Number(cfg.agent_assignee_id) : null;
+        if (agentAssigneeId != null) {
+          try {
+            const assignUrl = `${baseUrl}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${chatwoot_conversation_id}/assignments`;
+            const assignResp = await fetch(assignUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", api_access_token: cfg.chatwoot_api_token },
+              body: JSON.stringify({ assignee_id: agentAssigneeId }),
+            });
+            if (!assignResp.ok) {
+              console.warn("[Deliver] Failed to assign conversation to agent:", assignResp.status, await assignResp.text().catch(() => ""));
+            }
+          } catch (e: any) {
+            console.warn("[Deliver] Assign to agent failed:", e.message);
+          }
+        }
+
         if (welcome_video_url) {
           const greetingParts: string[] =
             Array.isArray(response_parts) && response_parts.length > 0

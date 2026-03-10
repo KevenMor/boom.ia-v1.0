@@ -14,9 +14,9 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ["'Sora'", "'DM Sans'", "system-ui", "-apple-system", "sans-serif"],
-        serif: ["'DM Serif Display'", "Georgia", "serif"],
-        mono: ["'DM Mono'", "'IBM Plex Mono'", "'Menlo'", "monospace"],
+        sans: ["Poppins", "system-ui", "-apple-system", "sans-serif"],
+        serif: ["Georgia", "serif"],
+        mono: ["'IBM Plex Mono'", "Menlo", "monospace"],
       },
       colors: {
         border: "hsl(var(--border))",

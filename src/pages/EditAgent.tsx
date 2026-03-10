@@ -134,6 +134,7 @@ export default function EditAgent() {
   const [reminderMinutesBefore, setReminderMinutesBefore] = useState(60);
   const [reminderTemplate, setReminderTemplate] = useState("");
   const [testAssigneeId, setTestAssigneeId] = useState("");
+  const [agentAssigneeId, setAgentAssigneeId] = useState("");
 
   const { register, handleSubmit, setValue, watch, reset } = useForm<FormData>({ resolver: zodResolver(schema) });
 
@@ -180,6 +181,7 @@ export default function EditAgent() {
       setReminderMinutesBefore((cfg as any).reminder_minutes_before ?? 60);
       setReminderTemplate((cfg as any).reminder_template ?? "");
       setTestAssigneeId(String((cfg as any).test_assignee_id ?? ""));
+      setAgentAssigneeId(String((cfg as any).agent_assignee_id ?? ""));
     }
   }, [agent, reset]);
 
@@ -220,6 +222,7 @@ export default function EditAgent() {
           reminder_minutes_before: reminderMinutesBefore,
           reminder_template: reminderTemplate || undefined,
           test_assignee_id: testAssigneeId ? Number(testAssigneeId) : undefined,
+          agent_assignee_id: agentAssigneeId ? Number(agentAssigneeId) : undefined,
         },
       });
       toast.success("Agente atualizado");
@@ -331,6 +334,23 @@ export default function EditAgent() {
               />
               <p className="text-xs text-muted-foreground">
                 Regra exclusiva do status <strong>Teste</strong>: o agente só interage quando a conversa no Chatwoot estiver atribuída a este ID. Qualquer mensagem em conversa com outro atendente (ou sem atribuição) não será respondida pelo agente.
+              </p>
+            </div>
+          )}
+
+          {/* Agent Assignee ID — only visible when status is "active" */}
+          {(watch("status") || agent.status) === "active" && (
+            <div className="space-y-3 rounded-lg border border-dashed border-primary/30 bg-primary/5 p-4">
+              <Label className="text-sm font-medium text-foreground">Assignee ID do agente (bot)</Label>
+              <Input
+                type="number"
+                placeholder="ID do usuário no Chatwoot que representa o bot"
+                value={agentAssigneeId}
+                onChange={(e) => setAgentAssigneeId(e.target.value)}
+                className="h-11 rounded-lg bg-background border-border font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                Quando o cliente chama, a conversa chega sem assignee. Após a IA enviar a primeira mensagem, ela atribui a conversa a este ID. A IA só interage com conversas sem assignee ou atribuídas a este ID.
               </p>
             </div>
           )}
