@@ -167,7 +167,7 @@ export default function Conversations() {
   }, {} as Record<string, typeof messages>);
 
   const hasDebugData = (messages ?? []).some(
-    (msg) => !!msg.metadata?.debug?.length || !!msg.metadata?.edge_logs?.length
+    (msg) => !!msg.metadata?.debug?.length || !!msg.metadata?.token_usage
   );
 
   const handleClearConversation = async () => {
@@ -760,9 +760,12 @@ export default function Conversations() {
 
                             return (
                               <div key={msg.id} className="space-y-1.5">
-                                {!isUser && !isSystem && showDebug && (msg.metadata?.debug?.length || msg.metadata?.edge_logs?.length) && (
+                                {!isUser && !isSystem && showDebug && (msg.metadata?.debug?.length || msg.metadata?.token_usage) && (
                                   <div className="flex justify-end mb-1">
-                                    <DebugBlock debug={msg.metadata?.debug ?? []} edgeLogs={msg.metadata?.edge_logs} />
+                                    <DebugBlock
+                                      debug={msg.metadata?.debug ?? []}
+                                      tokenUsage={msg.metadata?.token_usage}
+                                    />
                                   </div>
                                 )}
                                 {bubbles.map((bubble, bIdx) => (

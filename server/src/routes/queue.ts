@@ -63,7 +63,14 @@ async function callChatAgent(
   attachments?: any[],
   externalUserId?: string | null,
   chatwootConvId?: number | null
-): Promise<{ error: string | null; fullContent: string; responseParts: string[]; responseConvId: string | null }> {
+): Promise<{
+  error: string | null;
+  fullContent: string;
+  responseParts: string[];
+  responseConvId: string | null;
+  debug?: any[];
+  token_usage?: Record<string, unknown>;
+}> {
   const chatUrl = `${baseUrl}/api/chat-local`;
   const MAX_RETRIES = 3;
   let lastError = "";
@@ -116,6 +123,8 @@ async function callChatAgent(
       const MSG_SPLIT = "<<MSG_SPLIT>>";
       const responseParts: string[] = [];
       let currentPart = "";
+      let capturedDebug: any[] | undefined;
+      let capturedTokenUsage: Record<string, unknown> | undefined;
 
       const processSseLine = (rawLine: string) => {
         const line = rawLine.trim();
@@ -128,7 +137,14 @@ async function callChatAgent(
             responseConvId = ev.conversation_id;
             return;
           }
-          if (ev.debug || ev.edge_logs || ev.token_usage) return;
+          if (ev.debug) {
+            capturedDebug = Array.isArray(ev.debug) ? ev.debug : [ev.debug];
+            return;
+          }
+          if (ev.token_usage) {
+            capturedTokenUsage = ev.token_usage as Record<string, unknown>;
+            return;
+          }
           const delta = ev.choices?.[0]?.delta?.content;
           if (!delta) return;
           currentPart += delta;
@@ -156,7 +172,14 @@ async function callChatAgent(
       }
       if (currentPart.trim()) responseParts.push(currentPart.trim());
 
-      return { error: null, fullContent, responseParts, responseConvId };
+      return {
+        error: null,
+        fullContent,
+        responseParts,
+        responseConvId,
+        debug: capturedDebug,
+        token_usage: capturedTokenUsage,
+      };
     } catch (fetchErr: any) {
       lastError = fetchErr?.message || "fetch error";
       const isRetryable = /dns|ECONNREFUSED|timeout|name resolution|connection/i.test(lastError);
@@ -423,9 +446,18 @@ export async function queueRoutes(fastify: FastifyInstance) {
 
       const responseConvId = result.responseConvId ?? convId ?? null;
       const sanitizedContent = sanitizeLLMOutput(result.fullContent.trim());
+      const hasMetadata = result.debug?.length || result.token_usage;
+      const messageMetadata =
+        hasMetadata
+          ? {
+              ...(result.debug?.length ? { debug: result.debug } : {}),
+              ...(result.token_usage ? { token_usage: result.token_usage } : {}),
+            }
+          : null;
+
       if (responseConvId && sanitizedContent) {
         try {
-          await supabase.rpc("save_message", {
+          const savePayload: Record<string, unknown> = {
             p_agent_id: agent_id,
             p_conversation_id: responseConvId,
             p_role: "assistant",
@@ -434,7 +466,9 @@ export async function queueRoutes(fastify: FastifyInstance) {
             p_tokens_input: 0,
             p_tokens_output: 0,
             p_latency_ms: null,
-          });
+          };
+          if (messageMetadata) savePayload.p_metadata = messageMetadata;
+          await supabase.rpc("save_message", savePayload);
         } catch (e: any) {
           console.warn("[ProcessQueue] save assistant message failed:", e?.message);
         }

@@ -24,7 +24,7 @@ export interface Message {
   tokens_output: number;
   latency_ms: number | null;
   created_at: string;
-  metadata: { debug?: any[]; edge_logs?: any[] } | null;
+  metadata: { debug?: any[]; token_usage?: Record<string, unknown> } | null;
 }
 
 export function useConversations(agentId: string | null) {

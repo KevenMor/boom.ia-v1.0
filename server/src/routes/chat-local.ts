@@ -173,6 +173,24 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
   if (action === "cancelled" || action === "cancel") {
     return "Agendamento cancelado.";
   }
+  // consultar_estoque: incluir resumo dos veículos E photos_markdown para o LLM poder enviar as fotos
+  const vehicles = obj.vehicles as Array<{ nome_completo?: string; ano?: number; preco?: number; km?: number; cor?: string }> | undefined;
+  const photosMarkdown = obj.photos_markdown as string | undefined;
+  if (Array.isArray(vehicles) && vehicles.length > 0) {
+    const lines: string[] = [];
+    lines.push(`ESTOQUE ATUAL (${vehicles.length} veículo(s)):`);
+    for (const v of vehicles.slice(0, 10)) {
+      const parts = [v.nome_completo, v.ano, v.km != null ? `${v.km} km` : null, v.preco != null ? `R$ ${v.preco}` : null, v.cor].filter(Boolean);
+      lines.push("- " + parts.join(", "));
+    }
+    if (vehicles.length > 10) lines.push(`... e mais ${vehicles.length - 10} veículo(s).`);
+    if (photosMarkdown && photosMarkdown.trim()) {
+      lines.push("");
+      lines.push("FOTOS (copie o bloco abaixo literalmente na sua resposta quando o cliente pedir ou aceitar ver fotos):");
+      lines.push(photosMarkdown);
+    }
+    return lines.join("\n");
+  }
   if (Array.isArray(obj.data) && obj.data.length > 0) {
     const items = obj.data as Array<{ brand?: string; model?: string; year?: number; price?: number }>;
     const preview = items.slice(0, 5).map((v) => {

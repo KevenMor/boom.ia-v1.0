@@ -2,7 +2,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { ArrowLeft, Send, Loader2, Plus, Clock, Trash2, CheckCheck, Bug, Paperclip, Mic, Camera, AlertTriangle } from "lucide-react";
 import ReactMarkdown from "react-markdown";
-import { DebugBlock, type EdgeLog } from "@/components/sandbox/DebugBlock";
+import { DebugBlock, type LogEntry } from "@/components/sandbox/DebugBlock";
 import { AudioRecorder } from "@/components/sandbox/AudioRecorder";
 import { AttachmentPreview, classifyFile, type AttachmentFile } from "@/components/sandbox/AttachmentPreview";
 import { extractVideos, VideoPlayer, AudioPlayer, UserMediaPreview, type UserAttachmentMeta } from "@/components/sandbox/MediaBubble";
@@ -41,7 +41,7 @@ type Msg = {
   content: string;
   timestamp?: Date;
   debug?: DebugEntry[];
-  edgeLogs?: EdgeLog[];
+  edgeLogs?: LogEntry[];
   tokenUsage?: TokenUsageData;
   userAttachments?: UserAttachmentMeta[];
 };
@@ -308,7 +308,7 @@ export default function AgentSandbox() {
     setIsLoading(true);
 
     let debugData: DebugEntry[] | null = null;
-    let edgeLogsData: EdgeLog[] | null = null;
+    let edgeLogsData: LogEntry[] | null = null;
     let hasAssistantContent = false;
     const allMessages = [...messages, userMsg];
 

@@ -49,6 +49,7 @@ BEGIN
       tokens_output INTEGER DEFAULT 0,
       latency_ms INTEGER,
       model TEXT,
+      metadata JSONB DEFAULT ''{}'',
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   ', v_schema, v_schema);

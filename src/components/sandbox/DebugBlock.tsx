@@ -18,11 +18,12 @@ type TokenUsageData = {
 
 interface DebugBlockProps {
   debug: DebugEntry[];
-  edgeLogs?: EdgeLog[];
+  /** @deprecated Projeto não usa mais Edge Functions; mantido só para dados antigos. */
+  edgeLogs?: LogEntry[];
   tokenUsage?: TokenUsageData | null;
 }
 
-export interface EdgeLog {
+export interface LogEntry {
   timestamp: string;
   level: string;
   message: string;
@@ -111,7 +112,7 @@ export function DebugBlock({ debug, edgeLogs, tokenUsage }: DebugBlockProps) {
         {errors.length > 0 && <span className="text-red-400">{errors.length} erro{errors.length !== 1 ? "s" : ""}</span>}
         {totalTokens > 0 && <span className="text-emerald-400">{totalTokens.toLocaleString()} tokens</span>}
         {mediaAttachments.length > 0 && <span className="text-pink-400">🎙️ mídia</span>}
-        {edgeLogs && edgeLogs.length > 0 && <span className="text-orange-400">{edgeLogs.length} log{edgeLogs.length !== 1 ? "s" : ""}</span>}
+          {edgeLogs && edgeLogs.length > 0 && <span className="text-orange-400">{edgeLogs.length} log{edgeLogs.length !== 1 ? "s" : ""}</span>}
         {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
       </button>
 
@@ -354,7 +355,7 @@ export function DebugBlock({ debug, edgeLogs, tokenUsage }: DebugBlockProps) {
             </div>
           ))}
 
-          {/* Edge Function Logs */}
+          {/* Logs (legado; projeto não usa mais Edge Functions) */}
           {edgeLogs && edgeLogs.length > 0 && (
             <div className="border-t border-[#2a3942] pt-2">
               <button
@@ -362,7 +363,7 @@ export function DebugBlock({ debug, edgeLogs, tokenUsage }: DebugBlockProps) {
                 className="flex items-center gap-1.5 text-orange-400 font-semibold mb-1 hover:text-orange-300 transition-colors"
               >
                 <ScrollText className="h-3 w-3" />
-                📋 Edge Function Logs ({edgeLogs.length})
+                📋 Logs ({edgeLogs.length})
                 {showLogs ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
               </button>
               {showLogs && (
