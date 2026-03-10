@@ -98,7 +98,7 @@ async function build() {
         headers["apikey"] = nexusAnonKey;
         headers["authorization"] = `Bearer ${nexusAnonKey}`;
       } else {
-        request.log.warn("Supabase proxy: NO nexus key found, forwarding original headers");
+        console.warn("[Supabase-Proxy] NO nexus key found, forwarding original headers");
       }
       try {
         const body = ["POST", "PUT", "PATCH"].includes(request.method) && request.body ? JSON.stringify(request.body) : undefined;
