@@ -44,6 +44,19 @@ function formatDateTimeBR(dateStr: string | undefined): string {
   });
 }
 
+/** Exibe remind_at em Brasília. Trata valores sem timezone (ex: do Supabase) como UTC. */
+function formatRemindAtBR(dateStr: string | undefined): string {
+  if (!dateStr) return "";
+  let s = dateStr.trim();
+  if (!s.endsWith("Z") && !/[+-]\d{2}:?\d{2}$/.test(s)) s = s + "Z";
+  const d = new Date(s);
+  return d.toLocaleString("pt-BR", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+    timeZone: "America/Sao_Paulo",
+  });
+}
+
 /** Para Lembretes e Próximos Eventos: trata data em UTC (+00:00/Z) como horário de Brasília na exibição. */
 function formatDateTimeBRAsBrasilia(dateStr: string | undefined): string {
   if (!dateStr) return "";
@@ -612,7 +625,7 @@ export default function CalendarPage() {
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Envio: {formatDateTimeBR(r.remind_at)}
+                  Envio: {formatRemindAtBR(r.remind_at)}
                 </p>
               </div>
             ))}
