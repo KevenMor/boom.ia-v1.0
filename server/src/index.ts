@@ -90,7 +90,8 @@ async function build() {
   fastify.register(inventoryRoutes, { prefix: "/api" });
   fastify.register(contactsRoutes, { prefix: "/api" });
 
-  fastify.get("/health", async () => ({ ok: true, timestamp: new Date().toISOString() }));
+  fastify.get("/health", async () => ({ ok: true, timestamp: new Date().toISOString(), started_at: SERVER_STARTED_AT, build_id: SERVER_BUILD_ID }));
+  fastify.get("/api/version", async () => ({ ok: true, started_at: SERVER_STARTED_AT, build_id: SERVER_BUILD_ID }));
 
   // Proxy Supabase (auth, rest) para evitar CORS: frontend chama /api/supabase-proxy/* -> NEXUS_DB_URL/*
   const nexusUrl = process.env.NEXUS_DB_URL;
