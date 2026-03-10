@@ -818,8 +818,10 @@ STEP 2: EXTRACT PARAMETERS
 NOTE: consultar_fipe is NO LONGER USED. All appraisals are handled conversationally.
 For consultar_estoque: extract ALL relevant parameters from the message:
   - marca (brand), modelo (model), ano (year), faixa_preco (price range)
-  - cor (color) ÔÇö CRITICAL: if the customer mentions a color (branco, preto, prata, vermelho, azul, cinza, etc.), ALWAYS pass it as the "cor" parameter
-  - cambio (transmission), combustivel (fuel type), tipo (body type: use "pickup" for caminhonete/picape, or SUV, sedan, hatch)
+  - cor (color) — CRITICAL: if the customer mentions a color (branco, preto, prata, vermelho, azul, cinza, etc.), ALWAYS pass it as the "cor" parameter
+  - motorizacao (engine type) — when the customer mentions turbo, aspirado, TSI, TFSI, TDI, etc., pass as "motorizacao" (filters by version). NEVER use "cambio" for engine type.
+  - cambio (transmission only: automático, manual, CVT) — for gearbox type, NOT for engine
+  - combustivel (fuel type), tipo (body type: use "pickup" for caminhonete/picape, or SUV, sedan, hatch)
 
 ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
 DECISION EXAMPLES (study these carefully)
@@ -832,10 +834,11 @@ CALL consultar_estoque:
 - "tem algo at├® 200 mil?" ÔåÆ consultar_estoque(faixa_preco="at├® 200000")
 - "quero ver um sedan" ÔåÆ consultar_estoque(modelo="sedan")
 - "qual caminhonete tem em estoque?" / "o que vocês têm de caminhonete?" / "tem camionete?" ÔåÆ consultar_estoque(tipo="pickup")
-- "tem Onix branco?" ÔåÆ consultar_estoque(marca="Chevrolet", modelo="Onix", cor="branco")
-- "quero um preto, autom├ítico" ÔåÆ consultar_estoque(cor="preto", cambio="autom├ítico")
-- "vi o Onix branco de voc├¬s" ÔåÆ consultar_estoque(marca="Chevrolet", modelo="Onix", cor="branco")
-- "tem algum carro prata?" ÔåÆ consultar_estoque(cor="prata")
+- "tem Onix branco?" → consultar_estoque(marca="Chevrolet", modelo="Onix", cor="branco")
+- "quero um preto, automático" → consultar_estoque(cor="preto", cambio="automático")
+- "vi o Onix branco de vocês" → consultar_estoque(marca="Chevrolet", modelo="Onix", cor="branco")
+- "tem algum carro prata?" → consultar_estoque(cor="prata")
+- "sedan com motorização turbo" / "quero um turbo" → consultar_estoque(tipo="sedan", motorizacao="turbo")
 
 ÔÜá´©Å CRITICAL ÔÇö COLOR EXTRACTION (v2.7.0):
 When the customer mentions a COLOR alongside a model (e.g., "Onix branco", "Civic preto", "HB20 prata"), you MUST pass the "cor" parameter. This filters the inventory to show ONLY vehicles of that specific color. Missing the color parameter causes the system to return ALL vehicles of that model, which confuses the customer.

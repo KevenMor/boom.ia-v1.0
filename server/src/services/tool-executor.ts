@@ -80,6 +80,12 @@ async function executeInventoryQuery(
         motorizacaoFinal = modelo;
       }
     }
+    if (!motorizacaoFinal && cambio) {
+      const cambioNorm = normalizeForSearch(cambio);
+      if (MOTORIZACAO_KEYWORDS.some((k) => cambioNorm.includes(k))) {
+        motorizacaoFinal = cambio;
+      }
+    }
 
     // #region agent log
     const colorSynonyms = cor ? getColorSynonyms(cor) : [];
@@ -124,7 +130,8 @@ async function executeInventoryQuery(
         query = query.eq("year", yearNum);
       }
     }
-    if (cambio) {
+    const cambioIsMotorizacao = cambio && MOTORIZACAO_KEYWORDS.some((k) => normalizeForSearch(cambio).includes(k));
+    if (cambio && !cambioIsMotorizacao) {
       query = query.ilike("transmission", `%${cambio}%`);
     }
 
