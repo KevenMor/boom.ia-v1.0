@@ -294,6 +294,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               await supabase.rpc("cancel_pending_followups", {
                 p_agent_id: agentId,
                 p_conversation_id: newConvId,
+                p_cancel_reason: "user_replied",
               });
               await supabase.rpc("save_message", {
                 p_agent_id: agentId,
@@ -355,6 +356,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           await supabase.rpc("cancel_pending_followups", {
             p_agent_id: agentId,
             p_conversation_id: earlyConvId,
+            p_cancel_reason: "user_replied",
           });
         }
       } catch (e) {

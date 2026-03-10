@@ -41,6 +41,19 @@ const STATUS_LABELS: Record<string, string> = {
   exhausted: "Esgotado",
 };
 
+const CANCEL_REASON_LABELS: Record<string, string> = {
+  human_assigned: "Agente humano atribuído",
+  user_replied: "Cliente enviou mensagem",
+  appointment_confirmed: "Agendamento já confirmado",
+  agent_inactive: "Agente inativo",
+  agent_not_found: "Agente não encontrado",
+  test_assignee_mismatch: "Modo teste: conversa com outro atendente",
+};
+function getCancelReasonLabel(code: string | null | undefined): string {
+  if (!code) return "";
+  return CANCEL_REASON_LABELS[code] ?? code;
+}
+
 export default function FollowUpsPage() {
   const { selectedTenantId: globalTenantId } = useTenantContext();
   const { data: tenants } = useTenants();
@@ -187,6 +200,7 @@ export default function FollowUpsPage() {
                         <TableHead>Agente</TableHead>
                         <TableHead>Tentativa</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead>Motivo (cancelado)</TableHead>
                         <TableHead>Canal</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -240,6 +254,15 @@ function FollowUpRow({ item }: { item: FollowUpQueueItem }) {
         <Badge variant={statusVariant} className="text-[10px]">
           {STATUS_LABELS[item.status] ?? item.status}
         </Badge>
+      </TableCell>
+      <TableCell className="text-xs text-muted-foreground max-w-[200px]">
+        {item.status === "cancelled" && item.cancel_reason ? (
+          getCancelReasonLabel(item.cancel_reason)
+        ) : item.status === "cancelled" ? (
+          "—"
+        ) : (
+          ""
+        )}
       </TableCell>
       <TableCell>
         <span className="flex items-center gap-1.5 text-xs text-muted-foreground">

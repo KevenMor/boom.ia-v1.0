@@ -255,7 +255,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
       }
       const { data: rows, error: listErr } = await supabase
         .from("follow_up_queue")
-        .select("id, agent_id, conversation_id, external_user_id, channel, chatwoot_conversation_id, attempt, max_attempts, scheduled_at, status, created_at, updated_at, agents(id, name)")
+        .select("id, agent_id, conversation_id, external_user_id, channel, chatwoot_conversation_id, attempt, max_attempts, scheduled_at, status, cancel_reason, created_at, updated_at, agents(id, name)")
         .in("agent_id", agentIds)
         .order("scheduled_at", { ascending: true })
         .limit(500);
@@ -598,7 +598,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
           // #endregion
           await supabase
             .from("follow_up_queue")
-            .update({ status: "cancelled", updated_at: new Date().toISOString() })
+            .update({ status: "cancelled", cancel_reason: "agent_not_found", updated_at: new Date().toISOString() })
             .eq("id", item.id);
           continue;
         }
@@ -613,7 +613,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
           // #endregion
           await supabase
             .from("follow_up_queue")
-            .update({ status: "cancelled", updated_at: new Date().toISOString() })
+            .update({ status: "cancelled", cancel_reason: "agent_inactive", updated_at: new Date().toISOString() })
             .eq("id", item.id);
           continue;
         }
@@ -664,7 +664,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
                   // #endregion
                   await supabase
                     .from("follow_up_queue")
-                    .update({ status: "cancelled", updated_at: new Date().toISOString() })
+                    .update({ status: "cancelled", cancel_reason: "test_assignee_mismatch", updated_at: new Date().toISOString() })
                     .eq("id", item.id);
                   continue;
                 }
@@ -678,7 +678,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
                 // #endregion
                 await supabase
                   .from("follow_up_queue")
-                  .update({ status: "cancelled", updated_at: new Date().toISOString() })
+                  .update({ status: "cancelled", cancel_reason: "human_assigned", updated_at: new Date().toISOString() })
                   .eq("id", item.id);
                 continue;
               }
@@ -731,7 +731,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
           // #endregion
           await supabase
             .from("follow_up_queue")
-            .update({ status: "cancelled", updated_at: new Date().toISOString() })
+            .update({ status: "cancelled", cancel_reason: "appointment_confirmed", updated_at: new Date().toISOString() })
             .eq("id", item.id);
           continue;
         }
@@ -745,7 +745,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
           // #endregion
           await supabase
             .from("follow_up_queue")
-            .update({ status: "cancelled", updated_at: new Date().toISOString() })
+            .update({ status: "cancelled", cancel_reason: "user_replied", updated_at: new Date().toISOString() })
             .eq("id", item.id);
           continue;
         }

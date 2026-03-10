@@ -1158,6 +1158,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               supabase.rpc("cancel_pending_followups", {
                 p_agent_id: agent_id,
                 p_conversation_id: responseConvId,
+                p_cancel_reason: "user_replied",
               }).then(
                 ({ data: cancelled }) => {
                   if (cancelled != null && (cancelled as number) > 0) {
@@ -1417,6 +1418,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               supabase.rpc("cancel_pending_followups", {
                 p_agent_id: agent_id,
                 p_conversation_id: responseConvId,
+                p_cancel_reason: "user_replied",
               }).then(
                 ({ data: cancelled }) => {
                   if (cancelled != null && (cancelled as number) > 0) {

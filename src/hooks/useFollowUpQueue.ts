@@ -12,6 +12,7 @@ export interface FollowUpQueueItem {
   max_attempts: number;
   scheduled_at: string;
   status: string;
+  cancel_reason?: string | null;
   created_at: string;
   updated_at: string;
 }
