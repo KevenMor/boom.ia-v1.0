@@ -141,7 +141,12 @@ function extractVehicleEntities(text: string): ExtractedEntities {
 /** Converte resultado bruto de tool (JSON) em texto natural para o LLM conversacional. */
 function summarizeToolResult(obj: Record<string, unknown>): string {
   if (obj.error && typeof obj.error === "string") {
-    return `Erro: ${obj.error}`;
+    const err = obj.error;
+    const isPastDate = /passado|no passado|past/i.test(err);
+    if (isPastDate) {
+      return `Erro ao agendar: ${err}\n\nIMPORTANTE: O agendamento NÃO foi realizado. NUNCA confirme ao cliente que o horário foi reservado. Se o cliente pediu horário para "amanhã", use a data de AMANHÃ em start_at (não a de hoje). Corrija o start_at e chame novamente a ferramenta consultar_agenda com action "criar".`;
+    }
+    return `Erro: ${err}\n\nO agendamento NÃO foi feito. NÃO confirme ao cliente. Informe o problema de forma breve e corrija os dados antes de tentar novamente.`;
   }
   const action = obj.action as string | undefined;
   if (action === "check_availability") {
@@ -652,10 +657,16 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           console.log("[Chat-Local] Dispatcher model:", dispatcherModel);
 
           const todayISO = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+          const tomorrowDate = new Date();
+          tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+          const tomorrowISO = tomorrowDate.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
           const dispatcherDateContext = `
 
-[CONTEXTO TEMPORAL] Data de hoje (Brasília): ${todayISO}. Use SEMPRE esta data ao gerar start_at para consultar_agenda.
-Quando o cliente ESCOLHER um horário (ex.: "pode ser as 14:00", "14h") após você ter oferecido opções: chame consultar_agenda com action="criar", start_at="${todayISO}T[HORA]:00:00-03:00" (ex.: ${todayISO}T14:00:00-03:00), title="Visita - [nome do cliente]". NUNCA chame só check_availability quando o cliente já escolheu o horário.
+[CONTEXTO TEMPORAL] Data de hoje (Brasília): ${todayISO}. Amanhã: ${tomorrowISO}.
+Quando o cliente ESCOLHER um horário após você ter oferecido opções:
+- Se você ofereceu horários para HOJE → use start_at="${todayISO}T[HORA]:00:00-03:00".
+- Se você ofereceu horários para AMANHÃ (ex.: "amanhã de manhã", "amanhã às 11h") → use start_at="${tomorrowISO}T[HORA]:00:00-03:00", NÃO use a data de hoje.
+Chame consultar_agenda com action="criar", title="Visita - [nome do cliente]", start_at no formato correto conforme o dia oferecido. NUNCA chame só check_availability quando o cliente já escolheu o horário.
 REGRA ABSOLUTA: Se o cliente responde a uma oferta de horários com uma escolha (ex: "pode ser as 14:00", "10h", "amanhã as 10"), a action OBRIGATÓRIA é "criar". Chamar "cancelar" ou "check_availability" nesse cenário é um ERRO CRÍTICO.
 Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado para dia 09/03 às 09:00"). Use esse horário em cancelar: start_at no formato YYYY-MM-DDTHH:mm:ss-03:00 (ano = ano de hoje). Em seguida use criar com o novo horário pedido pelo cliente, também com a data de hoje.`;
 
@@ -664,10 +675,14 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           let schedulingHint = "";
           if (lastAssistantMsg && lastUserMsg) {
             const offeredTimes = /\b\d{1,2}[h:]\d{0,2}\b/.test(lastAssistantMsg.content);
+            const offeredTomorrow = /amanh[aã]|dia seguinte|depois de amanhã/i.test(lastAssistantMsg.content);
             const userChoseTime = /\b\d{1,2}[h:]\d{0,2}\b/.test(lastUserMsg.content) ||
               /(pode ser|quero|prefiro|vou|marco|as\s+\d|amanh[aã]\s*(as)?\s*\d)/i.test(lastUserMsg.content);
             if (offeredTimes && userChoseTime) {
               schedulingHint = `\n\n[HINT OBRIGATÓRIO] O assistente ofereceu horários e o cliente ESCOLHEU um. Você DEVE chamar consultar_agenda com action="criar". NÃO use "cancelar" nem "check_availability".`;
+              if (offeredTomorrow) {
+                schedulingHint += ` Use a data de AMANHÃ em start_at: ${tomorrowISO}T[HORA]:00:00-03:00 (ex.: ${tomorrowISO}T11:00:00-03:00), NÃO use ${todayISO}.`;
+              }
             }
           }
 

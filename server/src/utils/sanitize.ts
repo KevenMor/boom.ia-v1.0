@@ -44,6 +44,11 @@ export function sanitizeLLMOutput(content: string): string {
     /\b(consultar_estoque|consultar_agenda|inventory_query|calendar_query)\s*[:\s]*\s*\{[^}]*\}/gim,
     ""
   );
+  // Linhas que contêm chamada de ferramenta no formato nome(...) — remover a linha inteira
+  text = text
+    .split("\n")
+    .filter((line) => !/\b(consultar_estoque|consultar_agenda|inventory_query|calendar_query)\s*\(/.test(line))
+    .join("\n");
   text = text.replace(/\n{3,}/g, "\n\n").trim();
   return text;
 }
@@ -71,7 +76,8 @@ export function isCommandLine(line: string): boolean {
     /^.*HANDOFF_COMERCIAL.*$/im.test(t) ||
     /^.*\b(TOOL_CALL|FUNCTION_CALL|ACTION_OUTPUT)[:\s].*$/im.test(t) ||
     /^.*(?:Chamada da ferramenta|Consultando a ferramenta|Vou consultar a ferramenta)\s+(?:consultar_estoque|consultar_agenda|inventory_query)/im.test(t) ||
-    /^.*\b(consultar_estoque|consultar_agenda|inventory_query|calendar_query)\s*[:\s]\s*\{/im.test(t)
+    /^.*\b(consultar_estoque|consultar_agenda|inventory_query|calendar_query)\s*[:\s]\s*\{/im.test(t) ||
+    /\b(consultar_estoque|consultar_agenda|inventory_query|calendar_query)\s*\(/im.test(t)
   );
 }
 
