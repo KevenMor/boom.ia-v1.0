@@ -14,12 +14,14 @@ export async function authRoutes(fastify: FastifyInstance) {
     }
 
     try {
+      console.log("[Auth] attempting login for:", email, "nexusUrl:", nexusUrl?.slice(0, 40), "keyPrefix:", anonKey?.slice(0, 20));
       const supabase = createClient(nexusUrl, anonKey);
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
       if (error) {
-        console.warn("[Auth] login failed for:", email, error.message);
-        return reply.code(401).send({ error: error.message });
+        const errMsg = error.message || error.status || JSON.stringify(error);
+        console.warn("[Auth] login failed for:", email, "error:", errMsg, "status:", error.status, "full:", JSON.stringify(error));
+        return reply.code(401).send({ error: errMsg });
       }
 
       console.log("[Auth] login success for:", email);
