@@ -19,7 +19,7 @@ Use o arquivo **`.env.portainer.example`** na raiz do projeto como modelo. Preen
 1. **Stacks** → **Add stack**.
 2. **Name**: `boom-ia` (ou outro nome).
 3. **Build method**: **Git repository** (recomendado).
-   - **Repository URL**: `https://github.com/KevenMor/boom.ia-v1.0` (ou seu repositório).
+   - **Repository URL**: `https://github.com/KevenMor/boom-agents.git` (ou seu repositório).
    - **Repository reference**: `main` (ou a branch que você usa).
    - **Compose path**: `docker-compose.yml` (se estiver na raiz, pode deixar em branco dependendo da versão do Portainer).
 4. **Environment variables** (obrigatório — não há arquivo `.env` no repositório):

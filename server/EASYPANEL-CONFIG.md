@@ -20,7 +20,7 @@ Use **`Dockerfile.server`** na raiz para o servidor — assim o Build Path pode 
 ## 2a. Configuração do serviço SERVIDOR no Easypanel
 
 ### Fonte (Source)
-- **Github:** `KevenMor/boom.ia-v1.0`
+- **Github:** `KevenMor/boom-agents`
 - **Ramo:** `main`
 - **Caminho de Build (Build Path):** **`/`** (raiz)
 

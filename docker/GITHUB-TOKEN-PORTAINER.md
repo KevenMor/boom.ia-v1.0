@@ -22,7 +22,7 @@ O token do GitHub **não vai no .env da stack**. Ele é usado só pelo Portainer
 1. **Stacks** → **Add stack** (ou edite a stack existente).
 2. Em **Build method**, escolha **Git repository**.
 3. Preencha:
-   - **Repository URL**: `https://github.com/KevenMor/boom.ia-v1.0` (ou seu repositório).
+   - **Repository URL**: `https://github.com/KevenMor/boom-agents.git` (ou seu repositório).
    - **Repository reference**: `main` (ou a branch que você usa).
 4. Ative **Repository authentication** (ou **Use authentication**).
 5. Preencha:

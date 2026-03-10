@@ -23,7 +23,7 @@ Se o erro for tipo **pull access denied** ou **unauthorized**, a VPS não está 
 
 **Opção A – Deixar os pacotes públicos (recomendado):**
 
-1. No GitHub: **Your profile** → **Your repositories** → **boom.ia-v1.0** (ou pelo menu).
+1. No GitHub: **Your profile** → **Your repositories** → **boom-agents** (ou pelo menu).
 2. À direita: **Packages** (ou acesse **github.com/KevenMor?tab=packages**).
 3. Abra cada pacote: **kevenmor/boom-ia-server**, **kevenmor/boom-ia-frontend**, **kevenmor/boom-ia-proxy**.
 4. Em cada um: **Package settings** → **Danger zone** → **Change visibility** → **Public**.
