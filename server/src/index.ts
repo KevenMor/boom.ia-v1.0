@@ -10,6 +10,7 @@ import { toolsRoutes } from "./routes/tools.js";
 import { adminRoutes } from "./routes/admin.js";
 import { inventoryRoutes } from "./routes/inventory.js";
 import { contactsRoutes } from "./routes/contacts.js";
+import { authRoutes } from "./routes/auth.js";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 const SERVER_STARTED_AT = new Date().toISOString();
