@@ -167,17 +167,24 @@ async function executeInventoryQuery(
     }
 
     // Tipo (sedan, SUV, hatch, pickup): filtro na query via model/version — não existe coluna tipo
+    // PostgREST: usar asterisco como wildcard e aspas duplas no padrão
     if (tipo && ["suv", "sedan", "hatch", "pickup"].includes(normalizeForSearch(tipo))) {
       const tipoNorm = normalizeForSearch(tipo);
-      const pattern = `%${tipoNorm}%`;
+      const pattern = `"*${tipoNorm}*"`;
       query = query.or(`model.ilike.${pattern},version.ilike.${pattern}`);
     }
 
     // Motorização (turbo, TSI, etc.): filtro na query via model/version
+    // Para "turbo": expandir para TSI, TFSI, TDI (motores turbo comuns)
     if (motorizacaoFinal) {
       const motNorm = normalizeForSearch(motorizacaoFinal);
-      const pattern = `%${motNorm}%`;
-      query = query.or(`model.ilike.${pattern},version.ilike.${pattern}`);
+      const turboPatterns =
+        motNorm === "turbo" ? ["*turbo*", "*tsi*", "*tfsi*", "*tdi*"] : [`*${motNorm}*`];
+      const orParts = turboPatterns.flatMap((p) => [
+        `model.ilike."${p}"`,
+        `version.ilike."${p}"`,
+      ]);
+      query = query.or(orParts.join(","));
     }
 
     // Faixa de preço na query
