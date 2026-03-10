@@ -104,6 +104,7 @@ async function build() {
         const body = ["POST", "PUT", "PATCH"].includes(request.method) && request.body ? JSON.stringify(request.body) : undefined;
         const res = await fetch(targetUrl, { method: request.method, headers, body });
         const text = await res.text();
+        console.log("[Supabase-Proxy] response:", res.status, targetUrl.replace(/\?.*$/, ""));
         reply.code(res.status);
         res.headers.forEach((v, k) => { if (!["transfer-encoding"].includes(k.toLowerCase())) reply.header(k, v); });
         return reply.send(text);
