@@ -573,11 +573,13 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           chatwoot_conversation_id?: number | null;
           attachments?: unknown[];
           external_user_id?: string | null;
+          show_debug?: boolean;
         };
       }>,
       reply: FastifyReply
     ) => {
-      const { agent_id, messages, conversation_id, chatwoot_conversation_id, external_user_id } = req.body;
+      const { agent_id, messages, conversation_id, chatwoot_conversation_id, external_user_id, show_debug } = req.body;
+      const shouldSendDebug = !!show_debug;
 
       if (!agent_id || !messages || !Array.isArray(messages)) {
         return reply.status(400).send({ error: "agent_id and messages required" });
@@ -1064,7 +1066,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 }
               }
             }
-            sendSse({ debug: debugEntries });
+            if (shouldSendDebug) sendSse({ debug: debugEntries });
           } else {
             conversationalMessages = toOpenAIMessages(systemPrompt, messages);
           }
@@ -1366,7 +1368,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }
           }
           if (phase1ToolCalls.length === 0) {
-            sendSse({ debug: [{ type: "dispatcher_no_tools", model: convModel, dispatcher: dispatcherUsage, conversational: conversationalUsage }] });
+            if (shouldSendDebug) sendSse({ debug: [{ type: "dispatcher_no_tools", model: convModel, dispatcher: dispatcherUsage, conversational: conversationalUsage }] });
           }
 
           if (responseConvId && dualContentToSave.trim()) {
@@ -1567,7 +1569,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               console.warn("[Chat-Local] Failed to save token usage:", (dbErr as Error)?.message);
             }
           }
-          sendSse({ debug: [{ type: "single_provider", model, ...singleProviderUsageAccum }] });
+          if (shouldSendDebug) sendSse({ debug: [{ type: "single_provider", model, ...singleProviderUsageAccum }] });
           const singleContentToSave = sanitizeLLMOutput(fullContent.trim());
           if (responseConvId && singleContentToSave) {
             try {
@@ -1711,7 +1713,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           console.warn("[Chat-Local] Failed to save token usage:", (dbErr as Error)?.message);
         }
       }
-      sendSse({ debug: [{ type: "single_provider", model, ...singleProviderUsageAccum }] });
+      if (shouldSendDebug) sendSse({ debug: [{ type: "single_provider", model, ...singleProviderUsageAccum }] });
       const finalContentToSave = sanitizeLLMOutput(fullContent.trim());
       if (responseConvId && finalContentToSave) {
         try {

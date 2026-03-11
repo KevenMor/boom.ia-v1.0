@@ -320,6 +320,7 @@ export default function AgentSandbox() {
         agent_id: agentId,
         messages: allMessages.map((m) => ({ role: m.role, content: m.content })),
         conversation_id: conversationId,
+        show_debug: showDebug,
       };
       if (apiAttachments.length > 0) {
         body.attachments = apiAttachments;
