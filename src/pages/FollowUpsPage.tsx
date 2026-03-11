@@ -167,7 +167,7 @@ export default function FollowUpsPage() {
           Selecione um tenant para ver follow-ups e lembretes de agendamento.
         </p>
       ) : (
-        <Tabs defaultValue="followups" className="space-y-4">
+        <Tabs defaultValue="followups" className="space-y-4" onValueChange={(v) => v === "reminders" && refetchReminders()}>
           <TabsList className="grid w-full max-w-md grid-cols-2">
             <TabsTrigger value="followups" className="gap-2">
               <Bell className="h-4 w-4" />

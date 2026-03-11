@@ -911,17 +911,27 @@ export async function queueRoutes(fastify: FastifyInstance) {
       const supabase = createNexusClient();
       const { data: rows, error: listErr } = await supabase
         .from("appointment_reminders")
-        .select("id, agent_id, tenant_id, calendar_event_id, conversation_id, external_user_id, chatwoot_conversation_id, event_title, event_start_at, remind_at, status, skip_reason, created_at, updated_at, agents(id, name)")
+        .select("id, agent_id, tenant_id, calendar_event_id, conversation_id, external_user_id, chatwoot_conversation_id, event_title, event_start_at, remind_at, status, skip_reason, created_at, updated_at")
         .eq("tenant_id", tenantId)
         .order("remind_at", { ascending: false })
         .limit(500);
       if (listErr) {
         return reply.status(500).send({ error: listErr.message });
       }
+      const agentIds = [...new Set((rows ?? []).map((r: { agent_id: string }) => r.agent_id))];
+      const agentMap = new Map<string, string>();
+      if (agentIds.length > 0) {
+        const { data: agents } = await supabase
+          .from("agents")
+          .select("id, name")
+          .in("id", agentIds);
+        for (const a of agents ?? []) {
+          agentMap.set(a.id, a.name ?? "");
+        }
+      }
       const list = (rows ?? []).map((r: any) => ({
         ...r,
-        agent_name: r.agents?.name ?? null,
-        agents: undefined,
+        agent_name: agentMap.get(r.agent_id) ?? null,
       }));
       return reply.send(list);
     }

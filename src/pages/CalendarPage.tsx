@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Plus, Trash2, Clock, CalendarDays, Bell, MessageSquare, Phone, Menu } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTenantContext } from "@/contexts/TenantContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useTenants } from "@/hooks/useTenants";
@@ -154,6 +155,7 @@ export default function CalendarPage() {
 
   const { data: dbEvents, isLoading: eventsLoading } = useCalendarEvents(selectedTenantId || undefined, activeCalendarIds);
   const { data: agents, refetch: refetchAgents } = useAgents(selectedTenantId || undefined);
+  const qc = useQueryClient();
   const { data: pendingReminders, refetch: refetchReminders } = usePendingReminders(selectedTenantId || undefined);
   const createEvent = useCreateCalendarEvent();
   const updateEvent = useUpdateCalendarEvent();
@@ -189,11 +191,13 @@ export default function CalendarPage() {
 
   // Próximos eventos: apenas futuros (start >= agora), ordenados por data
   const upcomingEvents = useMemo(() => {
-    const now = new Date().toISOString();
+    const nowMs = Date.now();
     return events
       .filter((ev) => {
         const start = typeof ev.start === "string" ? ev.start : ev.start instanceof Date ? ev.start.toISOString() : "";
-        return start && start >= now;
+        if (!start) return false;
+        const startMs = new Date(start).getTime();
+        return startMs >= nowMs;
       })
       .sort((a, b) => {
         const sa = typeof a.start === "string" ? a.start : a.start instanceof Date ? a.start.toISOString() : "";
@@ -440,6 +444,7 @@ export default function CalendarPage() {
             } else {
               toast.success("Lembrete atualizado! 🔔");
               refetchReminders();
+              qc.invalidateQueries({ queryKey: ["appointment-reminders", selectedTenantId] });
             }
           } else {
             const { error: remInsertErr } = await supabase
@@ -463,6 +468,7 @@ export default function CalendarPage() {
             } else {
               toast.success("Lembrete agendado! 🔔");
               refetchReminders();
+              qc.invalidateQueries({ queryKey: ["appointment-reminders", selectedTenantId] });
             }
           }
         } else if (editingEventId) {
@@ -479,6 +485,7 @@ export default function CalendarPage() {
             toast.error("Evento salvo, mas erro ao cancelar lembrete.");
           } else {
             refetchReminders();
+            qc.invalidateQueries({ queryKey: ["appointment-reminders", selectedTenantId] });
           }
         }
       }
@@ -500,6 +507,7 @@ export default function CalendarPage() {
         .eq("calendar_event_id", editingEventId)
         .in("status", ["pending"]);
       refetchReminders();
+      qc.invalidateQueries({ queryKey: ["appointment-reminders", selectedTenantId] });
       toast.success("Evento excluído!");
     } catch (e: any) {
       toast.error(e.message || "Erro ao excluir.");
