@@ -927,6 +927,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
 
           let conversationalMessages: typeof dispatcherMessages;
+          let handoffAssigneeId: number | null = null;
 
           if (phase1ToolCalls.length > 0) {
             const assistantMsg: { role: "assistant"; content: string; tool_calls: Array<{ id: string; type: string; function: { name: string; arguments: string } }> } = {
@@ -1073,6 +1074,9 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   }
                 }
                 if (tool.tool_type === "chatwoot_assign" && result.success && responseConvId) {
+                  const assigneeId = (result.result as { assignee_id?: number | null })?.assignee_id;
+                  if (assigneeId != null) handoffAssigneeId = assigneeId;
+                  sendHandoffNotification(agent_id, agent, messages, external_user_id).then(() => {}, () => {});
                   supabase.rpc("cancel_pending_followups", {
                     p_agent_id: agent_id,
                     p_conversation_id: responseConvId,
@@ -1411,7 +1415,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }
           }
 
-          sendSse({ conversation_id: responseConvId });
+          sendSse(handoffAssigneeId != null ? { conversation_id: responseConvId, handoff_assignee_id: handoffAssigneeId } : { conversation_id: responseConvId });
           sendSse("[DONE]");
           reply.raw.end();
           return;
@@ -1422,6 +1426,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
       let fullContent = "";
       let iteration = 0;
       let singleProviderUsageAccum = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+      let handoffAssigneeIdSP: number | null = null;
 
       while (iteration < MAX_TOOL_ITERATIONS) {
         iteration++;
@@ -1726,6 +1731,9 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }
           }
           if (tool.tool_type === "chatwoot_assign" && result.success && responseConvId) {
+            const assigneeId = (result.result as { assignee_id?: number | null })?.assignee_id;
+            if (assigneeId != null) handoffAssigneeIdSP = assigneeId;
+            sendHandoffNotification(agent_id, agent, messages, external_user_id).then(() => {}, () => {});
             supabase.rpc("cancel_pending_followups", {
               p_agent_id: agent_id,
               p_conversation_id: responseConvId,
@@ -1771,7 +1779,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           console.warn("[Chat-Local] save_message (single, with tools) failed:", (saveErr as Error)?.message);
         }
       }
-      sendSse({ conversation_id: responseConvId });
+      sendSse(handoffAssigneeIdSP != null ? { conversation_id: responseConvId, handoff_assignee_id: handoffAssigneeIdSP } : { conversation_id: responseConvId });
       sendSse("[DONE]");
       reply.raw.end();
     }

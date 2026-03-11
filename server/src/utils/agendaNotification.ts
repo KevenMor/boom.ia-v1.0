@@ -201,31 +201,44 @@ export function buildCancelNotification(
 }
 
 /**
- * Monta notificacao de HANDOFF para time comercial (cliente aguardando atendimento).
- * Mesmo padrao do agendamento: nome, telefone, veiculo de interesse.
+ * Formata data/hora atual em padrão brasileiro (DD/MM/AAAA, HH:MM).
+ */
+function formatNowBR(): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date());
+}
+
+/**
+ * Monta notificacao de HANDOFF para time comercial (atendimento atribuído).
  * Formato:
- *   Cliente aguardando atendimento:
- *   Nome
- *   +55...
- *   Interesse: ...
- *   Encaminhado automaticamente pela IA
+ *   Atendimento atribuído:
+ *   Nome: ...
+ *   Telefone: ...
+ *   Data e hora: ...
  */
 export function buildHandoffNotification(
   nomeCliente: string,
   telefoneCliente?: string,
-  veiculoInteresse?: string,
-  messages?: Array<{ role: string; content: string }>
+  _veiculoInteresse?: string,
+  _messages?: Array<{ role: string; content: string }>
 ): string {
   const nome = (nomeCliente || "").trim() || "Cliente";
-  const telefone = telefoneCliente?.trim() ? formatPhone(telefoneCliente.trim()) : undefined;
-  const veiculo = veiculoInteresse?.trim() || (messages ? extractVeiculoFromMessages(messages) : undefined);
+  const telefone = telefoneCliente?.trim() ? formatPhone(telefoneCliente.trim()) : "Não informado";
+  const dataHora = formatNowBR();
 
   const lines: string[] = [
-    "Cliente aguardando atendimento:",
-    nome,
+    "Atendimento atribuído:",
+    "",
+    `Nome: ${nome}`,
+    `Telefone: ${telefone}`,
+    `Data e hora: ${dataHora}`,
   ];
-  if (telefone) lines.push(`📞 ${telefone}`);
-  if (veiculo) lines.push(`🚗 Interesse: ${veiculo}`);
-  lines.push("✅ Encaminhado automaticamente pela IA");
   return lines.join("\n");
 }

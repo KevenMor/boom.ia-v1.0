@@ -102,17 +102,16 @@ describe("buildFallbackAgendaNotification", () => {
 });
 
 describe("buildHandoffNotification", () => {
-  it("formata notificacao com nome, telefone e interesse", () => {
+  it("formata notificacao com nome, telefone e data/hora", () => {
     const result = buildHandoffNotification(
       "Henrique Carvalho",
-      "159998023871",
-      "Chevrolet Onix Joy"
+      "159998023871"
     );
-    expect(result).toContain("Cliente aguardando atendimento:");
-    expect(result).toContain("Henrique Carvalho");
-    expect(result).toContain("📞");
-    expect(result).toContain("Interesse: Chevrolet Onix Joy");
-    expect(result).toContain("Encaminhado automaticamente pela IA");
+    expect(result).toContain("Atendimento atribuído:");
+    expect(result).toContain("Nome: Henrique Carvalho");
+    expect(result).toContain("Telefone:");
+    expect(result).toContain("Data e hora:");
+    expect(result).toMatch(/\d{2}\/\d{2}\/\d{4}/);
   });
 });
 

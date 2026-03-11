@@ -68,6 +68,7 @@ async function callChatAgent(
   fullContent: string;
   responseParts: string[];
   responseConvId: string | null;
+  handoffAssigneeId?: number | null;
   debug?: any[];
   token_usage?: Record<string, unknown>;
 }> {
@@ -123,6 +124,7 @@ async function callChatAgent(
       let buf = "";
       let fullContent = "";
       let responseConvId = convId;
+      let handoffAssigneeId: number | null = null;
       const MSG_SPLIT = "<<MSG_SPLIT>>";
       const responseParts: string[] = [];
       let currentPart = "";
@@ -138,6 +140,7 @@ async function callChatAgent(
           const ev = JSON.parse(json);
           if (ev.conversation_id) {
             responseConvId = ev.conversation_id;
+            if (ev.handoff_assignee_id != null) handoffAssigneeId = Number(ev.handoff_assignee_id);
             return;
           }
           if (ev.debug) {
@@ -180,6 +183,7 @@ async function callChatAgent(
         fullContent,
         responseParts,
         responseConvId,
+        handoffAssigneeId,
         debug: capturedDebug,
         token_usage: capturedTokenUsage,
       };
@@ -538,6 +542,9 @@ export async function queueRoutes(fastify: FastifyInstance) {
         response_text: sanitizedContent,
         response_parts: responseParts,
       };
+      if (result.handoffAssigneeId != null) {
+        deliverBody.assignee_id = result.handoffAssigneeId;
+      }
       if (isFirstReply) {
         const { data: agentRow } = await supabase.from("agents").select("config").eq("id", agent_id).maybeSingle();
         const cfg = (agentRow?.config || {}) as Record<string, unknown>;

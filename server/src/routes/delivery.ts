@@ -23,6 +23,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
           response_text?: string;
           response_parts?: string[];
           welcome_video_url?: string;
+          assignee_id?: number;
         };
       }>,
       reply: FastifyReply
@@ -44,6 +45,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
         response_text,
         response_parts,
         welcome_video_url,
+        assignee_id: handoff_assignee_id,
       } = req.body;
 
       let agent: any = null;
@@ -77,13 +79,14 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
         const humanization = getHumanizationConfig(cfg);
 
         const agentAssigneeId = cfg.agent_assignee_id != null ? Number(cfg.agent_assignee_id) : null;
-        if (agentAssigneeId != null) {
+        const assigneeId = handoff_assignee_id != null ? Number(handoff_assignee_id) : agentAssigneeId;
+        if (assigneeId != null) {
           try {
             const assignUrl = `${baseUrl}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${chatwoot_conversation_id}/assignments`;
             const assignResp = await fetch(assignUrl, {
               method: "POST",
               headers: { "Content-Type": "application/json", api_access_token: cfg.chatwoot_api_token },
-              body: JSON.stringify({ assignee_id: agentAssigneeId }),
+              body: JSON.stringify({ assignee_id: assigneeId }),
             });
             if (!assignResp.ok) {
               console.warn("[Deliver] Failed to assign conversation to agent:", assignResp.status, await assignResp.text().catch(() => ""));
@@ -173,6 +176,18 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
             response_parts || [],
             humanization
           );
+        }
+        if (handoff_assignee_id != null) {
+          try {
+            const assignUrl = `${baseUrl}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${chatwoot_conversation_id}/assignments`;
+            await fetch(assignUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", api_access_token: cfg.chatwoot_api_token },
+              body: JSON.stringify({ assignee_id: Number(handoff_assignee_id) }),
+            });
+          } catch {
+            /* re-assign após envio para evitar que Chatwoot reassigne ao bot */
+          }
         }
       }
 
