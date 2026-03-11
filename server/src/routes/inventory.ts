@@ -37,15 +37,51 @@ function decodeHtmlEntities(s: string): string {
     .replace(/&copy;/g, "©");
 }
 
-/** Descrição inválida (placeholder, copyright, URL) — trata como vazia */
-function isInvalidDescription(s: string): boolean {
-  const t = s.trim();
-  if (!t) return true;
-  if (/^EMPTY$/i.test(t)) return true;
-  if (/^(&copy;|©)\s*PPL Motors/i.test(t)) return true;
-  if (/pplmotors\.(co|com\.br)\s*$/i.test(t) && t.length < 80) return true;
-  if (/^https?:\/\/[^\s]+$/i.test(t)) return true;
-  return false;
+/** Normaliza string para comparação (lowercase, sem acentos) */
+function normalizeForMatch(s: string): string {
+  return (s || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .trim();
+}
+
+/** Infere o tipo do veículo (hatch, sedan, SUV, camionete) a partir de brand/model/version */
+function inferVehicleType(brand: string, model: string, version: string): string {
+  const m = normalizeForMatch(model);
+  const v = normalizeForMatch(version);
+  const combined = `${m} ${v}`;
+
+  // Ordem: camionete → SUV → hatch → sedan (evitar conflito: Duster = SUV)
+  const CAMIONETE_MODELS = [
+    "s10", "hilux", "saveiro", "strada", "amarok", "ranger", "l200", "montana", "toro",
+    "frontier", "navara", "l200", "colorado", "sierra", "d-max", "triton",
+  ];
+  if (CAMIONETE_MODELS.some((x) => m.includes(x) || combined.includes(x))) return "camionete";
+
+  const SUV_MODELS = [
+    "tracker", "tiguan", "q5", "q3", "q7", "duster", "kicks", "compass", "renegade",
+    "creta", "hr-v", "hrv", "pulse", "taos", "t-cross", "tcross", "nivus", "kick",
+    "haval", "eclipse", "glb",
+  ];
+  if (SUV_MODELS.some((x) => m.includes(x) || combined.includes(x))) return "SUV";
+
+  const HATCH_MODELS = [
+    "fox", "onix", "hb20", "208", "gol", "up", "sandero", "prisma", "march",
+    "ka", "fiesta", "focus", "polo", "golf", "cruze hatch", "celer",
+  ];
+  if (HATCH_MODELS.some((x) => m.includes(x) || combined.includes(x))) return "hatch";
+  if (/hatch|hatchback|compacto/i.test(combined)) return "hatch";
+
+  const SEDAN_MODELS = [
+    "virtus", "a3", "civic", "corolla", "accord", "320i", "118i", "c 180",
+    "jetta", "passat", "vento", "fusion", "mondeo", "cruze", "malibu", "camry",
+    "sentra", "altima", "fluence", "logan",
+  ];
+  if (SEDAN_MODELS.some((x) => m.includes(x) || combined.includes(x))) return "sedan";
+  if (/sedan/i.test(combined) || /\b4p\b|4 portas/i.test(combined)) return "sedan";
+
+  return "";
 }
 
 function parseListingPage(html: string): VehicleCard[] {
@@ -214,7 +250,6 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
 
       async function processVehicle(vehicle: VehicleCard) {
         let photos: string[] = vehicle.photo_url ? [vehicle.photo_url] : [];
-        let description = "";
         const features: string[] = [];
         const optionals: string[] = [];
 
@@ -229,13 +264,14 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
             const detailHtml = await detailResp.text();
             const detail = parseDetailPage(detailHtml);
             if (detail.photos.length > 0) photos = detail.photos;
-            description = isInvalidDescription(detail.description) ? "" : detail.description;
             features.push(...detail.features);
             optionals.push(...detail.optionals);
           }
         } catch (e) {
           console.warn(`Detail fetch timeout/error for ${vehicle.external_id}`);
         }
+
+        const description = inferVehicleType(vehicle.brand, vehicle.model, vehicle.version);
 
         const record = {
           external_id: vehicle.external_id,

@@ -179,19 +179,18 @@ async function executeInventoryQuery(
       query = query.ilike("transmission", `%${cambio}%`);
     }
 
-    // Tipo (sedan, SUV, hatch, caminhonete/camionete/picape): filtro via model, version e description
-    const TIPOS_VALIDOS = ["suv", "sedan", "hatch", "camionete", "caminhonete", "picape", "pickup", "pikup"];
-    if (tipo && TIPOS_VALIDOS.includes(normalizeForSearch(tipo))) {
+    // Tipo de carro: busca na coluna description (onde o tipo está) + model e version
+    // PostgREST usa * como wildcard (alias de %)
+    if (tipo && String(tipo).trim()) {
       const tipoNorm = normalizeForSearch(tipo);
-      // Para sinônimos de pickup, busca por todas as variações no banco
       const termos =
         PICKUP_SYNONYMS.includes(tipoNorm)
           ? PICKUP_SYNONYMS
           : [tipoNorm];
       const orParts = termos.flatMap((t) => [
-        `model.ilike."*${t}*"`,
-        `version.ilike."*${t}*"`,
-        `description.ilike."*${t}*"`,
+        `model.ilike.*${t}*`,
+        `version.ilike.*${t}*`,
+        `description.ilike.*${t}*`,
       ]);
       query = query.or(orParts.join(","));
     }
@@ -203,8 +202,8 @@ async function executeInventoryQuery(
       const turboPatterns =
         motNorm === "turbo" ? ["*turbo*", "*tsi*", "*tfsi*", "*tdi*"] : [`*${motNorm}*`];
       const orParts = turboPatterns.flatMap((p) => [
-        `model.ilike."${p}"`,
-        `version.ilike."${p}"`,
+        `model.ilike.${p}`,
+        `version.ilike.${p}`,
       ]);
       query = query.or(orParts.join(","));
     }
