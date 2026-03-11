@@ -26,6 +26,7 @@ export type Database = {
           external_user_id: string
           id: string
           remind_at: string
+          skip_reason: string | null
           status: string
           tenant_id: string
           updated_at: string
@@ -56,6 +57,7 @@ export type Database = {
           external_user_id?: string
           id?: string
           remind_at?: string
+          skip_reason?: string | null
           status?: string
           tenant_id?: string
           updated_at?: string

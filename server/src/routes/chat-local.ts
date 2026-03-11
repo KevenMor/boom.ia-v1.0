@@ -2,8 +2,9 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
 import { buildSystemPrompt, getDispatcherPrompt } from "../services/prompts/registry.js";
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
-import { filterCommandLinesFromStream, sanitizeLLMOutput, fallbackSanitizeForRetry } from "../utils/sanitize.js";
-import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification, buildHandoffNotification, extractClientNameFromMessages, toBrasiliaISO } from "../utils/agendaNotification.js";
+import { filterCommandLinesFromStream, sanitizeLLMOutput, fallbackSanitizeForRetry, restorePortugueseAccents } from "../utils/sanitize.js";
+import { buildPetGenderContext } from "../utils/petGenderByName.js";
+import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification, buildHandoffNotification, extractClientNameFromMessages, userHasProvidedNameInMessages, toBrasiliaISO } from "../utils/agendaNotification.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 const MAX_TOOL_ITERATIONS = 5;
@@ -613,10 +614,13 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       const tools = (toolsData || []) as ToolDef[];
       const hasInventoryTool = tools.some((t) => t.tool_type === "inventory_query");
 
+      const isPetHome = tenantSlug === "pet-home" || tenantSlug === "pet-home-tia-erica";
+      const petContext = isPetHome ? buildPetGenderContext(messages) : null;
       const systemPrompt = buildSystemPrompt(
         agent.system_prompt || "",
         tenantSlug,
-        hasInventoryTool
+        hasInventoryTool,
+        petContext
       );
 
       const providerConfig = await getProviderApiKey(agent.provider_id, supabase);
@@ -1208,10 +1212,11 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                     fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1020',message:'Após filterCommandLines',data:{toSend:toSend,toSendLen:toSend.length,newBuffer:newBuffer,wasFiltered:delta.content.length>0&&toSend.length===0},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
                     // #endregion
                     if (toSend) {
+                      const accented = restorePortugueseAccents(toSend);
                       debugSendCount++;
-                      debugSendTotalLen += toSend.length;
-                      console.log("[Chat-Local] Streaming content chunk:", toSend.slice(0, 50));
-                      sendSse({ choices: [{ delta: { content: toSend } }] });
+                      debugSendTotalLen += accented.length;
+                      console.log("[Chat-Local] Streaming content chunk:", accented.slice(0, 50));
+                      sendSse({ choices: [{ delta: { content: accented } }] });
                     }
                   }
                 } catch { /* skip */ }
@@ -1220,17 +1225,21 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             if (done) {
               convFullContent += streamFilterBuffer;
               if (streamFilterBuffer) {
+                const accented = restorePortugueseAccents(streamFilterBuffer);
                 debugSendCount++;
-                debugSendTotalLen += streamFilterBuffer.length;
-                sendSse({ choices: [{ delta: { content: streamFilterBuffer } }] });
+                debugSendTotalLen += accented.length;
+                sendSse({ choices: [{ delta: { content: accented } }] });
               }
-              // Primeiro contato: pergunta do nome só se NÃO tiver vídeo de boas-vindas (quando tem vídeo, o delivery envia texto → vídeo → pergunta do nome, evitando duplicata)
+              // Primeiro contato: pergunta do nome só se NÃO tiver vídeo de boas-vindas e o cliente AINDA NÃO informou o nome
               const isFirstContact = messages.filter((m) => m.role === "assistant").length === 0;
               const agentCfg = (agent?.config || {}) as Record<string, unknown>;
               const hasWelcomeVideo = !!(agentCfg.welcome_video_url as string)?.trim();
               const nameQuestion = (agentCfg.welcome_name_question as string) || "Como posso te chamar?";
-              const alreadyHasNameQuestion = convFullContent.toLowerCase().includes(nameQuestion.toLowerCase());
-              if (isFirstContact && nameQuestion && !hasWelcomeVideo && !alreadyHasNameQuestion) {
+              const alreadyHasNameQuestion =
+                convFullContent.toLowerCase().includes(nameQuestion.toLowerCase()) ||
+                convFullContent.toLowerCase().includes("com quem eu falo?");
+              const clientAlreadyGaveName = userHasProvidedNameInMessages(messages);
+              if (isFirstContact && nameQuestion && !hasWelcomeVideo && !alreadyHasNameQuestion && !clientAlreadyGaveName) {
                 const nqContent = "\n\n" + nameQuestion;
                 debugSendCount++;
                 debugSendTotalLen += nqContent.length;
@@ -1475,7 +1484,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   content += delta.content;
                   const { toSend, newBuffer } = filterCommandLinesFromStream(streamFilterBuffer, delta.content);
                   streamFilterBuffer = newBuffer;
-                  if (toSend) sendSse({ choices: [{ delta: { content: toSend } }] });
+                  if (toSend) sendSse({ choices: [{ delta: { content: restorePortugueseAccents(toSend) } }] });
                 }
 
                 if (delta?.tool_calls) {
@@ -1500,13 +1509,16 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }
           }
           if (done) {
-            if (streamFilterBuffer) sendSse({ choices: [{ delta: { content: streamFilterBuffer } }] });
+            if (streamFilterBuffer) sendSse({ choices: [{ delta: { content: restorePortugueseAccents(streamFilterBuffer) } }] });
             const isFirstContact = messages.filter((m) => m.role === "assistant").length === 0;
             const agentCfgSingle = (agent?.config || {}) as Record<string, unknown>;
             const hasWelcomeVideoSingle = !!(agentCfgSingle.welcome_video_url as string)?.trim();
             const nameQuestionSingle = (agentCfgSingle.welcome_name_question as string) || "Como posso te chamar?";
-            const alreadyHasNameQuestionSingle = content.toLowerCase().includes(nameQuestionSingle.toLowerCase());
-            if (isFirstContact && nameQuestionSingle && !hasWelcomeVideoSingle && !alreadyHasNameQuestionSingle) {
+            const alreadyHasNameQuestionSingle =
+              content.toLowerCase().includes(nameQuestionSingle.toLowerCase()) ||
+              content.toLowerCase().includes("com quem eu falo?");
+            const clientAlreadyGaveNameSingle = userHasProvidedNameInMessages(messages);
+            if (isFirstContact && nameQuestionSingle && !hasWelcomeVideoSingle && !alreadyHasNameQuestionSingle && !clientAlreadyGaveNameSingle) {
               const nqContentSingle = "\n\n" + nameQuestionSingle;
               content += nqContentSingle;
               sendSse({ choices: [{ delta: { content: nqContentSingle } }] });

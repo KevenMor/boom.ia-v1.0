@@ -82,6 +82,28 @@ function extractVeiculoFromMessages(messages: Array<{ role: string; content: str
 }
 
 /**
+ * Verifica se o cliente já informou o nome nas mensagens (ex.: "Eu sou a Maria", "Me chamo João").
+ * Usado para NÃO injetar "Como posso te chamar?" quando o nome já foi dado.
+ */
+export function userHasProvidedNameInMessages(messages: Array<{ role: string; content: string }>): boolean {
+  const patterns = [
+    /(?:eu\s+)?sou\s+(?:a\s+|o\s+)?([A-Za-zÀ-ÿ]{2,30})/i,
+    /(?:me\s+)?chamo\s+([A-Za-zÀ-ÿ]{2,30})/i,
+    /(?:pode\s+me\s+chamar\s+de|me\s+chame\s+de)\s+([A-Za-zÀ-ÿ]{2,30})/i,
+    /(?:meu\s+)?nome\s+(?:e|eh|é)\s+([A-Za-zÀ-ÿ]{2,30})/i,
+  ];
+  for (const m of messages) {
+    if (m?.role !== "user") continue;
+    const text = (m.content || "").trim();
+    if (!text) continue;
+    for (const re of patterns) {
+      if (re.test(text)) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Extrai nome do cliente das ultimas mensagens (ex.: apos pergunta "Como posso te chamar?" ou junto com CPF/dados).
  */
 export function extractClientNameFromMessages(messages: Array<{ role: string; content: string }>): string | undefined {

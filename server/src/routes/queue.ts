@@ -867,6 +867,35 @@ export async function queueRoutes(fastify: FastifyInstance) {
     return reply.send({ processed, skipped, total: pending.length });
   });
 
+  fastify.get(
+    "/queue/reminders/list",
+    async (
+      req: FastifyRequest<{ Querystring: { tenant_id?: string } }>,
+      reply: FastifyReply
+    ) => {
+      const tenantId = req.query.tenant_id;
+      if (!tenantId) {
+        return reply.status(400).send({ error: "tenant_id is required" });
+      }
+      const supabase = createNexusClient();
+      const { data: rows, error: listErr } = await supabase
+        .from("appointment_reminders")
+        .select("id, agent_id, tenant_id, calendar_event_id, conversation_id, external_user_id, chatwoot_conversation_id, event_title, event_start_at, remind_at, status, skip_reason, created_at, updated_at, agents(id, name)")
+        .eq("tenant_id", tenantId)
+        .order("remind_at", { ascending: false })
+        .limit(500);
+      if (listErr) {
+        return reply.status(500).send({ error: listErr.message });
+      }
+      const list = (rows ?? []).map((r: any) => ({
+        ...r,
+        agent_name: r.agents?.name ?? null,
+        agents: undefined,
+      }));
+      return reply.send(list);
+    }
+  );
+
   fastify.post("/queue/reminders", async (_req: FastifyRequest, reply: FastifyReply) => {
     const supabase = createNexusClient();
 
@@ -901,7 +930,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
       console.log(`[Reminder] Cancelling ${duplicateIds.length} duplicate reminder(s)`);
       await supabase
         .from("appointment_reminders")
-        .update({ status: "cancelled", updated_at: new Date().toISOString() })
+        .update({ status: "cancelled", skip_reason: "duplicate", updated_at: new Date().toISOString() })
         .in("id", duplicateIds);
     }
 
@@ -924,7 +953,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
       if (!agent || (agent.status !== "active" && agent.status !== "test")) {
         await supabase
           .from("appointment_reminders")
-          .update({ status: "cancelled", updated_at: new Date().toISOString() })
+          .update({ status: "cancelled", skip_reason: "agent_inactive", updated_at: new Date().toISOString() })
           .eq("id", item.id);
         skipped++;
         continue;
@@ -934,7 +963,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
       if (!cfg.reminder_enabled) {
         await supabase
           .from("appointment_reminders")
-          .update({ status: "cancelled", updated_at: new Date().toISOString() })
+          .update({ status: "cancelled", skip_reason: "reminder_disabled", updated_at: new Date().toISOString() })
           .eq("id", item.id);
         skipped++;
         continue;
@@ -947,7 +976,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
         console.warn(`[Reminder] No delivery channel for agent ${agent.id}, cancelling`);
         await supabase
           .from("appointment_reminders")
-          .update({ status: "cancelled", updated_at: new Date().toISOString() })
+          .update({ status: "cancelled", skip_reason: "no_delivery_channel", updated_at: new Date().toISOString() })
           .eq("id", item.id);
         skipped++;
         continue;
@@ -1005,7 +1034,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
         console.error(`[Reminder] Failed to send for event "${item.event_title}", marking as failed`);
         await supabase
           .from("appointment_reminders")
-          .update({ status: "failed", updated_at: new Date().toISOString() })
+          .update({ status: "failed", skip_reason: "send_failed", updated_at: new Date().toISOString() })
           .eq("id", item.id);
         failed++;
       }

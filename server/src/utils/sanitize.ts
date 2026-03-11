@@ -54,7 +54,65 @@ export function sanitizeLLMOutput(content: string): string {
   // Tool call vazando como texto (horario_periodo = tool(...))
   text = text.replace(/\bhorario_periodo\s*=\s*tool\s*\([^)]*\)\s*/gim, "");
   text = text.replace(/\n{3,}/g, "\n\n").trim();
+
+  // Remove pergunta duplicada de nome (ambas perguntam a mesma coisa — "Com quem eu falo?" e "Como posso te chamar?")
+  if (/\bCom quem eu falo\?/i.test(text) && /\bComo posso te chamar\?/i.test(text)) {
+    text = text.replace(/\s+Como posso te chamar\?\s*/gi, " ").trim();
+  }
+
+  // Restauração de acentuação em português (Gemini 2.0 Flash costuma omitir)
+  text = restorePortugueseAccents(text);
+
   return text;
+}
+
+/** Corrige palavras comuns em português que modelos como Gemini costumam retornar sem acento. Exportada para uso no stream. */
+export function restorePortugueseAccents(text: string): string {
+  const replacements: [RegExp, string][] = [
+    [/\bvoce\b/gi, "você"],
+    [/\bnao\b/gi, "não"],
+    [/\botimo\b/gi, "ótimo"],
+    [/\botima\b/gi, "ótima"],
+    [/\bhospede\b/gi, "hóspede"],
+    [/\bhospedes\b/gi, "hóspedes"],
+    [/\bfamilia\b/gi, "família"],
+    [/\btambem\b/gi, "também"],
+    [/\btera\b/gi, "terá"],
+    [/\batencao\b/gi, "atenção"],
+    [/\bpreocupacao\b/gi, "preocupação"],
+    [/\bseguranca\b/gi, "segurança"],
+    [/\bcastracao\b/gi, "castração"],
+    [/\bmarcacao\b/gi, "marcação"],
+    [/\balem\b/gi, "além"],
+    [/\bdoencas\b/gi, "doenças"],
+    [/\bserias\b/gi, "sérias"],
+    [/\bobrigatoria\b/gi, "obrigatória"],
+    [/\bobrigatorio\b/gi, "obrigatório"],
+    [/\bsocializacao\b/gi, "socialização"],
+    [/\badaptacao\b/gi, "adaptação"],
+    [/\bcompativel\b/gi, "compatível"],
+    [/\bcompativeis\b/gi, "compatíveis"],
+    [/\bcaes\b/gi, "cães"],
+    [/\bcae\b/gi, "cão"],
+    [/\brecebera\b/gi, "receberá"],
+    [/\bnoticias\b/gi, "notícias"],
+    [/\bcameras\b/gi, "câmeras"],
+    [/\bcamera\b/gi, "câmera"],
+    [/\braca\b/gi, "raça"],
+    [/\bracas\b/gi, "raças"],
+    [/\brapida\b/gi, "rápida"],
+    [/\brapido\b/gi, "rápido"],
+    [/\binformacao\b/gi, "informação"],
+    [/\binformacoes\b/gi, "informações"],
+    [/\boperacao\b/gi, "operação"],
+    [/\bavaliacao\b/gi, "avaliação"],
+    [/\bconexao\b/gi, "conexão"],
+  ];
+  let result = text;
+  for (const [regex, replacement] of replacements) {
+    result = result.replace(regex, replacement);
+  }
+  return result;
 }
 
 /**

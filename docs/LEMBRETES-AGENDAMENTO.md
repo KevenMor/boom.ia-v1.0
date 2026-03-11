@@ -22,7 +22,12 @@ O sistema de lembretes envia mensagens aos clientes X minutos antes do horario d
    - Monta a mensagem com o template (`buildReminderMessage`)
    - Envia via Chatwoot (se `chatwoot_conversation_id`) ou WAHA (se `external_user_id`)
    - Atualiza `status` para `sent`, `failed` ou `cancelled`
+   - Grava `skip_reason` quando não enviado: `agent_inactive`, `reminder_disabled`, `no_delivery_channel`, `send_failed`, `duplicate`
    - Salva no historico da conversa (exceto eventos manuais com `conversation_id` iniciando em `manual-`)
+
+## Tenants existentes e novos
+
+Follow-ups e Lembretes funcionam para **qualquer tenant** (existente ou novo). O filtro usa `tenant_id`. Ver `docs/TENANT-ONBOARDING.md` para detalhes.
 
 ## Arquivos
 

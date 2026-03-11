@@ -69,6 +69,12 @@ O processamento dos follow-ups (rota `POST /api/queue/followups`, chamada a cada
   2. Confirme que o agente está **Ativo** ou **Teste** (e, se Teste, que o assignee da conversa é o `test_assignee_id`).
   3. Veja nos **logs do servidor** no horário em que o cron rodar (ex.: `[FollowUp] Human assigned` ou `[FollowUp] Appointment confirmed` ou `last message is from user`) para ver exatamente qual regra cancelou.
 
+---
+
+**Tenants:** Follow-ups e Lembretes funcionam para todos os tenants (existentes e novos). Ver `docs/TENANT-ONBOARDING.md`.
+
+---
+
 Se quiser, no próximo passo podemos:
 - adicionar um **motivo de cancelamento** na tabela/API (ex.: `cancel_reason`) para aparecer na página de follow-ups, ou
 - **afrouxar o CENÁRIO 2** (ex.: não cancelar quando o assignee for um ID “bot” configurável).

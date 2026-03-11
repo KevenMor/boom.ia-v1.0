@@ -1,7 +1,11 @@
 // ============================================================
-// Nexus AI ��� Prompt Registry
+// Nexus AI — Prompt Registry
 // Maps tenant slugs to their prompt configurations.
-// To add a new tenant: create a file and register it here.
+//
+// TENANTS EXISTENTES E NOVOS:
+// - Tenants NÃO registrados usam prompts padrão (system do agente, dispatcher default, follow-up genérico).
+// - Para prompts customizados: crie arquivo em prompts/ e registre aqui com o slug do tenant.
+// - Follow-ups e Lembretes funcionam para QUALQUER tenant (filtro por tenant_id).
 // ============================================================
 
 import { BASE_GREETING, DEFAULT_DISPATCHER_PROMPT } from "./base.js";
@@ -123,11 +127,13 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
  * 1. System prompt do tenant (se registrado) OU system_prompt do agente (do banco)
  * 2. Regras de comunica?�?�o do tenant (se existir e agente tem inventory tool)
  * 3. Instru?�?�es base de sauda?�?�o (sempre)
+ * 4. Contexto de pet (nome + gênero inferido) para Pet Home, quando aplicável
  */
 export function buildSystemPrompt(
   agentSystemPrompt: string,
   tenantSlug: string | null,
   hasInventoryTool: boolean,
+  petContext?: string | null,
 ): string {
   const config = tenantSlug ? TENANT_PROMPTS[tenantSlug] : undefined;
   const base = config?.systemPrompt || agentSystemPrompt || "You are a helpful AI assistant.";
@@ -142,7 +148,9 @@ export function buildSystemPrompt(
   const todayISO = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(now);
   const dateContext = `\n\n[CONTEXTO TEMPORAL] Agora: ${nowStr} (Bras?�lia). Hoje: ${todayISO}. Use estas datas como refer?�ncia ao falar de "hoje", "amanh?�", dias da semana, etc.`;
 
-  return base + commRules + greeting + dateContext;
+  const petContextBlock = petContext ? `\n\n${petContext}` : "";
+
+  return base + commRules + greeting + dateContext + petContextBlock;
 }
 
 /**
