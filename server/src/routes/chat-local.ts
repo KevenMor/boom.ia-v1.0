@@ -668,6 +668,50 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
 
       let responseConvId = conversation_id ?? null;
 
+      // Persistência: criar conversa e salvar mensagens (sandbox e chamadas diretas)
+      try {
+        if (!responseConvId) {
+          const { data: newConvId, error: createErr } = await supabase.rpc("create_conversation", {
+            p_agent_id: agent_id,
+            p_channel: "sandbox",
+            p_external_user_id: external_user_id ?? null,
+            p_contact_name: null,
+            p_contact_avatar_url: null,
+          });
+          if (createErr) {
+            console.error("[Chat-Local] create_conversation failed:", createErr.message);
+            if (/Tenant schema not provisioned|db_name/i.test(createErr.message)) {
+              return reply.status(503).send({
+                error: "Schema do tenant não provisionado. Crie o tenant pelo painel (Tenants) para provisionar automaticamente o schema de conversas.",
+                code: "TENANT_NOT_PROVISIONED",
+              });
+            }
+            throw createErr;
+          }
+          responseConvId = newConvId;
+        }
+
+        const lastUserMsg = messages.length > 0 ? messages[messages.length - 1] : null;
+        if (responseConvId && lastUserMsg?.role === "user" && lastUserMsg.content?.trim()) {
+          await supabase.rpc("save_message", {
+            p_agent_id: agent_id,
+            p_conversation_id: responseConvId,
+            p_role: "user",
+            p_content: lastUserMsg.content.trim(),
+            p_model: null,
+            p_tokens_input: 0,
+            p_tokens_output: 0,
+            p_latency_ms: null,
+          });
+        }
+      } catch (persistErr) {
+        console.error("[Chat-Local] Persistência inicial falhou:", (persistErr as Error)?.message);
+        return reply.status(503).send({
+          error: "Falha ao salvar conversa. Verifique se o tenant foi provisionado corretamente.",
+          detail: (persistErr as Error)?.message,
+        });
+      }
+
       const sendSse = (data: unknown) => {
         try {
           reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
@@ -1122,6 +1166,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           let debugDeltaTotalLen = 0;
           let debugSendCount = 0;
           let debugSendTotalLen = 0;
+          let dualContentToSave = "";
 
           const convReader = convResp.body!.getReader();
           const convDecoder = new TextDecoder();
@@ -1252,6 +1297,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1081',message:'Após sanitizeLLMOutput',data:{sanitized:sanitized,sanitizedLen:sanitized.length,wasStripped:retryContent.length>0&&sanitized.length===0},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
                   // #endregion
                   if (sanitized) {
+                    dualContentToSave = sanitized;
                     console.log("[Chat-Local] Retry OK, enviando conteúdo sanitizado:", sanitized.slice(0, 80));
                     sendSse({ choices: [{ delta: { content: sanitized } }] });
                   } else {
@@ -1259,6 +1305,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                     // #region agent log
                     fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1089',message:'Fallback sanitize',data:{fallback:fallback,fallbackLen:fallback.length,retryContentPreview:retryContent.slice(0,300)},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
                     // #endregion
+                    dualContentToSave = fallback || "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?";
                     if (fallback) {
                       console.log("[Chat-Local] sanitize retornou vazio, usando fallback:", fallback.slice(0, 80));
                       sendSse({ choices: [{ delta: { content: fallback } }] });
@@ -1268,6 +1315,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                     }
                   }
                 } else {
+                  dualContentToSave = "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?";
                   // #region agent log
                   fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1102',message:'Retry retornou vazio',data:{},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
                   // #endregion
@@ -1275,6 +1323,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   sendSse({ choices: [{ delta: { content: "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?" } }] });
                 }
               } else {
+                dualContentToSave = "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?";
                 const errText = await retryResp.text();
                 // #region agent log
                 fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1111',message:'Retry HTTP falhou',data:{status:retryResp.status,errText:errText.slice(0,200)},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
@@ -1283,9 +1332,12 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 sendSse({ choices: [{ delta: { content: "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?" } }] });
               }
             } catch (retryErr) {
+              dualContentToSave = "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?";
               console.error("[Chat-Local] Retry error:", retryErr);
               sendSse({ choices: [{ delta: { content: "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?" } }] });
             }
+          } else {
+            dualContentToSave = sanitizeLLMOutput((convFullContent + streamFilterBuffer).trim());
           }
 
           const tokenUsagePayload = {
@@ -1310,6 +1362,23 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               });
             } catch (dbErr) {
               console.warn("[Chat-Local] Failed to save token usage:", (dbErr as Error)?.message);
+            }
+          }
+
+          if (responseConvId && dualContentToSave.trim()) {
+            try {
+              await supabase.rpc("save_message", {
+                p_agent_id: agent_id,
+                p_conversation_id: responseConvId,
+                p_role: "assistant",
+                p_content: dualContentToSave.trim(),
+                p_model: null,
+                p_tokens_input: 0,
+                p_tokens_output: 0,
+                p_latency_ms: null,
+              });
+            } catch (saveErr) {
+              console.warn("[Chat-Local] save_message (dual) failed:", (saveErr as Error)?.message);
             }
           }
 
@@ -1493,6 +1562,23 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               console.warn("[Chat-Local] Failed to save token usage:", (dbErr as Error)?.message);
             }
           }
+          const singleContentToSave = sanitizeLLMOutput(fullContent.trim());
+          if (responseConvId && singleContentToSave) {
+            try {
+              await supabase.rpc("save_message", {
+                p_agent_id: agent_id,
+                p_conversation_id: responseConvId,
+                p_role: "assistant",
+                p_content: singleContentToSave,
+                p_model: null,
+                p_tokens_input: 0,
+                p_tokens_output: 0,
+                p_latency_ms: null,
+              });
+            } catch (saveErr) {
+              console.warn("[Chat-Local] save_message (single, no tools) failed:", (saveErr as Error)?.message);
+            }
+          }
           sendSse({ conversation_id: responseConvId });
           sendSse("[DONE]");
           reply.raw.end();
@@ -1617,6 +1703,23 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           });
         } catch (dbErr) {
           console.warn("[Chat-Local] Failed to save token usage:", (dbErr as Error)?.message);
+        }
+      }
+      const finalContentToSave = sanitizeLLMOutput(fullContent.trim());
+      if (responseConvId && finalContentToSave) {
+        try {
+          await supabase.rpc("save_message", {
+            p_agent_id: agent_id,
+            p_conversation_id: responseConvId,
+            p_role: "assistant",
+            p_content: finalContentToSave,
+            p_model: null,
+            p_tokens_input: 0,
+            p_tokens_output: 0,
+            p_latency_ms: null,
+          });
+        } catch (saveErr) {
+          console.warn("[Chat-Local] save_message (single, with tools) failed:", (saveErr as Error)?.message);
         }
       }
       sendSse({ conversation_id: responseConvId });

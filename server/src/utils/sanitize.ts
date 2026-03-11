@@ -49,6 +49,10 @@ export function sanitizeLLMOutput(content: string): string {
     .split("\n")
     .filter((line) => !/\b(consultar_estoque|consultar_agenda|inventory_query|calendar_query)\s*\(/.test(line))
     .join("\n");
+  // Blocos JSON de memória (ex.: {"memory":{"nome_cliente":"..."}})
+  text = text.replace(/\s*\{\s*"memory"\s*:\s*\{[^}]*\}\s*\}\s*/g, "");
+  // Tool call vazando como texto (horario_periodo = tool(...))
+  text = text.replace(/\bhorario_periodo\s*=\s*tool\s*\([^)]*\)\s*/gim, "");
   text = text.replace(/\n{3,}/g, "\n\n").trim();
   return text;
 }
@@ -77,7 +81,15 @@ export function isCommandLine(line: string): boolean {
     /^.*\b(TOOL_CALL|FUNCTION_CALL|ACTION_OUTPUT)[:\s].*$/im.test(t) ||
     /^.*(?:Chamada da ferramenta|Consultando a ferramenta|Vou consultar a ferramenta)\s+(?:consultar_estoque|consultar_agenda|inventory_query)/im.test(t) ||
     /^.*\b(consultar_estoque|consultar_agenda|inventory_query|calendar_query)\s*[:\s]\s*\{/im.test(t) ||
-    /\b(consultar_estoque|consultar_agenda|inventory_query|calendar_query)\s*\(/im.test(t)
+    /\b(consultar_estoque|consultar_agenda|inventory_query|calendar_query)\s*\(/im.test(t) ||
+    // Tool call vazando como texto (horario_periodo, busca_contexto, etc.)
+    /\bhorario_periodo\s*=\s*tool\s*\(/im.test(t) ||
+    /\btool\s*\(\s*["']horario_periodo["']/im.test(t) ||
+    /\b(horario_periodo|busca_contexto|buscacontexto)\s*\(/im.test(t) ||
+    // JSON de memória vazando
+    /^\s*["']?memory["']?\s*:\s*\{/im.test(t) ||
+    /^\s*["']?nome_cliente["']?\s*:\s*["']/im.test(t) ||
+    /^\s*["']?ts["']?\s*:\s*["']\d{4}-\d{2}-\d{2}T/im.test(t)
   );
 }
 

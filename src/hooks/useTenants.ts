@@ -20,7 +20,7 @@ export function useCreateTenant() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (tenant: Partial<Tenant>) => {
-      // 1. Insert tenant (status = provisioning by default)
+      // Insert tenant – trigger trg_provision_tenant_on_insert provisiona o schema automaticamente
       const { data, error } = await supabase
         .from("tenants")
         .insert(tenant)
@@ -28,26 +28,14 @@ export function useCreateTenant() {
         .single();
       if (error) throw error;
 
-      const created = data as Tenant;
-
-      // 2. Provision Data Plane schema
-      const { error: provError } = await supabase.rpc("provision_tenant_schema", {
-        p_tenant_id: created.id,
-      });
-      if (provError) {
-        // Cleanup: remove tenant if provisioning fails
-        await supabase.from("tenants").delete().eq("id", created.id);
-        throw new Error("Falha no provisionamento: " + provError.message);
-      }
-
-      // 3. Refetch to get updated status
+      // Refetch para obter status atualizado (db_name preenchido pelo provisionamento)
       const { data: updated } = await supabase
         .from("tenants")
         .select("*")
-        .eq("id", created.id)
+        .eq("id", data.id)
         .single();
 
-      return (updated ?? created) as Tenant;
+      return (updated ?? data) as Tenant;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tenants"] }),
   });
