@@ -103,6 +103,40 @@ export function userHasProvidedNameInMessages(messages: Array<{ role: string; co
   return false;
 }
 
+/** Frases que nunca devem ser usadas como nome do cliente. */
+const BLOCKLIST_NOME = new Set([
+  "aguardar para followup",
+  "aguardar",
+  "followup",
+  "como posso te chamar",
+  "como posso te ajudar",
+  "oi",
+  "olá",
+  "ola",
+  "bom dia",
+  "boa tarde",
+  "boa noite",
+  "ok",
+  "tudo bem",
+  "obrigado",
+  "obrigada",
+  "sim",
+  "não",
+  "nao",
+  "cliente",
+  "quero falar",
+  "quero falar com um atendente",
+  "atendente",
+  "humano",
+]);
+
+function isBlockedAsName(candidate: string): boolean {
+  const norm = candidate.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (BLOCKLIST_NOME.has(norm)) return true;
+  if (/\b(aguardar|followup|follow.?up)\b/i.test(norm)) return true;
+  return false;
+}
+
 /**
  * Extrai nome do cliente das ultimas mensagens (ex.: apos pergunta "Como posso te chamar?" ou junto com CPF/dados).
  */
@@ -116,16 +150,20 @@ export function extractClientNameFromMessages(messages: Array<{ role: string; co
     if (!text || text.length < 3) continue;
     const line = text.split(/\n/)[0];
     if (cpfPattern.test(line)) {
-    const beforeCpf = line.split(cpfPattern)[0].trim();
-    const words = beforeCpf.split(/\s+/).filter((w) => w.length > 1 && !/^\d+$/.test(w));
-    if (words.length >= 2 && words.length <= 4) {
-      const name = words.length >= 3 ? words.slice(-2).join(" ") : words.join(" ");
-      return name.replace(/[,.]/g, "").trim();
-    }
+      const beforeCpf = line.split(cpfPattern)[0].trim();
+      const words = beforeCpf.split(/\s+/).filter((w) => w.length > 1 && !/^\d+$/.test(w));
+      if (words.length >= 2 && words.length <= 4) {
+        const name = words.length >= 3 ? words.slice(-2).join(" ") : words.join(" ");
+        const cleaned = name.replace(/[,.]/g, "").trim();
+        if (cleaned && !isBlockedAsName(cleaned)) return cleaned;
+      }
     }
     if (line.length >= 2 && line.length <= 60 && !cpfPattern.test(line) && !/^\d+$/.test(line)) {
       const words = line.split(/\s+/).filter((w) => w.length > 0);
-      if (words.length >= 1 && words.length <= 4 && words.every((w) => /^[A-Za-zÀ-ÿ]+$/.test(w))) return line.trim();
+      if (words.length >= 1 && words.length <= 4 && words.every((w) => /^[A-Za-zÀ-ÿ]+$/.test(w))) {
+        const candidate = line.trim();
+        if (!isBlockedAsName(candidate)) return candidate;
+      }
     }
   }
   return undefined;
