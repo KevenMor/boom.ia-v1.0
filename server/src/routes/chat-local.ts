@@ -1077,7 +1077,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                     p_agent_id: agent_id,
                     p_conversation_id: responseConvId,
                     p_cancel_reason: "human_assigned",
-                  }).catch(() => {});
+                  }).then(() => {}, () => {});
                 }
               }
             }
@@ -1730,7 +1730,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               p_agent_id: agent_id,
               p_conversation_id: responseConvId,
               p_cancel_reason: "human_assigned",
-            }).catch(() => {});
+            }).then(() => {}, () => {});
           }
         }
       }
