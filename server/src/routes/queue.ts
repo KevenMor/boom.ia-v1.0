@@ -95,6 +95,7 @@ async function callChatAgent(
           "x-skip-save": "true",
         },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(115_000),
       });
 
       if (!chatResp.ok) {
@@ -871,9 +872,10 @@ export async function queueRoutes(fastify: FastifyInstance) {
               p_chatwoot_conversation_id: item.chatwoot_conversation_id,
               p_attempt: attempt + 1,
               p_max_attempts: maxAttempts,
-              p_intervals_minutes: JSON.stringify(intervals),
+              p_intervals_minutes: intervals,
               p_delay_minutes: nextDelay,
             });
+            console.log(`[FollowUp] Scheduled next attempt ${attempt + 1}/${maxAttempts} in ${nextDelay}min for ${item.conversation_id}`);
           } catch (e: any) {
             console.warn("[FollowUp] Schedule next attempt failed:", e.message);
           }

@@ -198,7 +198,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
             p_chatwoot_conversation_id: chatwoot_conversation_id,
             p_attempt: 1,
             p_max_attempts: maxAttempts,
-            p_intervals_minutes: JSON.stringify(intervals),
+            p_intervals_minutes: intervals,
             p_delay_minutes: firstDelay,
           });
           // #region agent log
