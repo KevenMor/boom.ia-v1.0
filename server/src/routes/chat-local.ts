@@ -1229,7 +1229,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               const agentCfg = (agent?.config || {}) as Record<string, unknown>;
               const hasWelcomeVideo = !!(agentCfg.welcome_video_url as string)?.trim();
               const nameQuestion = (agentCfg.welcome_name_question as string) || "Como posso te chamar?";
-              const alreadyHasNameQuestion = content.toLowerCase().includes(nameQuestion.toLowerCase());
+              const alreadyHasNameQuestion = convFullContent.toLowerCase().includes(nameQuestion.toLowerCase());
               if (isFirstContact && nameQuestion && !hasWelcomeVideo && !alreadyHasNameQuestion) {
                 const nqContent = "\n\n" + nameQuestion;
                 debugSendCount++;
