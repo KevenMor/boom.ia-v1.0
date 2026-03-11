@@ -114,12 +114,12 @@ async function executeInventoryQuery(
       }),
     }).catch(() => {});
     // #endregion
-    // Mapeia sinônimos de tipo para o valor aceito pelo filtro (caminhonete/picape/pikup -> pickup)
-    const tipoMapped =
-      tipoRaw && ["caminhonete", "picape", "pickup", "pikup"].includes(normalizeForSearch(tipoRaw))
-        ? "pickup"
+    // Normaliza pickup/picape/pikup → camionete (termo em português)
+    const PICKUP_TO_CAMIONETE = ["pickup", "picape", "pikup"];
+    const tipo =
+      tipoRaw && PICKUP_TO_CAMIONETE.includes(normalizeForSearch(tipoRaw))
+        ? "camionete"
         : tipoRaw;
-    const tipo = tipoMapped;
 
     // Normaliza valor numérico: se for número pequeno (< 1000) e o texto tiver "mil", trata como milhares
     function parsePriceValue(val: number | string, strContext?: string): number {
@@ -163,7 +163,8 @@ async function executeInventoryQuery(
     if (marca) {
       query = query.ilike("brand", `%${marca}%`);
     }
-    const skipModelFilter = ["suv", "sedan", "hatch", "pickup", ...MOTORIZACAO_KEYWORDS];
+    const PICKUP_SYNONYMS = ["camionete", "caminhonete", "picape", "pickup", "pikup"];
+    const skipModelFilter = ["suv", "sedan", "hatch", ...PICKUP_SYNONYMS, ...MOTORIZACAO_KEYWORDS];
     if (modelo && !skipModelFilter.some((k) => normalizeForSearch(modelo).includes(k))) {
       query = query.ilike("model", `%${modelo}%`);
     }
@@ -178,11 +179,21 @@ async function executeInventoryQuery(
       query = query.ilike("transmission", `%${cambio}%`);
     }
 
-    // Tipo (sedan, SUV, hatch, pickup): filtro via model, version e description
-    if (tipo && ["suv", "sedan", "hatch", "pickup"].includes(normalizeForSearch(tipo))) {
+    // Tipo (sedan, SUV, hatch, caminhonete/camionete/picape): filtro via model, version e description
+    const TIPOS_VALIDOS = ["suv", "sedan", "hatch", "camionete", "caminhonete", "picape", "pickup", "pikup"];
+    if (tipo && TIPOS_VALIDOS.includes(normalizeForSearch(tipo))) {
       const tipoNorm = normalizeForSearch(tipo);
-      const pattern = `"*${tipoNorm}*"`;
-      query = query.or(`model.ilike.${pattern},version.ilike.${pattern},description.ilike.${pattern}`);
+      // Para sinônimos de pickup, busca por todas as variações no banco
+      const termos =
+        PICKUP_SYNONYMS.includes(tipoNorm)
+          ? PICKUP_SYNONYMS
+          : [tipoNorm];
+      const orParts = termos.flatMap((t) => [
+        `model.ilike."*${t}*"`,
+        `version.ilike."*${t}*"`,
+        `description.ilike."*${t}*"`,
+      ]);
+      query = query.or(orParts.join(","));
     }
 
     // Motorização (turbo, TSI, etc.): filtro na query via model/version

@@ -83,6 +83,7 @@ async function callChatAgent(
         conversation_id: convId,
         attachments,
         external_user_id: externalUserId,
+        skip_save: true,
       };
       if (chatwootConvId != null) body.chatwoot_conversation_id = chatwootConvId;
 
@@ -91,6 +92,7 @@ async function callChatAgent(
         headers: {
           "Content-Type": "application/json",
           "x-nexus-auth": `Bearer ${nexusKey}`,
+          "x-skip-save": "true",
         },
         body: JSON.stringify(body),
       });
@@ -497,6 +499,9 @@ export async function queueRoutes(fastify: FastifyInstance) {
           : null;
 
       if (responseConvId && sanitizedContent) {
+        // #region agent log
+        fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'12d224'},body:JSON.stringify({sessionId:'12d224',location:'queue.ts:save_message',message:'process-queue save_message',data:{convId:responseConvId,contentLen:sanitizedContent.length,contentPreview:sanitizedContent.slice(0,120)},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+        // #endregion
         try {
           const savePayload: Record<string, unknown> = {
             p_agent_id: agent_id,

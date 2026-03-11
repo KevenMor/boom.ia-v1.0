@@ -87,6 +87,13 @@ function deduplicateRepeatedContent(text: string): string {
     const r3 = t.slice(2 * third).trim();
     if (unit === r2 && unit === r3) return unit;
   }
+  // Sufixo repetido 2x ou 3x (ex.: "Intro. Pergunta?Pergunta?Pergunta?")
+  const minUnit = 20;
+  for (let L = Math.min(Math.floor(len / 3), 500); L >= minUnit; L--) {
+    const suffix = t.slice(-L);
+    if (t.endsWith(suffix + suffix + suffix)) return t.slice(0, -2 * L).trim();
+    if (t.endsWith(suffix + suffix)) return t.slice(0, -L).trim();
+  }
   return t;
 }
 

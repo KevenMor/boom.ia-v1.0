@@ -769,6 +769,9 @@ export default function Conversations() {
                               }
                               if (currentBubble.text.trim()) bubbles.push(currentBubble);
                               if (bubbles.length === 0 && text) bubbles.push({ text, images });
+                              // #region agent log
+                              if (bubbles.length > 1) fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'12d224'},body:JSON.stringify({sessionId:'12d224',location:'Conversations.tsx:bubbles',message:'assistant msg split into multiple bubbles',data:{msgId:msg.id,bubbleCount:bubbles.length,rawContentLen:(msg.content||'').length},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+                              // #endregion
                             } else {
                               if (audioInfo.isAudio) {
                                 bubbles.push({ text: "", images: [], isAudio: true, transcription: audioInfo.transcription });

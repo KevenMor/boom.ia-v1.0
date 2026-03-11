@@ -823,7 +823,7 @@ For consultar_estoque: extract ALL relevant parameters from the message:
   - cor (color) — CRITICAL: if the customer mentions a color (branco, preto, prata, vermelho, azul, cinza, etc.), ALWAYS pass it as the "cor" parameter
   - motorizacao (engine type) — when the customer mentions turbo, aspirado, TSI, TFSI, TDI, etc., pass as "motorizacao" (filters by version). NEVER use "cambio" for engine type.
   - cambio (transmission only: automático, manual, CVT) — for gearbox type, NOT for engine
-  - combustivel (fuel type), tipo (body type: use "pickup" for caminhonete/picape, or SUV, sedan, hatch)
+  - combustivel (fuel type), tipo (body type: use "camionete" for caminhonete/picape/pickup; ou SUV, sedan, hatch)
 
 ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
 DECISION EXAMPLES (study these carefully)
@@ -835,7 +835,7 @@ CALL consultar_estoque:
 - "vi uma A3 no p├ítio, quanto custa?" ÔåÆ consultar_estoque(marca="Audi", modelo="A3")
 - "tem algo at├® 200 mil?" ÔåÆ consultar_estoque(faixa_preco="at├® 200000")
 - "quero ver um sedan" ÔåÆ consultar_estoque(modelo="sedan")
-- "qual caminhonete tem em estoque?" / "o que vocês têm de caminhonete?" / "tem camionete?" ÔåÆ consultar_estoque(tipo="pickup")
+- "qual caminhonete tem em estoque?" / "o que vocês têm de caminhonete?" / "tem camionete?" / "tem pickup?" ÔåÆ consultar_estoque(tipo="camionete")
 - "tem Onix branco?" → consultar_estoque(marca="Chevrolet", modelo="Onix", cor="branco")
 - "quero um preto, automático" → consultar_estoque(cor="preto", cambio="automático")
 - "vi o Onix branco de vocês" → consultar_estoque(marca="Chevrolet", modelo="Onix", cor="branco")

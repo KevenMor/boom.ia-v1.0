@@ -579,6 +579,8 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const { agent_id, messages, conversation_id, chatwoot_conversation_id, external_user_id } = req.body;
+      const body = req.body as Record<string, unknown>;
+      const skipSave = (req.headers["x-skip-save"] as string) === "true" || body?.skip_save === true;
 
       if (!agent_id || !messages || !Array.isArray(messages)) {
         return reply.status(400).send({ error: "agent_id and messages required" });
@@ -1378,7 +1380,10 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             sendSse({ debug: [{ type: "dispatcher_no_tools", model: convModel, dispatcher: dispatcherUsage, conversational: conversationalUsage }] });
           }
 
-          if (responseConvId && dualContentToSave.trim()) {
+          if (!skipSave && responseConvId && dualContentToSave.trim()) {
+            // #region agent log
+            fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'12d224'},body:JSON.stringify({sessionId:'12d224',location:'chat-local.ts:save_message_dual',message:'chat-local save_message (dual)',data:{convId:responseConvId,contentLen:dualContentToSave.length,contentPreview:dualContentToSave.slice(0,120)},timestamp:Date.now(),hypothesisId:'H1,H2'})}).catch(()=>{});
+            // #endregion
             try {
               await supabase.rpc("save_message", {
                 p_agent_id: agent_id,
@@ -1581,7 +1586,10 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
           sendSse({ debug: [{ type: "single_provider", model, ...singleProviderUsageAccum }] });
           const singleContentToSave = sanitizeLLMOutput(fullContent.trim());
-          if (responseConvId && singleContentToSave) {
+          if (!skipSave && responseConvId && singleContentToSave) {
+            // #region agent log
+            fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'12d224'},body:JSON.stringify({sessionId:'12d224',location:'chat-local.ts:save_message_single',message:'chat-local save_message (single)',data:{convId:responseConvId,contentLen:singleContentToSave.length,contentPreview:singleContentToSave.slice(0,120)},timestamp:Date.now(),hypothesisId:'H1,H2'})}).catch(()=>{});
+            // #endregion
             try {
               await supabase.rpc("save_message", {
                 p_agent_id: agent_id,
@@ -1725,7 +1733,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
       }
       sendSse({ debug: [{ type: "single_provider", model, ...singleProviderUsageAccum }] });
       const finalContentToSave = sanitizeLLMOutput(fullContent.trim());
-      if (responseConvId && finalContentToSave) {
+      if (!skipSave && responseConvId && finalContentToSave) {
         try {
           await supabase.rpc("save_message", {
             p_agent_id: agent_id,
