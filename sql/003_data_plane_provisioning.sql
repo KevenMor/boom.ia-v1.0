@@ -28,6 +28,8 @@ BEGIN
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       agent_id UUID NOT NULL REFERENCES public.agents(id) ON DELETE CASCADE,
       external_user_id TEXT,
+      contact_name TEXT,
+      contact_avatar_url TEXT,
       channel TEXT NOT NULL DEFAULT ''api'',
       metadata JSONB DEFAULT ''{}'',
       status TEXT NOT NULL DEFAULT ''open'',

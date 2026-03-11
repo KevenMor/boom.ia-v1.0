@@ -429,6 +429,15 @@ export default function AgentSandbox() {
             if (parsed.debug) {
               debugData = parsed.debug;
               setPendingDebug(parsed.debug);
+              setMessages((prev) => {
+                const lastIdx = prev.length - 1;
+                if (lastIdx >= 0 && prev[lastIdx].role === "assistant") {
+                  return prev.map((m, idx) =>
+                    idx === lastIdx ? { ...m, debug: parsed.debug } : m
+                  );
+                }
+                return prev;
+              });
               continue;
             }
 
@@ -781,6 +790,14 @@ export default function AgentSandbox() {
 
           <div className="space-y-1.5 py-4">
             {messages.map((msg, i) => renderBubble(msg, i))}
+
+            {showDebug && messages.some((m) => !m.role || m.role === "assistant") && !messages.some((m) => m.role === "assistant" && (m.debug?.length || m.edgeLogs?.length || m.tokenUsage)) && (
+              <div className="flex justify-start mb-1">
+                <div className="text-[10px] text-muted-foreground bg-muted/50 border border-border rounded-lg px-3 py-2">
+                  Debug ativado. O debug (modelo, tokens, tools) aparece abaixo de cada resposta do agente. Envie uma mensagem para ver.
+                </div>
+              </div>
+            )}
 
             {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
               <div className="flex justify-start mb-1">

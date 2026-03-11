@@ -66,6 +66,7 @@ export function DebugBlock({ debug, edgeLogs, tokenUsage }: DebugBlockProps) {
   const fipeIntercepts = debug.filter((d) => d.type === "fipe_intercept" || d.type === "fipe_intercept_result");
   const dispatcherSteps = debug.filter((d) => d.type?.startsWith("dispatcher_"));
   const tokenUsages = debug.filter((d) => d.type === "token_usage");
+  const singleProviderEntries = debug.filter((d) => d.type === "single_provider");
   const dispatcherTokensFromDebug = dispatcherSteps
     .filter((d) => d.usage)
     .reduce((acc, d) => ({
@@ -78,7 +79,12 @@ export function DebugBlock({ debug, edgeLogs, tokenUsage }: DebugBlockProps) {
     completion: acc.completion + (d.completion_tokens || 0),
     total: acc.total + (d.total_tokens || 0),
   }), { prompt: 0, completion: 0, total: 0 });
-  const totalTokensFromDebug = dispatcherTokensFromDebug.total + convTokensFromDebug.total;
+  const singleProviderTokens = singleProviderEntries.reduce((acc, d) => ({
+    prompt: acc.prompt + (d.prompt_tokens || 0),
+    completion: acc.completion + (d.completion_tokens || 0),
+    total: acc.total + (d.total_tokens || 0),
+  }), { prompt: 0, completion: 0, total: 0 });
+  const totalTokensFromDebug = dispatcherTokensFromDebug.total + convTokensFromDebug.total + singleProviderTokens.total;
 
   const dispatcherTokens = tokenUsage?.dispatcher
     ? { prompt: tokenUsage.dispatcher.prompt_tokens, completion: tokenUsage.dispatcher.completion_tokens, total: tokenUsage.dispatcher.total_tokens }
@@ -87,7 +93,9 @@ export function DebugBlock({ debug, edgeLogs, tokenUsage }: DebugBlockProps) {
     ? { prompt: tokenUsage.conversational.prompt_tokens, completion: tokenUsage.conversational.completion_tokens, total: tokenUsage.conversational.total_tokens }
     : tokenUsage?.single
       ? { prompt: tokenUsage.single.prompt_tokens, completion: tokenUsage.single.completion_tokens, total: tokenUsage.single.total_tokens }
-      : convTokensFromDebug;
+      : singleProviderTokens.total > 0
+        ? singleProviderTokens
+        : convTokensFromDebug;
   const totalTokens = tokenUsage
     ? (tokenUsage.dispatcher?.total_tokens ?? 0) + (tokenUsage.conversational?.total_tokens ?? 0) + (tokenUsage.single?.total_tokens ?? 0)
     : totalTokensFromDebug;
@@ -110,6 +118,7 @@ export function DebugBlock({ debug, edgeLogs, tokenUsage }: DebugBlockProps) {
         {dispatcherSteps.length > 0 && <span className="text-purple-400">{dispatcherSteps.length} dispatch</span>}
         <span className="text-[#53bdeb]">{llmIterations.length} LLM step{llmIterations.length !== 1 ? "s" : ""}</span>
         {errors.length > 0 && <span className="text-red-400">{errors.length} erro{errors.length !== 1 ? "s" : ""}</span>}
+        {singleProviderEntries.length > 0 && <span className="text-cyan-400">single</span>}
         {totalTokens > 0 && <span className="text-emerald-400">{totalTokens.toLocaleString()} tokens</span>}
         {mediaAttachments.length > 0 && <span className="text-pink-400">🎙️ mídia</span>}
           {edgeLogs && edgeLogs.length > 0 && <span className="text-orange-400">{edgeLogs.length} log{edgeLogs.length !== 1 ? "s" : ""}</span>}
@@ -118,6 +127,19 @@ export function DebugBlock({ debug, edgeLogs, tokenUsage }: DebugBlockProps) {
 
       {expanded && (
         <div className="mt-1 bg-[#111b21] border border-[#2a3942] rounded-lg p-3 text-[11px] font-mono space-y-2 overflow-x-auto">
+          {singleProviderEntries.length > 0 && (
+            <div>
+              <div className="text-cyan-400 font-semibold mb-1">📡 Single Provider</div>
+              <div className="text-[#8696a0] space-y-0.5">
+                {singleProviderEntries.map((sp, i) => (
+                  <div key={i}>
+                    Modelo: <span className="text-[#e9edef]">{sp.model}</span> — {sp.total_tokens?.toLocaleString()} tokens (in: {sp.prompt_tokens}, out: {sp.completion_tokens})
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {config && (
             <div>
               <div className="text-[#00a884] font-semibold mb-1">⚙️ Configuração LLM</div>

@@ -1229,7 +1229,8 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               const agentCfg = (agent?.config || {}) as Record<string, unknown>;
               const hasWelcomeVideo = !!(agentCfg.welcome_video_url as string)?.trim();
               const nameQuestion = (agentCfg.welcome_name_question as string) || "Como posso te chamar?";
-              if (isFirstContact && nameQuestion && !hasWelcomeVideo) {
+              const alreadyHasNameQuestion = content.toLowerCase().includes(nameQuestion.toLowerCase());
+              if (isFirstContact && nameQuestion && !hasWelcomeVideo && !alreadyHasNameQuestion) {
                 const nqContent = "\n\n" + nameQuestion;
                 debugSendCount++;
                 debugSendTotalLen += nqContent.length;
@@ -1501,7 +1502,8 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             const agentCfgSingle = (agent?.config || {}) as Record<string, unknown>;
             const hasWelcomeVideoSingle = !!(agentCfgSingle.welcome_video_url as string)?.trim();
             const nameQuestionSingle = (agentCfgSingle.welcome_name_question as string) || "Como posso te chamar?";
-            if (isFirstContact && nameQuestionSingle && !hasWelcomeVideoSingle) {
+            const alreadyHasNameQuestionSingle = content.toLowerCase().includes(nameQuestionSingle.toLowerCase());
+            if (isFirstContact && nameQuestionSingle && !hasWelcomeVideoSingle && !alreadyHasNameQuestionSingle) {
               const nqContentSingle = "\n\n" + nameQuestionSingle;
               content += nqContentSingle;
               sendSse({ choices: [{ delta: { content: nqContentSingle } }] });
@@ -1546,6 +1548,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
           if (singleProviderUsageAccum.total_tokens > 0) {
             sendSse({ token_usage: { single: { ...singleProviderUsageAccum, model } } });
+            sendSse({ debug: [{ type: "single_provider", model, ...singleProviderUsageAccum }] });
             try {
               await supabase.from("agent_token_usage").insert({
                 agent_id,
