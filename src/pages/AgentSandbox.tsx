@@ -320,7 +320,6 @@ export default function AgentSandbox() {
         agent_id: agentId,
         messages: allMessages.map((m) => ({ role: m.role, content: m.content })),
         conversation_id: conversationId,
-        show_debug: showDebug,
       };
       if (apiAttachments.length > 0) {
         body.attachments = apiAttachments;
@@ -437,7 +436,8 @@ export default function AgentSandbox() {
                     idx === lastIdx ? { ...m, debug: parsed.debug } : m
                   );
                 }
-                return prev;
+                // Debug chegou antes do conteúdo; criar mensagem assistant para anexar
+                return [...prev, { role: "assistant" as const, content: streamAccum, timestamp: new Date(), debug: parsed.debug }];
               });
               continue;
             }
