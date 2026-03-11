@@ -545,6 +545,9 @@ export async function queueRoutes(fastify: FastifyInstance) {
         }
       }
 
+      // #region agent log
+      fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4bd6f5'},body:JSON.stringify({sessionId:'4bd6f5',location:'queue.ts:fireDeliverMessage',message:'Triggering delivery (followup path)',data:{agent_id,conversation_id:responseConvId,chatwoot_conversation_id:!!chatwoot_conversation_id},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+      // #endregion
       fireDeliverMessage(baseUrl, authKey, deliverBody).catch((e) =>
         console.error("[ProcessQueue] deliver-message failed:", e)
       );
@@ -580,6 +583,11 @@ export async function queueRoutes(fastify: FastifyInstance) {
     }
 
     if (!pending || pending.length === 0) {
+      // #region agent log
+      const { count: pendingAny } = await supabase.from("follow_up_queue").select("id", { count: "exact", head: true }).eq("status", "pending");
+      const { count: pendingDue } = await supabase.from("follow_up_queue").select("id", { count: "exact", head: true }).eq("status", "pending").lte("scheduled_at", new Date().toISOString());
+      fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4bd6f5'},body:JSON.stringify({sessionId:'4bd6f5',location:'queue.ts:followup-no-pending',message:'Cron: no pending items',data:{pendingAny:pendingAny??0,pendingDue:pendingDue??0,now:new Date().toISOString()},timestamp:Date.now(),hypothesisId:'H3,H4'})}).catch(()=>{});
+      // #endregion
       return reply.send({ processed: 0, total: 0 });
     }
 
