@@ -10,13 +10,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { DateInputBR } from "@/components/ui/date-input-br";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Trash2, Clock, CalendarDays, Bell, MessageSquare, Phone } from "lucide-react";
+import { Plus, Trash2, Clock, CalendarDays, Bell, MessageSquare, Phone, Menu } from "lucide-react";
 import { useTenantContext } from "@/contexts/TenantContext";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useTenants } from "@/hooks/useTenants";
 import { useCalendars, useCreateCalendar } from "@/hooks/useCalendars";
 import { useCalendarEvents, useCreateCalendarEvent, useUpdateCalendarEvent, useDeleteCalendarEvent } from "@/hooks/useCalendarEvents";
@@ -24,6 +26,7 @@ import { useAgents } from "@/hooks/useAgents";
 import { usePendingReminders } from "@/hooks/usePendingReminders";
 import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import type { Calendar } from "@/types/calendar";
 
 const EVENT_COLORS: Record<string, { bg: string; border: string; label: string }> = {
@@ -113,9 +116,28 @@ function parseChatwootConvId(raw: string): number | null {
   return isNaN(n) ? null : n;
 }
 
+const VIEW_OPTIONS = [
+  { id: "dayGridMonth", label: "Mês" },
+  { id: "timeGridWeek", label: "Semana" },
+  { id: "timeGridDay", label: "Dia" },
+  { id: "listWeek", label: "Lista" },
+] as const;
+
 export default function CalendarPage() {
   const calendarRef = useRef<FullCalendar>(null);
+  const isMobile = useIsMobile();
   const { selectedTenantId: globalTenantId } = useTenantContext();
+  const [currentView, setCurrentView] = useState<string>("");
+  const [sidebarSheetOpen, setSidebarSheetOpen] = useState(false);
+
+  useEffect(() => {
+    const api = calendarRef.current?.getApi();
+    if (api && isMobile && api.view.type !== "listWeek") {
+      api.changeView("listWeek");
+    } else if (api && !isMobile && api.view.type !== "dayGridMonth") {
+      api.changeView("dayGridMonth");
+    }
+  }, [isMobile]);
 
   // Tenant & calendar selection — use global tenant when set
   const { data: tenants } = useTenants();
@@ -240,6 +262,31 @@ export default function CalendarPage() {
     setStartTime(info.allDay ? "08:00" : extractTime(info.startStr));
     setEndDate(extractDate(info.endStr));
     setEndTime(info.allDay ? "09:00" : extractTime(info.endStr));
+    setSendReminder(false);
+    setReminderChatwootConvId("");
+    setReminderPhone("");
+    setReminderAgentId(reminderAgents.length === 1 ? reminderAgents[0].id : "");
+    setDialogOpen(true);
+  }, [selectedTenantId, calendars, selectedCalendarId, reminderAgents]);
+
+  const handleFabNewEvent = useCallback(() => {
+    if (!selectedTenantId || !calendars?.length) {
+      toast.error("Selecione um tenant e crie uma agenda primeiro.");
+      return;
+    }
+    const now = new Date();
+    const end = new Date(now.getTime() + 60 * 60 * 1000);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    setSelectedEventClick(null);
+    setEditingEventId(null);
+    setNewTitle("");
+    setNewColor("primary");
+    setEventCalendarId(selectedCalendarId === "all" ? calendars[0].id : selectedCalendarId);
+    setAllDay(false);
+    setStartDate(extractDate(now.toISOString()));
+    setStartTime(`${pad(now.getHours())}:${pad(now.getMinutes())}`);
+    setEndDate(extractDate(end.toISOString()));
+    setEndTime(`${pad(end.getHours())}:${pad(end.getMinutes())}`);
     setSendReminder(false);
     setReminderChatwootConvId("");
     setReminderPhone("");
@@ -537,19 +584,49 @@ export default function CalendarPage() {
         </Card>
 
         <Card>
-          <CardHeader className="pb-2">
+          <CardHeader className="pb-2 flex-row items-center justify-between gap-2">
             <CardTitle className="text-base">Agenda</CardTitle>
+            {isMobile && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSidebarSheetOpen(true)}
+                className="shrink-0"
+              >
+                <Menu className="h-4 w-4 mr-1" />
+                Agendas
+              </Button>
+            )}
           </CardHeader>
+          {isMobile && (
+            <div className="px-4 pb-2 flex gap-1.5 overflow-x-auto">
+              {VIEW_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => calendarRef.current?.getApi().changeView(opt.id)}
+                  className={cn(
+                    "shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
+                    currentView === opt.id
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
           <CardContent className="calendar-wrapper">
             <FullCalendar
               ref={calendarRef}
               plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
-              initialView="dayGridMonth"
-              headerToolbar={{
-                left: "prev,next today",
-                center: "title",
-                right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek",
-              }}
+              initialView={isMobile ? "listWeek" : "dayGridMonth"}
+              headerToolbar={
+                isMobile
+                  ? { left: "prev,next today", center: "title", right: "" }
+                  : { left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek" }
+              }
+              datesSet={(info) => setCurrentView(info.view.type)}
               locale={ptBrLocale}
               timeZone="America/Sao_Paulo"
               selectable={!!selectedTenantId}
@@ -573,8 +650,8 @@ export default function CalendarPage() {
         </Card>
       </div>
 
-      {/* Sidebar */}
-      <div className="xl:col-span-3 col-span-12 space-y-6">
+      {/* Sidebar - desktop */}
+      <div className={cn("xl:col-span-3 col-span-12 space-y-6", isMobile && "hidden")}>
         <Card>
           <CardHeader className="flex-row items-center justify-between pb-2">
             <CardTitle className="text-base">Agendas</CardTitle>
@@ -657,6 +734,108 @@ export default function CalendarPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Sidebar Sheet - mobile */}
+      {isMobile && (
+        <Sheet open={sidebarSheetOpen} onOpenChange={setSidebarSheetOpen}>
+          <SheetContent side="right" className="w-full max-w-sm overflow-y-auto">
+            <SheetHeader>
+              <SheetTitle>Agendas e mais</SheetTitle>
+            </SheetHeader>
+            <div className="mt-6 space-y-6">
+              <div>
+                <h3 className="text-sm font-semibold mb-2">Agendas</h3>
+                {!selectedTenantId && (
+                  <p className="text-xs text-muted-foreground">Selecione um tenant para ver as agendas.</p>
+                )}
+                {calendarsLoading && <p className="text-xs text-muted-foreground">Carregando...</p>}
+                <div className="space-y-1">
+                  {calendars?.map((cal) => {
+                    const c = EVENT_COLORS[cal.color] || EVENT_COLORS.primary;
+                    return (
+                      <div
+                        key={cal.id}
+                        className={cn(
+                          "flex items-center gap-2 rounded-lg px-3 py-2 text-sm cursor-pointer transition-colors",
+                          selectedCalendarId === cal.id ? "bg-muted" : "hover:bg-muted/50"
+                        )}
+                        onClick={() => {
+                          setSelectedCalendarId(cal.id === selectedCalendarId ? "all" : cal.id);
+                          setSidebarSheetOpen(false);
+                        }}
+                      >
+                        <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: c.bg }} />
+                        <span className="text-foreground flex-1">{cal.name}</span>
+                        <CalendarDays className="h-3 w-3 text-muted-foreground" />
+                      </div>
+                    );
+                  })}
+                </div>
+                <Button size="sm" variant="outline" className="mt-2 w-full" disabled={!selectedTenantId} onClick={() => { setNewCalDialogOpen(true); setSidebarSheetOpen(false); }}>
+                  <Plus className="h-4 w-4 mr-1" /> Nova Agenda
+                </Button>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+                  <Bell className="h-4 w-4 text-primary" />
+                  Lembretes agendados
+                </h3>
+                {!selectedTenantId && <p className="text-xs text-muted-foreground">Selecione um tenant.</p>}
+                {selectedTenantId && pendingReminders === undefined && <p className="text-xs text-muted-foreground">Carregando...</p>}
+                {selectedTenantId && pendingReminders !== undefined && validReminders.length === 0 && (
+                  <p className="text-xs text-muted-foreground">Nenhum lembrete pendente.</p>
+                )}
+                <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                  {validReminders.map((r) => (
+                    <div key={r.id} className="rounded-lg border border-border p-2.5 text-sm">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-medium text-foreground line-clamp-1">{r.event_title}</p>
+                        <Badge variant={r.status === "sent" ? "secondary" : "default"} className="text-[10px] shrink-0">
+                          {r.status === "sent" ? "Enviado" : "Pendente"}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">Envio: {formatRemindAtBR(r.remind_at)}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold mb-2">Próximos Eventos</h3>
+                {eventsLoading && <p className="text-xs text-muted-foreground">Carregando...</p>}
+                <div className="space-y-3 max-h-[200px] overflow-y-auto">
+                  {upcomingEvents.slice(0, 5).map((ev) => (
+                    <div key={String(ev.id)} className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium text-foreground">{ev.title}</p>
+                        <Badge variant="secondary" className="text-[10px]">
+                          {typeof ev.start === "string" ? formatDateTimeBR(ev.start) : ev.start instanceof Date ? formatDateTimeBR(ev.start.toISOString()) : ""}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {calendars?.find(c => c.id === ev.extendedProps?.calendarId)?.name || "Agenda"}
+                      </p>
+                    </div>
+                  ))}
+                  {!eventsLoading && upcomingEvents.length === 0 && (
+                    <p className="text-xs text-muted-foreground">Nenhum evento futuro.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
+      )}
+
+      {/* FAB - mobile */}
+      {isMobile && (
+        <button
+          onClick={handleFabNewEvent}
+          className="fixed bottom-6 right-6 z-40 h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:bg-primary/90 transition-colors"
+          aria-label="Novo evento"
+        >
+          <Plus className="h-6 w-6" />
+        </button>
+      )}
 
       {/* Event Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
