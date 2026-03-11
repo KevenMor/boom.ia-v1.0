@@ -1035,6 +1035,10 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   }
                 }
 
+                if (tool.tool_type === "chatwoot_assign") {
+                  if (responseConvId) args = { ...args, conversation_id: responseConvId };
+                  if (chatwoot_conversation_id != null) args = { ...args, chatwoot_conversation_id };
+                }
                 console.log("[Chat-Local] Executando tool:", tc.function.name, "| args:", JSON.stringify(args));
                 debugEntries.push({ type: "tool_call", tool: tc.function.name, args, tool_type: "function" });
                 const result = await executeTool(tool, args, agent_id);
@@ -1067,6 +1071,13 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   if (result.success && result.result) {
                     sendAgendaNotification(agent_id, agent, result.result, messages, external_user_id, responseConvId, chatwoot_conversation_id).catch(() => {});
                   }
+                }
+                if (tool.tool_type === "chatwoot_assign" && result.success && responseConvId) {
+                  supabase.rpc("cancel_pending_followups", {
+                    p_agent_id: agent_id,
+                    p_conversation_id: responseConvId,
+                    p_cancel_reason: "human_assigned",
+                  }).catch(() => {});
                 }
               }
             }
@@ -1685,6 +1696,10 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }
           }
 
+          if (tool.tool_type === "chatwoot_assign") {
+            if (responseConvId) args = { ...args, conversation_id: responseConvId };
+            if (chatwoot_conversation_id != null) args = { ...args, chatwoot_conversation_id };
+          }
           console.log("[Chat-Local] Executando tool (single-provider):", tc.function.name, "| args:", JSON.stringify(args));
           const result = await executeTool(tool, args, agent_id);
           const resultPreview = result.success
@@ -1709,6 +1724,13 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             if (result.success && result.result) {
               sendAgendaNotification(agent_id, agent, result.result, messages, external_user_id, responseConvId, chatwoot_conversation_id).catch(() => {});
             }
+          }
+          if (tool.tool_type === "chatwoot_assign" && result.success && responseConvId) {
+            supabase.rpc("cancel_pending_followups", {
+              p_agent_id: agent_id,
+              p_conversation_id: responseConvId,
+              p_cancel_reason: "human_assigned",
+            }).catch(() => {});
           }
         }
       }

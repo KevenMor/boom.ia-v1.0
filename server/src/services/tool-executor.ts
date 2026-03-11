@@ -734,6 +734,142 @@ async function executeNearestUnit(args: Record<string, unknown>): Promise<ToolEx
   }
 }
 
+async function executeChatwootAssign(
+  supabase: ReturnType<typeof createNexusClient>,
+  tool: ToolDef,
+  args: Record<string, unknown>,
+  agentId: string
+): Promise<ToolExecutionResult> {
+  try {
+    const reason = String(args?.reason || "escalation");
+    const execCfg = (tool.execution_config || {}) as Record<string, unknown>;
+    const rules = Array.isArray(execCfg.rules) ? execCfg.rules : [] as Array<{ label?: string; assignee_id?: number; team_id?: number }>;
+
+    let assigneeId = (args?.assignee_id != null ? Number(args.assignee_id) : null) ?? (execCfg.assignee_id != null ? Number(execCfg.assignee_id) : null);
+    let teamId = (args?.team_id != null ? Number(args.team_id) : null) ?? (execCfg.team_id != null ? Number(execCfg.team_id) : null);
+    let matchedRule = "";
+
+    if (assigneeId == null && rules.length > 0) {
+      const reasonNorm = reason
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+      let bestScore = 0;
+      for (const rule of rules) {
+        if (!rule.label) continue;
+        const labelNorm = (rule.label as string)
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "");
+        const tokens = labelNorm.split(/\s+/).filter((t: string) => t.length >= 3);
+        const score = tokens.reduce(
+          (acc: number, tok: string) => acc + (reasonNorm.includes(tok) ? 1 : 0),
+          0
+        );
+        if (score > bestScore) {
+          bestScore = score;
+          assigneeId = rule.assignee_id ?? assigneeId;
+          teamId = rule.team_id ?? teamId;
+          matchedRule = rule.label;
+        }
+      }
+    }
+
+    const { data: agentCfgRow } = await supabase
+      .from("agents")
+      .select("config")
+      .eq("id", agentId)
+      .single();
+    const agCfg = (agentCfgRow?.config || {}) as Record<string, unknown>;
+    const cwUrl = agCfg.chatwoot_url as string | undefined;
+    const cwToken = agCfg.chatwoot_api_token as string | undefined;
+    const cwAccountId = agCfg.chatwoot_account_id as string | number | undefined;
+
+    if (!cwUrl || !cwToken || !cwAccountId) {
+      return {
+        success: false,
+        result: null,
+        error: "Chatwoot não configurado neste agente",
+      };
+    }
+
+    let cwConvId: number | null = null;
+    if (args?.chatwoot_conversation_id != null) {
+      cwConvId = Number(args.chatwoot_conversation_id);
+    }
+    if (cwConvId == null && args?.conversation_id) {
+      const { data: convRow } = await supabase
+        .from("conversations")
+        .select("chatwoot_conversation_id")
+        .eq("agent_id", agentId)
+        .eq("id", args.conversation_id)
+        .single();
+      cwConvId = convRow?.chatwoot_conversation_id != null ? Number(convRow.chatwoot_conversation_id) : null;
+    }
+    if (cwConvId == null) {
+      const { data: cwConvRows } = await supabase
+        .from("conversations")
+        .select("chatwoot_conversation_id")
+        .eq("agent_id", agentId)
+        .not("chatwoot_conversation_id", "is", null)
+        .order("started_at", { ascending: false })
+        .limit(1);
+      cwConvId = cwConvRows?.[0]?.chatwoot_conversation_id != null ? Number(cwConvRows[0].chatwoot_conversation_id) : null;
+    }
+
+    if (cwConvId == null) {
+      return {
+        success: false,
+        result: null,
+        error: "chatwoot_conversation_id é obrigatório. A conversa precisa estar vinculada ao Chatwoot.",
+      };
+    }
+
+    const baseUrl = (cwUrl as string).replace(/\/+$/, "");
+    const assignUrl = `${baseUrl}/api/v1/accounts/${cwAccountId}/conversations/${cwConvId}/assignments`;
+    const assignBody: Record<string, number> = {};
+    if (assigneeId != null) assignBody.assignee_id = assigneeId;
+    if (teamId != null) assignBody.team_id = teamId;
+
+    const assignResp = await fetch(assignUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", api_access_token: cwToken as string },
+      body: JSON.stringify(assignBody),
+    });
+
+    const assignRespText = await assignResp.text();
+    if (!assignResp.ok) {
+      return {
+        success: false,
+        result: null,
+        error: `Falha na atribuição Chatwoot: ${assignResp.status} - ${assignRespText.slice(0, 200)}`,
+      };
+    }
+
+    let parsedResp: unknown;
+    try {
+      parsedResp = JSON.parse(assignRespText);
+    } catch {
+      parsedResp = assignRespText;
+    }
+
+    return {
+      success: true,
+      result: {
+        status: "atribuido",
+        chatwoot_conversation_id: cwConvId,
+        assignee_id: assigneeId ?? null,
+        team_id: teamId ?? null,
+        matched_rule: matchedRule || null,
+        chatwoot_response: parsedResp,
+      },
+    };
+  } catch (e: unknown) {
+    const err = e as Error;
+    return { success: false, result: null, error: err?.message || "Chatwoot assign failed" };
+  }
+}
+
 export interface ToolDef {
   id: string;
   name: string;
@@ -763,11 +899,13 @@ export async function executeTool(
     case "nearest_unit":
       return executeNearestUnit(args);
 
+    case "chatwoot_assign":
+      return executeChatwootAssign(supabase, tool, args, agentId);
+
     case "web_scraper":
     case "api_rest":
     case "sql_query":
     case "rag_search":
-    case "chatwoot_assign":
     case "send_notification":
     default:
       return {
