@@ -25,6 +25,25 @@ function stripChatwootHeader(content: string): string {
   return content.replace(/^\[Atendente:[^\]]*\]\s*[^:]*:\s*/gm, "").trim();
 }
 
+/** Remove conteúdo repetido (ex.: mesmo texto 2x ou 3x — bug no painel ao exibir) */
+function deduplicateRepeatedContent(text: string): string {
+  const t = text.trim();
+  if (t.length < 60) return t;
+  const len = t.length;
+  const half = Math.floor(len / 2);
+  const first = t.slice(0, half).trim();
+  const second = t.slice(half).trim();
+  if (first.length > 30 && first === second) return first;
+  const third = Math.floor(len / 3);
+  const unit = t.slice(0, third).trim();
+  if (unit.length > 20) {
+    const r2 = t.slice(third, 2 * third).trim();
+    const r3 = t.slice(2 * third).trim();
+    if (unit === r2 && unit === r3) return unit;
+  }
+  return t;
+}
+
 function extractImages(content: string): { text: string; images: string[] } {
   const imgRegex = /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g;
   const images: string[] = [];
@@ -716,7 +735,7 @@ export default function Conversations() {
                             const isUser = msg.role === "user";
                             const isSystem = msg.role === "system" || msg.role === "tool";
                             const audioInfo = isUser ? parseAudioTranscription(msg.content || "") : { isAudio: false, transcription: "", remainingText: msg.content || "" };
-                            const contentForExtraction = isUser ? audioInfo.remainingText : msg.content || "";
+                            const contentForExtraction = isUser ? audioInfo.remainingText : deduplicateRepeatedContent(stripChatwootHeader(msg.content || ""));
                             const { text, images } = extractImages(contentForExtraction);
 
                             if (isSystem) {
@@ -731,7 +750,8 @@ export default function Conversations() {
 
                             const bubbles: { text: string; images: string[]; isAudio?: boolean; transcription?: string }[] = [];
                             if (!isUser) {
-                              const paragraphs = stripChatwootHeader(msg.content || "").split(/\n\n+/);
+                              const rawContent = deduplicateRepeatedContent(stripChatwootHeader(msg.content || ""));
+                              const paragraphs = rawContent.split(/\n\n+/);
                               let currentBubble = { text: "", images: [] as string[] };
                               for (const para of paragraphs) {
                                 const { text: pText, images: pImages } = extractImages(para);

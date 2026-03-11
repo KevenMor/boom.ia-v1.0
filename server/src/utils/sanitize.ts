@@ -63,7 +63,31 @@ export function sanitizeLLMOutput(content: string): string {
   // Restauração de acentuação em português (Gemini 2.0 Flash costuma omitir)
   text = restorePortugueseAccents(text);
 
+  // Remove conteúdo repetido (ex.: mesmo texto 2x ou 3x — bug no painel ao exibir)
+  text = deduplicateRepeatedContent(text);
+
   return text;
+}
+
+/** Remove conteúdo repetido (ex.: mesmo texto 2x ou 3x na mesma mensagem) */
+function deduplicateRepeatedContent(text: string): string {
+  const t = text.trim();
+  if (t.length < 60) return t;
+  const len = t.length;
+  // 2x: primeira metade = segunda metade
+  const half = Math.floor(len / 2);
+  const first = t.slice(0, half).trim();
+  const second = t.slice(half).trim();
+  if (first.length > 30 && first === second) return first;
+  // 3x: primeiro terço repetido
+  const third = Math.floor(len / 3);
+  const unit = t.slice(0, third).trim();
+  if (unit.length > 20) {
+    const r2 = t.slice(third, 2 * third).trim();
+    const r3 = t.slice(2 * third).trim();
+    if (unit === r2 && unit === r3) return unit;
+  }
+  return t;
 }
 
 /** Corrige palavras comuns em português que modelos como Gemini costumam retornar sem acento. Exportada para uso no stream. */

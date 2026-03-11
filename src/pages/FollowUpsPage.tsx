@@ -399,11 +399,9 @@ function FollowUpRow({ item }: { item: FollowUpQueueItem }) {
           {STATUS_LABELS[item.status] ?? item.status}
         </Badge>
       </TableCell>
-      <TableCell className="text-xs text-muted-foreground max-w-[200px]">
-        {item.status === "cancelled" && item.cancel_reason ? (
-          getCancelReasonLabel(item.cancel_reason)
-        ) : item.status === "cancelled" ? (
-          "—"
+      <TableCell className="text-xs text-muted-foreground max-w-[200px]" title={item.status === "cancelled" && item.cancel_reason ? getCancelReasonLabel(item.cancel_reason) : undefined}>
+        {item.status === "cancelled" ? (
+          item.cancel_reason ? getCancelReasonLabel(item.cancel_reason) : "Motivo não registrado"
         ) : (
           ""
         )}

@@ -265,6 +265,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
       const list = (rows ?? []).map((r: any) => ({
         ...r,
         agent_name: r.agents?.name ?? null,
+        cancel_reason: r.cancel_reason ?? null,
         agents: undefined,
       }));
       return reply.send(list);
@@ -674,13 +675,14 @@ export async function queueRoutes(fastify: FastifyInstance) {
                 }
               }
 
-              // CENÁRIO 2: Se conversa tem assignee humano (não é bot), cancelar follow-up.
-              // Com agent_assignee_id configurado: NÃO cancelar quando assignee === agent_assignee_id (bot).
-              // Assim follow-ups são enviados normalmente quando a conversa está atribuída ao bot.
+              // CENÁRIO 2: Conversa com assignee = agent_assignee_id (bot) → ENVIAR follow-up.
+              // Só cancelar quando assignee for diferente do ID configurado no painel (humano assumiu).
               if (currentAssigneeId && agent.status === "active") {
                 const agentAssigneeId = cfg.agent_assignee_id != null && cfg.agent_assignee_id !== "" ? Number(cfg.agent_assignee_id) : null;
                 const isAgentOwnConversation = agentAssigneeId != null && Number(currentAssigneeId) === Number(agentAssigneeId);
-                if (!isAgentOwnConversation) {
+                if (isAgentOwnConversation) {
+                  console.log(`[FollowUp] Assignee ${currentAssigneeId} = bot (agent_assignee_id): enviando follow-up ${item.id}`);
+                } else if (!isAgentOwnConversation) {
                   console.log(`[FollowUp] Human assigned (${currentAssigneeId}): cancelling ${item.id}`);
                   // #region agent log
                   fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-cancel',message:'CANCELLED: human assigned (active agent)',data:{itemId:item.id,currentAssigneeId},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
