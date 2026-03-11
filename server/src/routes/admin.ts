@@ -73,7 +73,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
       await supabase
         .from("follow_up_queue")
-        .update({ status: "cancelled", updated_at: new Date().toISOString() })
+        .update({ status: "cancelled", cancel_reason: "conversations_cleared_by_admin", updated_at: new Date().toISOString() })
         .in("conversation_id", conversation_ids)
         .eq("status", "pending");
 

@@ -580,8 +580,10 @@ export async function queueRoutes(fastify: FastifyInstance) {
     }
 
     if (!pending || pending.length === 0) {
-      return reply.send({ processed: 0 });
+      return reply.send({ processed: 0, total: 0 });
     }
+
+    console.log(`[FollowUp] Found ${pending.length} pending item(s), processing...`);
 
     let processed = 0;
     let skipped = 0;

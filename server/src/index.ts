@@ -170,10 +170,13 @@ build()
           const data = await resp.json() as { processed?: number; skipped?: number; total?: number };
           const processed = data.processed ?? 0;
           const skipped = data.skipped ?? 0;
+          const total = data.total ?? 0;
           if (processed > 0 || skipped > 0) {
             console.log("[FollowUp-Cron] processed:", processed, "skipped:", skipped);
-          } else if ((data.total ?? 0) > 0) {
+          } else if (total > 0) {
             console.log("[FollowUp-Cron] tick: no items processed (pending may have been cancelled/skipped by rules)");
+          } else {
+            console.log("[FollowUp-Cron] tick: no pending items");
           }
         }
       } catch (e) {
