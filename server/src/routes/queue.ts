@@ -647,11 +647,15 @@ export async function queueRoutes(fastify: FastifyInstance) {
             });
 
             if (convResp.ok) {
-              const convData = await convResp.json() as { meta?: { assignee?: { id?: number } } };
-              const currentAssigneeId = convData?.meta?.assignee?.id ?? null;
+              const raw = await convResp.json() as Record<string, unknown>;
+              // Chatwoot pode retornar direto ou em payload; assignee em meta ou na raiz
+              const convData = (raw.payload as Record<string, unknown>) || raw;
+              const meta = (convData.meta || convData) as Record<string, unknown>;
+              const assignee = (meta.assignee || (convData as any).assignee) as { id?: number | string } | null;
+              const currentAssigneeId = assignee?.id != null ? Number(assignee.id) : null;
 
               // #region agent log
-              fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-assignee',message:'Chatwoot assignee check',data:{itemId:item.id,agentStatus:agent.status,currentAssigneeId,testAssigneeId:cfg.test_assignee_id??null,convDataKeys:Object.keys(convData||{})},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+              fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-assignee',message:'Chatwoot assignee check',data:{itemId:item.id,agentStatus:agent.status,currentAssigneeId,agentAssigneeId:cfg.agent_assignee_id??null,testAssigneeId:cfg.test_assignee_id??null,convDataKeys:Object.keys(convData||{})},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
               // #endregion
 
               // CENÁRIO 3: Agente em teste — só enviar follow-up se assignee = test_assignee_id
@@ -670,11 +674,12 @@ export async function queueRoutes(fastify: FastifyInstance) {
                 }
               }
 
-              // CENÁRIO 2: Se conversa tem assignee humano (não é bot), cancelar follow-up
-              // Com agent_assignee_id: cancelar só se assignee != agent_assignee_id
+              // CENÁRIO 2: Se conversa tem assignee humano (não é bot), cancelar follow-up.
+              // Com agent_assignee_id configurado: NÃO cancelar quando assignee === agent_assignee_id (bot).
+              // Assim follow-ups são enviados normalmente quando a conversa está atribuída ao bot.
               if (currentAssigneeId && agent.status === "active") {
-                const agentAssigneeId = cfg.agent_assignee_id != null ? Number(cfg.agent_assignee_id) : null;
-                const isAgentOwnConversation = agentAssigneeId != null && currentAssigneeId === agentAssigneeId;
+                const agentAssigneeId = cfg.agent_assignee_id != null && cfg.agent_assignee_id !== "" ? Number(cfg.agent_assignee_id) : null;
+                const isAgentOwnConversation = agentAssigneeId != null && Number(currentAssigneeId) === Number(agentAssigneeId);
                 if (!isAgentOwnConversation) {
                   console.log(`[FollowUp] Human assigned (${currentAssigneeId}): cancelling ${item.id}`);
                   // #region agent log

@@ -350,7 +350,7 @@ export default function EditAgent() {
                 className="h-11 rounded-lg bg-background border-border font-mono text-sm"
               />
               <p className="text-xs text-muted-foreground">
-                Quando o cliente chama, a conversa chega sem assignee. Após a IA enviar a primeira mensagem, ela atribui a conversa a este ID. A IA só interage com conversas sem assignee ou atribuídas a este ID.
+                Quando o cliente chama, a conversa chega sem assignee. Após a IA enviar a primeira mensagem, ela atribui a conversa a este ID. A IA só interage com conversas sem assignee ou atribuídas a este ID. <strong>Follow-ups só são enviados</strong> quando a conversa está atribuída a este ID (ou sem assignee); caso contrário são cancelados.
               </p>
             </div>
           )}

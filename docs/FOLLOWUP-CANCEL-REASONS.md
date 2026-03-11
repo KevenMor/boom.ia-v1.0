@@ -32,10 +32,11 @@ O processamento dos follow-ups (rota `POST /api/queue/followups`, chamada a cada
 
 ---
 
-## 5. Conversa com humano atribuído (CENÁRIO 2) — causa muito provável
+## 5. Conversa com humano atribuído (CENÁRIO 2)
 - **Condição:** Agente **ativo** (`status === "active"`) **e** a API do Chatwoot retorna que a conversa tem **assignee** (qualquer ID).
-- **Ação:** Status → `cancelled`. A lógica assume: “conversa com atendente humano → não mandar follow-up automático”.
-- **Problema:** No Chatwoot, muitas contas têm **assignee padrão** (ex.: “Bot”, “Inbox” ou um usuário). Nesses casos, **sempre** há `meta.assignee.id`. O código não diferencia “humano” de “bot”; qualquer assignee cancela.
+- **Ação:** Status → `cancelled` **exceto** quando o assignee for o **bot** (configurado em `agent_assignee_id`). A lógica anterior assumia: “conversa com atendente humano → não mandar follow-up automático”.
+- **Solução:** Configure o **Assignee ID do agente (bot)** no painel do agente (quando status = Ativo). Esse é o ID do usuário no Chatwoot que representa o bot. Após a primeira mensagem, a IA atribui a conversa a esse ID. Quando o assignee da conversa for igual ao `agent_assignee_id`, o follow-up **é enviado normalmente**.
+- **Problema (obsoleto):** No Chatwoot, muitas contas têm **assignee padrão** (ex.: “Bot”, “Inbox” ou um usuário). Nesses casos, **sempre** há `meta.assignee.id`. O código não diferencia “humano” de “bot”; qualquer assignee cancela.
 - **No seu caso:** Se o cliente não interagiu e mesmo assim foi cancelado, é muito provável que a conversa no Chatwoot tivesse um assignee (até mesmo um “bot” ou inbox). Ao rodar o follow-up, o servidor viu `currentAssigneeId` preenchido e cancelou.
 
 **O que fazer:**
