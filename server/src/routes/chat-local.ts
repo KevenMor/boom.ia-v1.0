@@ -1365,6 +1365,9 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               console.warn("[Chat-Local] Failed to save token usage:", (dbErr as Error)?.message);
             }
           }
+          if (phase1ToolCalls.length === 0) {
+            sendSse({ debug: [{ type: "dispatcher_no_tools", model: convModel, dispatcher: dispatcherUsage, conversational: conversationalUsage }] });
+          }
 
           if (responseConvId && dualContentToSave.trim()) {
             try {
@@ -1708,6 +1711,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           console.warn("[Chat-Local] Failed to save token usage:", (dbErr as Error)?.message);
         }
       }
+      sendSse({ debug: [{ type: "single_provider", model, ...singleProviderUsageAccum }] });
       const finalContentToSave = sanitizeLLMOutput(fullContent.trim());
       if (responseConvId && finalContentToSave) {
         try {

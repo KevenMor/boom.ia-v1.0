@@ -67,6 +67,7 @@ export function DebugBlock({ debug, edgeLogs, tokenUsage }: DebugBlockProps) {
   const dispatcherSteps = debug.filter((d) => d.type?.startsWith("dispatcher_"));
   const tokenUsages = debug.filter((d) => d.type === "token_usage");
   const singleProviderEntries = debug.filter((d) => d.type === "single_provider");
+  const dispatcherNoToolsEntries = debug.filter((d) => d.type === "dispatcher_no_tools");
   const dispatcherTokensFromDebug = dispatcherSteps
     .filter((d) => d.usage)
     .reduce((acc, d) => ({
@@ -84,7 +85,16 @@ export function DebugBlock({ debug, edgeLogs, tokenUsage }: DebugBlockProps) {
     completion: acc.completion + (d.completion_tokens || 0),
     total: acc.total + (d.total_tokens || 0),
   }), { prompt: 0, completion: 0, total: 0 });
-  const totalTokensFromDebug = dispatcherTokensFromDebug.total + convTokensFromDebug.total + singleProviderTokens.total;
+  const dispatcherNoToolsTokens = dispatcherNoToolsEntries.reduce((acc, d) => {
+    const disp = d.dispatcher as { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined;
+    const conv = d.conversational as { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined;
+    return {
+      prompt: acc.prompt + (disp?.prompt_tokens ?? 0) + (conv?.prompt_tokens ?? 0),
+      completion: acc.completion + (disp?.completion_tokens ?? 0) + (conv?.completion_tokens ?? 0),
+      total: acc.total + (disp?.total_tokens ?? 0) + (conv?.total_tokens ?? 0),
+    };
+  }, { prompt: 0, completion: 0, total: 0 });
+  const totalTokensFromDebug = dispatcherTokensFromDebug.total + convTokensFromDebug.total + singleProviderTokens.total + dispatcherNoToolsTokens.total;
 
   const dispatcherTokens = tokenUsage?.dispatcher
     ? { prompt: tokenUsage.dispatcher.prompt_tokens, completion: tokenUsage.dispatcher.completion_tokens, total: tokenUsage.dispatcher.total_tokens }
@@ -95,7 +105,9 @@ export function DebugBlock({ debug, edgeLogs, tokenUsage }: DebugBlockProps) {
       ? { prompt: tokenUsage.single.prompt_tokens, completion: tokenUsage.single.completion_tokens, total: tokenUsage.single.total_tokens }
       : singleProviderTokens.total > 0
         ? singleProviderTokens
-        : convTokensFromDebug;
+        : dispatcherNoToolsTokens.total > 0
+          ? dispatcherNoToolsTokens
+          : convTokensFromDebug;
   const totalTokens = tokenUsage
     ? (tokenUsage.dispatcher?.total_tokens ?? 0) + (tokenUsage.conversational?.total_tokens ?? 0) + (tokenUsage.single?.total_tokens ?? 0)
     : totalTokensFromDebug;
@@ -119,6 +131,7 @@ export function DebugBlock({ debug, edgeLogs, tokenUsage }: DebugBlockProps) {
         <span className="text-[#53bdeb]">{llmIterations.length} LLM step{llmIterations.length !== 1 ? "s" : ""}</span>
         {errors.length > 0 && <span className="text-red-400">{errors.length} erro{errors.length !== 1 ? "s" : ""}</span>}
         {singleProviderEntries.length > 0 && <span className="text-cyan-400">single</span>}
+        {dispatcherNoToolsEntries.length > 0 && <span className="text-cyan-400">dual (sem tools)</span>}
         {totalTokens > 0 && <span className="text-emerald-400">{totalTokens.toLocaleString()} tokens</span>}
         {mediaAttachments.length > 0 && <span className="text-pink-400">🎙️ mídia</span>}
           {edgeLogs && edgeLogs.length > 0 && <span className="text-orange-400">{edgeLogs.length} log{edgeLogs.length !== 1 ? "s" : ""}</span>}
@@ -127,6 +140,21 @@ export function DebugBlock({ debug, edgeLogs, tokenUsage }: DebugBlockProps) {
 
       {expanded && (
         <div className="mt-1 bg-[#111b21] border border-[#2a3942] rounded-lg p-3 text-[11px] font-mono space-y-2 overflow-x-auto">
+          {dispatcherNoToolsEntries.length > 0 && (
+            <div>
+              <div className="text-cyan-400 font-semibold mb-1">📡 Dual Provider (sem tools)</div>
+              <div className="text-[#8696a0] space-y-0.5">
+                {dispatcherNoToolsEntries.map((d, i) => (
+                  <div key={i}>
+                    Modelo: <span className="text-[#e9edef]">{d.model}</span>
+                    {d.dispatcher && <span> — dispatcher: {(d.dispatcher as { total_tokens?: number })?.total_tokens ?? 0} tokens</span>}
+                    {d.conversational && <span> — conversacional: {(d.conversational as { total_tokens?: number })?.total_tokens ?? 0} tokens</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {singleProviderEntries.length > 0 && (
             <div>
               <div className="text-cyan-400 font-semibold mb-1">📡 Single Provider</div>
