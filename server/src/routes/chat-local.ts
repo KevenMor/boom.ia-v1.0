@@ -1548,7 +1548,6 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
           if (singleProviderUsageAccum.total_tokens > 0) {
             sendSse({ token_usage: { single: { ...singleProviderUsageAccum, model } } });
-            sendSse({ debug: [{ type: "single_provider", model, ...singleProviderUsageAccum }] });
             try {
               await supabase.from("agent_token_usage").insert({
                 agent_id,
@@ -1565,6 +1564,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               console.warn("[Chat-Local] Failed to save token usage:", (dbErr as Error)?.message);
             }
           }
+          sendSse({ debug: [{ type: "single_provider", model, ...singleProviderUsageAccum }] });
           const singleContentToSave = sanitizeLLMOutput(fullContent.trim());
           if (responseConvId && singleContentToSave) {
             try {

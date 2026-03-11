@@ -558,7 +558,7 @@ export default function AgentSandbox() {
     return (
       <div key={i}>
         {/* Debug block */}
-        {!isUser && (msg.debug || msg.edgeLogs) && showDebug && (
+        {!isUser && showDebug && (msg.debug?.length || msg.edgeLogs?.length || msg.tokenUsage) && (
           <div className="flex justify-start mb-1">
             <DebugBlock debug={msg.debug || []} edgeLogs={msg.edgeLogs} tokenUsage={msg.tokenUsage} />
           </div>
