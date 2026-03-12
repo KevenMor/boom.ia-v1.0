@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
+import { transcribeAudio, isAudioAttachment } from "../services/transcribe.js";
 import { buildSystemPrompt, getDispatcherPrompt } from "../services/prompts/registry.js";
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
 import { filterCommandLinesFromStream, sanitizeLLMOutput, fallbackSanitizeForRetry, restorePortugueseAccents } from "../utils/sanitize.js";
@@ -586,6 +587,39 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ error: "agent_id and messages required" });
       }
 
+      const attachments = (body.attachments as Array<{ file_type?: string; data_url?: string }>) ?? [];
+      let messagesToUse = [...messages];
+
+      // Transcrição de áudio no sandbox (igual ao fluxo WhatsApp)
+      const audioAttachments = attachments.filter(isAudioAttachment);
+      if (audioAttachments.length > 0 && messagesToUse.length > 0) {
+        const lastMsg = messagesToUse[messagesToUse.length - 1];
+        if (lastMsg.role === "user") {
+          console.log("[Chat-Local] Transcrevendo", audioAttachments.length, "áudio(s)...");
+          const transcriptions = await Promise.all(
+            audioAttachments.map((a) => transcribeAudio(a.data_url!))
+          );
+          const transcribedTexts = transcriptions.filter((t) => t.text).map((t) => t.text);
+          if (transcribedTexts.length > 0) {
+            const audioText = transcribedTexts.join("\n");
+            console.log("[Chat-Local] Transcrição:", audioText.slice(0, 120));
+            const prefix = lastMsg.content?.trim() ? `${lastMsg.content}\n` : "";
+            messagesToUse = [
+              ...messagesToUse.slice(0, -1),
+              { ...lastMsg, content: `${prefix}[Áudio transcrito]: ${audioText}` },
+            ];
+          } else {
+            const errors = transcriptions.filter((t) => t.error).map((t) => t.error);
+            console.warn("[Chat-Local] Transcrição falhou:", errors);
+            const fallback = "[O cliente enviou um áudio que não pôde ser transcrito. Peça para repetir por texto.]";
+            messagesToUse = [
+              ...messagesToUse.slice(0, -1),
+              { ...lastMsg, content: lastMsg.content?.trim() ? `${lastMsg.content}\n${fallback}` : fallback },
+            ];
+          }
+        }
+      }
+
       const supabase = createNexusClient();
 
       const { data: agent, error: agentErr } = await supabase
@@ -617,7 +651,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       const hasInventoryTool = tools.some((t) => t.tool_type === "inventory_query");
 
       const isPetHome = tenantSlug === "pet-home" || tenantSlug === "pet-home-tia-erica";
-      const petContext = isPetHome ? buildPetGenderContext(messages) : null;
+      const petContext = isPetHome ? buildPetGenderContext(messagesToUse) : null;
       const systemPrompt = buildSystemPrompt(
         agent.system_prompt || "",
         tenantSlug,
@@ -697,7 +731,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           responseConvId = newConvId;
         }
 
-        const lastUserMsg = messages.length > 0 ? messages[messages.length - 1] : null;
+        const lastUserMsg = messagesToUse.length > 0 ? messagesToUse[messagesToUse.length - 1] : null;
         if (responseConvId && lastUserMsg?.role === "user" && lastUserMsg.content?.trim()) {
           await supabase.rpc("save_message", {
             p_agent_id: agent_id,
@@ -775,8 +809,8 @@ Chame consultar_agenda com action="criar", title="Visita - [nome do cliente]", s
 REGRA ABSOLUTA: Se o cliente responde a uma oferta de horários com uma escolha (ex: "pode ser as 14:00", "10h", "amanhã as 10"), a action OBRIGATÓRIA é "criar". Chamar "cancelar" ou "check_availability" nesse cenário é um ERRO CRÍTICO.
 Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado para dia 09/03 às 09:00"). Use esse horário em cancelar: start_at no formato YYYY-MM-DDTHH:mm:ss-03:00 (ano = ano de hoje). Em seguida use criar com o novo horário pedido pelo cliente, também com a data de hoje.`;
 
-          const lastAssistantMsg = [...messages].reverse().find((m) => m.role === "assistant");
-          const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+          const lastAssistantMsg = [...messagesToUse].reverse().find((m) => m.role === "assistant");
+          const lastUserMsg = [...messagesToUse].reverse().find((m) => m.role === "user");
           let schedulingHint = "";
           if (lastAssistantMsg && lastUserMsg) {
             const offeredTimes = /\b\d{1,2}[h:]\d{0,2}\b/.test(lastAssistantMsg.content);
@@ -793,7 +827,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
 
           // Entity extraction: detect marca/modelo/ano/km from last user message to help the dispatcher
           const entities = lastUserMsg ? extractVehicleEntities(lastUserMsg.content) : {};
-          const appraisalCtx = isAppraisalContext(messages);
+          const appraisalCtx = isAppraisalContext(messagesToUse);
           let entityHint = "";
           if (entities.marca || entities.modelo || entities.ano || entities.km) {
             const parts: string[] = [];
@@ -809,7 +843,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
 
           const dispatcherMessages = toOpenAIMessages(
             getDispatcherPrompt(tenantSlug) + dispatcherDateContext + entityHint + schedulingHint,
-            messages
+            messagesToUse
           );
 
           const dispatcherBody: Record<string, unknown> = {
@@ -939,7 +973,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 function: { name: tc.function.name, arguments: tc.function.arguments },
               })),
             };
-            conversationalMessages = toOpenAIMessages(systemPrompt, messages);
+            conversationalMessages = toOpenAIMessages(systemPrompt, messagesToUse);
             conversationalMessages.push(assistantMsg);
 
             const debugEntries: Array<{ type: string; tool?: string; args?: Record<string, unknown>; tool_type?: string; preview?: unknown; [k: string]: unknown }> = [
@@ -992,7 +1026,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
 
                 const isEstoqueEmpty = tc.function.name === "consultar_estoque" && Object.keys(args).length === 0;
                 if (isEstoqueEmpty) {
-                  const recentText = messages
+                  const recentText = messagesToUse
                     .slice(-8)
                     .map((m) => (m.content ?? ""))
                     .join("\n");
@@ -1070,13 +1104,13 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                     });
                   }
                   if (result.success && result.result) {
-                    sendAgendaNotification(agent_id, agent, result.result, messages, external_user_id, responseConvId, chatwoot_conversation_id).catch(() => {});
+                    sendAgendaNotification(agent_id, agent, result.result, messagesToUse, external_user_id, responseConvId, chatwoot_conversation_id).catch(() => {});
                   }
                 }
                 if (tool.tool_type === "chatwoot_assign" && result.success && responseConvId) {
                   const assigneeId = (result.result as { assignee_id?: number | null })?.assignee_id;
                   if (assigneeId != null) handoffAssigneeId = assigneeId;
-                  sendHandoffNotification(agent_id, agent, messages, external_user_id).then(() => {}, () => {});
+                  sendHandoffNotification(agent_id, agent, messagesToUse, external_user_id).then(() => {}, () => {});
                   supabase.rpc("cancel_pending_followups", {
                     p_agent_id: agent_id,
                     p_conversation_id: responseConvId,
@@ -1087,7 +1121,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }
             sendSse({ debug: debugEntries });
           } else {
-            conversationalMessages = toOpenAIMessages(systemPrompt, messages);
+            conversationalMessages = toOpenAIMessages(systemPrompt, messagesToUse);
           }
 
           // Limpar mensagens para Gemini conversacional: remover tool_calls e mensagens "tool"
@@ -1248,14 +1282,14 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 sendSse({ choices: [{ delta: { content: accented } }] });
               }
               // Primeiro contato: pergunta do nome só se NÃO tiver vídeo de boas-vindas e o cliente AINDA NÃO informou o nome
-              const isFirstContact = messages.filter((m) => m.role === "assistant").length === 0;
+              const isFirstContact = messagesToUse.filter((m) => m.role === "assistant").length === 0;
               const agentCfg = (agent?.config || {}) as Record<string, unknown>;
               const hasWelcomeVideo = !!(agentCfg.welcome_video_url as string)?.trim();
               const nameQuestion = (agentCfg.welcome_name_question as string) || "Como posso te chamar?";
               const alreadyHasNameQuestion =
                 convFullContent.toLowerCase().includes(nameQuestion.toLowerCase()) ||
                 convFullContent.toLowerCase().includes("com quem eu falo?");
-              const clientAlreadyGaveName = userHasProvidedNameInMessages(messages);
+              const clientAlreadyGaveName = userHasProvidedNameInMessages(messagesToUse);
               if (isFirstContact && nameQuestion && !hasWelcomeVideo && !alreadyHasNameQuestion && !clientAlreadyGaveName) {
                 const nqContent = "\n\n" + nameQuestion;
                 debugSendCount++;
@@ -1267,7 +1301,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
 
           if (/HANDOFF_COMERCIAL/i.test(convFullContent)) {
-            sendHandoffNotification(agent_id, agent, messages, external_user_id).catch((e) => {
+            sendHandoffNotification(agent_id, agent, messagesToUse, external_user_id).catch((e) => {
               console.warn("[Chat-Local] Erro ao enviar notificação de handoff:", (e as Error)?.message);
             });
             if (responseConvId) {
@@ -1422,7 +1456,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
         }
       }
 
-      let llmMessages = toOpenAIMessages(systemPrompt, messages);
+      let llmMessages = toOpenAIMessages(systemPrompt, messagesToUse);
       let fullContent = "";
       let iteration = 0;
       let singleProviderUsageAccum = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
@@ -1531,14 +1565,14 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
           if (done) {
             if (streamFilterBuffer) sendSse({ choices: [{ delta: { content: restorePortugueseAccents(streamFilterBuffer) } }] });
-            const isFirstContact = messages.filter((m) => m.role === "assistant").length === 0;
+            const isFirstContact = messagesToUse.filter((m) => m.role === "assistant").length === 0;
             const agentCfgSingle = (agent?.config || {}) as Record<string, unknown>;
             const hasWelcomeVideoSingle = !!(agentCfgSingle.welcome_video_url as string)?.trim();
             const nameQuestionSingle = (agentCfgSingle.welcome_name_question as string) || "Como posso te chamar?";
             const alreadyHasNameQuestionSingle =
               content.toLowerCase().includes(nameQuestionSingle.toLowerCase()) ||
               content.toLowerCase().includes("com quem eu falo?");
-            const clientAlreadyGaveNameSingle = userHasProvidedNameInMessages(messages);
+            const clientAlreadyGaveNameSingle = userHasProvidedNameInMessages(messagesToUse);
             if (isFirstContact && nameQuestionSingle && !hasWelcomeVideoSingle && !alreadyHasNameQuestionSingle && !clientAlreadyGaveNameSingle) {
               const nqContentSingle = "\n\n" + nameQuestionSingle;
               content += nqContentSingle;
@@ -1562,7 +1596,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
 
         if (toolCalls.length === 0) {
           if (/HANDOFF_COMERCIAL/i.test(fullContent)) {
-            sendHandoffNotification(agent_id, agent, messages, external_user_id).catch((e) => {
+            sendHandoffNotification(agent_id, agent, messagesToUse, external_user_id).catch((e) => {
               console.warn("[Chat-Local] Erro ao enviar notificação de handoff (single-provider):", (e as Error)?.message);
             });
             if (responseConvId) {
@@ -1661,7 +1695,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
 
           const isEstoqueEmptySP = tc.function.name === "consultar_estoque" && Object.keys(args).length === 0;
           if (isEstoqueEmptySP) {
-            const recentTextSP = messages
+            const recentTextSP = messagesToUse
               .slice(-8)
               .map((m) => (m.content ?? ""))
               .join("\n");
@@ -1727,13 +1761,13 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               });
             }
             if (result.success && result.result) {
-              sendAgendaNotification(agent_id, agent, result.result, messages, external_user_id, responseConvId, chatwoot_conversation_id).catch(() => {});
+              sendAgendaNotification(agent_id, agent, result.result, messagesToUse, external_user_id, responseConvId, chatwoot_conversation_id).catch(() => {});
             }
           }
           if (tool.tool_type === "chatwoot_assign" && result.success && responseConvId) {
             const assigneeId = (result.result as { assignee_id?: number | null })?.assignee_id;
             if (assigneeId != null) handoffAssigneeIdSP = assigneeId;
-            sendHandoffNotification(agent_id, agent, messages, external_user_id).then(() => {}, () => {});
+            sendHandoffNotification(agent_id, agent, messagesToUse, external_user_id).then(() => {}, () => {});
             supabase.rpc("cancel_pending_followups", {
               p_agent_id: agent_id,
               p_conversation_id: responseConvId,
