@@ -9,7 +9,8 @@
     "migrate:tokens": "tsx scripts/run-token-migration.ts",
     "verify:tools": "tsx scripts/verify-agent-tools.ts",
     "verify:tokens": "tsx scripts/verify-token-tracking.ts",
-    "e2e": "tsx scripts/e2e-validation.ts"
+    "e2e": "tsx scripts/e2e-validation.ts",
+    "e2e:ideal": "tsx scripts/e2e-autoescola-ideal.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",

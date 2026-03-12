@@ -644,8 +644,22 @@ export async function queueRoutes(fastify: FastifyInstance) {
 
         const cfg = (agent.config || {}) as Record<string, any>;
 
-        const quietStart = Number(cfg.followup_quiet_start ?? 23);
-        const quietEnd = Number(cfg.followup_quiet_end ?? 7);
+        /** Extrai hora (0-23) de "HH:mm" ou número. O painel salva "07:00", "08:00" etc. */
+        function parseHour(v: any, defaultVal: number): number {
+          if (v == null || v === "") return defaultVal;
+          const n = Number(v);
+          if (!Number.isNaN(n) && n >= 0 && n <= 23) return n;
+          const s = String(v);
+          const m = s.match(/^(\d{1,2})/);
+          if (m) {
+            const h = parseInt(m[1], 10);
+            if (!Number.isNaN(h)) return Math.min(23, Math.max(0, h));
+          }
+          return defaultVal;
+        }
+
+        const quietStart = parseHour(cfg.followup_quiet_start, 23);
+        const quietEnd = parseHour(cfg.followup_quiet_end, 7);
         const nowBrasilia = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
         const currentHour = nowBrasilia.getHours();
         const inQuietHours = quietStart > quietEnd
