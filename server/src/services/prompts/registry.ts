@@ -33,6 +33,12 @@ import {
   DISPATCHER_PROMPT as DR_IURI_DISPATCHER,
   FOLLOWUP_PROMPT as DR_IURI_FOLLOWUP,
 } from "./dr-iuri.js";
+import {
+  SYSTEM_PROMPT as IDEAL_SYSTEM,
+  COMMUNICATION_RULES as IDEAL_COMM_RULES,
+  DISPATCHER_PROMPT as IDEAL_DISPATCHER,
+  FOLLOWUP_PROMPT as IDEAL_FOLLOWUP,
+} from "./autoescola-ideal.js";
 
 /**
  * Configura?�?�o de prompt por tenant.
@@ -119,6 +125,33 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     alwaysInjectCommRules: true,
     version: "v1.0",
     description: "Camila — Assistente Dr. Iuri (Otomodelação Salvador/BA)",
+  },
+  "ideal": {
+    systemPrompt: IDEAL_SYSTEM,
+    communicationRules: IDEAL_COMM_RULES,
+    dispatcherPrompt: IDEAL_DISPATCHER,
+    followupPrompt: IDEAL_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v5.0",
+    description: "Bia — SDR Autoescola Ideal (Sorocaba/SP)",
+  },
+  "autoescola-ideal": {
+    systemPrompt: IDEAL_SYSTEM,
+    communicationRules: IDEAL_COMM_RULES,
+    dispatcherPrompt: IDEAL_DISPATCHER,
+    followupPrompt: IDEAL_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v5.0",
+    description: "Bia — SDR Autoescola Ideal (Sorocaba/SP)",
+  },
+  "auto-escola-ideal": {
+    systemPrompt: IDEAL_SYSTEM,
+    communicationRules: IDEAL_COMM_RULES,
+    dispatcherPrompt: IDEAL_DISPATCHER,
+    followupPrompt: IDEAL_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v5.0",
+    description: "Bia — SDR Autoescola Ideal (Sorocaba/SP)",
   },
 };
 
