@@ -105,6 +105,33 @@ const KNOWN_BRANDS: Record<string, string> = {
   mini: "Mini", lexus: "Lexus", alfa: "Alfa Romeo",
 };
 
+/** Modelos conhecidos que implicam marca (cliente pode citar só o modelo, ex: "Siena"). Ordenado por tamanho decrescente para priorizar match mais longo (ex: "grand siena"). */
+const KNOWN_MODELS_TO_BRAND: Array<{ key: string; modelo: string; marca: string }> = [
+  { key: "grand siena", modelo: "Grand Siena", marca: "Fiat" },
+  { key: "siena", modelo: "Siena", marca: "Fiat" },
+  { key: "palio", modelo: "Palio", marca: "Fiat" },
+  { key: "uno", modelo: "Uno", marca: "Fiat" },
+  { key: "strada", modelo: "Strada", marca: "Fiat" },
+  { key: "corolla", modelo: "Corolla", marca: "Toyota" },
+  { key: "hilux", modelo: "Hilux", marca: "Toyota" },
+  { key: "onix", modelo: "Onix", marca: "Chevrolet" },
+  { key: "cruze", modelo: "Cruze", marca: "Chevrolet" },
+  { key: "tracker", modelo: "Tracker", marca: "Chevrolet" },
+  { key: "civic", modelo: "Civic", marca: "Honda" },
+  { key: "hb20", modelo: "HB20", marca: "Hyundai" },
+  { key: "creta", modelo: "Creta", marca: "Hyundai" },
+  { key: "virtus", modelo: "Virtus", marca: "Volkswagen" },
+  { key: "gol", modelo: "Gol", marca: "Volkswagen" },
+  { key: "t-cross", modelo: "T-Cross", marca: "Volkswagen" },
+  { key: "taos", modelo: "Taos", marca: "Volkswagen" },
+  { key: "s10", modelo: "S10", marca: "Chevrolet" },
+  { key: "compass", modelo: "Compass", marca: "Jeep" },
+  { key: "renegade", modelo: "Renegade", marca: "Jeep" },
+  { key: "q5", modelo: "Q5", marca: "Audi" },
+  { key: "a3", modelo: "A3", marca: "Audi" },
+  { key: "320i", modelo: "320i", marca: "BMW" },
+];
+
 interface ExtractedEntities {
   marca?: string;
   modelo?: string;
@@ -128,6 +155,18 @@ function extractVehicleEntities(text: string): ExtractedEntities {
         if (!yearTest && raw.length > 1) result.modelo = raw;
       }
       break;
+    }
+  }
+
+  // Se não encontrou marca/modelo por marca explícita, tenta reconhecer modelo conhecido (ex: "Siena", "vim pelo Siena")
+  if (!result.modelo || !result.marca) {
+    for (const { key, modelo, marca } of KNOWN_MODELS_TO_BRAND) {
+      const wordBoundary = new RegExp(`(?:^|[^a-zà-ÿ0-9])${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:[^a-zà-ÿ0-9]|$)`, "i");
+      if (wordBoundary.test(lower)) {
+        result.modelo = modelo;
+        if (!result.marca) result.marca = marca;
+        break;
+      }
     }
   }
 

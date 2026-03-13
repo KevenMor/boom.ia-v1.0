@@ -160,13 +160,23 @@ async function executeInventoryQuery(
       }
     }
 
-    if (marca) {
-      query = query.ilike("brand", `%${marca}%`);
-    }
     const PICKUP_SYNONYMS = ["camionete", "caminhonete", "picape", "pickup", "pikup"];
     const skipModelFilter = ["suv", "sedan", "hatch", ...PICKUP_SYNONYMS, ...MOTORIZACAO_KEYWORDS];
-    if (modelo && !skipModelFilter.some((k) => normalizeForSearch(modelo).includes(k))) {
-      query = query.ilike("model", `%${modelo}%`);
+    const hasMarca = Boolean(marca?.trim());
+    const hasModelo = Boolean(modelo?.trim() && !skipModelFilter.some((k) => normalizeForSearch(modelo!).includes(k)));
+
+    // Quando há apenas um termo (marca OU modelo), buscar em brand E model (OR) para cobrir casos como Haval,
+    // que pode estar em brand ou em model no inventário. Assim "tem haval?" encontra em qualquer coluna.
+    if (hasMarca && !hasModelo) {
+      const term = marca!.trim();
+      const orParts = [`brand.ilike.*${term}*`, `model.ilike.*${term}*`];
+      query = query.or(orParts.join(","));
+    } else if (hasModelo && !hasMarca) {
+      const term = modelo!.trim();
+      const orParts = [`brand.ilike.*${term}*`, `model.ilike.*${term}*`];
+      query = query.or(orParts.join(","));
+    } else if (hasMarca && hasModelo) {
+      query = query.ilike("brand", `%${marca}%`).ilike("model", `%${modelo}%`);
     }
     if (ano) {
       const yearNum = typeof ano === "string" ? parseInt(ano, 10) : ano;

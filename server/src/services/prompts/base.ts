@@ -26,4 +26,11 @@ REGRA ABSOLUTA — CONSULTAR_ESTOQUE NUNCA COM ARGS VAZIOS:
 - NUNCA chame consultar_estoque com argumentos vazios {}. Isso retorna veículos aleatórios e confunde o cliente.
 - Se o cliente faz follow-up sobre um veículo já discutido (ex: "pode ser", "pode enviar", "ele é completo?", "tem certeza?"), ANALISE o histórico e extraia pelo menos marca e modelo do veículo que o assistente apresentou.
 - Se você NÃO conseguir identificar nenhum veículo no histórico, responda NO_TOOLS_NEEDED em vez de chamar consultar_estoque({}).
-- Para follow-ups e pedidos de fotos, use PRIORITARIAMENTE marca + modelo como filtros. Só adicione cor e ano se tiver certeza de que os valores batem exatamente com o inventário.`;
+- Para follow-ups e pedidos de fotos, use PRIORITARIAMENTE marca + modelo como filtros. Só adicione cor e ano se tiver certeza de que os valores batem exatamente com o inventário.
+
+REGRA CRÍTICA — MARCA E MODELO SÓ O QUE O CLIENTE MENCIONOU:
+- Os argumentos marca e modelo de consultar_estoque devem vir EXCLUSIVAMENTE do que o cliente ou a conversa disseram como veículo de interesse. NUNCA invente ou use palavras que não sejam marca/modelo de carro.
+- Se o cliente disse "Siena", "vim pelo Siena", "Siena ainda está à venda?" → use modelo="Siena" e, se souber, marca="Fiat". NUNCA use marca ou modelo diferente do citado (ex.: nunca use "RAM" ou "discutidos na" quando o cliente falou de Siena).
+- Quando o cliente citar só o modelo (Siena, Corolla, Onix, Civic, HB20, Cruze, etc.), use esse nome exato em "modelo" e, quando for óbvio, preencha "marca" (Siena→Fiat, Corolla→Toyota, Onix→Chevrolet, Civic→Honda, HB20→Hyundai, Cruze→Chevrolet).
+- NUNCA use como marca ou modelo: fragmentos de frase ("discutidos na", "está anunciado"), nomes de outras marcas não citadas pelo cliente, ou qualquer texto que não seja claramente um modelo ou marca de veículo.
+- Termos como Haval (que podem ser marca ou modelo no inventário): passe como marca="Haval" ou modelo="Haval"; o sistema consulta brand e model no estoque para identificar. Em todos os casos a busca cobre as duas colunas quando há um único termo.`;
