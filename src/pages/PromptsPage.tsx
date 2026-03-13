@@ -134,14 +134,26 @@ export default function PromptsPage() {
     return dash > 0 ? desc.substring(dash + 1).trim() : "";
   }
 
-  // Filter tenants by selected tenant slug
-  const tenants = selectedTenant
+  // Normaliza slug para comparação (remove hífens e espaços)
+  function norm(s: string) {
+    return s.toLowerCase().replace(/[\s-]/g, "");
+  }
+
+  // Filter tenants by selected tenant slug (match exato ou normalizado para cobrir "ideal" vs "auto-escola-ideal")
+  const filtered = selectedTenant
     ? allTenants.filter((t) => {
         const tenantSlug = selectedTenant.slug.toLowerCase();
         const promptSlug = t.slug.toLowerCase();
-        return promptSlug === tenantSlug || promptSlug.startsWith(tenantSlug) || tenantSlug.startsWith(promptSlug);
+        if (promptSlug === tenantSlug || promptSlug.startsWith(tenantSlug) || tenantSlug.startsWith(promptSlug))
+          return true;
+        const nTenant = norm(selectedTenant.slug);
+        const nPrompt = norm(t.slug);
+        return nTenant === nPrompt || nTenant.includes(nPrompt) || nPrompt.includes(nTenant);
       })
     : allTenants;
+
+  // Se filtrou por tenant e deu vazio, mostra todos para não ficar em branco
+  const tenants = selectedTenant && filtered.length === 0 ? allTenants : filtered;
 
   const totalChars = tenants.reduce((sum, t) => sum + t.systemPromptLength + t.communicationRulesLength + t.dispatcherPromptLength + t.followupPromptLength, 0);
 

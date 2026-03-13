@@ -907,6 +907,7 @@ export async function executeTool(
       return executeCalendarQuery(supabase, tool, args, agentId);
 
     case "nearest_unit":
+    case "consultar_unidade":
       return executeNearestUnit(args);
 
     case "chatwoot_assign":

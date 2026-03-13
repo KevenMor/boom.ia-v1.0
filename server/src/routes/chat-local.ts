@@ -281,6 +281,15 @@ function isAppraisalContext(messages: Array<{ role: string; content: string }>):
   );
 }
 
+/** Extrai CEP da mensagem (8 dígitos, formato 12345-678 ou 12345678). Retorna só os dígitos ou null. */
+function extractCepFromText(text: string): string | null {
+  if (!text || typeof text !== "string") return null;
+  const match = text.replace(/\s+/g, " ").trim().match(/\b(\d{5}-?\d{3})\b/);
+  if (!match) return null;
+  const digits = match[1].replace(/\D/g, "");
+  return digits.length === 8 ? digits : null;
+}
+
 /**
  * Sanitiza nome de função para OpenAI e Gemini.
  * OpenAI exige: ^[a-zA-Z0-9_-]+$
@@ -880,8 +889,18 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             entityHint += `\n\n[CONTEXTO DE FLUXO] A última mensagem do assistente pedia dados do veículo do CLIENTE (marca, modelo, ano, km). Isso é APPRAISAL (intent A). NÃO chame consultar_fipe — avaliação é feita presencialmente pelo time comercial. Se o cliente já forneceu marca+modelo+ano, chame consultar_agenda com action "check_availability" e date "${todayISO}" para oferecer horários reais ao sugerir visita na loja. NÃO chame consultar_estoque.`;
           }
 
+          const hasNearestUnitTool = tools.some((t) => t.tool_type === "nearest_unit" || t.tool_type === "consultar_unidade");
+          const isIdealTenant = tenantSlug && /ideal|autoescola-ideal|auto-escola-ideal/i.test(String(tenantSlug));
+          let cepHint = "";
+          if (hasNearestUnitTool && isIdealTenant && lastUserMsg?.content) {
+            const cep = extractCepFromText(lastUserMsg.content);
+            if (cep) {
+              cepHint = `\n\n[CEP DETECTADO na mensagem do cliente: ${cep}. OBRIGATÓRIO: chame a ferramenta de consulta de CEP/unidade (consultar_cep, consultar_unidade ou nearest_unit) com argumento cep="${cep}" — sem cep a ferramenta retorna erro. NÃO retorne NO_TOOLS_NEEDED.]`;
+            }
+          }
+
           const dispatcherMessages = toOpenAIMessages(
-            getDispatcherPrompt(tenantSlug) + dispatcherDateContext + entityHint + schedulingHint,
+            getDispatcherPrompt(tenantSlug) + dispatcherDateContext + entityHint + cepHint + schedulingHint,
             messagesToUse
           );
 
@@ -1112,6 +1131,22 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 if (tool.tool_type === "chatwoot_assign") {
                   if (responseConvId) args = { ...args, conversation_id: responseConvId };
                   if (chatwoot_conversation_id != null) args = { ...args, chatwoot_conversation_id };
+                }
+                if (tool.tool_type === "nearest_unit" || tool.tool_type === "consultar_unidade") {
+                  if (!args.cep || String(args.cep).trim() === "") {
+                    const recentText = messagesToUse
+                      .slice(-8)
+                      .map((m) => (m.content ?? ""))
+                      .join(" ");
+                    const cepFallback = extractCepFromText(recentText);
+                    if (cepFallback) {
+                      args = { ...args, cep: cepFallback };
+                      console.log("[Chat-Local] consulta CEP/unidade sem cep: injetado do histórico:", cepFallback);
+                    }
+                  }
+                  if (!args.tenant_id && agent?.tenant_id) {
+                    args = { ...args, tenant_id: agent.tenant_id };
+                  }
                 }
                 console.log("[Chat-Local] Executando tool:", tc.function.name, "| args:", JSON.stringify(args));
                 debugEntries.push({ type: "tool_call", tool: tc.function.name, args, tool_type: "function" });
@@ -1777,6 +1812,22 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           if (tool.tool_type === "chatwoot_assign") {
             if (responseConvId) args = { ...args, conversation_id: responseConvId };
             if (chatwoot_conversation_id != null) args = { ...args, chatwoot_conversation_id };
+          }
+          if (tool.tool_type === "nearest_unit" || tool.tool_type === "consultar_unidade") {
+            if (!args.cep || String(args.cep).trim() === "") {
+              const recentTextSP = messagesToUse
+                .slice(-8)
+                .map((m) => (m.content ?? ""))
+                .join(" ");
+              const cepFallbackSP = extractCepFromText(recentTextSP);
+              if (cepFallbackSP) {
+                args = { ...args, cep: cepFallbackSP };
+                console.log("[Chat-Local] consulta CEP/unidade sem cep (single-provider): injetado do histórico:", cepFallbackSP);
+              }
+            }
+            if (!args.tenant_id && agent?.tenant_id) {
+              args = { ...args, tenant_id: agent.tenant_id };
+            }
           }
           console.log("[Chat-Local] Executando tool (single-provider):", tc.function.name, "| args:", JSON.stringify(args));
           const result = await executeTool(tool, args, agent_id);

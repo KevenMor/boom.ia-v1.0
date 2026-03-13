@@ -8,7 +8,7 @@
 // - Follow-ups e Lembretes funcionam para QUALQUER tenant (filtro por tenant_id).
 // ============================================================
 
-import { BASE_GREETING, DEFAULT_DISPATCHER_PROMPT } from "./base.js";
+import { BASE_GREETING, DEFAULT_DISPATCHER_PROMPT, GLOBAL_CONDUCT_RULES } from "./base.js";
 import {
   SYSTEM_PROMPT as PPL_SYSTEM,
   COMMUNICATION_RULES as PPL_COMM_RULES,
@@ -41,22 +41,22 @@ import {
 } from "./autoescola-ideal.js";
 
 /**
- * Configura?�?�o de prompt por tenant.
+ * Configuração de prompt por tenant.
  */
 interface TenantPromptConfig {
   /** System prompt completo (substitui o do banco se presente) */
   systemPrompt?: string;
-  /** Extens?�o de regras de comunica?�?�o (concatenada ao system prompt) */
+  /** Extensão de regras de comunicação (concatenada ao system prompt) */
   communicationRules?: string;
   /** Dispatcher prompt (Phase 1) */
   dispatcherPrompt: string;
-  /** Follow-up prompt (vari?�veis: {attempt}, {max_attempts}) */
+  /** Follow-up prompt (variáveis: {attempt}, {max_attempts}) */
   followupPrompt?: string;
   /** Always inject communication rules even without inventory tool */
   alwaysInjectCommRules?: boolean;
-  /** Vers?�o do prompt para refer?�ncia */
+  /** Versão do prompt para referência */
   version: string;
-  /** Descri?�?�o para exibi?�?�o no painel */
+  /** Descrição para exibição no painel */
   description: string;
 }
 
@@ -70,7 +70,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: PPL_DISPATCHER,
     followupPrompt: PPL_FOLLOWUP,
     version: "v2.0.0",
-    description: "Ana J??lia ��� SDR PPL Motors (Concession?�ria Sorocaba/SP)",
+    description: "Ana Júlia — SDR PPL Motors (Concessionária Sorocaba/SP)",
   },
   "ppl-motors": {
     systemPrompt: PPL_SYSTEM,
@@ -78,7 +78,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: PPL_DISPATCHER,
     followupPrompt: PPL_FOLLOWUP,
     version: "v2.0.0",
-    description: "Ana J??lia ��� SDR PPL Motors (Concession?�ria Sorocaba/SP)",
+    description: "Ana Júlia — SDR PPL Motors (Concessionária Sorocaba/SP)",
   },
   "instituto-vicentim-maekawa": {
     systemPrompt: IVM_SYSTEM,
@@ -87,9 +87,9 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     followupPrompt: IVM_FOLLOWUP,
     alwaysInjectCommRules: true,
     version: "v1.2.0",
-    description: "Mariana ��� Recepcionista Instituto Vicentim Maekawa (Odontologia Sorocaba/SP)",
+    description: "Mariana — Recepcionista Instituto Vicentim Maekawa (Odontologia Sorocaba/SP)",
   },
-  // Typo variant in database ��� maps to the same config
+  // Typo variant in database — maps to the same config
   "insituto-vicentim-maekawa": {
     systemPrompt: IVM_SYSTEM,
     communicationRules: IVM_COMM_RULES,
@@ -97,7 +97,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     followupPrompt: IVM_FOLLOWUP,
     alwaysInjectCommRules: true,
     version: "v1.2.0",
-    description: "Mariana ��� Recepcionista Instituto Vicentim Maekawa (Odontologia Sorocaba/SP)",
+    description: "Mariana — Recepcionista Instituto Vicentim Maekawa (Odontologia Sorocaba/SP)",
   },
   "pet-home": {
     systemPrompt: PH_SYSTEM,
@@ -106,7 +106,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     followupPrompt: PH_FOLLOWUP,
     alwaysInjectCommRules: true,
     version: "v1.2.1",
-    description: "Tia Ana ��� Atendente Pet Home (Hotel e Creche para Cachorros Sorocaba/SP)",
+    description: "Tia Ana — Atendente Pet Home (Hotel e Creche para Cachorros Sorocaba/SP)",
   },
   "pet-home-tia-erica": {
     systemPrompt: PH_SYSTEM,
@@ -115,7 +115,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     followupPrompt: PH_FOLLOWUP,
     alwaysInjectCommRules: true,
     version: "v1.2.1",
-    description: "Tia Ana ��� Atendente Pet Home (Hotel e Creche para Cachorros Sorocaba/SP)",
+    description: "Tia Ana — Atendente Pet Home (Hotel e Creche para Cachorros Sorocaba/SP)",
   },
   "dr-iuri": {
     systemPrompt: DR_IURI_SYSTEM,
@@ -132,7 +132,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: IDEAL_DISPATCHER,
     followupPrompt: IDEAL_FOLLOWUP,
     alwaysInjectCommRules: true,
-    version: "v5.0",
+    version: "v8.0-flash",
     description: "Bia — SDR Autoescola Ideal (Sorocaba/SP)",
   },
   "autoescola-ideal": {
@@ -141,7 +141,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: IDEAL_DISPATCHER,
     followupPrompt: IDEAL_FOLLOWUP,
     alwaysInjectCommRules: true,
-    version: "v5.0",
+    version: "v8.0-flash",
     description: "Bia — SDR Autoescola Ideal (Sorocaba/SP)",
   },
   "auto-escola-ideal": {
@@ -150,7 +150,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: IDEAL_DISPATCHER,
     followupPrompt: IDEAL_FOLLOWUP,
     alwaysInjectCommRules: true,
-    version: "v5.0",
+    version: "v8.0-flash",
     description: "Bia — SDR Autoescola Ideal (Sorocaba/SP)",
   },
 };
@@ -158,9 +158,10 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
 /**
  * Retorna o prompt system completo para um agente, compondo:
  * 1. System prompt do tenant (se registrado) OU system_prompt do agente (do banco)
- * 2. Regras de comunica?�?�o do tenant (se existir e agente tem inventory tool)
- * 3. Instru?�?�es base de sauda?�?�o (sempre)
- * 4. Contexto de pet (nome + gênero inferido) para Pet Home, quando aplicável
+ * 2. Regras de comunicação do tenant (se existir e agente tem inventory tool)
+ * 3. Instruções base de saudação (sempre)
+ * 4. Regras globais de conduta (nome/dados só do que o cliente informou — sempre)
+ * 5. Contexto de pet (nome + gênero inferido) para Pet Home, quando aplicável
  */
 export function buildSystemPrompt(
   agentSystemPrompt: string,
@@ -173,17 +174,18 @@ export function buildSystemPrompt(
   const shouldInjectComm = (hasInventoryTool && config?.communicationRules) || config?.alwaysInjectCommRules;
   const commRules = (shouldInjectComm && config?.communicationRules) ? "\n\n" + config.communicationRules : "";
   const greeting = "\n\n" + BASE_GREETING;
+  const globalRules = "\n\n" + GLOBAL_CONDUCT_RULES;
 
-  // Inject current Brasilia datetime so the model knows "hoje" and "amanh?�"
+  // Inject current Brasilia datetime so the model knows "hoje" and "amanhã"
   const now = new Date();
   const brasiliaFormatter = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
   const nowStr = brasiliaFormatter.format(now);
   const todayISO = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(now);
-  const dateContext = `\n\n[CONTEXTO TEMPORAL] Agora: ${nowStr} (Bras?�lia). Hoje: ${todayISO}. Use estas datas como refer?�ncia ao falar de "hoje", "amanh?�", dias da semana, etc.`;
+  const dateContext = `\n\n[CONTEXTO TEMPORAL] Agora: ${nowStr} (Brasília). Hoje: ${todayISO}. Use estas datas como referência ao falar de "hoje", "amanhã", dias da semana, etc.`;
 
   const petContextBlock = petContext ? `\n\n${petContext}` : "";
 
-  return base + commRules + greeting + dateContext + petContextBlock;
+  return base + commRules + greeting + globalRules + dateContext + petContextBlock;
 }
 
 /**
@@ -196,7 +198,7 @@ export function getDispatcherPrompt(tenantSlug: string | null): string {
 
 /**
  * Retorna o follow-up prompt para um tenant.
- * Se n?�o houver configura?�?�o espec?�fica, retorna null (usa o default do process-followups).
+ * Se não houver configuração específica, retorna null (usa o default do process-followups).
  */
 export function getFollowupPrompt(tenantSlug: string | null): string | null {
   const config = tenantSlug ? TENANT_PROMPTS[tenantSlug] : undefined;
@@ -204,7 +206,7 @@ export function getFollowupPrompt(tenantSlug: string | null): string | null {
 }
 
 /**
- * Retorna todas as configura?�?�es de prompts para exibi?�?�o no frontend.
+ * Retorna todas as configurações de prompts para exibição no frontend.
  */
 export function getAllPromptConfigs(): Record<string, TenantPromptConfig & { slug: string }> {
   const result: Record<string, TenantPromptConfig & { slug: string }> = {};
@@ -218,7 +220,7 @@ export function getAllPromptConfigs(): Record<string, TenantPromptConfig & { slu
 }
 
 /**
- * Retorna a configura?�?�o de prompt de um tenant espec?�fico.
+ * Retorna a configuração de prompt de um tenant específico.
  */
 export function getPromptConfig(tenantSlug: string): (TenantPromptConfig & { slug: string }) | null {
   const config = TENANT_PROMPTS[tenantSlug];
