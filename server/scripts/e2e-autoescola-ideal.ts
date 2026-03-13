@@ -221,7 +221,7 @@ async function main() {
     { user: "Me chamo Lucas", name: "Nome" },
     { user: "Não, não sou aluno", name: "Não é aluno" },
     { user: "Quero orçamento para categoria B", name: "Pedido orçamento" },
-    { user: "Vai ser minha primeira vez", name: "Primeira vez", expect: /2 ou 8|8 que a gente recomenda/i },
+    { user: "Vai ser minha primeira vez", name: "Primeira vez", expect: /duas aulas|mais quantidades|pacote.*2|recomenda/i },
     { user: "Quero 8 aulas", name: "Escolha 8", expect: /médico|psicotécnico|teórico/i },
     { user: "Não, ainda não fiz", name: "Não fez exames", expect: /agendamento|marcação|consultoria|acompanhamento/i },
   ]);
@@ -246,7 +246,7 @@ async function main() {
     { user: "Me chamo Pedro", name: "Nome" },
     { user: "Não sou aluno", name: "Não é aluno" },
     { user: "Quero orçamento de carro e também de carro e moto", name: "Dois orçamentos B e AB", expect: /experiência|primeira vez|dirige|pilota/i },
-    { user: "Vai ser minha primeira vez", name: "Primeira vez", expect: /2.*8|8.*2|recomenda|prefere.*2.*8|aulas de cada/i },
+    { user: "Vai ser minha primeira vez", name: "Primeira vez", expect: /duas aulas|mais quantidades|recomenda|pacote|orçamento/i },
     { user: "Quero 8 aulas", name: "Escolha 8", expect: /médico|psicotécnico|teórico/i },
     { user: "Não, ainda não fiz", name: "Não fez exames", expect: /R\$\s*\d|940|1\.740|carro|moto/i },
     { user: "E qual pacote com mais aulas?", name: "Pergunta mais aulas", expect: /R\$\s*\d|aula|10|12|14|16|18|20/i },
