@@ -9,6 +9,7 @@ import { webhookRoutes } from "./routes/webhooks.js";
 import { toolsRoutes } from "./routes/tools.js";
 import { adminRoutes } from "./routes/admin.js";
 import { inventoryRoutes } from "./routes/inventory.js";
+import { ragRoutes } from "./routes/rag.js";
 import { contactsRoutes } from "./routes/contacts.js";
 import { demoRoutes } from "./routes/demo.js";
 
@@ -78,6 +79,7 @@ async function build() {
   fastify.register(toolsRoutes, { prefix: "/api" });
   fastify.register(adminRoutes, { prefix: "/api" });
   fastify.register(inventoryRoutes, { prefix: "/api" });
+  fastify.register(ragRoutes, { prefix: "/api" });
   fastify.register(contactsRoutes, { prefix: "/api" });
   fastify.register(demoRoutes, { prefix: "/api" });
 

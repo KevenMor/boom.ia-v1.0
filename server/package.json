@@ -10,9 +10,12 @@
     "verify:tools": "tsx scripts/verify-agent-tools.ts",
     "verify:tokens": "tsx scripts/verify-token-tracking.ts",
     "e2e": "tsx scripts/e2e-validation.ts",
-    "e2e:ideal": "tsx scripts/e2e-autoescola-ideal.ts"
+    "e2e:ideal": "tsx scripts/e2e-autoescola-ideal.ts",
+    "scrape:vicentim": "tsx scripts/scrape-vicentim-website.ts",
+    "ingest:vicentim": "node scripts/run-ingest-vicentim.mjs"
   },
   "dependencies": {
+    "cheerio": "^1.0.0",
     "@fastify/cors": "^10.0.1",
     "undici": "^7.0.0",
     "@fastify/env": "^5.0.1",
