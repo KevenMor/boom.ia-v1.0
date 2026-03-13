@@ -56,47 +56,54 @@ function isAgendarLink(href: string): boolean {
   );
 }
 
+/** Scrape uma única página (evita acumular 21 DOMs em memória) */
+async function scrapeOnePage(pagePath: string): Promise<PageContent | null> {
+  const url = `${BASE_URL}${pagePath}`;
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; VicentimRAG/1.0; +https://boom-agents)" },
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+    const $ = cheerio.load(html);
+
+    const pageTitle =
+      $("title").text().replace(/ - Instituto Vicentim Maekawa.*$/, "").trim() ||
+      $("h1").first().text().trim() ||
+      (pagePath === "/" ? "Instituto Vicentim Maekawa - Início" : "Página");
+
+    const bodyParts: string[] = [];
+    $("main#content .elementor-widget-heading .elementor-heading-title").each((_, el) => {
+      const text = $(el).text().trim();
+      if (text && !isAgendarLink(text) && text.length > 10) bodyParts.push(text);
+    });
+
+    const faqs: { pergunta: string; resposta: string }[] = [];
+    $(".elementor-toggle-item").each((_, item) => {
+      const $item = $(item);
+      const pergunta = $item.find(".elementor-toggle-title").text().trim();
+      const resposta = $item.find(".elementor-tab-content p").text().trim();
+      if (pergunta && resposta) faqs.push({ pergunta, resposta });
+    });
+
+    let bodyText = cleanText(bodyParts.join("\n\n"));
+    const faqText = faqs.map((f) => `P: ${f.pergunta}\nR: ${f.resposta}`).join("\n\n");
+    if (faqText) bodyText = bodyText ? `${bodyText}\n\n---\n\n${faqText}` : faqText;
+
+    if (bodyText || faqs.length > 0) {
+      return { url, title: pageTitle, bodyText, faqs };
+    }
+  } catch {
+    /* skip */
+  }
+  return null;
+}
+
 export async function scrapeVicentimPages(): Promise<PageContent[]> {
   const results: PageContent[] = [];
   for (const page of PAGES) {
-    const url = `${BASE_URL}${page.path}`;
-    try {
-      const res = await fetch(url, {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; VicentimRAG/1.0; +https://boom-agents)" },
-      });
-      if (!res.ok) continue;
-      const html = await res.text();
-      const $ = cheerio.load(html);
-
-      const pageTitle =
-        $("title").text().replace(/ - Instituto Vicentim Maekawa.*$/, "").trim() ||
-        $("h1").first().text().trim() ||
-        (page.path === "/" ? "Instituto Vicentim Maekawa - Início" : "Página");
-
-      const bodyParts: string[] = [];
-      $("main#content .elementor-widget-heading .elementor-heading-title").each((_, el) => {
-        const text = $(el).text().trim();
-        if (text && !isAgendarLink(text) && text.length > 10) bodyParts.push(text);
-      });
-
-      const faqs: { pergunta: string; resposta: string }[] = [];
-      $(".elementor-toggle-item").each((_, item) => {
-        const $item = $(item);
-        const pergunta = $item.find(".elementor-toggle-title").text().trim();
-        const resposta = $item.find(".elementor-tab-content p").text().trim();
-        if (pergunta && resposta) faqs.push({ pergunta, resposta });
-      });
-
-      let bodyText = cleanText(bodyParts.join("\n\n"));
-      const faqText = faqs.map((f) => `P: ${f.pergunta}\nR: ${f.resposta}`).join("\n\n");
-      if (faqText) bodyText = bodyText ? `${bodyText}\n\n---\n\n${faqText}` : faqText;
-
-      if (bodyText || faqs.length > 0) {
-        results.push({ url, title: pageTitle, bodyText, faqs });
-      }
-    } catch {
-      /* skip */
-    }
+    const content = await scrapeOnePage(page.path);
+    if (content) results.push(content);
     await new Promise((r) => setTimeout(r, 300));
   }
   return results;
@@ -177,15 +184,17 @@ export async function runVicentimIngest(
   const schema = tenant.db_name;
   const agentId = agent.id;
 
-  const allPages = await scrapeVicentimPages();
   const offset = options?.pageOffset ?? 0;
-  const limit = options?.pageLimit ?? allPages.length;
-  const pages = allPages.slice(offset, offset + limit);
+  const limit = options?.pageLimit ?? 5;
+  const pageSlice = PAGES.slice(offset, offset + limit);
 
   const errors: string[] = [];
   let chunksInserted = 0;
 
-  for (const page of pages) {
+  for (const pageDef of pageSlice) {
+    const page = await scrapeOnePage(pageDef.path);
+    if (!page) continue;
+    await new Promise((r) => setTimeout(r, 300));
     if (!page.bodyText || page.bodyText.length < 50) continue;
 
     const title =
@@ -253,7 +262,7 @@ export async function runVicentimIngest(
 
   return {
     success: errors.length === 0,
-    pagesProcessed: pages.length,
+    pagesProcessed: pageSlice.length,
     chunksInserted,
     errors: errors.length > 0 ? errors : undefined,
   };

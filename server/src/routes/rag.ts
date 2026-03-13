@@ -24,20 +24,19 @@ export async function ragRoutes(fastify: FastifyInstance) {
     }
 
     const pageOffset = parseInt((req.query as { page_offset?: string })?.page_offset || "0", 10);
-    const pageLimit = (req.query as { page_limit?: string })?.page_limit
-      ? parseInt((req.query as { page_limit: string }).page_limit, 10)
-      : undefined;
+    const pageLimitRaw = (req.query as { page_limit?: string })?.page_limit;
+    const pageLimit = pageLimitRaw ? parseInt(pageLimitRaw, 10) : 5;
 
     reply.code(202).send({
       success: true,
       message: "Ingest iniciado em background",
       pageOffset: isNaN(pageOffset) ? 0 : pageOffset,
-      pageLimit: pageLimit && !isNaN(pageLimit) ? pageLimit : undefined,
+      pageLimit: isNaN(pageLimit) ? 5 : pageLimit,
     });
 
     runVicentimIngest(supabase, openaiKey, {
       pageOffset: isNaN(pageOffset) ? 0 : pageOffset,
-      pageLimit: pageLimit && !isNaN(pageLimit) ? pageLimit : undefined,
+      pageLimit: isNaN(pageLimit) ? 5 : pageLimit,
     })
       .then((result) => {
         fastify.log.info(

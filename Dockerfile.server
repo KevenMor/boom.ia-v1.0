@@ -18,5 +18,7 @@ RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
 EXPOSE 3001
 ENV NODE_ENV=production
+# Heap 8GB para evitar OOM em ingest RAG e outras operações pesadas
+ENV NODE_OPTIONS="--max-old-space-size=8192"
 # Wrapper para sempre logar antes do Node (Swarm/Portainer mostra o erro se crashar)
 CMD ["sh", "-c", "echo '[Boom] Server starting...' && exec node dist/index.js"]
