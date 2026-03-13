@@ -1069,6 +1069,7 @@ CRITICAL RULES
  */
 export const FOLLOWUP_PROMPT = `[SISTEMA INTERNO - FOLLOW-UP AUTOM├üTICO]
 Escreva APENAS uma mensagem de follow-up (tentativa {attempt} de {max_attempts}).
+(O sistema N├ÂO envia follow-up quando o cliente j├í deixou claro que n├úo tem interesse — ex.: respondeu "N├úo" ├á oferta de op├º├Áes ou modelos parecidos.)
 
 REGRAS OBRIGAT├ôRIAS:
 - No m├íximo 1 ou 2 frases curtas e objetivas.

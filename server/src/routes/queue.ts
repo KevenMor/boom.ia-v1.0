@@ -785,6 +785,30 @@ export async function queueRoutes(fastify: FastifyInstance) {
           continue;
         }
 
+        // --- CENÁRIO 1b: Cliente deixou claro que NÃO tem mais interesse (ex.: disse "Não" a oferta de opções parecidas) ---
+        const userDeclinedNoInterest = (() => {
+          const declinePattern = /^(n[aã]o|nao|nope|dispenso|t[aá] bom|j[aá] encontrei|desisti|n[aã]o quero|n[aã]o preciso|n[aã]o obrigad[oa]|deixa (pra )?lá|sem interesse|obrigad[oa]?\s*[,.]?\s*(mas\s+)?n[aã]o|n[aã]o\s+obrigad[oa])[\s.!?]*$/i;
+          const recent = conversationMessages.slice(-10);
+          for (let i = recent.length - 1; i >= 0; i--) {
+            if (recent[i].role === "user") {
+              const content = (recent[i].content || "").trim();
+              if (declinePattern.test(content) || (content.length <= 25 && /^n[aã]o\b/i.test(content))) {
+                return true;
+              }
+              break;
+            }
+          }
+          return false;
+        })();
+        if (userDeclinedNoInterest) {
+          console.log(`[FollowUp] Client declined / no interest expressed: cancelling ${item.id}`);
+          await supabase
+            .from("follow_up_queue")
+            .update({ status: "cancelled", cancel_reason: "client_no_interest", updated_at: new Date().toISOString() })
+            .eq("id", item.id);
+          continue;
+        }
+
         const lastMsg = conversationMessages[conversationMessages.length - 1];
         if (lastMsg?.role === "assistant") {
           // No reply from user since our last message — proceed with follow-up
