@@ -11,8 +11,8 @@ export async function ragRoutes(fastify: FastifyInstance) {
   /**
    * POST /api/rag/ingest-vicentim
    * Scrape + ingest do site Vicentim Maekawa no RAG.
-   * Chamado por cron (ex.: cron-job.org) — sem body obrigatório.
-   * Query: ?page_offset=0&page_limit=5 (opcional, para processar em lotes)
+   * Chamado por cron (ex.: cron-job.org) — retorna 202 imediato e processa em background
+   * para evitar timeout do cron. Query: ?page_offset=0&page_limit=5 (opcional)
    */
   fastify.post("/rag/ingest-vicentim", async (req: FastifyRequest, reply: FastifyReply) => {
     const nexusAuth = (req.headers["x-nexus-auth"] as string) || "";
@@ -28,24 +28,25 @@ export async function ragRoutes(fastify: FastifyInstance) {
       ? parseInt((req.query as { page_limit: string }).page_limit, 10)
       : undefined;
 
-    try {
-      const result = await runVicentimIngest(supabase, openaiKey, {
-        pageOffset: isNaN(pageOffset) ? 0 : pageOffset,
-        pageLimit: pageLimit && !isNaN(pageLimit) ? pageLimit : undefined,
-      });
+    reply.code(202).send({
+      success: true,
+      message: "Ingest iniciado em background",
+      pageOffset: isNaN(pageOffset) ? 0 : pageOffset,
+      pageLimit: pageLimit && !isNaN(pageLimit) ? pageLimit : undefined,
+    });
 
-      return reply.send({
-        success: result.success,
-        pagesProcessed: result.pagesProcessed,
-        chunksInserted: result.chunksInserted,
-        errors: result.errors,
+    runVicentimIngest(supabase, openaiKey, {
+      pageOffset: isNaN(pageOffset) ? 0 : pageOffset,
+      pageLimit: pageLimit && !isNaN(pageLimit) ? pageLimit : undefined,
+    })
+      .then((result) => {
+        fastify.log.info(
+          { pagesProcessed: result.pagesProcessed, chunksInserted: result.chunksInserted, errors: result.errors },
+          "RAG ingest Vicentim concluído"
+        );
+      })
+      .catch((err: unknown) => {
+        fastify.log.error(err, "RAG ingest Vicentim falhou");
       });
-    } catch (err: unknown) {
-      fastify.log.error(err);
-      return reply.status(500).send({
-        success: false,
-        error: (err as Error).message,
-      });
-    }
   });
 }

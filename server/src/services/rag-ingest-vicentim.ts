@@ -118,7 +118,9 @@ function chunkText(text: string): string[] {
   return chunks.filter((c) => c.length > 50);
 }
 
-async function getEmbedding(text: string, apiKey: string): Promise<number[]> {
+/** OpenAI aceita array de textos; retorna embeddings em lote (muito mais rápido) */
+async function getEmbeddingsBatch(texts: string[], apiKey: string): Promise<number[][]> {
+  const inputs = texts.map((t) => t.slice(0, 8000));
   const res = await fetch("https://api.openai.com/v1/embeddings", {
     method: "POST",
     headers: {
@@ -127,12 +129,13 @@ async function getEmbedding(text: string, apiKey: string): Promise<number[]> {
     },
     body: JSON.stringify({
       model: EMBEDDING_MODEL,
-      input: text.slice(0, 8000),
+      input: inputs,
     }),
   });
   if (!res.ok) throw new Error(`OpenAI embeddings: ${res.status}`);
-  const data = (await res.json()) as { data: { embedding: number[] }[] };
-  return data.data[0].embedding;
+  const data = (await res.json()) as { data: { embedding: number[]; index: number }[] };
+  const byIndex = (data.data || []).sort((a, b) => a.index - b.index);
+  return byIndex.map((d) => d.embedding);
 }
 
 export interface IngestResult {
@@ -214,24 +217,29 @@ export async function runVicentimIngest(
 
     const chunks = chunkText(page.bodyText);
     let inserted = 0;
-    for (let i = 0; i < chunks.length; i++) {
-      const content = chunks[i];
+    const BATCH_SIZE = 20;
+    for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+      const batch = chunks.slice(i, i + BATCH_SIZE);
       try {
-        const embedding = await getEmbedding(content, openaiKey);
-        const embeddingStr = `[${embedding.join(",")}]`;
-        const { error: chunkErr } = await supabase.rpc("rag_ingest_insert_chunk", {
-          p_schema: schema,
-          p_document_id: docId,
-          p_content: content,
-          p_embedding: embeddingStr,
-          p_chunk_index: i,
-          p_metadata: { url: page.url, title },
-        });
-        if (!chunkErr) inserted++;
+        const embeddings = await getEmbeddingsBatch(batch, openaiKey);
+        for (let j = 0; j < batch.length; j++) {
+          const content = batch[j];
+          const embedding = embeddings[j];
+          if (!embedding) continue;
+          const embeddingStr = `[${embedding.join(",")}]`;
+          const { error: chunkErr } = await supabase.rpc("rag_ingest_insert_chunk", {
+            p_schema: schema,
+            p_document_id: docId,
+            p_content: content,
+            p_embedding: embeddingStr,
+            p_chunk_index: i + j,
+            p_metadata: { url: page.url, title },
+          });
+          if (!chunkErr) inserted++;
+        }
       } catch (e) {
-        errors.push(`chunk ${i}: ${(e as Error).message}`);
+        errors.push(`chunks ${i}-${i + batch.length}: ${(e as Error).message}`);
       }
-      await new Promise((r) => setTimeout(r, 100));
     }
 
     await supabase.rpc("rag_ingest_update_document_status", {
