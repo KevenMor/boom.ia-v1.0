@@ -6,6 +6,12 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Chatwoot API usa api_access_token por padrão (doc oficial). Bearer só se cfg.chatwoot_use_bearer.
+function getChatwootAuthHeaders(apiToken: string, cfg?: Record<string, any>): Record<string, string> {
+  const useBearer = cfg && (cfg.chatwoot_use_bearer === true || cfg.chatwoot_auth_style === "bearer");
+  return useBearer ? { Authorization: `Bearer ${apiToken}` } : { api_access_token: apiToken };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -83,13 +89,14 @@ Deno.serve(async (req: Request) => {
       // Send via Chatwoot
       const baseUrl = (cfg.chatwoot_url as string).replace(/\/+$/, "");
       const msgUrl = `${baseUrl}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${chatwootConvId}/messages`;
+      const cwAuth = getChatwootAuthHeaders(cfg.chatwoot_api_token, cfg);
 
       try {
         const resp = await fetch(msgUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${cfg.chatwoot_api_token}`,
+            ...cwAuth,
           },
           body: JSON.stringify({
             content: content.trim(),

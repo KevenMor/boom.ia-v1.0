@@ -3,6 +3,7 @@
  * Usado por chat-local (agendamento, handoff) e tool-executor (enviar_notificacao).
  */
 import { createNexusClient } from "../services/supabase.js";
+import { getChatwootAuthHeaders } from "../services/delivery.js";
 
 export async function sendNotificationToGroup(
   agentId: string,
@@ -55,10 +56,11 @@ export async function sendNotificationToGroup(
 
     const baseUrl = cwUrl.replace(/\/+$/, "");
     const msgUrl = `${baseUrl}/api/v1/accounts/${cwAccountId}/conversations/${targetConvId}/messages`;
+    const cwAuth = getChatwootAuthHeaders(cwToken, cfg);
 
     const resp = await fetch(msgUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${cwToken}` },
+      headers: { "Content-Type": "application/json", ...cwAuth },
       body: JSON.stringify({ content: message, message_type: "outgoing", private: false }),
     });
 

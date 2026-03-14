@@ -843,9 +843,12 @@ async function executeChatwootAssign(
     if (assigneeId != null) assignBody.assignee_id = assigneeId;
     if (teamId != null) assignBody.team_id = teamId;
 
+    const { getChatwootAuthHeaders } = await import("./delivery.js");
+    const cwAuth = getChatwootAuthHeaders(cwToken as string, agCfg);
+
     const assignResp = await fetch(assignUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${cwToken as string}` },
+      headers: { "Content-Type": "application/json", ...cwAuth },
       body: JSON.stringify(assignBody),
     });
 

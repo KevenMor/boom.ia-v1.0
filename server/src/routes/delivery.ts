@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
 import {
+  getChatwootAuthHeaders,
   sendChatwootTextMessage,
   sendChatwootImageMessage,
   sendChatwootMediaMessage,
@@ -77,6 +78,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
         const baseUrl = cfg.chatwoot_url.replace(/\/+$/, "");
         const msgUrl = `${baseUrl}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${chatwoot_conversation_id}/messages`;
         const humanization = getHumanizationConfig(cfg);
+        const cwAuth = getChatwootAuthHeaders(cfg.chatwoot_api_token, cfg);
 
         const agentAssigneeId = cfg.agent_assignee_id != null ? Number(cfg.agent_assignee_id) : null;
         const assigneeId = handoff_assignee_id != null ? Number(handoff_assignee_id) : agentAssigneeId;
@@ -85,7 +87,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
             const assignUrl = `${baseUrl}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${chatwoot_conversation_id}/assignments`;
             const assignResp = await fetch(assignUrl, {
               method: "POST",
-              headers: { "Content-Type": "application/json", Authorization: `Bearer ${cfg.chatwoot_api_token}` },
+              headers: { "Content-Type": "application/json", ...cwAuth },
               body: JSON.stringify({ assignee_id: assigneeId }),
             });
             if (!assignResp.ok) {
@@ -118,10 +120,10 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
               const textOnly = part.replace(imageRegex, "").replace(/\n{3,}/g, "\n\n").trim();
 
               if (textOnly.trim()) {
-                await sendChatwootTextMessage(msgUrl, cfg.chatwoot_api_token, textOnly.trim());
+                await sendChatwootTextMessage(msgUrl, cwAuth, textOnly.trim());
               }
               for (const imageUrl of imageUrls) {
-                await sendChatwootImageMessage(msgUrl, cfg.chatwoot_api_token, imageUrl, "");
+                await sendChatwootImageMessage(msgUrl, cwAuth, imageUrl, "");
               }
               if (i < greetingParts.length - 1) {
                 await new Promise((r) => setTimeout(r, applyJitter(2000)));
@@ -132,7 +134,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
 
           await sendChatwootMediaMessage(
             msgUrl,
-            cfg.chatwoot_api_token,
+            cwAuth,
             welcome_video_url,
             "video/mp4",
             ""
@@ -140,7 +142,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
           await new Promise((r) => setTimeout(r, 8000));
 
           const nameQuestion = cfg.welcome_name_question || "Como posso te chamar?";
-          await sendChatwootTextMessage(msgUrl, cfg.chatwoot_api_token, nameQuestion);
+          await sendChatwootTextMessage(msgUrl, cwAuth, nameQuestion);
 
           if (conversation_id) {
             try {
@@ -169,7 +171,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
         } else {
           await replyToChatwoot(
             cfg.chatwoot_url,
-            cfg.chatwoot_api_token,
+            cwAuth,
             cfg.chatwoot_account_id,
             chatwoot_conversation_id,
             (response_text || "").trim(),
@@ -182,7 +184,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
             const assignUrl = `${baseUrl}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${chatwoot_conversation_id}/assignments`;
             await fetch(assignUrl, {
               method: "POST",
-              headers: { "Content-Type": "application/json", Authorization: `Bearer ${cfg.chatwoot_api_token}` },
+              headers: { "Content-Type": "application/json", ...cwAuth },
               body: JSON.stringify({ assignee_id: Number(handoff_assignee_id) }),
             });
           } catch {

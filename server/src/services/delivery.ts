@@ -1,3 +1,13 @@
+/**
+ * Headers de autenticação para API Chatwoot.
+ * Por padrão usa api_access_token (documentação oficial).
+ * Se cfg.chatwoot_use_bearer === true, usa Authorization: Bearer (para Nginx sem underscores_in_headers).
+ */
+export function getChatwootAuthHeaders(apiToken: string, cfg?: Record<string, unknown>): Record<string, string> {
+  const useBearer = cfg && (cfg.chatwoot_use_bearer === true || cfg.chatwoot_auth_style === "bearer");
+  return useBearer ? { Authorization: `Bearer ${apiToken}` } : { api_access_token: apiToken };
+}
+
 function extractImagesFromMarkdown(text: string): { textOnly: string; imageUrls: string[] } {
   const imageRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/g;
   const imageUrls: string[] = [];
@@ -11,12 +21,12 @@ function extractImagesFromMarkdown(text: string): { textOnly: string; imageUrls:
 
 async function sendChatwootTextMessage(
   url: string,
-  apiToken: string,
+  authHeaders: Record<string, string>,
   content: string
 ): Promise<boolean> {
   const resp = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiToken}` },
+    headers: { "Content-Type": "application/json", ...authHeaders },
     body: JSON.stringify({ content, message_type: "outgoing", private: false }),
   });
   if (!resp.ok) {
@@ -28,16 +38,16 @@ async function sendChatwootTextMessage(
 
 async function sendChatwootImageMessage(
   url: string,
-  apiToken: string,
+  authHeaders: Record<string, string>,
   imageUrl: string,
   caption?: string
 ): Promise<boolean> {
-  return sendChatwootImagesBatch(url, apiToken, [imageUrl], caption);
+  return sendChatwootImagesBatch(url, authHeaders, [imageUrl], caption);
 }
 
 async function sendChatwootImagesBatch(
   url: string,
-  apiToken: string,
+  authHeaders: Record<string, string>,
   imageUrls: string[],
   caption?: string
 ): Promise<boolean> {
@@ -74,13 +84,13 @@ async function sendChatwootImagesBatch(
   if (failedUrls.length > 0) {
     console.warn(`[Deliver] ${failedUrls.length}/${imageUrls.length} image(s) failed to download. Trying one-by-one.`);
     for (const imageUrl of failedUrls) {
-      const ok = await sendChatwootImageMessage(url, apiToken, imageUrl, "");
+      const ok = await sendChatwootImageMessage(url, authHeaders, imageUrl, "");
       if (!ok) console.warn(`[Deliver] Single-image send failed for: ${imageUrl.slice(0, 80)}...`);
     }
   }
 
   if (successfulDownloads.length === 0) {
-    for (const u of imageUrls) await sendChatwootTextMessage(url, apiToken, u);
+    for (const u of imageUrls) await sendChatwootTextMessage(url, authHeaders, u);
     return false;
   }
 
@@ -95,7 +105,7 @@ async function sendChatwootImagesBatch(
 
   const resp = await fetch(url, {
     method: "POST",
-    headers: { Authorization: `Bearer ${apiToken}` },
+    headers: { ...authHeaders },
     body: formData,
   });
 
@@ -108,7 +118,7 @@ async function sendChatwootImagesBatch(
 
 async function sendChatwootMediaMessage(
   url: string,
-  apiToken: string,
+  authHeaders: Record<string, string>,
   mediaUrl: string,
   contentType = "video/mp4",
   caption?: string
@@ -127,7 +137,7 @@ async function sendChatwootMediaMessage(
 
     const resp = await fetch(url, {
       method: "POST",
-      headers: { Authorization: `Bearer ${apiToken}` },
+      headers: { ...authHeaders },
       body: formData,
     });
     return resp.ok;
@@ -138,7 +148,7 @@ async function sendChatwootMediaMessage(
 
 async function setChatwootTyping(
   chatwootUrl: string,
-  apiToken: string,
+  authHeaders: Record<string, string>,
   accountId: string,
   conversationId: number,
   status: "on" | "off"
@@ -148,7 +158,7 @@ async function setChatwootTyping(
     const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}/toggle_typing_status`;
     const resp = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiToken}` },
+      headers: { "Content-Type": "application/json", ...authHeaders },
       body: JSON.stringify({ typing_status: status }),
     });
     if (!resp.ok) console.warn(`[Deliver] Typing ${status} failed ${resp.status}`);
@@ -163,7 +173,7 @@ async function setChatwootTyping(
  */
 async function sendChatwootPrivateNote(
   chatwootUrl: string,
-  apiToken: string,
+  authHeaders: Record<string, string>,
   accountId: string | number,
   conversationId: string | number,
   content: string
@@ -173,7 +183,7 @@ async function sendChatwootPrivateNote(
     const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}/messages`;
     const resp = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiToken}` },
+      headers: { "Content-Type": "application/json", ...authHeaders },
       body: JSON.stringify({ content, message_type: "outgoing", private: true }),
     });
     if (!resp.ok) {
@@ -247,7 +257,7 @@ function consolidateImageParts(parts: string[]): ConsolidatedPart[] {
 
 async function replyToChatwoot(
   chatwootUrl: string,
-  apiToken: string,
+  authHeaders: Record<string, string>,
   accountId: string,
   conversationId: number,
   content: string,
@@ -308,7 +318,7 @@ async function replyToChatwoot(
       fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'delivery.ts:imageBlock',message:'sending image block',data:{blockIdx:i,imageCount:urls.length,budgetRemaining:MAX_BUDGET_MS-(Date.now()-startTime)},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
       // #endregion
       for (let j = 0; j < urls.length; j++) {
-        await sendChatwootImagesBatch(msgUrl, apiToken, [urls[j]], "");
+        await sendChatwootImagesBatch(msgUrl, authHeaders, [urls[j]], "");
         if (j < urls.length - 1) {
           await safeDelay(applyJitter(IMAGE_BLOCK_DELAY_MS));
         }
@@ -327,12 +337,12 @@ async function replyToChatwoot(
       fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'delivery.ts:textBlock',message:'sending text block',data:{blockIdx:i,textPreview:block.content.slice(0,60),prevBlockWasImages,prevImageCount,budgetRemaining:MAX_BUDGET_MS-(Date.now()-startTime)},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
       // #endregion
       if (humanization.typingDelayMs > 0 && hasTimeBudget()) {
-        await setChatwootTyping(chatwootUrl, apiToken, accountId, conversationId, "on");
+        await setChatwootTyping(chatwootUrl, authHeaders, accountId, conversationId, "on");
         await safeDelay(applyJitter(humanization.typingDelayMs));
       }
-      await sendChatwootTextMessage(msgUrl, apiToken, block.content);
+      await sendChatwootTextMessage(msgUrl, authHeaders, block.content);
       if (humanization.typingDelayMs > 0) {
-        setChatwootTyping(chatwootUrl, apiToken, accountId, conversationId, "off").catch(() => {});
+        setChatwootTyping(chatwootUrl, authHeaders, accountId, conversationId, "off").catch(() => {});
       }
       prevBlockWasImages = false;
       prevImageCount = 0;
@@ -345,4 +355,13 @@ async function replyToChatwoot(
   }
 }
 
-export { extractImagesFromMarkdown, sendChatwootTextMessage, sendChatwootImageMessage, sendChatwootMediaMessage, sendChatwootPrivateNote, getHumanizationConfig, replyToChatwoot, applyJitter };
+export {
+  extractImagesFromMarkdown,
+  sendChatwootTextMessage,
+  sendChatwootImageMessage,
+  sendChatwootMediaMessage,
+  sendChatwootPrivateNote,
+  getHumanizationConfig,
+  replyToChatwoot,
+  applyJitter,
+};

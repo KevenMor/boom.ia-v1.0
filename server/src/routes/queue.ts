@@ -3,6 +3,7 @@ import { createNexusClient } from "../services/supabase.js";
 import { stripChatwootNamePrefix, sanitizeLLMOutput } from "../utils/sanitize.js";
 import { getFollowupPrompt } from "../services/prompts/registry.js";
 import {
+  getChatwootAuthHeaders,
   sendChatwootTextMessage,
   getHumanizationConfig,
   applyJitter,
@@ -679,8 +680,9 @@ export async function queueRoutes(fastify: FastifyInstance) {
           try {
             const chatwootBase = cfg.chatwoot_url.replace(/\/+$/, "");
             const convUrl = `${chatwootBase}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${item.chatwoot_conversation_id}`;
+            const cwAuth = getChatwootAuthHeaders(cfg.chatwoot_api_token, cfg);
             const convResp = await fetch(convUrl, {
-              headers: { Authorization: `Bearer ${cfg.chatwoot_api_token}` },
+              headers: cwAuth,
               signal: AbortSignal.timeout(10_000),
             });
 
@@ -890,12 +892,13 @@ export async function queueRoutes(fastify: FastifyInstance) {
           const chatwootBase = cfg.chatwoot_url.replace(/\/+$/, "");
           const msgUrl = `${chatwootBase}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${item.chatwoot_conversation_id}/messages`;
           const humanization = getHumanizationConfig(cfg);
+          const cwAuth = getChatwootAuthHeaders(cfg.chatwoot_api_token, cfg);
 
           if (humanization.typingDelayMs > 0) {
             await new Promise((r) => setTimeout(r, applyJitter(humanization.typingDelayMs)));
           }
 
-          const sent = await sendChatwootTextMessage(msgUrl, cfg.chatwoot_api_token, followupText);
+          const sent = await sendChatwootTextMessage(msgUrl, cwAuth, followupText);
           if (!sent) {
             console.error("[FollowUp] Chatwoot send failed for", item.id);
           }
@@ -1069,7 +1072,8 @@ export async function queueRoutes(fastify: FastifyInstance) {
       if (hasChatwoot && item.chatwoot_conversation_id) {
         const baseUrl = (cfg.chatwoot_url as string).replace(/\/+$/, "");
         const msgUrl = `${baseUrl}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${item.chatwoot_conversation_id}/messages`;
-        sent = await sendChatwootTextMessage(msgUrl, cfg.chatwoot_api_token as string, message);
+        const cwAuth = getChatwootAuthHeaders(cfg.chatwoot_api_token as string, cfg);
+        sent = await sendChatwootTextMessage(msgUrl, cwAuth, message);
       }
 
       if (!sent && hasWaha && item.external_user_id) {

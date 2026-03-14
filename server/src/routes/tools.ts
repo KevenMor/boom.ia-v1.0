@@ -4,6 +4,7 @@ import { executeTool } from "../services/tool-executor.js";
 import { runFipeQuery } from "../services/fipe.js";
 import { runFindNearestUnit } from "../services/find-nearest-unit.js";
 import { formatDateBR } from "../utils/agendaNotification.js";
+import { getChatwootAuthHeaders } from "../services/delivery.js";
 
 export async function toolsRoutes(fastify: FastifyInstance) {
   fastify.post("/tools/fipe", async (req: FastifyRequest, reply: FastifyReply) => {
@@ -473,10 +474,11 @@ export async function toolsRoutes(fastify: FastifyInstance) {
           const assignBody: Record<string, any> = {};
           if (assigneeId) assignBody.assignee_id = Number(assigneeId);
           if (teamId) assignBody.team_id = Number(teamId);
+          const cwAuth = getChatwootAuthHeaders(cwToken, agCfg);
 
           const assignResp = await fetch(assignUrl, {
             method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${cwToken}` },
+            headers: { "Content-Type": "application/json", ...cwAuth },
             body: JSON.stringify(assignBody),
           });
 

@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createClient } from "@supabase/supabase-js";
 import { sendViaWaha } from "../services/waha.js";
+import { getChatwootAuthHeaders } from "../services/delivery.js";
 
 async function sendViaChatwoot(
   cfg: Record<string, any>,
@@ -13,12 +14,13 @@ async function sendViaChatwoot(
   const apiToken = cfg.chatwoot_api_token;
   const inboxId = cfg.chatwoot_inbox_id;
   const phoneWithPlus = "+" + phone;
+  const cwAuth = getChatwootAuthHeaders(apiToken, cfg);
 
   let contactId: number | null = null;
   try {
     const searchResp = await fetch(
       `${baseUrl}/api/v1/accounts/${accountId}/contacts/search?q=${encodeURIComponent(phoneWithPlus)}`,
-      { headers: { Authorization: `Bearer ${apiToken}` } }
+      { headers: cwAuth }
     );
     if (searchResp.ok) {
       const searchData = await searchResp.json();
@@ -31,7 +33,7 @@ async function sendViaChatwoot(
     try {
       const createResp = await fetch(`${baseUrl}/api/v1/accounts/${accountId}/contacts`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiToken}` },
+        headers: { "Content-Type": "application/json", ...cwAuth },
         body: JSON.stringify({
           name: name?.trim() || phoneWithPlus,
           phone_number: phoneWithPlus,
@@ -61,7 +63,7 @@ async function sendViaChatwoot(
     if (inboxId) convBody.inbox_id = Number(inboxId);
     const convResp = await fetch(`${baseUrl}/api/v1/accounts/${accountId}/conversations`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiToken}` },
+      headers: { "Content-Type": "application/json", ...cwAuth },
       body: JSON.stringify(convBody),
     });
     if (convResp.ok) {
@@ -240,10 +242,11 @@ export async function contactsRoutes(fastify: FastifyInstance) {
 
       if (hasChatwoot) {
         const msgUrl = `${(cfg.chatwoot_url as string).replace(/\/+$/, "")}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${chatwootConvId}/messages`;
+        const cwAuth = getChatwootAuthHeaders(cfg.chatwoot_api_token, cfg);
         try {
           const resp = await fetch(msgUrl, {
             method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${cfg.chatwoot_api_token}` },
+            headers: { "Content-Type": "application/json", ...cwAuth },
             body: JSON.stringify({ content: content.trim(), message_type: "outgoing", private: false }),
           });
           if (resp.ok) {

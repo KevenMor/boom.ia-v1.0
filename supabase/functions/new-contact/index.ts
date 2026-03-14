@@ -45,6 +45,12 @@ async function sendViaWaha(
   }
 }
 
+// Chatwoot API usa api_access_token por padrão (doc oficial). Bearer só se cfg.chatwoot_use_bearer.
+function getChatwootAuthHeaders(apiToken: string, cfg?: Record<string, any>): Record<string, string> {
+  const useBearer = cfg && (cfg.chatwoot_use_bearer === true || cfg.chatwoot_auth_style === "bearer");
+  return useBearer ? { Authorization: `Bearer ${apiToken}` } : { api_access_token: apiToken };
+}
+
 // ---------- Chatwoot sender (fallback) ----------
 async function sendViaChatwoot(
   cfg: Record<string, any>,
@@ -57,6 +63,7 @@ async function sendViaChatwoot(
   const apiToken = cfg.chatwoot_api_token;
   const inboxId = cfg.chatwoot_inbox_id;
   const phoneWithPlus = "+" + phone;
+  const cwAuth = getChatwootAuthHeaders(apiToken, cfg);
 
   // Search or create contact
   let contactId: number | null = null;
@@ -64,7 +71,7 @@ async function sendViaChatwoot(
   try {
     const searchResp = await fetch(
       `${baseUrl}/api/v1/accounts/${accountId}/contacts/search?q=${encodeURIComponent(phoneWithPlus)}`,
-      { headers: { Authorization: `Bearer ${apiToken}` } }
+      { headers: cwAuth }
     );
     if (searchResp.ok) {
       const searchData = await searchResp.json();
@@ -84,7 +91,7 @@ async function sendViaChatwoot(
         `${baseUrl}/api/v1/accounts/${accountId}/contacts`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiToken}` },
+          headers: { "Content-Type": "application/json", ...cwAuth },
           body: JSON.stringify({
             name: name?.trim() || phoneWithPlus,
             phone_number: phoneWithPlus,
@@ -122,7 +129,7 @@ async function sendViaChatwoot(
       `${baseUrl}/api/v1/accounts/${accountId}/conversations`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiToken}` },
+        headers: { "Content-Type": "application/json", ...cwAuth },
         body: JSON.stringify(convBody),
       }
     );
