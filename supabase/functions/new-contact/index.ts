@@ -64,7 +64,7 @@ async function sendViaChatwoot(
   try {
     const searchResp = await fetch(
       `${baseUrl}/api/v1/accounts/${accountId}/contacts/search?q=${encodeURIComponent(phoneWithPlus)}`,
-      { headers: { api_access_token: apiToken } }
+      { headers: { Authorization: `Bearer ${apiToken}` } }
     );
     if (searchResp.ok) {
       const searchData = await searchResp.json();
@@ -84,7 +84,7 @@ async function sendViaChatwoot(
         `${baseUrl}/api/v1/accounts/${accountId}/contacts`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json", api_access_token: apiToken },
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiToken}` },
           body: JSON.stringify({
             name: name?.trim() || phoneWithPlus,
             phone_number: phoneWithPlus,
@@ -122,7 +122,7 @@ async function sendViaChatwoot(
       `${baseUrl}/api/v1/accounts/${accountId}/conversations`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", api_access_token: apiToken },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiToken}` },
         body: JSON.stringify(convBody),
       }
     );

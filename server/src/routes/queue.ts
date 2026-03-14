@@ -680,7 +680,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
             const chatwootBase = cfg.chatwoot_url.replace(/\/+$/, "");
             const convUrl = `${chatwootBase}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${item.chatwoot_conversation_id}`;
             const convResp = await fetch(convUrl, {
-              headers: { api_access_token: cfg.chatwoot_api_token },
+              headers: { Authorization: `Bearer ${cfg.chatwoot_api_token}` },
               signal: AbortSignal.timeout(10_000),
             });
 

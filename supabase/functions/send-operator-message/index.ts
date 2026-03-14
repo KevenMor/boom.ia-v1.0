@@ -89,7 +89,7 @@ Deno.serve(async (req: Request) => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            api_access_token: cfg.chatwoot_api_token,
+            Authorization: `Bearer ${cfg.chatwoot_api_token}`,
           },
           body: JSON.stringify({
             content: content.trim(),

@@ -845,7 +845,7 @@ async function executeChatwootAssign(
 
     const assignResp = await fetch(assignUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json", api_access_token: cwToken as string },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${cwToken as string}` },
       body: JSON.stringify(assignBody),
     });
 

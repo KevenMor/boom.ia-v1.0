@@ -839,53 +839,71 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             messagesToUse
           );
 
-          const dispatcherBody: Record<string, unknown> = {
-            model: dispatcherModel,
-            messages: dispatcherMessages,
-            stream: true,
-            stream_options: { include_usage: true },
-            temperature: 0.2,
-            tools: dispatcherTools,
-            tool_choice: "auto",
-          };
-
           const base = dispatcherConfig.baseUrl.replace(/\/+$/, "");
           const isGeminiBase = /generativelanguage\.googleapis\.com/i.test(base);
           const dispatcherApiUrl = isGeminiBase && !base.includes("/openai")
             ? `${base}/openai/chat/completions`
             : `${base}/chat/completions`;
 
-          console.log("[Chat-Local] Dispatcher request:", {
-            url: dispatcherApiUrl,
-            model: dispatcherBody.model,
-            hasAuth: !!dispatcherConfig.apiKey,
-            authLength: dispatcherConfig.apiKey?.length,
-          });
+          const DEPRECATED_GEMINI_FALLBACK: Record<string, string> = {
+            "gemini-2.0-flash-lite": "gemini-2.0-flash",
+            "models/gemini-2.0-flash-lite": "gemini-2.0-flash",
+          };
 
+          let dispatcherModelToUse = dispatcherModel;
           let dispatcherResp: Response;
-          try {
-            dispatcherResp = await fetch(dispatcherApiUrl, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${dispatcherConfig.apiKey}`,
-              },
-              body: JSON.stringify(dispatcherBody),
-              signal: AbortSignal.timeout(60000),
-            });
-          } catch (fetchErr: unknown) {
-            const e = fetchErr as { code?: string; message?: string };
-            const isNetworkError = e?.code === "ECONNRESET" || /ECONNRESET|ETIMEDOUT|ENOTFOUND|ECONNREFUSED/i.test(String(e?.message || ""));
-            console.error("[Chat-Local] Dispatcher fetch failed:", e?.message || fetchErr);
-            sendSse({ error: isNetworkError ? "Conexão com LLM interrompida. Tente novamente." : (e?.message || "Falha ao conectar com dispatcher") });
-            sendSse("[DONE]");
-            reply.raw.end();
-            return;
-          }
+          for (let attempt = 0; attempt < 2; attempt++) {
+            const dispatcherBody: Record<string, unknown> = {
+              model: dispatcherModelToUse,
+              messages: dispatcherMessages,
+              stream: true,
+              stream_options: { include_usage: true },
+              temperature: 0.2,
+              tools: dispatcherTools,
+              tool_choice: "auto",
+            };
 
-          if (!dispatcherResp.ok) {
+            console.log("[Chat-Local] Dispatcher request:", {
+              url: dispatcherApiUrl,
+              model: dispatcherBody.model,
+              attempt: attempt + 1,
+              hasAuth: !!dispatcherConfig.apiKey,
+              authLength: dispatcherConfig.apiKey?.length,
+            });
+
+            try {
+              dispatcherResp = await fetch(dispatcherApiUrl, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${dispatcherConfig.apiKey}`,
+                },
+                body: JSON.stringify(dispatcherBody),
+                signal: AbortSignal.timeout(60000),
+              });
+            } catch (fetchErr: unknown) {
+              const e = fetchErr as { code?: string; message?: string };
+              const isNetworkError = e?.code === "ECONNRESET" || /ECONNRESET|ETIMEDOUT|ENOTFOUND|ECONNREFUSED/i.test(String(e?.message || ""));
+              console.error("[Chat-Local] Dispatcher fetch failed:", e?.message || fetchErr);
+              sendSse({ error: isNetworkError ? "Conexão com LLM interrompida. Tente novamente." : (e?.message || "Falha ao conectar com dispatcher") });
+              sendSse("[DONE]");
+              reply.raw.end();
+              return;
+            }
+
+            if (dispatcherResp.ok) break;
+
             const errText = await dispatcherResp.text();
             console.error("[Chat-Local] Dispatcher error:", dispatcherResp.status, errText.slice(0, 200));
+
+            const is404Deprecated = dispatcherResp.status === 404 && /no longer available|deprecated/i.test(errText);
+            const fallbackModel = DEPRECATED_GEMINI_FALLBACK[dispatcherModelToUse] || DEPRECATED_GEMINI_FALLBACK[`models/${dispatcherModelToUse}`];
+            if (attempt === 0 && is404Deprecated && isGeminiBase && fallbackModel) {
+              console.log(`[Chat-Local] Modelo ${dispatcherModelToUse} deprecado, tentando fallback: ${fallbackModel}`);
+              dispatcherModelToUse = fallbackModel;
+              continue;
+            }
+
             sendSse({ error: providerErrorMessage(dispatcherResp.status, errText) });
             sendSse("[DONE]");
             reply.raw.end();

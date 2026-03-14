@@ -476,7 +476,7 @@ export async function toolsRoutes(fastify: FastifyInstance) {
 
           const assignResp = await fetch(assignUrl, {
             method: "POST",
-            headers: { "Content-Type": "application/json", api_access_token: cwToken },
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${cwToken}` },
             body: JSON.stringify(assignBody),
           });
 
@@ -507,114 +507,37 @@ export async function toolsRoutes(fastify: FastifyInstance) {
         }
 
         case "send_notification": {
-          const message = args?.message || args?.mensagem;
-          if (!message) {
-            result = {
-              error:
-                "message é obrigatório (texto da notificação composto pelo agente)",
-            };
+          let agentId = args?.agent_id;
+          if (!agentId) {
+            const { data: linkRows } = await supabase
+              .from("agent_tools")
+              .select("agent_id")
+              .eq("tool_id", tool.id)
+              .limit(1);
+            agentId = linkRows?.[0]?.agent_id;
+          }
+
+          if (!agentId) {
+            result = { error: "Nenhum agente vinculado a esta tool" };
             break;
           }
 
-          const execCfg = (tool.execution_config || {}) as Record<string, any>;
-          const channel = execCfg.channel || "chatwoot_message";
-          const targetConvId = args?.conversation_id || execCfg.conversation_id;
-
-          if (channel === "chatwoot_message") {
-            if (!targetConvId) {
-              result = {
-                error:
-                  "conversation_id não configurado. Configure o ID do grupo destino na tool.",
-              };
-              break;
-            }
-
-            let agentId = args?.agent_id;
-            if (!agentId) {
-              const { data: linkRows } = await supabase
-                .from("agent_tools")
-                .select("agent_id")
-                .eq("tool_id", tool.id)
-                .limit(1);
-              agentId = linkRows?.[0]?.agent_id;
-            }
-
-            if (!agentId) {
-              result = { error: "Nenhum agente vinculado a esta tool" };
-              break;
-            }
-
-            const { data: agentRow } = await supabase
-              .from("agents")
-              .select("config")
-              .eq("id", agentId)
-              .single();
-            const agCfg = (agentRow?.config || {}) as Record<string, any>;
-            const cwUrl = agCfg.chatwoot_url;
-            const cwToken = agCfg.chatwoot_api_token;
-            const cwAccountId = agCfg.chatwoot_account_id;
-
-            if (!cwUrl || !cwToken || !cwAccountId) {
-              result = {
-                error: "Chatwoot não configurado no agente vinculado",
-                agent_id: agentId,
-              };
-              break;
-            }
-
-            const baseUrl = cwUrl.replace(/\/+$/, "");
-            const msgUrl = `${baseUrl}/api/v1/accounts/${cwAccountId}/conversations/${targetConvId}/messages`;
-
-            const msgResp = await fetch(msgUrl, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", api_access_token: cwToken },
-              body: JSON.stringify({
-                content: message,
-                message_type: "outgoing",
-                private: false,
-              }),
-            });
-
-            const msgRespText = await msgResp.text();
-            if (!msgResp.ok) {
-              result = { error: `Falha ao enviar: ${msgResp.status}`, detail: msgRespText };
-            } else {
-              let parsed: any;
-              try {
-                parsed = JSON.parse(msgRespText);
-              } catch {
-                parsed = msgRespText;
-              }
-              result = {
-                status: "enviado",
-                channel: "chatwoot_message",
-                conversation_id: targetConvId,
-                chatwoot_response: parsed,
-              };
-            }
-          } else if (channel === "webhook") {
-            const webhookUrl = execCfg.webhook_url;
-            if (!webhookUrl) {
-              result = { error: "webhook_url não configurado na execution_config" };
-              break;
-            }
-            const resp = await fetch(webhookUrl, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                message,
-                timestamp: new Date().toISOString(),
-              }),
-            });
-            const respText = await resp.text();
-            result = {
-              status: resp.ok ? "enviado" : "erro",
-              channel: "webhook",
-              http_status: resp.status,
-              response: respText.slice(0, 2000),
-            };
-          } else {
-            result = { error: `Canal desconhecido: ${channel}` };
+          try {
+            const execResult = await executeTool(
+              {
+                id: tool.id,
+                name: tool.name,
+                tool_type: tool.tool_type,
+                tenant_id: tool.tenant_id,
+                execution_config: tool.execution_config,
+                function_def: tool.function_def,
+              },
+              args || {},
+              agentId
+            );
+            result = execResult.success ? execResult.result : { error: execResult.error };
+          } catch (e: any) {
+            result = { error: e?.message || "Falha ao enviar notificação" };
           }
           break;
         }

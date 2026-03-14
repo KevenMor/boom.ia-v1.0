@@ -85,7 +85,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
             const assignUrl = `${baseUrl}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${chatwoot_conversation_id}/assignments`;
             const assignResp = await fetch(assignUrl, {
               method: "POST",
-              headers: { "Content-Type": "application/json", api_access_token: cfg.chatwoot_api_token },
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${cfg.chatwoot_api_token}` },
               body: JSON.stringify({ assignee_id: assigneeId }),
             });
             if (!assignResp.ok) {
@@ -182,7 +182,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
             const assignUrl = `${baseUrl}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${chatwoot_conversation_id}/assignments`;
             await fetch(assignUrl, {
               method: "POST",
-              headers: { "Content-Type": "application/json", api_access_token: cfg.chatwoot_api_token },
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${cfg.chatwoot_api_token}` },
               body: JSON.stringify({ assignee_id: Number(handoff_assignee_id) }),
             });
           } catch {

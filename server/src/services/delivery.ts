@@ -16,7 +16,7 @@ async function sendChatwootTextMessage(
 ): Promise<boolean> {
   const resp = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json", api_access_token: apiToken },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiToken}` },
     body: JSON.stringify({ content, message_type: "outgoing", private: false }),
   });
   if (!resp.ok) {
@@ -95,7 +95,7 @@ async function sendChatwootImagesBatch(
 
   const resp = await fetch(url, {
     method: "POST",
-    headers: { api_access_token: apiToken },
+    headers: { Authorization: `Bearer ${apiToken}` },
     body: formData,
   });
 
@@ -127,7 +127,7 @@ async function sendChatwootMediaMessage(
 
     const resp = await fetch(url, {
       method: "POST",
-      headers: { api_access_token: apiToken },
+      headers: { Authorization: `Bearer ${apiToken}` },
       body: formData,
     });
     return resp.ok;
@@ -148,7 +148,7 @@ async function setChatwootTyping(
     const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}/toggle_typing_status`;
     const resp = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", api_access_token: apiToken },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiToken}` },
       body: JSON.stringify({ typing_status: status }),
     });
     if (!resp.ok) console.warn(`[Deliver] Typing ${status} failed ${resp.status}`);
@@ -173,7 +173,7 @@ async function sendChatwootPrivateNote(
     const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}/messages`;
     const resp = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", api_access_token: apiToken },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiToken}` },
       body: JSON.stringify({ content, message_type: "outgoing", private: true }),
     });
     if (!resp.ok) {

@@ -58,7 +58,7 @@ export async function sendNotificationToGroup(
 
     const resp = await fetch(msgUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json", api_access_token: cwToken },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${cwToken}` },
       body: JSON.stringify({ content: message, message_type: "outgoing", private: false }),
     });
 
