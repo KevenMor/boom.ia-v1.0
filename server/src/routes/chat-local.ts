@@ -6,6 +6,7 @@ import { executeTool, type ToolDef } from "../services/tool-executor.js";
 import { filterCommandLinesFromStream, sanitizeLLMOutput, fallbackSanitizeForRetry, restorePortugueseAccents } from "../utils/sanitize.js";
 import { buildPetGenderContext } from "../utils/petGenderByName.js";
 import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification, buildHandoffNotification, extractClientNameFromMessages, userHasProvidedNameInMessages, toBrasiliaISO } from "../utils/agendaNotification.js";
+import { sendNotificationToGroup } from "../utils/sendNotification.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 const MAX_TOOL_ITERATIONS = 5;
@@ -403,68 +404,6 @@ Gere a notificacao organizada.`;
  * 
  * Também agenda lembrete em appointment_reminders se reminder_enabled.
  */
-async function sendNotificationToGroup(
-  agentId: string,
-  agent: { config?: Record<string, unknown>; tenant_id?: string },
-  message: string
-): Promise<void> {
-  const supabase = createNexusClient();
-  try {
-    const { data: notifTools } = await supabase
-      .from("tools")
-      .select("id, tool_type, execution_config")
-      .eq("tool_type", "send_notification")
-      .limit(10);
-
-    if (!notifTools || notifTools.length === 0) {
-      console.warn("[Chat-Local] Nenhuma tool send_notification encontrada");
-      return;
-    }
-
-    const { data: agentToolLinks } = await supabase
-      .from("agent_tools")
-      .select("tool_id")
-      .eq("agent_id", agentId);
-    const linkedToolIds = new Set((agentToolLinks || []).map((l: { tool_id: string }) => l.tool_id));
-
-    const notifTool = notifTools.find((t: { id: string }) => linkedToolIds.has(t.id)) || notifTools[0];
-    const execCfg = (notifTool.execution_config || {}) as Record<string, unknown>;
-    const targetConvId = execCfg.conversation_id;
-
-    if (!targetConvId) {
-      console.warn("[Chat-Local] Tool send_notification sem conversation_id configurado");
-      return;
-    }
-
-    const cfg = (agent.config || {}) as Record<string, string>;
-    const cwUrl = cfg.chatwoot_url;
-    const cwToken = cfg.chatwoot_api_token;
-    const cwAccountId = cfg.chatwoot_account_id;
-
-    if (!cwUrl || !cwToken || !cwAccountId) {
-      console.warn("[Chat-Local] Chatwoot não configurado no agente para notificação");
-      return;
-    }
-
-    const baseUrl = cwUrl.replace(/\/+$/, "");
-    const msgUrl = `${baseUrl}/api/v1/accounts/${cwAccountId}/conversations/${targetConvId}/messages`;
-
-    const resp = await fetch(msgUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", api_access_token: cwToken },
-      body: JSON.stringify({ content: message, message_type: "outgoing", private: false }),
-    });
-
-    if (!resp.ok) {
-      console.error("[Chat-Local] Notificação falhou:", resp.status, await resp.text());
-    } else {
-      console.log("[Chat-Local] Notificação enviada com sucesso para conversa", targetConvId);
-    }
-  } catch (e) {
-    console.warn("[Chat-Local] Erro ao enviar notificação:", e);
-  }
-}
-
 async function sendAgendaNotification(
   agentId: string,
   agent: { config?: Record<string, unknown>; tenant_id?: string },
@@ -553,7 +492,7 @@ async function sendAgendaNotification(
     }
   }
 
-  await sendNotificationToGroup(agentId, agent, message);
+  await sendNotificationToGroup(agentId, message);
 }
 
 /**
@@ -573,7 +512,7 @@ async function sendHandoffNotification(
     undefined,
     messages
   );
-  await sendNotificationToGroup(agentId, agent, message);
+  await sendNotificationToGroup(agentId, message);
 }
 
 function normalizeParametersSchema(params: unknown): Record<string, unknown> {
@@ -1035,6 +974,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             ];
 
             const agendaCriarCache = new Map<string, { result: unknown; success: boolean }>();
+            let sendNotificationExecutedThisTurn = false;
 
             // consultar_fipe removido do fluxo (v3.5.0) — avaliações são presenciais
 
@@ -1177,10 +1117,15 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                     sendAgendaNotification(agent_id, agent, result.result, messagesToUse, external_user_id, responseConvId, chatwoot_conversation_id).catch(() => {});
                   }
                 }
+                if (tool.tool_type === "send_notification" && result.success) {
+                  sendNotificationExecutedThisTurn = true;
+                }
                 if (tool.tool_type === "chatwoot_assign" && result.success && responseConvId) {
                   const assigneeId = (result.result as { assignee_id?: number | null })?.assignee_id;
                   if (assigneeId != null) handoffAssigneeId = assigneeId;
-                  sendHandoffNotification(agent_id, agent, messagesToUse, external_user_id).then(() => {}, () => {});
+                  if (!sendNotificationExecutedThisTurn) {
+                    sendHandoffNotification(agent_id, agent, messagesToUse, external_user_id).then(() => {}, () => {});
+                  }
                   supabase.rpc("cancel_pending_followups", {
                     p_agent_id: agent_id,
                     p_conversation_id: responseConvId,
@@ -1743,6 +1688,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
         llmMessages.push(assistantMsg);
 
         const agendaCriarCacheSP = new Map<string, { result: unknown; success: boolean }>();
+        let sendNotificationExecutedThisTurnSP = false;
 
         for (const tc of toolCalls) {
           const tool = nameToTool.get(tc.function.name);
@@ -1850,10 +1796,15 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               sendAgendaNotification(agent_id, agent, result.result, messagesToUse, external_user_id, responseConvId, chatwoot_conversation_id).catch(() => {});
             }
           }
+          if (tool.tool_type === "send_notification" && result.success) {
+            sendNotificationExecutedThisTurnSP = true;
+          }
           if (tool.tool_type === "chatwoot_assign" && result.success && responseConvId) {
             const assigneeId = (result.result as { assignee_id?: number | null })?.assignee_id;
             if (assigneeId != null) handoffAssigneeIdSP = assigneeId;
-            sendHandoffNotification(agent_id, agent, messagesToUse, external_user_id).then(() => {}, () => {});
+            if (!sendNotificationExecutedThisTurnSP) {
+              sendHandoffNotification(agent_id, agent, messagesToUse, external_user_id).then(() => {}, () => {});
+            }
             supabase.rpc("cancel_pending_followups", {
               p_agent_id: agent_id,
               p_conversation_id: responseConvId,

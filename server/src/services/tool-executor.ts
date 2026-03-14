@@ -1,6 +1,8 @@
 import { createNexusClient } from "./supabase.js";
 import { runFipeQuery } from "./fipe.js";
 import { runFindNearestUnit } from "./find-nearest-unit.js";
+import { buildHandoffNotification } from "../utils/agendaNotification.js";
+import { sendNotificationToGroup } from "../utils/sendNotification.js";
 
 export interface ToolExecutionResult {
   success: boolean;
@@ -913,16 +915,122 @@ export async function executeTool(
     case "chatwoot_assign":
       return executeChatwootAssign(supabase, tool, args, agentId);
 
+    case "send_notification":
+      return executeSendNotification(agentId, args);
+
+    case "rag_search":
+      return executeRagSearch(supabase, tool, args, agentId);
+
     case "web_scraper":
     case "api_rest":
     case "sql_query":
-    case "rag_search":
-    case "send_notification":
     default:
       return {
         success: false,
         result: null,
         error: `Tool type ${tool.tool_type} not yet supported in local chat`,
       };
+  }
+}
+
+async function executeSendNotification(
+  agentId: string,
+  args: Record<string, unknown>
+): Promise<ToolExecutionResult> {
+  const nome = String(args?.nome ?? args?.nome_cliente ?? args?.name ?? "").trim() || "Cliente";
+  const telefone = String(
+    args?.telefone ?? args?.telefone_cliente ?? args?.phone ?? args?.numero ?? ""
+  ).trim();
+  const message = buildHandoffNotification(nome, telefone || undefined);
+  const { success, error } = await sendNotificationToGroup(agentId, message);
+  if (!success) {
+    return { success: false, result: null, error: error || "Falha ao enviar notificação" };
+  }
+  return { success: true, result: { message: "Notificação enviada com sucesso" } };
+}
+
+async function getEmbedding(text: string): Promise<number[]> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY não configurado para RAG");
+  }
+  const res = await fetch("https://api.openai.com/v1/embeddings", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "text-embedding-ada-002",
+      input: text.slice(0, 8000),
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`OpenAI embeddings: ${res.status} ${err}`);
+  }
+  const data = (await res.json()) as { data: { embedding: number[] }[] };
+  return data.data[0].embedding;
+}
+
+async function executeRagSearch(
+  supabase: ReturnType<typeof createNexusClient>,
+  tool: ToolDef,
+  args: Record<string, unknown>,
+  agentId: string
+): Promise<ToolExecutionResult> {
+  try {
+    const query = String(args?.query ?? args?.pergunta ?? "").trim();
+    if (!query) {
+      return {
+        success: false,
+        result: null,
+        error: "Parâmetro 'query' é obrigatório para busca RAG",
+      };
+    }
+
+    const execCfg = (tool.execution_config || {}) as Record<string, unknown>;
+    const limit = Math.min(Math.max(Number(execCfg.limit) || 5, 1), 20);
+
+    const embedding = await getEmbedding(query);
+
+    const { data: rows, error } = await supabase.rpc("rag_search_chunks", {
+      p_agent_id: agentId,
+      p_query_embedding: embedding,
+      p_limit: limit,
+    });
+
+    if (error) {
+      return {
+        success: false,
+        result: null,
+        error: `RAG search failed: ${error.message}`,
+      };
+    }
+
+    const results = (rows || []).map((r: { content?: string; source_url?: string; title?: string }) => ({
+      content: r.content || "",
+      source_url: r.source_url || null,
+      title: r.title || null,
+    }));
+
+    const textForLlm = results
+      .map((r, i) => `[${i + 1}] ${r.title ? `(${r.title}) ` : ""}${r.content}`)
+      .join("\n\n---\n\n");
+
+    return {
+      success: true,
+      result: {
+        results,
+        text: textForLlm,
+      },
+    };
+  } catch (e: unknown) {
+    const err = e as Error;
+    return {
+      success: false,
+      result: null,
+      error: err?.message || "RAG search failed",
+    };
   }
 }
