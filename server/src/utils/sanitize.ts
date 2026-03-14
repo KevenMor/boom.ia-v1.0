@@ -41,18 +41,20 @@ export function sanitizeLLMOutput(content: string): string {
     ""
   );
   text = text.replace(
-    /\b(consultar_estoque|consultar_agenda|inventory_query|calendar_query)\s*[:\s]*\s*\{[^}]*\}/gim,
+    /\b(consultar_estoque|consultar_agenda|consultar_base_conhecimento|inventory_query|calendar_query|rag_search)\s*[:\s]*\s*\{[^}]*\}/gim,
     ""
   );
   // Linhas que contêm chamada de ferramenta no formato nome(...) — remover a linha inteira
   text = text
     .split("\n")
-    .filter((line) => !/\b(consultar_estoque|consultar_agenda|inventory_query|calendar_query)\s*\(/.test(line))
+    .filter((line) => !/\b(consultar_estoque|consultar_agenda|consultar_base_conhecimento|inventory_query|calendar_query|rag_search)\s*\(/.test(line))
     .join("\n");
   // Blocos JSON de memória (ex.: {"memory":{"nome_cliente":"..."}})
   text = text.replace(/\s*\{\s*"memory"\s*:\s*\{[^}]*\}\s*\}\s*/g, "");
   // Tool call vazando como texto (horario_periodo = tool(...))
   text = text.replace(/\bhorario_periodo\s*=\s*tool\s*\([^)]*\)\s*/gim, "");
+  // consultar_base_conhecimento(pergunta="...") vazando como texto
+  text = text.replace(/\bconsultar_base_conhecimento\s*\([^)]*\)\s*/gim, "");
   text = text.replace(/\n{3,}/g, "\n\n").trim();
 
   // Remove pergunta duplicada de nome (ambas perguntam a mesma coisa — "Com quem eu falo?" e "Como posso te chamar?")
@@ -168,9 +170,9 @@ export function isCommandLine(line: string): boolean {
     /^.*ENVIAR_FOTOS?_VEICULOS?[:\s].*$/im.test(t) ||
     /^.*HANDOFF_COMERCIAL.*$/im.test(t) ||
     /^.*\b(TOOL_CALL|FUNCTION_CALL|ACTION_OUTPUT)[:\s].*$/im.test(t) ||
-    /^.*(?:Chamada da ferramenta|Consultando a ferramenta|Vou consultar a ferramenta)\s+(?:consultar_estoque|consultar_agenda|inventory_query)/im.test(t) ||
-    /^.*\b(consultar_estoque|consultar_agenda|inventory_query|calendar_query)\s*[:\s]\s*\{/im.test(t) ||
-    /\b(consultar_estoque|consultar_agenda|inventory_query|calendar_query)\s*\(/im.test(t) ||
+    /^.*(?:Chamada da ferramenta|Consultando a ferramenta|Vou consultar a ferramenta)\s+(?:consultar_estoque|consultar_agenda|consultar_base_conhecimento|inventory_query)/im.test(t) ||
+    /^.*\b(consultar_estoque|consultar_agenda|consultar_base_conhecimento|inventory_query|calendar_query|rag_search)\s*[:\s]\s*\{/im.test(t) ||
+    /\b(consultar_estoque|consultar_agenda|consultar_base_conhecimento|inventory_query|calendar_query|rag_search)\s*\(/im.test(t) ||
     // Tool call vazando como texto (horario_periodo, busca_contexto, etc.)
     /\bhorario_periodo\s*=\s*tool\s*\(/im.test(t) ||
     /\btool\s*\(\s*["']horario_periodo["']/im.test(t) ||

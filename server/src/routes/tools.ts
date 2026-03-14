@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
+import { executeTool } from "../services/tool-executor.js";
 import { runFipeQuery } from "../services/fipe.js";
 import { runFindNearestUnit } from "../services/find-nearest-unit.js";
 import { formatDateBR } from "../utils/agendaNotification.js";
@@ -167,11 +168,35 @@ export async function toolsRoutes(fastify: FastifyInstance) {
           };
           break;
 
-        case "rag_search":
-          result = {
-            info: "RAG Search tools require agent context. Test via Agent Sandbox.",
-          };
+        case "rag_search": {
+          const tenantId = tool.tenant_id;
+          if (!tenantId) {
+            result = { error: "Tool sem tenant_id. RAG precisa de um agente do tenant." };
+            break;
+          }
+          const { data: agentRow } = await supabase
+            .from("agents")
+            .select("id")
+            .eq("tenant_id", tenantId)
+            .limit(1)
+            .maybeSingle();
+          const agentId = agentRow?.id;
+          if (!agentId) {
+            result = { error: "Nenhum agente encontrado para o tenant desta tool. Crie um agente no tenant." };
+            break;
+          }
+          try {
+            const execResult = await executeTool(
+              { id: tool.id, name: tool.name, tool_type: tool.tool_type, tenant_id: tool.tenant_id, execution_config: tool.execution_config, function_def: tool.function_def },
+              args || {},
+              agentId
+            );
+            result = execResult.success ? execResult.result : { error: execResult.error };
+          } catch (e: any) {
+            result = { error: e?.message || "RAG search failed" };
+          }
           break;
+        }
 
         case "fipe_query": {
           const fipeArgs: Record<string, any> = {};

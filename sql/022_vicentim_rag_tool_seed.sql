@@ -42,9 +42,12 @@ BEGIN
             "query": {
               "type": "string",
               "description": "Pergunta ou termo de busca sobre tratamentos, procedimentos ou dúvidas frequentes"
+            },
+            "pergunta": {
+              "type": "string",
+              "description": "Pergunta ou termo de busca (alias de query)"
             }
-          },
-          "required": ["query"]
+          }
         }
       }'::jsonb,
       '{"limit": 5}'::jsonb
