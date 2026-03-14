@@ -834,13 +834,9 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         if (dispatcherConfig) {
           console.log("[Chat-Local] Dual-provider: dispatcher (tools) + conversacional");
           const { openaiTools: dispatcherTools, nameToTool: dispatcherNameToTool } = buildOpenAITools(tools, dispatcherConfig.baseUrl);
-          let dispatcherModel = (agentConfig.dispatcher_model as string)
+          const dispatcherModel = (agentConfig.dispatcher_model as string)
             || (tenantSettings.dispatcher_model as string)
-            || "gpt-4o";
-          if (dispatcherModel === "gpt-4o-mini") {
-            dispatcherModel = "gpt-4o";
-            console.log("[Chat-Local] Dispatcher upgrade: gpt-4o-mini -> gpt-4o (maior inteligência para tool calls)");
-          }
+            || "gpt-4o-mini";
           console.log("[Chat-Local] Dispatcher model:", dispatcherModel);
 
           const todayISO = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
