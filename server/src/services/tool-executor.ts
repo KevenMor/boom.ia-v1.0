@@ -898,6 +898,9 @@ export async function executeTool(
 ): Promise<ToolExecutionResult> {
   const supabase = createNexusClient();
 
+  const fnName = (tool.function_def as Record<string, unknown>)?.name as string;
+  const isEnviarNotificacao = /enviar[_ ]?notific(a|a[cç])[oõ]a?/i.test(fnName || "");
+
   switch (tool.tool_type) {
     case "inventory_query":
       return executeInventoryQuery(supabase, agentId, args);
@@ -925,6 +928,9 @@ export async function executeTool(
     case "api_rest":
     case "sql_query":
     default:
+      if (isEnviarNotificacao) {
+        return executeSendNotification(agentId, args);
+      }
       return {
         success: false,
         result: null,
