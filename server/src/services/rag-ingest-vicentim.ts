@@ -110,6 +110,7 @@ export async function scrapeVicentimPages(): Promise<PageContent[]> {
 }
 
 function chunkText(text: string): string[] {
+  if (!text || text.length === 0) return [];
   const chunks: string[] = [];
   let start = 0;
   while (start < text.length) {
@@ -118,11 +119,13 @@ function chunkText(text: string): string[] {
       const lastSpace = text.lastIndexOf(" ", end);
       if (lastSpace > start + CHUNK_SIZE / 2) end = lastSpace + 1;
     }
-    chunks.push(text.slice(start, end).trim());
+    const chunk = text.slice(start, end).trim();
+    if (chunk.length > 50) chunks.push(chunk);
+    if (end >= text.length) break;
     start = end - CHUNK_OVERLAP;
     if (start >= text.length) break;
   }
-  return chunks.filter((c) => c.length > 50);
+  return chunks;
 }
 
 /** OpenAI aceita array de textos; retorna embeddings em lote (muito mais rápido) */
