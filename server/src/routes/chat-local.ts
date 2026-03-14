@@ -851,7 +851,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           };
 
           let dispatcherModelToUse = dispatcherModel;
-          let dispatcherResp: Response;
+          let dispatcherResp!: Response;
           for (let attempt = 0; attempt < 2; attempt++) {
             const dispatcherBody: Record<string, unknown> = {
               model: dispatcherModelToUse,

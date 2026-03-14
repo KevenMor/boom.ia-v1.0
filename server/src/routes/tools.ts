@@ -532,8 +532,8 @@ export async function toolsRoutes(fastify: FastifyInstance) {
                 execution_config: tool.execution_config,
                 function_def: tool.function_def,
               },
-              args || {},
-              agentId
+              (args || {}) as Record<string, unknown>,
+              String(agentId)
             );
             result = execResult.success ? execResult.result : { error: execResult.error };
           } catch (e: any) {

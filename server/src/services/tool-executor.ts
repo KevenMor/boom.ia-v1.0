@@ -1021,7 +1021,7 @@ async function executeRagSearch(
     }));
 
     const textForLlm = results
-      .map((r, i) => `[${i + 1}] ${r.title ? `(${r.title}) ` : ""}${r.content}`)
+      .map((r: { content?: string; source_url?: string; title?: string }, i: number) => `[${i + 1}] ${r.title ? `(${r.title}) ` : ""}${r.content}`)
       .join("\n\n---\n\n");
 
     return {
