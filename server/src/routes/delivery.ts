@@ -227,6 +227,9 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
           // #endregion
           console.warn("[Deliver] Schedule follow-up failed:", e.message);
         }
+      } else {
+        const reason = !followupEnabled ? "followup_enabled=false" : !conversation_id ? "conversation_id ausente" : "chatwoot_conversation_id ausente";
+        console.warn("[Deliver] Follow-up não agendado:", reason, "agent_id=" + agent_id);
       }
 
       return reply.send({
