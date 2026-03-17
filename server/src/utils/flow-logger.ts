@@ -18,7 +18,7 @@ export const msgLog = {
     console.warn(`[MSG] agent=${shortId(agentId)} | webhook→queue | ERRO status=${status} ${body.slice(0, 80)}`),
 
   /** Queue processou e chamou chat-local */
-  queueChatOk: (agentId: string, convId: string | null) =>
+  queueChatOk: (agentId: string, convId: string | null | undefined) =>
     console.log(`[MSG] agent=${shortId(agentId)} conv=${shortId(convId)} | queue→chat | OK`),
 
   queueChatFailed: (agentId: string, err: string) =>
@@ -28,7 +28,7 @@ export const msgLog = {
     console.warn(`[MSG] agent=${shortId(agentId)} | queue | fullContent vazio — usando fallback`),
 
   /** Delivery enviou ao Chatwoot */
-  deliveryOk: (agentId: string, convId: string | null) =>
+  deliveryOk: (agentId: string, convId: string | null | undefined) =>
     console.log(`[MSG] agent=${shortId(agentId)} conv=${shortId(convId)} | delivery→chatwoot | OK (sent)`),
 
   deliveryFallback: (agentId: string) =>
@@ -59,7 +59,7 @@ export const followupLog = {
     console.log(`[FollowUp] cron | ${count} items a processar`),
 
   /** Item processado com sucesso */
-  sent: (itemId: string, convId: string, attempt: number, maxAttempts: number) =>
+  sent: (itemId: string, convId: string | null | undefined, attempt: number, maxAttempts: number) =>
     console.log(`[FollowUp] item=${shortId(itemId)} conv=${shortId(convId)} attempt=${attempt}/${maxAttempts} | OK (sent)`),
 
   /** Próximo agendado */
@@ -75,7 +75,7 @@ export const followupLog = {
     console.log(`[FollowUp] item=${shortId(itemId)} | REAGENDADO (${reason})`),
 
   /** Erro ao processar */
-  error: (itemId: string, convId: string, attempt: number, maxAttempts: number, reason: string) =>
+  error: (itemId: string, convId: string | null | undefined, attempt: number, maxAttempts: number, reason: string) =>
     console.error(`[FollowUp] item=${shortId(itemId)} conv=${shortId(convId)} attempt=${attempt}/${maxAttempts} | ERRO (${reason})`),
 
   /** Erro ao buscar pendentes */
