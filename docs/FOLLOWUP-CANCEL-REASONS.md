@@ -83,6 +83,17 @@ O processamento dos follow-ups (rota `POST /api/queue/followups`, chamada a cada
 
 ---
 
+## Aplicar migração para motivo aparecer
+
+Se o motivo de cancelamento não aparece (frontend mostra "Motivo não registrado"), aplique as migrações SQL:
+
+1. `sql/016_follow_up_cancel_reason.sql` — adiciona coluna `cancel_reason` e atualiza `cancel_pending_followups`
+2. `sql/024_schedule_followup_cancel_reason.sql` — atualiza `schedule_followup` para definir motivo ao cancelar
+
+Ou, se usar Supabase migrations: `npx supabase db push`
+
+---
+
 Se quiser, no próximo passo podemos:
 - adicionar um **motivo de cancelamento** na tabela/API (ex.: `cancel_reason`) para aparecer na página de follow-ups, ou
 - **afrouxar o CENÁRIO 2** (ex.: não cancelar quando o assignee for um ID “bot” configurável).

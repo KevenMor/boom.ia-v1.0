@@ -829,8 +829,15 @@ export async function queueRoutes(fastify: FastifyInstance) {
         const lastMsg = conversationMessages[conversationMessages.length - 1];
         if (lastMsg?.role === "assistant") {
           // No reply from user since our last message — proceed with follow-up
+        } else if (!lastMsg || (lastMsg.role !== "user" && lastMsg.role !== "assistant")) {
+          console.warn(`[FollowUp] CANCELLED item ${item.id} (attempt ${item.attempt}/${item.max_attempts}): unknown_state — lastMsg role="${lastMsg?.role ?? "null"}", history length=${conversationMessages.length}`);
+          await supabase
+            .from("follow_up_queue")
+            .update({ status: "cancelled", cancel_reason: "unknown_state", updated_at: new Date().toISOString() })
+            .eq("id", item.id);
+          continue;
         } else if (lastMsg?.role === "user") {
-          console.log(`[FollowUp] CANCELLED item ${item.id}: user_replied (última msg é do usuário)`);
+          console.log(`[FollowUp] CANCELLED item ${item.id} (attempt ${item.attempt}/${item.max_attempts}): user_replied — última msg do usuário: "${(lastMsg.content || "").slice(0, 60)}..."`);
           // #region agent log
           fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-cancel',message:'CANCELLED: last message is from user (user replied)',data:{itemId:item.id,lastMsgPreview:lastMsg.content.slice(0,80)},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
           // #endregion
@@ -904,6 +911,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
           }
         }
 
+        let sent = false;
         if (item.chatwoot_conversation_id && cfg.chatwoot_url && cfg.chatwoot_api_token && cfg.chatwoot_account_id) {
           const chatwootBase = cfg.chatwoot_url.replace(/\/+$/, "");
           const msgUrl = `${chatwootBase}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${item.chatwoot_conversation_id}/messages`;
@@ -914,10 +922,21 @@ export async function queueRoutes(fastify: FastifyInstance) {
             await new Promise((r) => setTimeout(r, applyJitter(humanization.typingDelayMs)));
           }
 
-          const sent = await sendChatwootTextMessage(msgUrl, cwAuth, followupText);
+          sent = await sendChatwootTextMessage(msgUrl, cwAuth, followupText);
           if (!sent) {
-            console.error("[FollowUp] Chatwoot send failed for", item.id);
+            console.error("[FollowUp] Chatwoot send failed for", item.id, "- item stays pending for retry");
           }
+        } else {
+          console.warn("[FollowUp] No Chatwoot config for item", item.id, "- cancelling (no_delivery_channel)");
+          await supabase
+            .from("follow_up_queue")
+            .update({ status: "cancelled", cancel_reason: "no_delivery_channel", updated_at: new Date().toISOString() })
+            .eq("id", item.id);
+          continue;
+        }
+
+        if (!sent) {
+          continue;
         }
 
         await supabase
