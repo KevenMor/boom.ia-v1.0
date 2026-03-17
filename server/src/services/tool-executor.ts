@@ -182,6 +182,8 @@ async function executeInventoryQuery(
 
     // Quando há apenas um termo (marca OU modelo), buscar em brand E model (OR) para cobrir casos como Haval,
     // que pode estar em brand ou em model no inventário. Assim "tem haval?" encontra em qualquer coluna.
+    // Quando há marca E modelo: buscar ambos em brand OU model, pois marcas como Haval (sub-marca da GWM)
+    // podem estar em model (ex: brand=GWM, model=Haval H6). Exige que AMBOS os termos apareçam em brand+model.
     if (hasMarca && !hasModelo) {
       const term = marca!.trim();
       const orParts = [`brand.ilike.*${term}*`, `model.ilike.*${term}*`];
@@ -191,7 +193,9 @@ async function executeInventoryQuery(
       const orParts = [`brand.ilike.*${term}*`, `model.ilike.*${term}*`];
       query = query.or(orParts.join(","));
     } else if (hasMarca && hasModelo) {
-      query = query.ilike("brand", `%${marca}%`).ilike("model", `%${modelo}%`);
+      const orMarca = [`brand.ilike.*${marca!.trim()}*`, `model.ilike.*${marca!.trim()}*`].join(",");
+      const orModelo = [`brand.ilike.*${modelo!.trim()}*`, `model.ilike.*${modelo!.trim()}*`].join(",");
+      query = query.or(orMarca).or(orModelo);
     }
     if (ano) {
       const yearNum = typeof ano === "string" ? parseInt(ano, 10) : ano;
