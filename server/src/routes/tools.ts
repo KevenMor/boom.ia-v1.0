@@ -415,6 +415,15 @@ export async function toolsRoutes(fastify: FastifyInstance) {
             }
           }
 
+          // Quando não há assignee_id, team_id é essencial para atribuir ao time
+          if (!assigneeId && !teamId) {
+            result = {
+              error:
+                "Configure assignee_id ou team_id na ferramenta (Padrão ou Regras). Sem assignee, o team_id é obrigatório para atribuir ao time.",
+            };
+            break;
+          }
+
           let agentId = args?.agent_id;
           if (!agentId) {
             const { data: linkRows } = await supabase

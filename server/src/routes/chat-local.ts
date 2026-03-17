@@ -1060,6 +1060,10 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 if (tool.tool_type === "chatwoot_assign") {
                   if (responseConvId) args = { ...args, conversation_id: responseConvId };
                   if (chatwoot_conversation_id != null) args = { ...args, chatwoot_conversation_id };
+                  // Quando o LLM não envia assignee_id/team_id, usar os padrões da config (team_id é essencial quando não há assignee)
+                  const cfg = (tool.execution_config || {}) as Record<string, unknown>;
+                  if (args.assignee_id == null && cfg.assignee_id != null) args = { ...args, assignee_id: cfg.assignee_id };
+                  if (args.team_id == null && cfg.team_id != null) args = { ...args, team_id: cfg.team_id };
                 }
                 if (tool.tool_type === "nearest_unit" || tool.tool_type === "consultar_unidade") {
                   if (!args.cep || String(args.cep).trim() === "") {
@@ -1735,6 +1739,10 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           if (tool.tool_type === "chatwoot_assign") {
             if (responseConvId) args = { ...args, conversation_id: responseConvId };
             if (chatwoot_conversation_id != null) args = { ...args, chatwoot_conversation_id };
+            // Quando o LLM não envia assignee_id/team_id, usar os padrões da config (team_id é essencial quando não há assignee)
+            const cfg = (tool.execution_config || {}) as Record<string, unknown>;
+            if (args.assignee_id == null && cfg.assignee_id != null) args = { ...args, assignee_id: cfg.assignee_id };
+            if (args.team_id == null && cfg.team_id != null) args = { ...args, team_id: cfg.team_id };
           }
           if (tool.tool_type === "nearest_unit" || tool.tool_type === "consultar_unidade") {
             if (!args.cep || String(args.cep).trim() === "") {

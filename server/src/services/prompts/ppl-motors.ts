@@ -983,7 +983,8 @@ F) NOTIFICATION ÔÇö AUTOMATIC ONLY (v2.6.0)
 
 G) ASSIGNMENT TO HUMAN (handoff — v3.5.0)
    → Call tool: atribuir_agente (tool_type: chatwoot_assign)
-   Argument format (preferred): {"assignee_id": 15}
+   Argument format: {"assignee_id": 15} OU {"team_id": 3} quando atribuir ao time (sem agente específico).
+   Se não passar assignee_id nem team_id, o sistema usa os padrões configurados na tool (team_id é essencial quando não há assignee).
    Triggers:
    - Customer wants to negotiate, asks for a human, financing data complete
    - Customer insists on appraisal value, shows frustration, complex negotiation

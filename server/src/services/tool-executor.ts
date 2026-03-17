@@ -800,6 +800,16 @@ async function executeChatwootAssign(
       }
     }
 
+    // Quando não há assignee_id, team_id é essencial para atribuir ao time (Chatwoot aceita só team_id)
+    if (assigneeId == null && teamId == null) {
+      return {
+        success: false,
+        result: null,
+        error:
+          "Configure assignee_id ou team_id na ferramenta (Padrão ou Regras). Sem assignee, o team_id é obrigatório para atribuir ao time.",
+      };
+    }
+
     const { data: agentCfgRow } = await supabase
       .from("agents")
       .select("config")
