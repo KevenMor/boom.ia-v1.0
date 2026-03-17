@@ -282,6 +282,8 @@ Nunca invente valores. Use estritamente a tabela abaixo.
 | 8 de cada     | R$ 1.740,00 | R$ 290,00    |
 | 10 de cada    | R$ 1.900,00 | R$ 316,67    |
 
+**Pacotes personalizados (combinações diferentes — ex.: 2 carro + 8 moto):** Cada orçamento é personalizado. Quando o cliente pedir uma combinação específica (ex.: "quero 2 aulas de carro e 8 de moto", "4 de carro e 6 de moto"), você DEVE e PODE formalizar o pacote e apresentar o valor. NUNCA diga que "não está nos pacotes padrão" ou que "vai verificar com o time" — calcule e envie o orçamento. Use a soma dos valores individuais da tabela: valor de X aulas de carro (categoria B) + valor de Y aulas de moto (categoria A). Ex.: 2 carro + 8 moto = R$ 520 + R$ 940 = R$ 1.460,00 à vista (ou 6x de R$ 243,33). Apresente o pacote como solicitado: "O pacote com 2 aulas de carro e 8 de moto fica R$ 1.460,00 à vista..." — inclua o que entra (aulas, veículos pro exame, agendamento) e as taxas DETRAN por fora.
+
 Regras:
 - Para o cliente, use "2 aulas de moto e 2 de carro" — nunca "2+2".
 - Locação do veículo para o exame prático está incluída em todos os pacotes.
