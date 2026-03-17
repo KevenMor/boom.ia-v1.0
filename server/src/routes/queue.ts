@@ -20,6 +20,10 @@ import {
 
 const API_BASE = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
 
+function normalizeContent(v: string): string {
+  return (v || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 async function isLastMessage(
   supabase: any,
   agentId: string,
@@ -614,6 +618,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
     let skipped = 0;
 
     for (const item of pending) {
+      console.log(`[FollowUp] Processando item=${item.id?.slice(0, 8)}… conv=${item.conversation_id?.slice(0, 8)}… attempt=${item.attempt}/${item.max_attempts} scheduled=${item.scheduled_at}`);
       try {
         const { data: agent } = await supabase
           .from("agents")
@@ -695,6 +700,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
               if (agent.status === "test") {
                 const testAssigneeId = cfg.test_assignee_id != null ? Number(cfg.test_assignee_id) : null;
                 if (testAssigneeId == null || currentAssigneeId !== testAssigneeId) {
+                  console.log(`[FollowUp] CANCELLED test_assignee_mismatch | item=${item.id?.slice(0, 8)}… | currentAssignee=${currentAssigneeId} testAssignee=${testAssigneeId}`);
                   followupLog.cancelled(item.id, "test_assignee_mismatch");
                   await supabase
                     .from("follow_up_queue")
@@ -711,6 +717,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
                 if (agentAssigneeId != null) {
                   const isAgentOwnConversation = Number(currentAssigneeId) === Number(agentAssigneeId);
                   if (!isAgentOwnConversation) {
+                    console.log(`[FollowUp] CANCELLED human_assigned | item=${item.id?.slice(0, 8)}… | assignee=${currentAssigneeId} agentAssignee=${agentAssigneeId}`);
                     followupLog.cancelled(item.id, "human_assigned", `assignee=${currentAssigneeId}`);
                     await supabase
                       .from("follow_up_queue")
@@ -759,6 +766,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
         const hasConfirmedSchedule = confirmedMsgs.length > 0;
 
         if (hasConfirmedSchedule) {
+          console.log(`[FollowUp] CANCELLED appointment_confirmed | item=${item.id?.slice(0, 8)}…`);
           followupLog.cancelled(item.id, "appointment_confirmed");
           await supabase
             .from("follow_up_queue")
@@ -783,6 +791,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
           return false;
         })();
         if (userDeclinedNoInterest) {
+          console.log(`[FollowUp] CANCELLED client_no_interest | item=${item.id?.slice(0, 8)}…`);
           followupLog.cancelled(item.id, "client_no_interest");
           await supabase
             .from("follow_up_queue")
@@ -795,6 +804,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
         if (lastMsg?.role === "assistant") {
           // No reply from user since our last message — proceed with follow-up
         } else if (!lastMsg || (lastMsg.role !== "user" && lastMsg.role !== "assistant")) {
+          console.log(`[FollowUp] CANCELLED unknown_state | item=${item.id?.slice(0, 8)}… conv=${item.conversation_id?.slice(0, 8)}… | lastMsg.role=${lastMsg?.role ?? "null"} | historyLen=${conversationMessages.length}`);
           followupLog.cancelled(item.id, "unknown_state", `lastMsg=${lastMsg?.role ?? "null"}`);
           await supabase
             .from("follow_up_queue")
@@ -802,12 +812,19 @@ export async function queueRoutes(fastify: FastifyInstance) {
             .eq("id", item.id);
           continue;
         } else if (lastMsg?.role === "user") {
-          followupLog.cancelled(item.id, "user_replied");
-          await supabase
-            .from("follow_up_queue")
-            .update({ status: "cancelled", cancel_reason: "user_replied", updated_at: new Date().toISOString() })
-            .eq("id", item.id);
-          continue;
+          const prevMsg = conversationMessages[conversationMessages.length - 2];
+          const isLikelyEcho = prevMsg?.role === "assistant" && normalizeContent(prevMsg.content) === normalizeContent(lastMsg.content);
+          if (isLikelyEcho) {
+            console.log(`[FollowUp] user_replied IGNORADO (eco) | item=${item.id?.slice(0, 8)}… | lastUser="${String(lastMsg.content).slice(0, 40)}…" = lastAssistant`);
+          } else {
+            console.log(`[FollowUp] CANCELLED user_replied | item=${item.id?.slice(0, 8)}… conv=${item.conversation_id?.slice(0, 8)}… | lastUser="${String(lastMsg.content).slice(0, 50)}…"`);
+            followupLog.cancelled(item.id, "user_replied");
+            await supabase
+              .from("follow_up_queue")
+              .update({ status: "cancelled", cancel_reason: "user_replied", updated_at: new Date().toISOString() })
+              .eq("id", item.id);
+            continue;
+          }
         }
 
         const attempt = item.attempt || 1;
