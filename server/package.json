@@ -11,6 +11,7 @@
     "verify:tokens": "tsx scripts/verify-token-tracking.ts",
     "e2e": "tsx scripts/e2e-validation.ts",
     "e2e:ideal": "tsx scripts/e2e-autoescola-ideal.ts",
+    "e2e:tools": "tsx scripts/e2e-tool-calls.ts",
     "scrape:vicentim": "tsx scripts/scrape-vicentim-website.ts",
     "ingest:vicentim": "node scripts/run-ingest-vicentim.mjs"
   },

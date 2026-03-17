@@ -254,12 +254,11 @@ function formatNowBR(): string {
 }
 
 /**
- * Monta notificacao de HANDOFF para time comercial (atendimento atribuído).
- * Formato:
- *   Atendimento atribuído:
+ * Monta notificacao de HANDOFF para time (cliente aguardando atendimento humano).
+ * Formato padrao:
+ *   Aguarda um atendimento humano
  *   Nome: ...
  *   Telefone: ...
- *   Data e hora: ...
  */
 export function buildHandoffNotification(
   nomeCliente: string,
@@ -269,14 +268,12 @@ export function buildHandoffNotification(
 ): string {
   const nome = (nomeCliente || "").trim() || "Cliente";
   const telefone = telefoneCliente?.trim() ? formatPhone(telefoneCliente.trim()) : "Não informado";
-  const dataHora = formatNowBR();
 
   const lines: string[] = [
-    "Atendimento atribuído:",
+    "Aguarda um atendimento humano",
     "",
     `Nome: ${nome}`,
     `Telefone: ${telefone}`,
-    `Data e hora: ${dataHora}`,
   ];
   return lines.join("\n");
 }

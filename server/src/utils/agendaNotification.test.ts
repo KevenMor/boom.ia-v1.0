@@ -102,16 +102,15 @@ describe("buildFallbackAgendaNotification", () => {
 });
 
 describe("buildHandoffNotification", () => {
-  it("formata notificacao com nome, telefone e data/hora", () => {
+  it("formata notificacao com titulo padrao, nome e telefone", () => {
     const result = buildHandoffNotification(
       "Henrique Carvalho",
       "159998023871"
     );
-    expect(result).toContain("Atendimento atribuído:");
+    expect(result).toContain("Aguarda um atendimento humano");
     expect(result).toContain("Nome: Henrique Carvalho");
     expect(result).toContain("Telefone:");
-    expect(result).toContain("Data e hora:");
-    expect(result).toMatch(/\d{2}\/\d{2}\/\d{4}/);
+    expect(result).not.toContain("Data e hora:");
   });
 });
 
