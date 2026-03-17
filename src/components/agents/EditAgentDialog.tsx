@@ -120,7 +120,7 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
           dispatcher_provider_id: dispatcherProviderId || undefined,
           dispatcher_model: dispatcherModel || undefined,
           followup_enabled: followupEnabled,
-          followup_max_attempts: followupMaxAttempts,
+          followup_max_attempts: followupIntervals.length,
           followup_intervals: followupIntervals,
           followup_quiet_start: followupQuietStart || undefined,
           followup_quiet_end: followupQuietEnd || undefined,

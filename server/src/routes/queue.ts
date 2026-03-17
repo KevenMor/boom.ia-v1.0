@@ -592,7 +592,19 @@ export async function queueRoutes(fastify: FastifyInstance) {
     }
 
     if (!pending || pending.length === 0) {
-      followupLog.cronNoPending();
+      const { data: future } = await supabase
+        .from("follow_up_queue")
+        .select("id, scheduled_at")
+        .eq("status", "pending")
+        .gt("scheduled_at", new Date().toISOString())
+        .order("scheduled_at", { ascending: true })
+        .limit(3);
+      if (future && future.length > 0) {
+        const nextAt = new Date(future[0].scheduled_at);
+        console.log(`[FollowUp] cron | 0 due now (${future.length} agendado(s) para depois, próximo às ${nextAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })})`);
+      } else {
+        followupLog.cronNoPending();
+      }
       return reply.send({ processed: 0, total: 0 });
     }
 
@@ -799,8 +811,9 @@ export async function queueRoutes(fastify: FastifyInstance) {
         }
 
         const attempt = item.attempt || 1;
-        const maxAttempts = item.max_attempts || 3;
         const intervals: number[] = (() => {
+          const fromCfg = Array.isArray(cfg.followup_intervals) ? cfg.followup_intervals : null;
+          if (fromCfg && fromCfg.length > 0) return fromCfg;
           try {
             const raw = item.intervals_minutes;
             return Array.isArray(raw) ? raw : JSON.parse(raw);
@@ -808,6 +821,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
             return [10, 20, 30];
           }
         })();
+        const maxAttempts = Math.max(intervals.length, item.max_attempts || 3);
 
         let followupPrompt = getFollowupPrompt(tenantSlug);
         if (!followupPrompt) {
@@ -907,21 +921,24 @@ export async function queueRoutes(fastify: FastifyInstance) {
 
         if (attempt < maxAttempts) {
           const nextDelay = intervals[attempt] || intervals[intervals.length - 1] || 30;
+          const nextAttempt = attempt + 1;
           try {
-            await supabase.rpc("schedule_followup", {
+            const { data: nextId } = await supabase.rpc("schedule_followup", {
               p_agent_id: item.agent_id,
               p_conversation_id: item.conversation_id,
               p_external_user_id: item.external_user_id,
               p_channel: item.channel,
               p_chatwoot_conversation_id: item.chatwoot_conversation_id,
-              p_attempt: attempt + 1,
+              p_attempt: nextAttempt,
               p_max_attempts: maxAttempts,
               p_intervals_minutes: intervals,
               p_delay_minutes: nextDelay,
             });
-            followupLog.nextScheduled(item.conversation_id, attempt + 1, maxAttempts, nextDelay);
+            const dueAt = new Date(Date.now() + nextDelay * 60 * 1000);
+            console.log(`[FollowUp] ${nextAttempt}/${maxAttempts} agendado | conv=${item.conversation_id?.slice(0, 8)}… | em ${nextDelay}min (às ${dueAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}) | id=${nextId ?? "—"}`);
+            followupLog.nextScheduled(item.conversation_id, nextAttempt, maxAttempts, nextDelay);
           } catch (e: any) {
-            console.warn("[FollowUp] Schedule next attempt failed:", e.message);
+            console.warn("[FollowUp] Falha ao agendar próximo:", e.message, "| attempt=" + nextAttempt + "/" + maxAttempts);
           }
         }
 

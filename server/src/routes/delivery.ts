@@ -214,7 +214,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
         const intervals: number[] = Array.isArray(cfg.followup_intervals)
           ? cfg.followup_intervals
           : [10, 20, 30];
-        const maxAttempts = Number(cfg.followup_max_attempts) || intervals.length;
+        const maxAttempts = Math.max(intervals.length, Number(cfg.followup_max_attempts) || 0);
         const firstDelay = intervals[0] || 10;
 
         try {
