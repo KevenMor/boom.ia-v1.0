@@ -169,13 +169,21 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
             }
           }
         } else {
+          const hasContent = (response_text || "").trim() || (response_parts || []).some((p: string) => (p || "").trim());
+          const contentToSend = hasContent
+            ? (response_text || "").trim()
+            : "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?";
+          const partsToSend = hasContent ? (response_parts || []) : [];
+          if (!hasContent) {
+            console.warn("[Deliver] Resposta vazia — enviando fallback. agent_id=" + agent_id);
+          }
           await replyToChatwoot(
             cfg.chatwoot_url,
             cwAuth,
             cfg.chatwoot_account_id,
             chatwoot_conversation_id,
-            (response_text || "").trim(),
-            response_parts || [],
+            contentToSend,
+            partsToSend,
             humanization
           );
         }

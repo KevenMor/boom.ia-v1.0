@@ -37,18 +37,20 @@ async function getProviderApiKey(
 
     if (provider) {
       let apiKey = "";
-      if (provider.api_key_encrypted && process.env.ENCRYPTION_KEY) {
+      const encryptionKey = process.env.ENCRYPTION_KEY || process.env.ENCRYPTION_SECRET;
+      if (provider.api_key_encrypted && encryptionKey) {
         try {
           console.log("[Chat-Local] Descriptografando chave do provider:", providerId);
           const { decrypt } = await import("../services/crypto.js");
-          apiKey = await decrypt(provider.api_key_encrypted, process.env.ENCRYPTION_KEY);
+          apiKey = await decrypt(provider.api_key_encrypted, encryptionKey);
           console.log("[Chat-Local] Chave descriptografada com sucesso, length:", apiKey.length);
         } catch (err) {
-          console.error("[Chat-Local] Falha ao descriptografar chave do provider:", providerId, err);
           const isGemini = /generativelanguage|googleapis/i.test(provider.base_url || "");
           apiKey = isGemini ? (geminiKey || openaiKey || "") : (openaiKey || geminiKey || "");
           if (apiKey) {
-            console.log("[Chat-Local] Usando fallback de env var, length:", apiKey.length, "isGemini:", isGemini);
+            console.warn("[Chat-Local] Descriptografar falhou, usando fallback de env var. provider:", providerId, "err:", (err as Error)?.message);
+          } else {
+            console.error("[Chat-Local] Falha ao descriptografar chave do provider:", providerId, err);
           }
         }
       } else {
@@ -1360,6 +1362,8 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               debugDeltaCount,
               debugDeltaTotalLen,
               debugSendCount,
+              streamFilterBufferPreview: streamFilterBuffer.slice(0, 120),
+              convFullContentPreview: convFullContent.slice(0, 120),
               hint: debugDeltaTotalLen > 0 && debugSendTotalLen === 0 ? "conteúdo filtrado por filterCommandLines" : "modelo retornou vazio ou sem deltas",
             });
             // #region agent log

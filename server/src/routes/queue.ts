@@ -107,6 +107,7 @@ async function callChatAgent(
 
       if (!chatResp.ok) {
         const errText = await chatResp.text();
+        console.warn("[ProcessQueue] callChatAgent HTTP", chatResp.status, "agent_id=" + agentId, "body=" + errText.slice(0, 150));
         const isRetryable =
           chatResp.status >= 500 ||
           chatResp.status === 404 ||
@@ -494,12 +495,18 @@ export async function queueRoutes(fastify: FastifyInstance) {
       );
 
       if (result.error) {
-        console.error("[ProcessQueue] callChatAgent failed:", result.error.slice(0, 300));
+        console.error("[ProcessQueue] callChatAgent failed:", result.error.slice(0, 300), "agent_id=" + agent_id);
         return reply.status(502).send({ error: "Agent processing failed", detail: result.error });
       }
 
       const responseConvId = result.responseConvId ?? convId ?? null;
-      const sanitizedContent = sanitizeLLMOutput(result.fullContent.trim());
+      const rawContent = result.fullContent?.trim() || "";
+      const sanitizedContent = rawContent
+        ? sanitizeLLMOutput(rawContent)
+        : "Desculpe, tive um problema ao processar. Pode repetir, por favor?";
+      if (!rawContent) {
+        console.warn("[ProcessQueue] fullContent vazio (sem erro) — usando fallback. agent_id=" + agent_id + " convId=" + (responseConvId ?? "null"));
+      }
       const hasMetadata = result.debug?.length || result.token_usage;
       const messageMetadata =
         hasMetadata

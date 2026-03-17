@@ -435,6 +435,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           }
 
           const respText = await resp.text().catch(() => "");
+          console.warn("[Webhook] Queue dispatch retornou não-OK:", resp.status, "agent_id=" + agentId, "body=" + respText.slice(0, 200));
           if (earlyConvId && userMessage?.trim() && debounceMs > 0) {
             try {
               const normalizedContent = stripChatwootNamePrefix(userMessage);
@@ -461,6 +462,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           });
         } catch (e: any) {
           if (e.name === "AbortError") {
+            console.log("[Webhook] Queue fetch AbortError (timeout 1.5s) — processamento continua em background. agent_id=" + agentId);
             return reply.status(202).send({
               status: "queued",
               agent_id: agentId,
