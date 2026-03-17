@@ -233,6 +233,10 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
             .eq("conversation_id", conversation_id)
             .eq("status", "cancelled")
             .is("cancel_reason", null);
+          if (followupId) {
+            const { addFollowUpJob } = await import("../services/followup-queue.js");
+            await addFollowUpJob(followupId, firstDelay * 60 * 1000);
+          }
           console.log(`[FollowUp] Agendado 1/${maxAttempts} | conv=${conversation_id?.slice(0, 8)}… | delay=${firstDelay}min | id=${followupId ?? "—"}`);
         } catch (e: any) {
           console.warn("[Deliver] Schedule follow-up failed:", e.message);

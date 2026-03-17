@@ -47,6 +47,10 @@ Obrigatórias:
 
 Opcionais (fallback): `NEXUS_DB_ANON_KEY`
 
+| Nome | Valor |
+|------|--------|
+| `REDIS_URL` | URL do Redis (ex.: `redis://default:Boom%402025@conexoesapp_redis_boomia:6379`). Se configurado, follow-ups usam BullMQ em vez de cron. Senha com `@` deve ser codificada como `%40`. |
+
 ---
 
 ## 2b. Configuração do serviço FRONTEND no Easypanel

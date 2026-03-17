@@ -258,6 +258,339 @@ async function fireDeliverMessage(
   }
 }
 
+export type ProcessFollowUpResult =
+  | { processed: true; nextId?: string; nextDelay?: number }
+  | { processed: false; skipped?: boolean };
+
+/** Processa um item da fila de follow-up. Usado pelo cron e pelo worker BullMQ. */
+export async function processFollowUpItem(
+  item: Record<string, unknown>,
+  supabase: ReturnType<typeof createNexusClient>,
+  baseUrl: string,
+  nexusKey: string
+): Promise<ProcessFollowUpResult> {
+  const parseHour = (v: unknown, defaultVal: number): number => {
+    if (v == null || v === "") return defaultVal;
+    const n = Number(v);
+    if (!Number.isNaN(n) && n >= 0 && n <= 23) return n;
+    const s = String(v);
+    const m = s.match(/^(\d{1,2})/);
+    if (m) {
+      const h = parseInt(m[1], 10);
+      if (!Number.isNaN(h)) return Math.min(23, Math.max(0, h));
+    }
+    return defaultVal;
+  };
+
+  const { data: agent } = await supabase
+    .from("agents")
+    .select("id, name, provider_id, model, system_prompt, tenant_id, config, status")
+    .eq("id", item.agent_id)
+    .single();
+
+  if (!agent) {
+    followupLog.cancelled(item.id as string, "agent_not_found", `agent_id=${item.agent_id}`);
+    await supabase
+      .from("follow_up_queue")
+      .update({ status: "cancelled", cancel_reason: "agent_not_found", updated_at: new Date().toISOString() })
+      .eq("id", item.id);
+    return { processed: false, skipped: true };
+  }
+
+  if (agent.status === "inactive") {
+    followupLog.cancelled(item.id as string, "agent_inactive");
+    await supabase
+      .from("follow_up_queue")
+      .update({ status: "cancelled", cancel_reason: "agent_inactive", updated_at: new Date().toISOString() })
+      .eq("id", item.id);
+    return { processed: false, skipped: true };
+  }
+
+  const cfg = (agent.config || {}) as Record<string, unknown>;
+  const quietStart = parseHour(cfg.followup_quiet_start, 23);
+  const quietEnd = parseHour(cfg.followup_quiet_end, 7);
+  const now = new Date();
+  const currentHour = getBrasiliaHour(now);
+  const inQuietHours = isInQuietHours(quietStart, quietEnd, now);
+
+  if (inQuietHours) {
+    const nextSlot = getNextSlotOutsideQuietHours(quietStart, quietEnd, item.scheduled_at as string, now);
+    followupLog.rescheduled(item.id as string, `quiet_hours ${currentHour}h`);
+    await supabase
+      .from("follow_up_queue")
+      .update({ scheduled_at: nextSlot, updated_at: now.toISOString() })
+      .eq("id", item.id);
+    return { processed: false, skipped: true };
+  }
+
+  if (item.chatwoot_conversation_id && cfg.chatwoot_url && cfg.chatwoot_api_token && cfg.chatwoot_account_id) {
+    try {
+      const chatwootBase = (cfg.chatwoot_url as string).replace(/\/+$/, "");
+      const convUrl = `${chatwootBase}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${item.chatwoot_conversation_id}`;
+      const cwAuth = getChatwootAuthHeaders(cfg.chatwoot_api_token as string, cfg);
+      const convResp = await fetch(convUrl, { headers: cwAuth, signal: AbortSignal.timeout(10_000) });
+
+      if (convResp.ok) {
+        const raw = (await convResp.json()) as Record<string, unknown>;
+        const convData = ((raw.payload as Record<string, unknown>) || raw) as Record<string, unknown>;
+        const meta = (convData.meta || convData) as Record<string, unknown>;
+        const assignee = (meta.assignee || convData.assignee) as { id?: number | string } | null;
+        const currentAssigneeId = assignee?.id != null ? Number(assignee.id) : null;
+
+        if (agent.status === "test") {
+          const testAssigneeId = cfg.test_assignee_id != null ? Number(cfg.test_assignee_id) : null;
+          if (testAssigneeId == null || currentAssigneeId !== testAssigneeId) {
+            console.log(`[FollowUp] CANCELLED test_assignee_mismatch | item=${(item.id as string)?.slice(0, 8)}…`);
+            followupLog.cancelled(item.id as string, "test_assignee_mismatch");
+            await supabase
+              .from("follow_up_queue")
+              .update({ status: "cancelled", cancel_reason: "test_assignee_mismatch", updated_at: new Date().toISOString() })
+              .eq("id", item.id);
+            return { processed: false, skipped: true };
+          }
+        }
+
+        if (currentAssigneeId != null && agent.status === "active") {
+          const agentAssigneeId = cfg.agent_assignee_id != null && cfg.agent_assignee_id !== "" ? Number(cfg.agent_assignee_id) : null;
+          if (agentAssigneeId != null) {
+            const isAgentOwnConversation = Number(currentAssigneeId) === Number(agentAssigneeId);
+            if (!isAgentOwnConversation) {
+              console.log(`[FollowUp] CANCELLED human_assigned | item=${(item.id as string)?.slice(0, 8)}…`);
+              followupLog.cancelled(item.id as string, "human_assigned");
+              await supabase
+                .from("follow_up_queue")
+                .update({ status: "cancelled", cancel_reason: "human_assigned", updated_at: new Date().toISOString() })
+                .eq("id", item.id);
+              return { processed: false, skipped: true };
+            }
+          }
+        }
+      }
+    } catch (e: unknown) {
+      console.warn("[FollowUp] Chatwoot assignee check failed:", (e as Error)?.message);
+    }
+  }
+
+  const { data: tenant } = await supabase.from("tenants").select("slug").eq("id", agent.tenant_id).single();
+  const tenantSlug = tenant?.slug ?? null;
+
+  let conversationMessages: { role: string; content: string }[] = [];
+  if (item.conversation_id) {
+    try {
+      const { data: history } = await supabase.rpc("load_conversation_messages", {
+        p_agent_id: item.agent_id,
+        p_conversation_id: item.conversation_id,
+      });
+      if (history && Array.isArray(history)) {
+        conversationMessages = history.slice(-20).map((m: { role?: string; content?: string }) => ({
+          role: m.role === "tool" ? "system" : (m.role || "user"),
+          content: (m.content as string) || "",
+        }));
+      }
+    } catch (e: unknown) {
+      console.warn("[FollowUp] Could not load history:", (e as Error)?.message);
+    }
+  }
+
+  const confirmedMsgs = conversationMessages.filter((m) =>
+    m.role === "assistant" && /confirmad[oa]|agendad[oa]|marcad[oa]|appointment.*confirm/i.test(m.content)
+  );
+  if (confirmedMsgs.length > 0) {
+    console.log(`[FollowUp] CANCELLED appointment_confirmed | item=${(item.id as string)?.slice(0, 8)}…`);
+    followupLog.cancelled(item.id as string, "appointment_confirmed");
+    await supabase
+      .from("follow_up_queue")
+      .update({ status: "cancelled", cancel_reason: "appointment_confirmed", updated_at: new Date().toISOString() })
+      .eq("id", item.id);
+    return { processed: false, skipped: true };
+  }
+
+  const declinePattern = /^(n[aã]o|nao|nope|dispenso|t[aá] bom|j[aá] encontrei|desisti|n[aã]o quero|n[aã]o preciso|n[aã]o obrigad[oa]|deixa (pra )?lá|sem interesse|obrigad[oa]?\s*[,.]?\s*(mas\s+)?n[aã]o|n[aã]o\s+obrigad[oa])[\s.!?]*$/i;
+  const recent = conversationMessages.slice(-10);
+  for (let i = recent.length - 1; i >= 0; i--) {
+    if (recent[i].role === "user") {
+      const content = (recent[i].content || "").trim();
+      if (declinePattern.test(content) || (content.length <= 25 && /^n[aã]o\b/i.test(content))) {
+        console.log(`[FollowUp] CANCELLED client_no_interest | item=${(item.id as string)?.slice(0, 8)}…`);
+        followupLog.cancelled(item.id as string, "client_no_interest");
+        await supabase
+          .from("follow_up_queue")
+          .update({ status: "cancelled", cancel_reason: "client_no_interest", updated_at: new Date().toISOString() })
+          .eq("id", item.id);
+        return { processed: false, skipped: true };
+      }
+      break;
+    }
+  }
+
+  const lastMsg = conversationMessages[conversationMessages.length - 1];
+  const prevMsg = conversationMessages[conversationMessages.length - 2];
+  if (lastMsg?.role === "assistant") {
+    // proceed
+  } else if (!lastMsg || (lastMsg.role !== "user" && lastMsg.role !== "assistant")) {
+    console.log(`[FollowUp] CANCELLED unknown_state | item=${(item.id as string)?.slice(0, 8)}…`);
+    followupLog.cancelled(item.id as string, "unknown_state");
+    await supabase
+      .from("follow_up_queue")
+      .update({ status: "cancelled", cancel_reason: "unknown_state", updated_at: new Date().toISOString() })
+      .eq("id", item.id);
+    return { processed: false, skipped: true };
+  } else if (lastMsg?.role === "user") {
+    const content = String(lastMsg.content || "");
+    if (/^\[SISTEMA INTERNO[\s\-—]/.test(content)) {
+      console.log(`[FollowUp] lastUser é prompt interno — prosseguindo | item=${(item.id as string)?.slice(0, 8)}…`);
+    } else {
+      const normUser = normalizeContent(content);
+      const normAsst = prevMsg?.role === "assistant" ? normalizeContent(String(prevMsg.content || "")) : "";
+      const isLikelyEcho = normAsst && (normUser === normAsst || isLikelyEchoContent(normUser, normAsst));
+      if (!isLikelyEcho) {
+        console.log(`[FollowUp] CANCELLED user_replied | item=${(item.id as string)?.slice(0, 8)}…`);
+        followupLog.cancelled(item.id as string, "user_replied");
+        await supabase
+          .from("follow_up_queue")
+          .update({ status: "cancelled", cancel_reason: "user_replied", updated_at: new Date().toISOString() })
+          .eq("id", item.id);
+        return { processed: false, skipped: true };
+      }
+    }
+  }
+
+  const attempt = (item.attempt as number) || 1;
+  const intervals: number[] = (() => {
+    const fromCfg = Array.isArray(cfg.followup_intervals) ? cfg.followup_intervals : null;
+    if (fromCfg && fromCfg.length > 0) return fromCfg;
+    try {
+      const raw = item.intervals_minutes;
+      return Array.isArray(raw) ? raw : JSON.parse(raw as string);
+    } catch {
+      return [10, 20, 30];
+    }
+  })();
+  const maxAttempts = Math.max(intervals.length, (item.max_attempts as number) || 3);
+
+  let followupPrompt = getFollowupPrompt(tenantSlug);
+  if (!followupPrompt) {
+    followupPrompt = `[SISTEMA INTERNO - FOLLOW-UP]\nEscreva uma mensagem curta de follow-up (tentativa {attempt} de {max_attempts}). Seja natural, breve (1-2 frases) e use o contexto da conversa.`;
+  }
+  followupPrompt = followupPrompt
+    .replace(/\{attempt\}/g, String(attempt))
+    .replace(/\{max_attempts\}/g, String(maxAttempts));
+
+  const messages = [...conversationMessages, { role: "user", content: followupPrompt }];
+
+  const chatResult = await callChatAgent(
+    baseUrl,
+    nexusKey,
+    item.agent_id as string,
+    messages,
+    item.conversation_id as string | null,
+    undefined,
+    item.external_user_id as string | null,
+    (item.chatwoot_conversation_id as number) ?? null
+  );
+
+  if (chatResult.error) {
+    followupLog.error(item.id as string, item.conversation_id as string, attempt, maxAttempts, "llm_failed");
+    return { processed: false, skipped: true };
+  }
+
+  const followupText = sanitizeLLMOutput(chatResult.fullContent.trim());
+  if (!followupText) {
+    followupLog.error(item.id as string, item.conversation_id as string, attempt, maxAttempts, "empty_response");
+    return { processed: false, skipped: true };
+  }
+
+  if (item.conversation_id) {
+    try {
+      await supabase.rpc("save_message", {
+        p_agent_id: item.agent_id,
+        p_conversation_id: item.conversation_id,
+        p_role: "assistant",
+        p_content: followupText,
+        p_model: "followup",
+        p_tokens_input: 0,
+        p_tokens_output: 0,
+        p_latency_ms: null,
+      });
+    } catch (e: unknown) {
+      console.warn("[FollowUp] Save message failed:", (e as Error)?.message);
+    }
+  }
+
+  const { data: recheck } = await supabase
+    .from("follow_up_queue")
+    .select("status")
+    .eq("id", item.id)
+    .single();
+  if (recheck?.status !== "pending") {
+    followupLog.cancelled(item.id as string, "skipped_race", `status=${recheck?.status ?? "?"}`);
+    return { processed: false, skipped: true };
+  }
+
+  let sent = false;
+  if (item.chatwoot_conversation_id && cfg.chatwoot_url && cfg.chatwoot_api_token && cfg.chatwoot_account_id) {
+    const chatwootBase = (cfg.chatwoot_url as string).replace(/\/+$/, "");
+    const msgUrl = `${chatwootBase}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${item.chatwoot_conversation_id}/messages`;
+    const humanization = getHumanizationConfig(cfg);
+    const cwAuth = getChatwootAuthHeaders(cfg.chatwoot_api_token as string, cfg);
+    if (humanization.typingDelayMs > 0) {
+      await new Promise((r) => setTimeout(r, applyJitter(humanization.typingDelayMs)));
+    }
+    sent = await sendChatwootTextMessage(msgUrl, cwAuth, followupText);
+    if (!sent) {
+      followupLog.error(item.id as string, item.conversation_id as string, attempt, maxAttempts, "chatwoot_send_failed");
+      return { processed: false, skipped: true };
+    }
+  } else {
+    followupLog.cancelled(item.id as string, "no_delivery_channel");
+    await supabase
+      .from("follow_up_queue")
+      .update({ status: "cancelled", cancel_reason: "no_delivery_channel", updated_at: new Date().toISOString() })
+      .eq("id", item.id);
+    return { processed: false, skipped: true };
+  }
+
+  await supabase
+    .from("follow_up_queue")
+    .update({ status: "sent", updated_at: new Date().toISOString() })
+    .eq("id", item.id);
+
+  if (attempt < maxAttempts) {
+    const nextDelay = intervals[attempt] || intervals[intervals.length - 1] || 30;
+    const nextAttempt = attempt + 1;
+    try {
+      const { data: nextId } = await supabase.rpc("schedule_followup", {
+        p_agent_id: item.agent_id,
+        p_conversation_id: item.conversation_id,
+        p_external_user_id: item.external_user_id,
+        p_channel: item.channel,
+        p_chatwoot_conversation_id: item.chatwoot_conversation_id,
+        p_attempt: nextAttempt,
+        p_max_attempts: maxAttempts,
+        p_intervals_minutes: intervals,
+        p_delay_minutes: nextDelay,
+      });
+      await supabase
+        .from("follow_up_queue")
+        .update({ cancel_reason: "superseded", updated_at: new Date().toISOString() })
+        .eq("agent_id", item.agent_id)
+        .eq("conversation_id", item.conversation_id)
+        .eq("status", "cancelled")
+        .is("cancel_reason", null);
+      const dueAt = new Date(Date.now() + nextDelay * 60 * 1000);
+      console.log(`[FollowUp] ${nextAttempt}/${maxAttempts} agendado | conv=${(item.conversation_id as string)?.slice(0, 8)}… | em ${nextDelay}min (às ${dueAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}) | id=${nextId ?? "—"}`);
+      followupLog.nextScheduled(item.conversation_id as string, nextAttempt, maxAttempts, nextDelay);
+      return { processed: true, nextId: nextId as string | undefined, nextDelay };
+    } catch (e: unknown) {
+      console.warn("[FollowUp] Falha ao agendar próximo:", (e as Error)?.message);
+      return { processed: true };
+    }
+  }
+
+  followupLog.sent(item.id as string, item.conversation_id as string, attempt, maxAttempts);
+  return { processed: true };
+}
+
 export async function queueRoutes(fastify: FastifyInstance) {
   fastify.get(
     "/queue/followups/list",
@@ -592,6 +925,33 @@ export async function queueRoutes(fastify: FastifyInstance) {
       return reply.status(500).send({ error: "Missing server config" });
     }
 
+    const { isRedisEnabled, addFollowUpJob } = await import("../services/followup-queue.js");
+
+    if (isRedisEnabled()) {
+      const { data: allPending, error: fetchErr } = await supabase
+        .from("follow_up_queue")
+        .select("id, scheduled_at")
+        .eq("status", "pending")
+        .order("scheduled_at", { ascending: true })
+        .limit(100);
+      if (fetchErr) {
+        followupLog.fetchFailed(fetchErr.message);
+        return reply.status(500).send({ error: fetchErr.message });
+      }
+      const now = Date.now();
+      let rehydrated = 0;
+      for (const item of allPending ?? []) {
+        const scheduledAt = new Date(item.scheduled_at).getTime();
+        const delayMs = Math.max(0, scheduledAt - now);
+        const ok = await addFollowUpJob(item.id, delayMs);
+        if (ok) rehydrated++;
+      }
+      if (rehydrated > 0) {
+        console.log(`[FollowUp] Reidratação: ${rehydrated} job(s) adicionado(s) ao BullMQ`);
+      }
+      return reply.send({ processed: 0, rehydrated, total: allPending?.length ?? 0 });
+    }
+
     const { data: pending, error: fetchErr } = await supabase
       .from("follow_up_queue")
       .select("*")
@@ -630,366 +990,17 @@ export async function queueRoutes(fastify: FastifyInstance) {
     for (const item of pending) {
       console.log(`[FollowUp] Processando item=${item.id?.slice(0, 8)}… conv=${item.conversation_id?.slice(0, 8)}… attempt=${item.attempt}/${item.max_attempts} scheduled=${item.scheduled_at}`);
       try {
-        const { data: agent } = await supabase
-          .from("agents")
-          .select("id, name, provider_id, model, system_prompt, tenant_id, config, status")
-          .eq("id", item.agent_id)
-          .single();
-
-        if (!agent) {
-          followupLog.cancelled(item.id, "agent_not_found", `agent_id=${item.agent_id}`);
-          await supabase
-            .from("follow_up_queue")
-            .update({ status: "cancelled", cancel_reason: "agent_not_found", updated_at: new Date().toISOString() })
-            .eq("id", item.id);
-          continue;
-        }
-
-        if (agent.status === "inactive") {
-          followupLog.cancelled(item.id, "agent_inactive");
-          await supabase
-            .from("follow_up_queue")
-            .update({ status: "cancelled", cancel_reason: "agent_inactive", updated_at: new Date().toISOString() })
-            .eq("id", item.id);
-          continue;
-        }
-
-        const cfg = (agent.config || {}) as Record<string, any>;
-
-        /** Extrai hora (0-23) de "HH:mm" ou número. O painel salva "07:00", "08:00" etc. */
-        function parseHour(v: any, defaultVal: number): number {
-          if (v == null || v === "") return defaultVal;
-          const n = Number(v);
-          if (!Number.isNaN(n) && n >= 0 && n <= 23) return n;
-          const s = String(v);
-          const m = s.match(/^(\d{1,2})/);
-          if (m) {
-            const h = parseInt(m[1], 10);
-            if (!Number.isNaN(h)) return Math.min(23, Math.max(0, h));
+        const result = await processFollowUpItem(item, supabase, baseUrl, nexusKey);
+        if (result.processed) {
+          processed++;
+          if (result.nextId && result.nextDelay != null) {
+            const { addFollowUpJob } = await import("../services/followup-queue.js");
+            await addFollowUpJob(result.nextId, result.nextDelay * 60 * 1000);
           }
-          return defaultVal;
-        }
-
-        const quietStart = parseHour(cfg.followup_quiet_start, 23);
-        const quietEnd = parseHour(cfg.followup_quiet_end, 7);
-        const now = new Date();
-        const currentHour = getBrasiliaHour(now);
-        const inQuietHours = isInQuietHours(quietStart, quietEnd, now);
-
-        if (inQuietHours) {
-          const nextSlot = getNextSlotOutsideQuietHours(quietStart, quietEnd, item.scheduled_at, now);
-          followupLog.rescheduled(item.id, `quiet_hours ${currentHour}h`);
-          await supabase
-            .from("follow_up_queue")
-            .update({ scheduled_at: nextSlot, updated_at: now.toISOString() })
-            .eq("id", item.id);
+        } else if (result.skipped) {
           skipped++;
-          continue;
         }
-
-        // --- CENÁRIO 2 e 3: Verificar assignee atual no Chatwoot ---
-        if (item.chatwoot_conversation_id && cfg.chatwoot_url && cfg.chatwoot_api_token && cfg.chatwoot_account_id) {
-          try {
-            const chatwootBase = cfg.chatwoot_url.replace(/\/+$/, "");
-            const convUrl = `${chatwootBase}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${item.chatwoot_conversation_id}`;
-            const cwAuth = getChatwootAuthHeaders(cfg.chatwoot_api_token, cfg);
-            const convResp = await fetch(convUrl, {
-              headers: cwAuth,
-              signal: AbortSignal.timeout(10_000),
-            });
-
-            if (convResp.ok) {
-              const raw = await convResp.json() as Record<string, unknown>;
-              // Chatwoot pode retornar direto ou em payload; assignee em meta ou na raiz
-              const convData = (raw.payload as Record<string, unknown>) || raw;
-              const meta = (convData.meta || convData) as Record<string, unknown>;
-              const assignee = (meta.assignee || (convData as any).assignee) as { id?: number | string } | null;
-              const currentAssigneeId = assignee?.id != null ? Number(assignee.id) : null;
-              const agentAssigneeIdForLog = cfg.agent_assignee_id != null && cfg.agent_assignee_id !== "" ? Number(cfg.agent_assignee_id) : null;
-
-              // CENÁRIO 3: Agente em teste — só enviar follow-up se assignee = test_assignee_id
-              if (agent.status === "test") {
-                const testAssigneeId = cfg.test_assignee_id != null ? Number(cfg.test_assignee_id) : null;
-                if (testAssigneeId == null || currentAssigneeId !== testAssigneeId) {
-                  console.log(`[FollowUp] CANCELLED test_assignee_mismatch | item=${item.id?.slice(0, 8)}… | currentAssignee=${currentAssigneeId} testAssignee=${testAssigneeId}`);
-                  followupLog.cancelled(item.id, "test_assignee_mismatch");
-                  await supabase
-                    .from("follow_up_queue")
-                    .update({ status: "cancelled", cancel_reason: "test_assignee_mismatch", updated_at: new Date().toISOString() })
-                    .eq("id", item.id);
-                  continue;
-                }
-              }
-
-              // CENÁRIO 2: Só cancelar quando agent_assignee_id está configurado E assignee ≠ bot (humano assumiu).
-              // Se agent_assignee_id NÃO está configurado, não cancelar por assignee — enviar follow-up.
-              if (currentAssigneeId != null && agent.status === "active") {
-                const agentAssigneeId = cfg.agent_assignee_id != null && cfg.agent_assignee_id !== "" ? Number(cfg.agent_assignee_id) : null;
-                if (agentAssigneeId != null) {
-                  const isAgentOwnConversation = Number(currentAssigneeId) === Number(agentAssigneeId);
-                  if (!isAgentOwnConversation) {
-                    console.log(`[FollowUp] CANCELLED human_assigned | item=${item.id?.slice(0, 8)}… | assignee=${currentAssigneeId} agentAssignee=${agentAssigneeId}`);
-                    followupLog.cancelled(item.id, "human_assigned", `assignee=${currentAssigneeId}`);
-                    await supabase
-                      .from("follow_up_queue")
-                      .update({ status: "cancelled", cancel_reason: "human_assigned", updated_at: new Date().toISOString() })
-                      .eq("id", item.id);
-                    continue;
-                  }
-                }
-              }
-            }
-          } catch (e: any) {
-            console.warn("[FollowUp] Chatwoot assignee check failed:", e.message);
-          }
-        }
-
-        const { data: tenant } = await supabase
-          .from("tenants")
-          .select("slug")
-          .eq("id", agent.tenant_id)
-          .single();
-
-        const tenantSlug = tenant?.slug ?? null;
-
-        let conversationMessages: { role: string; content: string }[] = [];
-        if (item.conversation_id) {
-          try {
-            const { data: history } = await supabase.rpc("load_conversation_messages", {
-              p_agent_id: item.agent_id,
-              p_conversation_id: item.conversation_id,
-            });
-            if (history && Array.isArray(history)) {
-              conversationMessages = history.slice(-20).map((m: any) => ({
-                role: m.role === "tool" ? "system" : m.role,
-                content: (m.content as string) || "",
-              }));
-            }
-          } catch (e: any) {
-            console.warn("[FollowUp] Could not load history:", e.message);
-          }
-        }
-
-        // --- CENÁRIO 1: Verificar se houve agendamento confirmado ---
-        const confirmedMsgs = conversationMessages.filter((m) =>
-          m.role === "assistant" && /confirmad[oa]|agendad[oa]|marcad[oa]|appointment.*confirm/i.test(m.content)
-        );
-        const hasConfirmedSchedule = confirmedMsgs.length > 0;
-
-        if (hasConfirmedSchedule) {
-          console.log(`[FollowUp] CANCELLED appointment_confirmed | item=${item.id?.slice(0, 8)}…`);
-          followupLog.cancelled(item.id, "appointment_confirmed");
-          await supabase
-            .from("follow_up_queue")
-            .update({ status: "cancelled", cancel_reason: "appointment_confirmed", updated_at: new Date().toISOString() })
-            .eq("id", item.id);
-          continue;
-        }
-
-        // --- CENÁRIO 1b: Cliente deixou claro que NÃO tem mais interesse (ex.: disse "Não" a oferta de opções parecidas) ---
-        const userDeclinedNoInterest = (() => {
-          const declinePattern = /^(n[aã]o|nao|nope|dispenso|t[aá] bom|j[aá] encontrei|desisti|n[aã]o quero|n[aã]o preciso|n[aã]o obrigad[oa]|deixa (pra )?lá|sem interesse|obrigad[oa]?\s*[,.]?\s*(mas\s+)?n[aã]o|n[aã]o\s+obrigad[oa])[\s.!?]*$/i;
-          const recent = conversationMessages.slice(-10);
-          for (let i = recent.length - 1; i >= 0; i--) {
-            if (recent[i].role === "user") {
-              const content = (recent[i].content || "").trim();
-              if (declinePattern.test(content) || (content.length <= 25 && /^n[aã]o\b/i.test(content))) {
-                return true;
-              }
-              break;
-            }
-          }
-          return false;
-        })();
-        if (userDeclinedNoInterest) {
-          console.log(`[FollowUp] CANCELLED client_no_interest | item=${item.id?.slice(0, 8)}…`);
-          followupLog.cancelled(item.id, "client_no_interest");
-          await supabase
-            .from("follow_up_queue")
-            .update({ status: "cancelled", cancel_reason: "client_no_interest", updated_at: new Date().toISOString() })
-            .eq("id", item.id);
-          continue;
-        }
-
-        const lastMsg = conversationMessages[conversationMessages.length - 1];
-        const prevMsg = conversationMessages[conversationMessages.length - 2];
-        if (lastMsg?.role === "assistant") {
-          // No reply from user since our last message — proceed with follow-up
-        } else if (!lastMsg || (lastMsg.role !== "user" && lastMsg.role !== "assistant")) {
-          console.log(`[FollowUp] CANCELLED unknown_state | item=${item.id?.slice(0, 8)}… conv=${item.conversation_id?.slice(0, 8)}… | lastMsg.role=${lastMsg?.role ?? "null"} | historyLen=${conversationMessages.length}`);
-          followupLog.cancelled(item.id, "unknown_state", `lastMsg=${lastMsg?.role ?? "null"}`);
-          await supabase
-            .from("follow_up_queue")
-            .update({ status: "cancelled", cancel_reason: "unknown_state", updated_at: new Date().toISOString() })
-            .eq("id", item.id);
-          continue;
-        } else if (lastMsg?.role === "user") {
-          // Ignorar: última "user" é o próprio prompt interno do follow-up (salvo pela chamada LLM anterior)
-          const content = String(lastMsg.content || "");
-          if (/^\[SISTEMA INTERNO[\s\-—]/.test(content)) {
-            console.log(`[FollowUp] lastUser é prompt interno — prosseguindo | item=${item.id?.slice(0, 8)}…`);
-            // Prosseguir com envio do follow-up (não cancelar)
-          } else {
-            const normUser = normalizeContent(content);
-            const normAsst = prevMsg?.role === "assistant" ? normalizeContent(String(prevMsg.content || "")) : "";
-            const isLikelyEcho = normAsst && (normUser === normAsst || isLikelyEchoContent(normUser, normAsst));
-            if (isLikelyEcho) {
-              console.log(`[FollowUp] user_replied IGNORADO (eco) | item=${item.id?.slice(0, 8)}… | lastUser="${content.slice(0, 40)}…" = lastAssistant`);
-            } else {
-              console.log(`[FollowUp] CANCELLED user_replied | item=${item.id?.slice(0, 8)}… conv=${item.conversation_id?.slice(0, 8)}… | lastUser="${content.slice(0, 50)}…"`);
-              followupLog.cancelled(item.id, "user_replied");
-              await supabase
-                .from("follow_up_queue")
-                .update({ status: "cancelled", cancel_reason: "user_replied", updated_at: new Date().toISOString() })
-                .eq("id", item.id);
-              continue;
-            }
-          }
-        }
-
-        const attempt = item.attempt || 1;
-        const intervals: number[] = (() => {
-          const fromCfg = Array.isArray(cfg.followup_intervals) ? cfg.followup_intervals : null;
-          if (fromCfg && fromCfg.length > 0) return fromCfg;
-          try {
-            const raw = item.intervals_minutes;
-            return Array.isArray(raw) ? raw : JSON.parse(raw);
-          } catch {
-            return [10, 20, 30];
-          }
-        })();
-        const maxAttempts = Math.max(intervals.length, item.max_attempts || 3);
-
-        let followupPrompt = getFollowupPrompt(tenantSlug);
-        if (!followupPrompt) {
-          followupPrompt = `[SISTEMA INTERNO - FOLLOW-UP]\nEscreva uma mensagem curta de follow-up (tentativa {attempt} de {max_attempts}). Seja natural, breve (1-2 frases) e use o contexto da conversa.`;
-        }
-        followupPrompt = followupPrompt
-          .replace(/\{attempt\}/g, String(attempt))
-          .replace(/\{max_attempts\}/g, String(maxAttempts));
-
-        const messages = [
-          ...conversationMessages,
-          { role: "user", content: followupPrompt },
-        ];
-
-        const chatResult = await callChatAgent(
-          baseUrl,
-          nexusKey,
-          item.agent_id,
-          messages,
-          item.conversation_id,
-          undefined,
-          item.external_user_id,
-          item.chatwoot_conversation_id ?? null
-        );
-
-        if (chatResult.error) {
-          followupLog.error(item.id, item.conversation_id, attempt, maxAttempts, "llm_failed");
-          continue;
-        }
-
-        const followupText = sanitizeLLMOutput(chatResult.fullContent.trim());
-        if (!followupText) {
-          followupLog.error(item.id, item.conversation_id, attempt, maxAttempts, "empty_response");
-          continue;
-        }
-
-        if (item.conversation_id) {
-          try {
-            await supabase.rpc("save_message", {
-              p_agent_id: item.agent_id,
-              p_conversation_id: item.conversation_id,
-              p_role: "assistant",
-              p_content: followupText,
-              p_model: "followup",
-              p_tokens_input: 0,
-              p_tokens_output: 0,
-              p_latency_ms: null,
-            });
-          } catch (e: any) {
-            console.warn("[FollowUp] Save message failed:", e.message);
-          }
-        }
-
-        // Re-verificar status antes de enviar (evita race: webhook pode ter cancelado enquanto processávamos)
-        const { data: recheck } = await supabase
-          .from("follow_up_queue")
-          .select("status")
-          .eq("id", item.id)
-          .single();
-        if (recheck?.status !== "pending") {
-          followupLog.cancelled(item.id, "skipped_race", `status=${recheck?.status ?? "?"} (cancelado durante processamento)`);
-          continue;
-        }
-
-        let sent = false;
-        if (item.chatwoot_conversation_id && cfg.chatwoot_url && cfg.chatwoot_api_token && cfg.chatwoot_account_id) {
-          const chatwootBase = cfg.chatwoot_url.replace(/\/+$/, "");
-          const msgUrl = `${chatwootBase}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${item.chatwoot_conversation_id}/messages`;
-          const humanization = getHumanizationConfig(cfg);
-          const cwAuth = getChatwootAuthHeaders(cfg.chatwoot_api_token, cfg);
-
-          if (humanization.typingDelayMs > 0) {
-            await new Promise((r) => setTimeout(r, applyJitter(humanization.typingDelayMs)));
-          }
-
-          sent = await sendChatwootTextMessage(msgUrl, cwAuth, followupText);
-          if (!sent) {
-            followupLog.error(item.id, item.conversation_id, attempt, maxAttempts, "chatwoot_send_failed");
-          }
-        } else {
-          followupLog.cancelled(item.id, "no_delivery_channel");
-          await supabase
-            .from("follow_up_queue")
-            .update({ status: "cancelled", cancel_reason: "no_delivery_channel", updated_at: new Date().toISOString() })
-            .eq("id", item.id);
-          continue;
-        }
-
-        if (!sent) {
-          continue;
-        }
-
-        await supabase
-          .from("follow_up_queue")
-          .update({ status: "sent", updated_at: new Date().toISOString() })
-          .eq("id", item.id);
-
-        if (attempt < maxAttempts) {
-          const nextDelay = intervals[attempt] || intervals[intervals.length - 1] || 30;
-          const nextAttempt = attempt + 1;
-          try {
-            const { data: nextId } = await supabase.rpc("schedule_followup", {
-              p_agent_id: item.agent_id,
-              p_conversation_id: item.conversation_id,
-              p_external_user_id: item.external_user_id,
-              p_channel: item.channel,
-              p_chatwoot_conversation_id: item.chatwoot_conversation_id,
-              p_attempt: nextAttempt,
-              p_max_attempts: maxAttempts,
-              p_intervals_minutes: intervals,
-              p_delay_minutes: nextDelay,
-            });
-            // Fallback: garantir cancel_reason em itens cancelados (se migração schedule_followup não aplicada)
-            await supabase
-              .from("follow_up_queue")
-              .update({ cancel_reason: "superseded", updated_at: new Date().toISOString() })
-              .eq("agent_id", item.agent_id)
-              .eq("conversation_id", item.conversation_id)
-              .eq("status", "cancelled")
-              .is("cancel_reason", null);
-            const dueAt = new Date(Date.now() + nextDelay * 60 * 1000);
-            console.log(`[FollowUp] ${nextAttempt}/${maxAttempts} agendado | conv=${item.conversation_id?.slice(0, 8)}… | em ${nextDelay}min (às ${dueAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}) | id=${nextId ?? "—"}`);
-            followupLog.nextScheduled(item.conversation_id, nextAttempt, maxAttempts, nextDelay);
-          } catch (e: any) {
-            console.warn("[FollowUp] Falha ao agendar próximo:", e.message, "| attempt=" + nextAttempt + "/" + maxAttempts);
-          }
-        }
-
-        processed++;
-        followupLog.sent(item.id, item.conversation_id, attempt, maxAttempts);
-      } catch (e: any) {
+      } catch (e: unknown) {
         followupLog.error(item.id, item.conversation_id, item.attempt || 1, item.max_attempts || 3, (e as Error)?.message || "unknown");
       }
     }

@@ -159,33 +159,59 @@ export { build };
 
 build()
   .then((app) => app.listen({ port: PORT, host: "0.0.0.0" }))
-  .then(() => {
+  .then(async () => {
     console.log(`[Server] Listening on http://0.0.0.0:${PORT}`);
 
-    const FOLLOWUP_INTERVAL_MS = 60_000;
-    const followupUrl = `http://127.0.0.1:${PORT}/api/queue/followups`;
+    const { isRedisEnabled, addFollowUpJob } = await import("./services/followup-queue.js");
+    const { startFollowUpWorker } = await import("./workers/followup-worker.js");
 
-    setInterval(async () => {
-      try {
-        const resp = await fetch(followupUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", signal: AbortSignal.timeout(120_000) });
-        if (resp.ok) {
-          const data = await resp.json() as { processed?: number; skipped?: number; total?: number };
-          const processed = data.processed ?? 0;
-          const skipped = data.skipped ?? 0;
-          const total = data.total ?? 0;
-          if (processed > 0 || skipped > 0) {
-            console.log("[FollowUp-Cron] processed:", processed, "skipped:", skipped);
-          } else if (total > 0) {
-            console.log("[FollowUp-Cron] tick: no items processed (pending may have been cancelled/skipped by rules)");
-          } else {
-            console.log("[FollowUp-Cron] tick: no pending items");
-          }
+    if (isRedisEnabled()) {
+      const worker = startFollowUpWorker();
+      if (worker) {
+        console.log("[Server] Follow-up BullMQ worker started");
+        const { createNexusClient } = await import("./services/supabase.js");
+        const supabase = createNexusClient();
+        const { data: pending } = await supabase
+          .from("follow_up_queue")
+          .select("id, scheduled_at")
+          .eq("status", "pending")
+          .order("scheduled_at", { ascending: true })
+          .limit(100);
+        const now = Date.now();
+        let rehydrated = 0;
+        for (const item of pending ?? []) {
+          const delayMs = Math.max(0, new Date(item.scheduled_at).getTime() - now);
+          if (await addFollowUpJob(item.id, delayMs)) rehydrated++;
         }
-      } catch (e) {
-        console.warn("[FollowUp-Cron] request failed:", (e as Error)?.message ?? e);
+        if (rehydrated > 0) {
+          console.log(`[Server] Follow-up reidratação: ${rehydrated} job(s) adicionado(s)`);
+        }
       }
-    }, FOLLOWUP_INTERVAL_MS);
-    console.log(`[Server] Follow-up cron started (every ${FOLLOWUP_INTERVAL_MS / 1000}s)`);
+    } else {
+      const FOLLOWUP_INTERVAL_MS = 60_000;
+      const followupUrl = `http://127.0.0.1:${PORT}/api/queue/followups`;
+      setInterval(async () => {
+        try {
+          const resp = await fetch(followupUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", signal: AbortSignal.timeout(120_000) });
+          if (resp.ok) {
+            const data = await resp.json() as { processed?: number; skipped?: number; total?: number };
+            const processed = data.processed ?? 0;
+            const skipped = data.skipped ?? 0;
+            const total = data.total ?? 0;
+            if (processed > 0 || skipped > 0) {
+              console.log("[FollowUp-Cron] processed:", processed, "skipped:", skipped);
+            } else if (total > 0) {
+              console.log("[FollowUp-Cron] tick: no items processed (pending may have been cancelled/skipped by rules)");
+            } else {
+              console.log("[FollowUp-Cron] tick: no pending items");
+            }
+          }
+        } catch (e) {
+          console.warn("[FollowUp-Cron] request failed:", (e as Error)?.message ?? e);
+        }
+      }, FOLLOWUP_INTERVAL_MS);
+      console.log(`[Server] Follow-up cron started (every ${FOLLOWUP_INTERVAL_MS / 1000}s)`);
+    }
 
     const REMINDER_INTERVAL_MS = 60_000;
     const reminderUrl = `http://127.0.0.1:${PORT}/api/queue/reminders`;
