@@ -696,6 +696,9 @@ export async function queueRoutes(fastify: FastifyInstance) {
         const allMessages = await consumeBufferedMessages(supabase, agent_id, external_user_id || "", channel || "");
         if (allMessages.length > 0) {
           finalMessage = allMessages.join("\n");
+        } else {
+          // Buffer já consumido por outra requisição concorrente — evita transcrição/processamento triplicado em áudio
+          return reply.send({ status: "skipped", reason: "buffer already consumed by concurrent request" });
         }
       }
 
@@ -704,6 +707,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ error: "No message to process" });
       }
 
+      let attachmentsForChat: unknown[] | undefined = attachments;
       if (hasAttachments) {
         const audioAttachments = (attachments as any[]).filter(isAudioAttachment);
         if (audioAttachments.length > 0) {
@@ -720,6 +724,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
             finalMessage = finalMessage
               ? `${finalMessage}\n[Áudio transcrito]: ${audioText}`
               : `[Áudio transcrito]: ${audioText}`;
+            attachmentsForChat = []; // Evita transcrição duplicada no chat-local
           } else {
             const errors = transcriptions.filter((t) => t.error).map((t) => t.error);
             console.warn("[ProcessQueue] Audio transcription failed:", errors);
@@ -831,7 +836,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
         agent_id,
         messages,
         convId ?? null,
-        attachments,
+        attachmentsForChat,
         external_user_id ?? null,
         chatwoot_conversation_id ?? null
       );
