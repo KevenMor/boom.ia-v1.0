@@ -824,19 +824,26 @@ export async function queueRoutes(fastify: FastifyInstance) {
             .eq("id", item.id);
           continue;
         } else if (lastMsg?.role === "user") {
-          const normUser = normalizeContent(String(lastMsg.content || ""));
-          const normAsst = prevMsg?.role === "assistant" ? normalizeContent(String(prevMsg.content || "")) : "";
-          const isLikelyEcho = normAsst && (normUser === normAsst || isLikelyEchoContent(normUser, normAsst));
-          if (isLikelyEcho) {
-            console.log(`[FollowUp] user_replied IGNORADO (eco) | item=${item.id?.slice(0, 8)}… | lastUser="${String(lastMsg.content).slice(0, 40)}…" = lastAssistant`);
+          // Ignorar: última "user" é o próprio prompt interno do follow-up (salvo pela chamada LLM anterior)
+          const content = String(lastMsg.content || "");
+          if (/^\[SISTEMA INTERNO[\s\-—]/.test(content)) {
+            console.log(`[FollowUp] lastUser é prompt interno — prosseguindo | item=${item.id?.slice(0, 8)}…`);
+            // Prosseguir com envio do follow-up (não cancelar)
           } else {
-            console.log(`[FollowUp] CANCELLED user_replied | item=${item.id?.slice(0, 8)}… conv=${item.conversation_id?.slice(0, 8)}… | lastUser="${String(lastMsg.content).slice(0, 50)}…"`);
-            followupLog.cancelled(item.id, "user_replied");
-            await supabase
-              .from("follow_up_queue")
-              .update({ status: "cancelled", cancel_reason: "user_replied", updated_at: new Date().toISOString() })
-              .eq("id", item.id);
-            continue;
+            const normUser = normalizeContent(content);
+            const normAsst = prevMsg?.role === "assistant" ? normalizeContent(String(prevMsg.content || "")) : "";
+            const isLikelyEcho = normAsst && (normUser === normAsst || isLikelyEchoContent(normUser, normAsst));
+            if (isLikelyEcho) {
+              console.log(`[FollowUp] user_replied IGNORADO (eco) | item=${item.id?.slice(0, 8)}… | lastUser="${content.slice(0, 40)}…" = lastAssistant`);
+            } else {
+              console.log(`[FollowUp] CANCELLED user_replied | item=${item.id?.slice(0, 8)}… conv=${item.conversation_id?.slice(0, 8)}… | lastUser="${content.slice(0, 50)}…"`);
+              followupLog.cancelled(item.id, "user_replied");
+              await supabase
+                .from("follow_up_queue")
+                .update({ status: "cancelled", cancel_reason: "user_replied", updated_at: new Date().toISOString() })
+                .eq("id", item.id);
+              continue;
+            }
           }
         }
 
