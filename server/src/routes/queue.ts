@@ -20,6 +20,9 @@ import {
 
 const API_BASE = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
 
+/** Quantidade de mensagens do histórico enviadas ao agente (conversas longas perdem contexto se muito baixo) */
+const CHAT_HISTORY_MESSAGE_LIMIT = 60;
+
 function normalizeContent(v: string): string {
   return (v || "").trim().replace(/\s+/g, " ").toLowerCase();
 }
@@ -382,7 +385,7 @@ export async function processFollowUpItem(
         p_conversation_id: item.conversation_id,
       });
       if (history && Array.isArray(history)) {
-        conversationMessages = history.slice(-20).map((m: { role?: string; content?: string }) => ({
+        conversationMessages = history.slice(-CHAT_HISTORY_MESSAGE_LIMIT).map((m: { role?: string; content?: string }) => ({
           role: m.role === "tool" ? "system" : (m.role || "user"),
           content: (m.content as string) || "",
         }));
@@ -788,7 +791,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
             p_conversation_id: convId,
           });
           if (history && Array.isArray(history)) {
-            conversationMessages = history.slice(-20).map((m: any) => ({
+            conversationMessages = history.slice(-CHAT_HISTORY_MESSAGE_LIMIT).map((m: any) => ({
               role: m.role === "tool" ? "system" : m.role,
               content: (m.content as string) || "",
             }));
