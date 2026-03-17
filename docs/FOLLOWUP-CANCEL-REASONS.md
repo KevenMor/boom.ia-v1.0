@@ -62,6 +62,13 @@ O processamento dos follow-ups (rota `POST /api/queue/followups`, chamada a cada
 
 ---
 
+## 8. Substituído por novo agendamento (schedule_followup)
+- **Condição:** A função `schedule_followup` foi chamada (ex.: ao enviar a primeira mensagem ou ao agendar a próxima tentativa) e existiam follow-ups pendentes para a mesma conversa.
+- **Ação:** Os pendentes são cancelados com `cancel_reason = 'superseded'` antes de inserir o novo.
+- **No seu caso:** Pode ocorrer se houver duplicatas ou se um novo follow-up substitui um anterior (ex.: reagendamento).
+
+---
+
 ## Resumo para o seu caso
 
 - **Causa mais provável do cancelamento anterior:** **CENÁRIO 2** (corrigido em 2026-03: se `agent_assignee_id` não configurado, não cancela mais) ou **quiet hours** (skipped, não cancelado).

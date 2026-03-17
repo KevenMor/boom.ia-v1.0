@@ -50,6 +50,8 @@ const CANCEL_REASON_LABELS: Record<string, string> = {
   agent_inactive: "Agente inativo",
   agent_not_found: "Agente não encontrado",
   test_assignee_mismatch: "Modo teste: conversa com outro atendente",
+  client_no_interest: "Cliente não tem interesse",
+  superseded: "Substituído por novo agendamento",
 };
 function getCancelReasonLabel(code: string | null | undefined): string {
   if (!code) return "";
