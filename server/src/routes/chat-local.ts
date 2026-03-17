@@ -280,12 +280,13 @@ function isAppraisalContext(messages: Array<{ role: string; content: string }>):
   );
 }
 
-/** Extrai CEP da mensagem (8 dígitos, formato 12345-678 ou 12345678). Retorna só os dígitos ou null. */
+/** Extrai CEP do texto (8 dígitos, formato 12345-678 ou 12345678). Retorna o último encontrado (mais recente na conversa) ou null. */
 function extractCepFromText(text: string): string | null {
   if (!text || typeof text !== "string") return null;
-  const match = text.replace(/\s+/g, " ").trim().match(/\b(\d{5}-?\d{3})\b/);
-  if (!match) return null;
-  const digits = match[1].replace(/\D/g, "");
+  const matches = [...text.replace(/\s+/g, " ").trim().matchAll(/\b(\d{5}-?\d{3})\b/g)];
+  if (matches.length === 0) return null;
+  const lastMatch = matches[matches.length - 1];
+  const digits = lastMatch[1].replace(/\D/g, "");
   return digits.length === 8 ? digits : null;
 }
 
@@ -808,12 +809,13 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
 
           const hasNearestUnitTool = tools.some((t) => t.tool_type === "nearest_unit" || t.tool_type === "consultar_unidade");
-          const isIdealTenant = tenantSlug && /ideal|autoescola-ideal|auto-escola-ideal/i.test(String(tenantSlug));
           let cepHint = "";
-          if (hasNearestUnitTool && isIdealTenant && lastUserMsg?.content) {
-            const cep = extractCepFromText(lastUserMsg.content);
+          if (hasNearestUnitTool) {
+            // Buscar CEP em toda a conversa (cliente pode ter informado em mensagem anterior)
+            const fullConvText = messagesToUse.map((m) => (m.content ?? "")).join(" ");
+            const cep = extractCepFromText(fullConvText);
             if (cep) {
-              cepHint = `\n\n[CEP DETECTADO na mensagem do cliente: ${cep}. OBRIGATÓRIO: chame a ferramenta de consulta de CEP/unidade (consultar_cep, consultar_unidade ou nearest_unit) com argumento cep="${cep}" — sem cep a ferramenta retorna erro. NÃO retorne NO_TOOLS_NEEDED.]`;
+              cepHint = `\n\n[CEP DETECTADO na conversa: ${cep}. OBRIGATÓRIO: chame consultar_unidade/nearest_unit com cep="${cep}" e tenant_id quando aplicável. Sem cep a ferramenta retorna erro. NÃO retorne NO_TOOLS_NEEDED.]`;
             }
           }
 
@@ -1078,8 +1080,9 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 }
                 if (tool.tool_type === "nearest_unit" || tool.tool_type === "consultar_unidade") {
                   if (!args.cep || String(args.cep).trim() === "") {
+                    // Buscar CEP em até 30 mensagens (cliente pode ter informado há várias trocas)
                     const recentText = messagesToUse
-                      .slice(-8)
+                      .slice(-30)
                       .map((m) => (m.content ?? ""))
                       .join(" ");
                     const cepFallback = extractCepFromText(recentText);
@@ -1769,7 +1772,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           if (tool.tool_type === "nearest_unit" || tool.tool_type === "consultar_unidade") {
             if (!args.cep || String(args.cep).trim() === "") {
               const recentTextSP = messagesToUse
-                .slice(-8)
+                .slice(-30)
                 .map((m) => (m.content ?? ""))
                 .join(" ");
               const cepFallbackSP = extractCepFromText(recentTextSP);

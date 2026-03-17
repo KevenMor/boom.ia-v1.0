@@ -63,12 +63,17 @@ export async function runFindNearestUnit(
 
   if (googleMapsKey) {
     try {
-      // Destinos: máx 25 por request (limite da API). Usar lat,lng ou endereço quando disponível.
+      // Destinos: SEMPRE usar endereço completo — lat/lng da tabela podem estar incorretos e geram distâncias erradas.
+      // O Google geocodifica o endereço corretamente para cálculo de rota.
       const destinations = units
         .slice(0, 25)
-        .map((u: any) =>
-          u.lat && u.lng ? `${u.lat},${u.lng}` : u.address || `${u.cep}, ${u.city || ""}, Brasil`
-        )
+        .map((u: any) => {
+          const addr = u.address?.trim();
+          const city = (u.city || "").trim();
+          if (addr) return `${addr}, ${city || "Sorocaba"}, SP, Brasil`;
+          if (u.cep) return `${u.cep}, ${city || "Sorocaba"}, SP, Brasil`;
+          return u.lat && u.lng ? `${u.lat},${u.lng}` : null;
+        })
         .filter(Boolean)
         .join("|");
 

@@ -16,6 +16,9 @@ import { demoRoutes } from "./routes/demo.js";
 const PORT = parseInt(process.env.PORT || "3001", 10);
 
 console.log("[Server] Starting... PORT=%s NODE_ENV=%s", PORT, process.env.NODE_ENV);
+if (!process.env.GOOGLE_MAPS_API_KEY) {
+  console.warn("[Server] GOOGLE_MAPS_API_KEY não configurada — consultar_unidade usará distância em linha reta (Haversine). Veja docs/GOOGLE-MAPS-CONFIG.md");
+}
 
 async function build() {
   const isProduction = process.env.NODE_ENV === "production";

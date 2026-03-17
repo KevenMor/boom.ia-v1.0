@@ -49,7 +49,14 @@ GOOGLE_MAPS_API_KEY=sua_chave_aqui
 
 ---
 
-## 5. Reiniciar o servidor
+## 5. Configurar no ambiente de deploy (Easypanel, Docker, etc.)
+
+**Importante:** A variável deve estar configurada no ambiente onde o servidor roda:
+- **Easypanel:** Serviço do servidor → Variáveis de ambiente → adicione `GOOGLE_MAPS_API_KEY`
+- **Docker:** passe via `-e GOOGLE_MAPS_API_KEY=...` ou no compose
+- O `.env` local **não** é usado em produção — configure no painel do provedor
+
+## 6. Reiniciar o servidor
 
 Após configurar a chave, reinicie o serviço do servidor para carregar a variável.
 
