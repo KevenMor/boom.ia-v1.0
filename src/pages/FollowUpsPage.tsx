@@ -54,6 +54,7 @@ const CANCEL_REASON_LABELS: Record<string, string> = {
   superseded: "Substituído por novo agendamento",
   no_delivery_channel: "Sem canal Chatwoot configurado",
   unknown_state: "Estado desconhecido (histórico vazio ou inesperado)",
+  unknown: "Motivo não identificado (fallback)",
 };
 function getCancelReasonLabel(code: string | null | undefined): string {
   if (!code) return "";

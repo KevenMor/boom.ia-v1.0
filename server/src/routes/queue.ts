@@ -24,6 +24,16 @@ function normalizeContent(v: string): string {
   return (v || "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+function isLikelyEchoContent(incoming: string, assistant: string): boolean {
+  if (incoming === assistant) return true;
+  const a = incoming.length;
+  const b = assistant.length;
+  if (a < 10 || b < 10) return false;
+  const shorter = a <= b ? incoming : assistant;
+  const longer = a <= b ? assistant : incoming;
+  return longer.includes(shorter) && shorter.length >= Math.min(longer.length * 0.7, 15);
+}
+
 async function isLastMessage(
   supabase: any,
   agentId: string,
@@ -695,6 +705,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
               const meta = (convData.meta || convData) as Record<string, unknown>;
               const assignee = (meta.assignee || (convData as any).assignee) as { id?: number | string } | null;
               const currentAssigneeId = assignee?.id != null ? Number(assignee.id) : null;
+              const agentAssigneeIdForLog = cfg.agent_assignee_id != null && cfg.agent_assignee_id !== "" ? Number(cfg.agent_assignee_id) : null;
 
               // CENÁRIO 3: Agente em teste — só enviar follow-up se assignee = test_assignee_id
               if (agent.status === "test") {
@@ -801,6 +812,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
         }
 
         const lastMsg = conversationMessages[conversationMessages.length - 1];
+        const prevMsg = conversationMessages[conversationMessages.length - 2];
         if (lastMsg?.role === "assistant") {
           // No reply from user since our last message — proceed with follow-up
         } else if (!lastMsg || (lastMsg.role !== "user" && lastMsg.role !== "assistant")) {
@@ -812,8 +824,9 @@ export async function queueRoutes(fastify: FastifyInstance) {
             .eq("id", item.id);
           continue;
         } else if (lastMsg?.role === "user") {
-          const prevMsg = conversationMessages[conversationMessages.length - 2];
-          const isLikelyEcho = prevMsg?.role === "assistant" && normalizeContent(prevMsg.content) === normalizeContent(lastMsg.content);
+          const normUser = normalizeContent(String(lastMsg.content || ""));
+          const normAsst = prevMsg?.role === "assistant" ? normalizeContent(String(prevMsg.content || "")) : "";
+          const isLikelyEcho = normAsst && (normUser === normAsst || isLikelyEchoContent(normUser, normAsst));
           if (isLikelyEcho) {
             console.log(`[FollowUp] user_replied IGNORADO (eco) | item=${item.id?.slice(0, 8)}… | lastUser="${String(lastMsg.content).slice(0, 40)}…" = lastAssistant`);
           } else {
@@ -951,6 +964,14 @@ export async function queueRoutes(fastify: FastifyInstance) {
               p_intervals_minutes: intervals,
               p_delay_minutes: nextDelay,
             });
+            // Fallback: garantir cancel_reason em itens cancelados (se migração schedule_followup não aplicada)
+            await supabase
+              .from("follow_up_queue")
+              .update({ cancel_reason: "superseded", updated_at: new Date().toISOString() })
+              .eq("agent_id", item.agent_id)
+              .eq("conversation_id", item.conversation_id)
+              .eq("status", "cancelled")
+              .is("cancel_reason", null);
             const dueAt = new Date(Date.now() + nextDelay * 60 * 1000);
             console.log(`[FollowUp] ${nextAttempt}/${maxAttempts} agendado | conv=${item.conversation_id?.slice(0, 8)}… | em ${nextDelay}min (às ${dueAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}) | id=${nextId ?? "—"}`);
             followupLog.nextScheduled(item.conversation_id, nextAttempt, maxAttempts, nextDelay);

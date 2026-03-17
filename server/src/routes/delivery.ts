@@ -206,10 +206,6 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
 
       const followupEnabled = cfg.followup_enabled === true || cfg.followup_enabled === "true";
 
-      // #region agent log
-      fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4bd6f5'},body:JSON.stringify({sessionId:'4bd6f5',location:'delivery.ts:followup-check',message:'Delivery followup check',data:{followupEnabled,conversation_id:!!conversation_id,chatwoot_conversation_id:!!chatwoot_conversation_id,agent_id},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
-      // #endregion
-
       if (followupEnabled && conversation_id && chatwoot_conversation_id) {
         const intervals: number[] = Array.isArray(cfg.followup_intervals)
           ? cfg.followup_intervals
@@ -229,14 +225,16 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
             p_intervals_minutes: intervals,
             p_delay_minutes: firstDelay,
           });
+          // Fallback: garantir cancel_reason em itens cancelados (se migração schedule_followup não aplicada)
+          await supabase
+            .from("follow_up_queue")
+            .update({ cancel_reason: "superseded", updated_at: new Date().toISOString() })
+            .eq("agent_id", agent_id)
+            .eq("conversation_id", conversation_id)
+            .eq("status", "cancelled")
+            .is("cancel_reason", null);
           console.log(`[FollowUp] Agendado 1/${maxAttempts} | conv=${conversation_id?.slice(0, 8)}… | delay=${firstDelay}min | id=${followupId ?? "—"}`);
-          // #region agent log
-          fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4bd6f5'},body:JSON.stringify({sessionId:'4bd6f5',location:'delivery.ts:schedule_followup-success',message:'schedule_followup OK',data:{agent_id,conversation_id,firstDelay},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-          // #endregion
         } catch (e: any) {
-          // #region agent log
-          fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4bd6f5'},body:JSON.stringify({sessionId:'4bd6f5',location:'delivery.ts:schedule_followup-fail',message:'schedule_followup FAILED',data:{agent_id,error:e?.message},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-          // #endregion
           console.warn("[Deliver] Schedule follow-up failed:", e.message);
         }
       } else {

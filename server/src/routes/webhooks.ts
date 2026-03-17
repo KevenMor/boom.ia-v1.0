@@ -147,13 +147,46 @@ async function hasRecentDuplicateIncoming(
   }
 }
 
-/** Verifica se a mensagem "incoming" é provável eco da última mensagem do bot (WhatsApp/Chatwoot às vezes repete). */
+/** Verifica se há follow-up pendente agendado recentemente (últimos N segundos) para esta conversa. */
+async function hasRecentPendingFollowup(
+  supabase: any,
+  agentId: string,
+  convId: string,
+  withinSeconds = 300
+): Promise<boolean> {
+  try {
+    const since = new Date(Date.now() - withinSeconds * 1000).toISOString();
+    const { data } = await supabase
+      .from("follow_up_queue")
+      .select("id")
+      .eq("agent_id", agentId)
+      .eq("conversation_id", convId)
+      .eq("status", "pending")
+      .gte("created_at", since)
+      .limit(1);
+    return !!(data && data.length > 0);
+  } catch {
+    return false;
+  }
+}
+
+/** Verifica se a mensagem "incoming" é provável eco de alguma mensagem do bot (WhatsApp/Chatwoot às vezes repete). Compara com as últimas N mensagens do assistente. */
+function isLikelyEchoContent(incoming: string, assistant: string): boolean {
+  if (incoming === assistant) return true;
+  const a = incoming.length;
+  const b = assistant.length;
+  if (a < 10 || b < 10) return false;
+  const shorter = a <= b ? incoming : assistant;
+  const longer = a <= b ? assistant : incoming;
+  return longer.includes(shorter) && shorter.length >= Math.min(longer.length * 0.7, 15);
+}
+
 async function isLikelyEchoOfBotMessage(
   supabase: any,
   agentId: string,
   convId: string,
   incomingText: string,
-  windowSeconds = 120
+  windowSeconds = 180
 ): Promise<boolean> {
   try {
     const { data: history } = await supabase.rpc("load_conversation_messages", {
@@ -162,15 +195,17 @@ async function isLikelyEchoOfBotMessage(
     });
     if (!history || !Array.isArray(history) || history.length === 0) return false;
     const normalizedIncoming = normalizeContent(incomingText);
-    if (!normalizedIncoming || normalizedIncoming.length < 10) return false;
+    if (!normalizedIncoming || normalizedIncoming.length < 5) return false;
     const now = Date.now();
-    for (let i = history.length - 1; i >= 0; i--) {
+    let checked = 0;
+    for (let i = history.length - 1; i >= 0 && checked < 10; i--) {
       const m = history[i];
       if (m.role !== "assistant") continue;
+      checked++;
       const createdAt = m.created_at ? new Date(m.created_at).getTime() : 0;
-      if (!createdAt || now - createdAt > windowSeconds * 1000) break;
-      if (normalizeContent(String(m.content || "")) === normalizedIncoming) return true;
-      break;
+      if (!createdAt || now - createdAt > windowSeconds * 1000) continue;
+      const norm = normalizeContent(String(m.content || ""));
+      if (norm === normalizedIncoming || isLikelyEchoContent(normalizedIncoming, norm)) return true;
     }
     return false;
   } catch {
@@ -223,16 +258,22 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         return reply.send({ status: "ignored", reason: `Event '${payload.event}' not handled` });
       }
 
-      if (payload.event === "message_created" && payload.message_type === "outgoing") {
+      // Ignorar mensagens outgoing (do bot) — Chatwoot envia ao criar mensagem via API
+      const mt = payload.message_type ?? (payload as any).message?.message_type;
+      const isOutgoing =
+        mt === "outgoing" ||
+        mt === 1 ||
+        mt === "1" ||
+        (typeof mt === "string" && mt.toLowerCase() === "outgoing");
+      if (payload.event === "message_created" && isOutgoing) {
         return reply.send({
           status: "ignored",
-          reason: "Outgoing já registrado pela queue; evita duplicata da resposta da agente no Chat ao Vivo",
+          reason: "Outgoing — mensagem do bot, não processar",
         });
       }
 
       if (payload.event === "message_created") {
-        const mt = payload.message_type;
-        const notIncoming = mt !== "incoming" && (mt as number) !== 0;
+        const notIncoming = mt !== "incoming" && mt !== "0" && (mt as number) !== 0;
         if (notIncoming) {
           return reply.send({ status: "ignored", reason: "Not an incoming message" });
         }
@@ -320,6 +361,13 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 p_cancel_reason: "user_replied",
               });
               if (cancelled && cancelled > 0) {
+                await supabase
+                  .from("follow_up_queue")
+                  .update({ cancel_reason: "user_replied", updated_at: new Date().toISOString() })
+                  .eq("agent_id", agentId)
+                  .eq("conversation_id", newConvId)
+                  .eq("status", "cancelled")
+                  .is("cancel_reason", null);
                 console.log(`[FollowUp] Webhook (human-assigned) cancelou ${cancelled} follow-up(s) | conv=${newConvId?.slice(0, 8)}…`);
               }
               await supabase.rpc("save_message", {
@@ -379,19 +427,34 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         });
         earlyConvId = existingConvId;
         if (earlyConvId) {
+          // Janela de graça PRIMEIRO: se há follow-up pendente nos últimos 5 min, ignorar incoming
+          const hasRecentPending = await hasRecentPendingFollowup(supabase, agentId, earlyConvId, 300);
+          if (hasRecentPending) {
+            console.log(`[FollowUp] Webhook ignorado (janela de graça 5min) | conv=${earlyConvId?.slice(0, 8)}…`);
+            return reply.send({ status: "ignored", reason: "Janela de graça — follow-up pendente preservado" });
+          }
           const likelyEcho = userMessage?.trim()
-            ? await isLikelyEchoOfBotMessage(supabase, agentId, earlyConvId, userMessage, 120)
+            ? await isLikelyEchoOfBotMessage(supabase, agentId, earlyConvId, userMessage, 300)
             : false;
           if (likelyEcho) {
-            console.log(`[FollowUp] Webhook ignorado (eco do bot) | conv=${earlyConvId?.slice(0, 8)}… | content="${String(userMessage).slice(0, 50)}…"`);
-            return reply.send({ status: "ignored", reason: "Echo do bot detectado — mensagem idêntica à última do assistente" });
-          } else {
+            console.log(`[FollowUp] Webhook ignorado (eco do bot) | conv=${earlyConvId?.slice(0, 8)}…`);
+            return reply.send({ status: "ignored", reason: "Echo do bot detectado" });
+          }
+          {
             const { data: cancelled } = await supabase.rpc("cancel_pending_followups", {
               p_agent_id: agentId,
               p_conversation_id: earlyConvId,
               p_cancel_reason: "user_replied",
             });
             if (cancelled && cancelled > 0) {
+              // Fallback: garantir cancel_reason mesmo se migração 20260311120000 não aplicada
+              await supabase
+                .from("follow_up_queue")
+                .update({ cancel_reason: "user_replied", updated_at: new Date().toISOString() })
+                .eq("agent_id", agentId)
+                .eq("conversation_id", earlyConvId)
+                .eq("status", "cancelled")
+                .is("cancel_reason", null);
               console.log(`[FollowUp] Webhook cancelou ${cancelled} follow-up(s) | conv=${earlyConvId?.slice(0, 8)}… | motivo=user_replied | content="${String(userMessage || "").slice(0, 60)}…"`);
             }
           }
