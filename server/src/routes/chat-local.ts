@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
 import { msgLog } from "../utils/flow-logger.js";
 import { transcribeAudio, isAudioAttachment } from "../services/transcribe.js";
+import { extractDocument, formatExtractedForMessage, isImageOrPdfAttachment } from "../services/extractDocument.js";
 import { buildSystemPrompt, getDispatcherPrompt } from "../services/prompts/registry.js";
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
 import { filterCommandLinesFromStream, sanitizeLLMOutput, fallbackSanitizeForRetry, restorePortugueseAccents } from "../utils/sanitize.js";
@@ -601,6 +602,29 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
             messagesToUse = [
               ...messagesToUse.slice(0, -1),
               { ...lastMsg, content: lastMsg.content?.trim() ? `${lastMsg.content}\n${fallback}` : fallback },
+            ];
+          }
+        }
+      }
+
+      // Extração de dados de documento (RG, CNH, comprovante) — sandbox e fluxo direto
+      const docAttachments = attachments.filter(isImageOrPdfAttachment);
+      if (docAttachments.length > 0 && messagesToUse.length > 0) {
+        const lastMsg = messagesToUse[messagesToUse.length - 1];
+        if (lastMsg.role === "user") {
+          console.log("[Chat-Local] Extraindo dados de", docAttachments.length, "documento(s)...");
+          const extractedParts: string[] = [];
+          for (const doc of docAttachments) {
+            const result = await extractDocument(doc.data_url!, doc);
+            const formatted = formatExtractedForMessage(result.data);
+            if (formatted) extractedParts.push(formatted);
+          }
+          if (extractedParts.length > 0) {
+            const docText = extractedParts.join("\n");
+            const prefix = lastMsg.content?.trim() ? `${lastMsg.content}\n` : "";
+            messagesToUse = [
+              ...messagesToUse.slice(0, -1),
+              { ...lastMsg, content: `${prefix}${docText}` },
             ];
           }
         }

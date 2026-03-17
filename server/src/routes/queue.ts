@@ -11,6 +11,7 @@ import {
 } from "../services/delivery.js";
 import { sendViaWaha } from "../services/waha.js";
 import { transcribeAudio, isAudioAttachment } from "../services/transcribe.js";
+import { extractDocument, formatExtractedForMessage, isImageOrPdfAttachment } from "../services/extractDocument.js";
 import { buildReminderMessage } from "../utils/buildReminderMessage.js";
 import {
   getBrasiliaHour,
@@ -710,6 +711,8 @@ export async function queueRoutes(fastify: FastifyInstance) {
       let attachmentsForChat: unknown[] | undefined = attachments;
       if (hasAttachments) {
         const audioAttachments = (attachments as any[]).filter(isAudioAttachment);
+        const docAttachments = (attachments as any[]).filter(isImageOrPdfAttachment);
+
         if (audioAttachments.length > 0) {
           console.log("[ProcessQueue] Transcribing", audioAttachments.length, "audio attachment(s)...");
           const transcriptions = await Promise.all(
@@ -731,6 +734,25 @@ export async function queueRoutes(fastify: FastifyInstance) {
             if (!finalMessage) {
               finalMessage = "[O cliente enviou um áudio que não pôde ser transcrito. Peça para repetir por texto.]";
             }
+          }
+        }
+
+        if (docAttachments.length > 0) {
+          console.log("[ProcessQueue] Extracting document data from", docAttachments.length, "image/PDF(s)...");
+          const extractedParts: string[] = [];
+          for (const doc of docAttachments) {
+            const result = await extractDocument(doc.data_url, doc);
+            const formatted = formatExtractedForMessage(result.data);
+            if (formatted) extractedParts.push(formatted);
+            else if (result.error) console.warn("[ProcessQueue] Document extraction failed:", result.error);
+          }
+          if (extractedParts.length > 0) {
+            const docText = extractedParts.join("\n");
+            finalMessage = finalMessage
+              ? `${finalMessage}\n${docText}`
+              : docText;
+            attachmentsForChat = (attachmentsForChat as any[])?.filter((a) => !isImageOrPdfAttachment(a)) ?? [];
+            if (!attachmentsForChat?.length) attachmentsForChat = [];
           }
         }
       }
