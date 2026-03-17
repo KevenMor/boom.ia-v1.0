@@ -843,8 +843,26 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }
           }
 
+          const hasAssignTool = tools.some((t) => t.tool_type === "chatwoot_assign");
+          const isAutoescolaIdeal = tenantSlug === "ideal" || tenantSlug === "autoescola-ideal" || tenantSlug === "auto-escola-ideal";
+          let assignHint = "";
+          if (hasAssignTool && isAutoescolaIdeal) {
+            const lastAsst = [...messagesToUse].reverse().find((m) => m.role === "assistant");
+            const lastUsr = [...messagesToUse].reverse().find((m) => m.role === "user");
+            const summaryHasUnit = lastAsst?.content && /Unidade de preferência:/i.test(lastAsst.content) && /Está tudo correto\?/i.test(lastAsst.content);
+            const userTrim = lastUsr?.content?.trim() || "";
+            const userConfirms = userTrim && (userTrim.length < 80) && /\b(sim|ok|está certo|tudo certo|confirmo|pode ser|perfeito|legal|beleza|bora|vamos|quero|fechado|tá certo|está ok|pode seguir|tudo ok)\b/i.test(userTrim);
+            if (summaryHasUnit && userConfirms && lastAsst?.content) {
+              const unitMatch = lastAsst.content.match(/Unidade de preferência:\s*(.+?)(?:\n|$)/i);
+              const unitName = unitMatch?.[1]?.trim();
+              if (unitName) {
+                assignHint = `\n\n[RESUMO CONFIRMADO. OBRIGATÓRIO: chame atribuir_agente/chatwoot_assign com reason="${unitName}" para transferir ao time da unidade mais próxima da residência do cliente. NÃO retorne NO_TOOLS_NEEDED.]`;
+              }
+            }
+          }
+
           const dispatcherMessages = toOpenAIMessages(
-            getDispatcherPrompt(tenantSlug) + dispatcherDateContext + entityHint + cepHint + schedulingHint,
+            getDispatcherPrompt(tenantSlug) + dispatcherDateContext + entityHint + cepHint + assignHint + schedulingHint,
             messagesToUse
           );
 
