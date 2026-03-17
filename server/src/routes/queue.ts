@@ -340,6 +340,18 @@ export async function processFollowUpItem(
         const meta = (convData.meta || convData) as Record<string, unknown>;
         const assignee = (meta.assignee || convData.assignee) as { id?: number | string } | null;
         const currentAssigneeId = assignee?.id != null ? Number(assignee.id) : null;
+        const team = (meta.team || convData.team) as { id?: number | string } | null;
+        const currentTeamId = team?.id != null ? Number(team.id) : (meta.team_id ?? convData.team_id) != null ? Number(meta.team_id ?? convData.team_id) : null;
+
+        if (currentTeamId != null && agent.status === "active") {
+          console.log(`[FollowUp] CANCELLED team_assigned | item=${(item.id as string)?.slice(0, 8)}…`);
+          followupLog.cancelled(item.id as string, "team_assigned");
+          await supabase
+            .from("follow_up_queue")
+            .update({ status: "cancelled", cancel_reason: "team_assigned", updated_at: new Date().toISOString() })
+            .eq("id", item.id);
+          return { processed: false, skipped: true };
+        }
 
         if (agent.status === "test") {
           const testAssigneeId = cfg.test_assignee_id != null ? Number(cfg.test_assignee_id) : null;
