@@ -218,7 +218,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
         const firstDelay = intervals[0] || 10;
 
         try {
-          await supabase.rpc("schedule_followup", {
+          const { data: followupId } = await supabase.rpc("schedule_followup", {
             p_agent_id: agent_id,
             p_conversation_id: conversation_id,
             p_external_user_id: external_user_id,
@@ -229,6 +229,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
             p_intervals_minutes: intervals,
             p_delay_minutes: firstDelay,
           });
+          console.log(`[FollowUp] Agendado 1/${maxAttempts} | conv=${conversation_id?.slice(0, 8)}… | delay=${firstDelay}min | id=${followupId ?? "—"}`);
           // #region agent log
           fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4bd6f5'},body:JSON.stringify({sessionId:'4bd6f5',location:'delivery.ts:schedule_followup-success',message:'schedule_followup OK',data:{agent_id,conversation_id,firstDelay},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
           // #endregion

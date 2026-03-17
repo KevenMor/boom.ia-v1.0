@@ -279,11 +279,14 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               p_contact_avatar_url: chatwoot.contactAvatarUrl,
             });
             if (newConvId && chatwoot.message?.trim()) {
-              await supabase.rpc("cancel_pending_followups", {
+              const { data: cancelled } = await supabase.rpc("cancel_pending_followups", {
                 p_agent_id: agentId,
                 p_conversation_id: newConvId,
                 p_cancel_reason: "user_replied",
               });
+              if (cancelled && cancelled > 0) {
+                console.log(`[FollowUp] Webhook (human-assigned) cancelou ${cancelled} follow-up(s) | conv=${newConvId?.slice(0, 8)}…`);
+              }
               await supabase.rpc("save_message", {
                 p_agent_id: agentId,
                 p_conversation_id: newConvId,
@@ -341,11 +344,14 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         });
         earlyConvId = existingConvId;
         if (earlyConvId) {
-          await supabase.rpc("cancel_pending_followups", {
+          const { data: cancelled } = await supabase.rpc("cancel_pending_followups", {
             p_agent_id: agentId,
             p_conversation_id: earlyConvId,
             p_cancel_reason: "user_replied",
           });
+          if (cancelled && cancelled > 0) {
+            console.log(`[FollowUp] Webhook cancelou ${cancelled} follow-up(s) | conv=${earlyConvId?.slice(0, 8)}… | motivo=user_replied`);
+          }
         }
       } catch (e) {
         console.warn("[Webhook] Early cancel failed:", e);

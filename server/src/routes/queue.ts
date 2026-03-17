@@ -861,6 +861,17 @@ export async function queueRoutes(fastify: FastifyInstance) {
           }
         }
 
+        // Re-verificar status antes de enviar (evita race: webhook pode ter cancelado enquanto processávamos)
+        const { data: recheck } = await supabase
+          .from("follow_up_queue")
+          .select("status")
+          .eq("id", item.id)
+          .single();
+        if (recheck?.status !== "pending") {
+          followupLog.cancelled(item.id, "skipped_race", `status=${recheck?.status ?? "?"} (cancelado durante processamento)`);
+          continue;
+        }
+
         let sent = false;
         if (item.chatwoot_conversation_id && cfg.chatwoot_url && cfg.chatwoot_api_token && cfg.chatwoot_account_id) {
           const chatwootBase = cfg.chatwoot_url.replace(/\/+$/, "");
