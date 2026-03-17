@@ -147,29 +147,6 @@ async function hasRecentDuplicateIncoming(
   }
 }
 
-/** Verifica se há follow-up pendente agendado recentemente (últimos N segundos) para esta conversa. */
-async function hasRecentPendingFollowup(
-  supabase: any,
-  agentId: string,
-  convId: string,
-  withinSeconds = 300
-): Promise<boolean> {
-  try {
-    const since = new Date(Date.now() - withinSeconds * 1000).toISOString();
-    const { data } = await supabase
-      .from("follow_up_queue")
-      .select("id")
-      .eq("agent_id", agentId)
-      .eq("conversation_id", convId)
-      .eq("status", "pending")
-      .gte("created_at", since)
-      .limit(1);
-    return !!(data && data.length > 0);
-  } catch {
-    return false;
-  }
-}
-
 /** Verifica se a mensagem "incoming" é provável eco de alguma mensagem do bot (WhatsApp/Chatwoot às vezes repete). Compara com as últimas N mensagens do assistente. */
 function isLikelyEchoContent(incoming: string, assistant: string): boolean {
   if (incoming === assistant) return true;
@@ -427,12 +404,6 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         });
         earlyConvId = existingConvId;
         if (earlyConvId) {
-          // Janela de graça PRIMEIRO: se há follow-up pendente nos últimos 5 min, ignorar incoming
-          const hasRecentPending = await hasRecentPendingFollowup(supabase, agentId, earlyConvId, 300);
-          if (hasRecentPending) {
-            console.log(`[FollowUp] Webhook ignorado (janela de graça 5min) | conv=${earlyConvId?.slice(0, 8)}…`);
-            return reply.send({ status: "ignored", reason: "Janela de graça — follow-up pendente preservado" });
-          }
           const likelyEcho = userMessage?.trim()
             ? await isLikelyEchoOfBotMessage(supabase, agentId, earlyConvId, userMessage, 300)
             : false;
