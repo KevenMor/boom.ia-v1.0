@@ -19,9 +19,9 @@ O processamento dos follow-ups (rota `POST /api/queue/followups`, chamada a cada
 ---
 
 ## 3. Horário de silêncio (quiet hours)
-- **Condição:** Hora atual (Brasília) dentro do intervalo `followup_quiet_start`–`followup_quiet_end` (ex.: 23h–7h).
-- **Ação:** Item **não** é cancelado; fica para a próxima rodada (apenas **skipped**).
-- **No seu caso:** Se o follow-up era de dia, não é essa a causa.
+- **Condição:** Hora atual (Brasília) dentro do intervalo `followup_quiet_start`–`followup_quiet_end` (ex.: 22h–8h).
+- **Ação:** Item **não** é cancelado; é **reagendado** para o próximo slot fora do silêncio (ex.: 08:XX do mesmo dia ou do dia seguinte, mantendo o minuto). O log mostra: `[FollowUp] REAGENDANDO item X: quiet hours — hora Brasília Yh → próximo slot <ISO>`.
+- **Timezone:** A hora é sempre calculada em Brasília (America/Sao_Paulo) via `Intl`, mesmo com servidor em UTC.
 
 ---
 
@@ -33,7 +33,7 @@ O processamento dos follow-ups (rota `POST /api/queue/followups`, chamada a cada
 ---
 
 ## 5. Conversa com humano atribuído (CENÁRIO 2)
-- **Condição:** Agente **ativo** (`status === "active"`) **e** a API do Chatwoot retorna que a conversa tem **assignee** (qualquer ID).
+- **Condição:** Agente **ativo** **e** `agent_assignee_id` configurado **e** assignee da conversa ≠ `agent_assignee_id`.
 - **Ação:** Status → `cancelled` **exceto** quando o assignee for o **bot** (configurado em `agent_assignee_id`). A lógica anterior assumia: “conversa com atendente humano → não mandar follow-up automático”.
 - **Solução:** Configure o **Assignee ID do agente (bot)** no painel do agente (quando status = Ativo). Esse é o ID do usuário no Chatwoot que representa o bot. Após a primeira mensagem, a IA atribui a conversa a esse ID. Quando o assignee da conversa for igual ao `agent_assignee_id`, o follow-up **é enviado normalmente**.
 - **Problema (obsoleto):** No Chatwoot, muitas contas têm **assignee padrão** (ex.: “Bot”, “Inbox” ou um usuário). Nesses casos, **sempre** há `meta.assignee.id`. O código não diferencia “humano” de “bot”; qualquer assignee cancela.
@@ -64,11 +64,11 @@ O processamento dos follow-ups (rota `POST /api/queue/followups`, chamada a cada
 
 ## Resumo para o seu caso
 
-- **Causa mais provável do cancelamento anterior:** **CENÁRIO 2** — conversa no Chatwoot com assignee (qualquer um), fazendo o código cancelar o follow-up mesmo sem interação do cliente.
+- **Causa mais provável do cancelamento anterior:** **CENÁRIO 2** (corrigido em 2026-03: se `agent_assignee_id` não configurado, não cancela mais) ou **quiet hours** (skipped, não cancelado).
 - **Para o follow-up das 12:30:**
   1. Confirme no Chatwoot se a conversa está **sem assignee** ou com um assignee que você queira que “não cancele” (aí precisamos de ajuste no código).
   2. Confirme que o agente está **Ativo** ou **Teste** (e, se Teste, que o assignee da conversa é o `test_assignee_id`).
-  3. Veja nos **logs do servidor** no horário em que o cron rodar (ex.: `[FollowUp] Human assigned` ou `[FollowUp] Appointment confirmed` ou `last message is from user`) para ver exatamente qual regra cancelou.
+  3. Veja nos **logs do servidor** no horário em que o cron rodar: `[FollowUp] CANCELLED item X: <motivo>` ou `[FollowUp] SKIPPED item X: quiet hours`.
 
 ---
 

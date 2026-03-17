@@ -11,6 +11,11 @@ import {
 import { sendViaWaha } from "../services/waha.js";
 import { transcribeAudio, isAudioAttachment } from "../services/transcribe.js";
 import { buildReminderMessage } from "../utils/buildReminderMessage.js";
+import {
+  getBrasiliaHour,
+  isInQuietHours,
+  getNextSlotOutsideQuietHours,
+} from "../utils/brasiliaTime.js";
 
 const API_BASE = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
 
@@ -618,6 +623,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
           .single();
 
         if (!agent) {
+          console.log(`[FollowUp] CANCELLED item ${item.id}: agent_not_found (agent_id ${item.agent_id})`);
           // #region agent log
           fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-cancel',message:'CANCELLED: agent not found',data:{itemId:item.id,agentId:item.agent_id},timestamp:Date.now(),hypothesisId:'H-agent-missing'})}).catch(()=>{});
           // #endregion
@@ -633,6 +639,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
         // #endregion
 
         if (agent.status === "inactive") {
+          console.log(`[FollowUp] CANCELLED item ${item.id}: agent_inactive`);
           // #region agent log
           fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-cancel',message:'CANCELLED: agent inactive',data:{itemId:item.id,agentStatus:agent.status},timestamp:Date.now(),hypothesisId:'H-inactive'})}).catch(()=>{});
           // #endregion
@@ -661,16 +668,24 @@ export async function queueRoutes(fastify: FastifyInstance) {
 
         const quietStart = parseHour(cfg.followup_quiet_start, 23);
         const quietEnd = parseHour(cfg.followup_quiet_end, 7);
-        const nowBrasilia = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
-        const currentHour = nowBrasilia.getHours();
-        const inQuietHours = quietStart > quietEnd
-          ? (currentHour >= quietStart || currentHour < quietEnd)
-          : (currentHour >= quietStart && currentHour < quietEnd);
+        const now = new Date();
+        const currentHour = getBrasiliaHour(now);
+        const inQuietHours = isInQuietHours(quietStart, quietEnd, now);
+        // Debug: UTC hour vs Brasília hour (evita confusão quando servidor está em UTC)
+        if (pending.length <= 3) {
+          console.log(`[FollowUp] Timezone check: UTC ${now.getUTCHours()}h, Brasília ${currentHour}h, quiet ${quietStart}h–${quietEnd}h, inQuiet=${inQuietHours}`);
+        }
 
         if (inQuietHours) {
+          const nextSlot = getNextSlotOutsideQuietHours(quietStart, quietEnd, item.scheduled_at, now);
+          console.log(`[FollowUp] REAGENDANDO item ${item.id} (conversation ${item.conversation_id}): quiet hours — hora Brasília ${currentHour}h, config ${quietStart}h–${quietEnd}h → próximo slot ${nextSlot}`);
           // #region agent log
-          fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-skip',message:'SKIPPED: quiet hours',data:{itemId:item.id,currentHour,quietStart,quietEnd},timestamp:Date.now(),hypothesisId:'H-quiet'})}).catch(()=>{});
+          fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-reschedule',message:'REAGENDADO: quiet hours',data:{itemId:item.id,currentHour,quietStart,quietEnd,nextSlot},timestamp:Date.now(),hypothesisId:'H-quiet'})}).catch(()=>{});
           // #endregion
+          await supabase
+            .from("follow_up_queue")
+            .update({ scheduled_at: nextSlot, updated_at: now.toISOString() })
+            .eq("id", item.id);
           skipped++;
           continue;
         }
@@ -714,23 +729,23 @@ export async function queueRoutes(fastify: FastifyInstance) {
                 }
               }
 
-              // CENÁRIO 2: Conversa com assignee = agent_assignee_id (bot) → ENVIAR follow-up.
-              // Só cancelar quando assignee for diferente do ID configurado no painel (humano assumiu).
-              if (currentAssigneeId && agent.status === "active") {
+              // CENÁRIO 2: Só cancelar quando agent_assignee_id está configurado E assignee ≠ bot (humano assumiu).
+              // Se agent_assignee_id NÃO está configurado, não cancelar por assignee — enviar follow-up.
+              if (currentAssigneeId != null && agent.status === "active") {
                 const agentAssigneeId = cfg.agent_assignee_id != null && cfg.agent_assignee_id !== "" ? Number(cfg.agent_assignee_id) : null;
-                const isAgentOwnConversation = agentAssigneeId != null && Number(currentAssigneeId) === Number(agentAssigneeId);
-                if (isAgentOwnConversation) {
-                  console.log(`[FollowUp] Assignee ${currentAssigneeId} = bot (agent_assignee_id): enviando follow-up ${item.id}`);
-                } else if (!isAgentOwnConversation) {
-                  console.log(`[FollowUp] Human assigned (${currentAssigneeId}): cancelling ${item.id}`);
-                  // #region agent log
-                  fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-cancel',message:'CANCELLED: human assigned (active agent)',data:{itemId:item.id,currentAssigneeId},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
-                  // #endregion
-                  await supabase
-                    .from("follow_up_queue")
-                    .update({ status: "cancelled", cancel_reason: "human_assigned", updated_at: new Date().toISOString() })
-                    .eq("id", item.id);
-                  continue;
+                if (agentAssigneeId != null) {
+                  const isAgentOwnConversation = Number(currentAssigneeId) === Number(agentAssigneeId);
+                  if (!isAgentOwnConversation) {
+                    console.log(`[FollowUp] CANCELLED item ${item.id}: human_assigned (assignee ${currentAssigneeId} != bot ${agentAssigneeId})`);
+                    // #region agent log
+                    fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-cancel',message:'CANCELLED: human assigned (active agent)',data:{itemId:item.id,currentAssigneeId},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+                    // #endregion
+                    await supabase
+                      .from("follow_up_queue")
+                      .update({ status: "cancelled", cancel_reason: "human_assigned", updated_at: new Date().toISOString() })
+                      .eq("id", item.id);
+                    continue;
+                  }
                 }
               }
             }
@@ -776,7 +791,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
         // #endregion
 
         if (hasConfirmedSchedule) {
-          console.log(`[FollowUp] Appointment confirmed: cancelling ${item.id}`);
+          console.log(`[FollowUp] CANCELLED item ${item.id}: appointment_confirmed (regex match no histórico)`);
           // #region agent log
           fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-cancel',message:'CANCELLED: confirmed schedule regex match',data:{itemId:item.id,confirmedMsgPreviews:confirmedMsgs.map(m=>m.content.slice(0,120))},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
           // #endregion
@@ -803,7 +818,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
           return false;
         })();
         if (userDeclinedNoInterest) {
-          console.log(`[FollowUp] Client declined / no interest expressed: cancelling ${item.id}`);
+          console.log(`[FollowUp] CANCELLED item ${item.id}: client_no_interest`);
           await supabase
             .from("follow_up_queue")
             .update({ status: "cancelled", cancel_reason: "client_no_interest", updated_at: new Date().toISOString() })
@@ -815,6 +830,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
         if (lastMsg?.role === "assistant") {
           // No reply from user since our last message — proceed with follow-up
         } else if (lastMsg?.role === "user") {
+          console.log(`[FollowUp] CANCELLED item ${item.id}: user_replied (última msg é do usuário)`);
           // #region agent log
           fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-cancel',message:'CANCELLED: last message is from user (user replied)',data:{itemId:item.id,lastMsgPreview:lastMsg.content.slice(0,80)},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
           // #endregion
@@ -1059,6 +1075,33 @@ export async function queueRoutes(fastify: FastifyInstance) {
         await supabase
           .from("appointment_reminders")
           .update({ status: "cancelled", skip_reason: "no_delivery_channel", updated_at: new Date().toISOString() })
+          .eq("id", item.id);
+        skipped++;
+        continue;
+      }
+
+      // Quiet hours: reagendar remind_at em vez de cancelar (mesma lógica do follow-up)
+      function parseReminderHour(v: unknown, defaultVal: number): number {
+        if (v == null || v === "") return defaultVal;
+        const n = Number(v);
+        if (!Number.isNaN(n) && n >= 0 && n <= 23) return n;
+        const s = String(v);
+        const m = s.match(/^(\d{1,2})/);
+        if (m) {
+          const h = parseInt(m[1], 10);
+          if (!Number.isNaN(h)) return Math.min(23, Math.max(0, h));
+        }
+        return defaultVal;
+      }
+      const rQuietStart = parseReminderHour(cfg.followup_quiet_start, 23);
+      const rQuietEnd = parseReminderHour(cfg.followup_quiet_end, 7);
+      const now = new Date();
+      if (isInQuietHours(rQuietStart, rQuietEnd, now)) {
+        const nextSlot = getNextSlotOutsideQuietHours(rQuietStart, rQuietEnd, item.remind_at, now);
+        console.log(`[Reminder] REAGENDANDO item ${item.id}: quiet hours — hora Brasília ${getBrasiliaHour(now)}h → próximo slot ${nextSlot}`);
+        await supabase
+          .from("appointment_reminders")
+          .update({ remind_at: nextSlot, updated_at: now.toISOString() })
           .eq("id", item.id);
         skipped++;
         continue;
