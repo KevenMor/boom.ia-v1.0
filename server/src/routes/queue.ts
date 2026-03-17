@@ -601,7 +601,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
         .limit(3);
       if (future && future.length > 0) {
         const nextAt = new Date(future[0].scheduled_at);
-        console.log(`[FollowUp] cron | 0 due now (${future.length} agendado(s) para depois, próximo às ${nextAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })})`);
+        console.log(`[FollowUp] cron | 0 due now (${future.length} agendado(s) para depois, próximo às ${nextAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })})`);
       } else {
         followupLog.cronNoPending();
       }
@@ -935,7 +935,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
               p_delay_minutes: nextDelay,
             });
             const dueAt = new Date(Date.now() + nextDelay * 60 * 1000);
-            console.log(`[FollowUp] ${nextAttempt}/${maxAttempts} agendado | conv=${item.conversation_id?.slice(0, 8)}… | em ${nextDelay}min (às ${dueAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}) | id=${nextId ?? "—"}`);
+            console.log(`[FollowUp] ${nextAttempt}/${maxAttempts} agendado | conv=${item.conversation_id?.slice(0, 8)}… | em ${nextDelay}min (às ${dueAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}) | id=${nextId ?? "—"}`);
             followupLog.nextScheduled(item.conversation_id, nextAttempt, maxAttempts, nextDelay);
           } catch (e: any) {
             console.warn("[FollowUp] Falha ao agendar próximo:", e.message, "| attempt=" + nextAttempt + "/" + maxAttempts);

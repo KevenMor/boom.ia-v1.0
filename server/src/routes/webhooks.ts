@@ -147,6 +147,37 @@ async function hasRecentDuplicateIncoming(
   }
 }
 
+/** Verifica se a mensagem "incoming" é provável eco da última mensagem do bot (WhatsApp/Chatwoot às vezes repete). */
+async function isLikelyEchoOfBotMessage(
+  supabase: any,
+  agentId: string,
+  convId: string,
+  incomingText: string,
+  windowSeconds = 120
+): Promise<boolean> {
+  try {
+    const { data: history } = await supabase.rpc("load_conversation_messages", {
+      p_agent_id: agentId,
+      p_conversation_id: convId,
+    });
+    if (!history || !Array.isArray(history) || history.length === 0) return false;
+    const normalizedIncoming = normalizeContent(incomingText);
+    if (!normalizedIncoming || normalizedIncoming.length < 10) return false;
+    const now = Date.now();
+    for (let i = history.length - 1; i >= 0; i--) {
+      const m = history[i];
+      if (m.role !== "assistant") continue;
+      const createdAt = m.created_at ? new Date(m.created_at).getTime() : 0;
+      if (!createdAt || now - createdAt > windowSeconds * 1000) break;
+      if (normalizeContent(String(m.content || "")) === normalizedIncoming) return true;
+      break;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 async function bufferMessage(
   supabase: any,
   agentId: string,
@@ -279,6 +310,10 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               p_contact_avatar_url: chatwoot.contactAvatarUrl,
             });
             if (newConvId && chatwoot.message?.trim()) {
+              const likelyEcho = await isLikelyEchoOfBotMessage(supabase, agentId, newConvId, chatwoot.message, 120);
+              if (likelyEcho) {
+                return reply.send({ status: "ignored", reason: "Echo do bot detectado" });
+              }
               const { data: cancelled } = await supabase.rpc("cancel_pending_followups", {
                 p_agent_id: agentId,
                 p_conversation_id: newConvId,
@@ -344,13 +379,21 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         });
         earlyConvId = existingConvId;
         if (earlyConvId) {
-          const { data: cancelled } = await supabase.rpc("cancel_pending_followups", {
-            p_agent_id: agentId,
-            p_conversation_id: earlyConvId,
-            p_cancel_reason: "user_replied",
-          });
-          if (cancelled && cancelled > 0) {
-            console.log(`[FollowUp] Webhook cancelou ${cancelled} follow-up(s) | conv=${earlyConvId?.slice(0, 8)}… | motivo=user_replied`);
+          const likelyEcho = userMessage?.trim()
+            ? await isLikelyEchoOfBotMessage(supabase, agentId, earlyConvId, userMessage, 120)
+            : false;
+          if (likelyEcho) {
+            console.log(`[FollowUp] Webhook ignorado (eco do bot) | conv=${earlyConvId?.slice(0, 8)}… | content="${String(userMessage).slice(0, 50)}…"`);
+            return reply.send({ status: "ignored", reason: "Echo do bot detectado — mensagem idêntica à última do assistente" });
+          } else {
+            const { data: cancelled } = await supabase.rpc("cancel_pending_followups", {
+              p_agent_id: agentId,
+              p_conversation_id: earlyConvId,
+              p_cancel_reason: "user_replied",
+            });
+            if (cancelled && cancelled > 0) {
+              console.log(`[FollowUp] Webhook cancelou ${cancelled} follow-up(s) | conv=${earlyConvId?.slice(0, 8)}… | motivo=user_replied | content="${String(userMessage || "").slice(0, 60)}…"`);
+            }
           }
         }
       } catch (e) {
