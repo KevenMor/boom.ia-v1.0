@@ -18,6 +18,19 @@ function normalizeForSearch(str: string): string {
     .trim();
 }
 
+/**
+ * Remove fragmentos de frase que o LLM às vezes inclui ao extrair marca/modelo.
+ * Ex: "Cruze e queria" ou "Cruze e " → "Cruze" (a conjunção "e" + resto da frase é removida).
+ */
+function sanitizeVehicleParam(val: string | undefined): string | undefined {
+  if (val == null || typeof val !== "string") return val;
+  const trimmed = val.trim();
+  if (!trimmed) return undefined;
+  // Remove " e " ou " e" + resto da frase (ex: "Cruze e ", "Cruze e", "Cruze e queria")
+  const cleaned = trimmed.replace(/\s+e\s*.*$/i, "").trim();
+  return cleaned || undefined;
+}
+
 /** Decodifica entidades HTML para exibição limpa (&#225; → á, &copy; → ©) */
 function decodeHtmlEntities(s: string): string {
   return s
@@ -75,8 +88,8 @@ async function executeInventoryQuery(
       .eq("status", "available")
       .limit(50);
 
-    const marca = (args.marca || args.brand) as string | undefined;
-    const modelo = (args.modelo || args.model) as string | undefined;
+    const marca = sanitizeVehicleParam((args.marca || args.brand) as string | undefined);
+    const modelo = sanitizeVehicleParam((args.modelo || args.model) as string | undefined);
     const cor = args.cor as string | undefined;
     const ano = args.ano as number | string | undefined;
     const faixaPreco = (args.faixa_preco || args.faixaPreco) as string | undefined;

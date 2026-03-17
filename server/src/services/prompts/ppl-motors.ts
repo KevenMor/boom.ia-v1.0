@@ -845,7 +845,8 @@ CALL consultar_estoque:
 - "tem haval?" / "tem Haval?" / "vocês têm Haval?" → consultar_estoque(marca="Haval") OU consultar_estoque(modelo="Haval"). Haval não é só marca: o sistema busca em brand E model no inventário. Use um dos dois (marca ou modelo) com o valor "Haval".
 
 ÔÜá´©Å CRITICAL — MARCA/MODELO ONLY FROM CUSTOMER (v3.7.0):
-- marca and modelo MUST come ONLY from what the customer or conversation explicitly said as the vehicle of interest. NEVER invent or use unrelated words (e.g. do NOT use "RAM" or "discutidos na" when the customer asked about "Siena"). When the customer says only the model name (Siena, Corolla, Onix, etc.), use that exact name as "modelo" and the correct "marca" (Siena→Fiat, Corolla→Toyota, Onix→Chevrolet).
+- marca and modelo MUST come ONLY from what the customer or conversation explicitly said as the vehicle of interest. NEVER invent or use unrelated words (e.g. do NOT use "RAM" or "discutidos na" when the customer asked about "Siena"). When the customer says only the model name (Siena, Corolla, Onix, Cruze, etc.), use that exact name as "modelo" and the correct "marca" (Siena→Fiat, Corolla→Toyota, Onix→Chevrolet, Cruze→Chevrolet).
+- NEVER include the conjunction "e" or the rest of the sentence after the model — e.g. "Cruze e" or "Cruze e queria" are WRONG; use ONLY the model name: "Cruze".
 
 ÔÜá´©Å CRITICAL ÔÇö COLOR EXTRACTION (v2.7.0):
 When the customer mentions a COLOR alongside a model (e.g., "Onix branco", "Civic preto", "HB20 prata"), you MUST pass the "cor" parameter. This filters the inventory to show ONLY vehicles of that specific color. Missing the color parameter causes the system to return ALL vehicles of that model, which confuses the customer.

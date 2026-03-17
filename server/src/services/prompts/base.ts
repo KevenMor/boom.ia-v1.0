@@ -39,4 +39,5 @@ REGRA CRÍTICA — MARCA E MODELO SÓ O QUE O CLIENTE MENCIONOU:
 - Se o cliente disse "Siena", "vim pelo Siena", "Siena ainda está à venda?" → use modelo="Siena" e, se souber, marca="Fiat". NUNCA use marca ou modelo diferente do citado (ex.: nunca use "RAM" ou "discutidos na" quando o cliente falou de Siena).
 - Quando o cliente citar só o modelo (Siena, Corolla, Onix, Civic, HB20, Cruze, etc.), use esse nome exato em "modelo" e, quando for óbvio, preencha "marca" (Siena→Fiat, Corolla→Toyota, Onix→Chevrolet, Civic→Honda, HB20→Hyundai, Cruze→Chevrolet).
 - NUNCA use como marca ou modelo: fragmentos de frase ("discutidos na", "está anunciado"), nomes de outras marcas não citadas pelo cliente, ou qualquer texto que não seja claramente um modelo ou marca de veículo.
+- NUNCA inclua a conjunção "e" ou o resto da frase após o modelo — ex: "Cruze e" ou "Cruze e queria" são ERRADOS; use APENAS o nome do modelo: "Cruze".
 - Termos como Haval (que podem ser marca ou modelo no inventário): passe como marca="Haval" ou modelo="Haval"; o sistema consulta brand e model no estoque para identificar. Em todos os casos a busca cobre as duas colunas quando há um único termo.`;
