@@ -41,7 +41,14 @@ export async function runFindNearestUnit(
     throw Object.assign(new Error("CEP não encontrado"), { status: 404 });
   }
 
-  const clientAddress = `${viaCepData.logradouro}, ${viaCepData.bairro}, ${viaCepData.localidade} - ${viaCepData.uf}`;
+  // Endereço para Google Maps: quando logradouro vazio, usar CEP + cidade (formato que a API aceita)
+  const logr = (viaCepData.logradouro || "").trim();
+  const bairro = (viaCepData.bairro || "").trim();
+  const cidade = (viaCepData.localidade || "").trim();
+  const uf = (viaCepData.uf || "").trim();
+  const clientAddress = logr
+    ? [logr, bairro, `${cidade} - ${uf}`].filter(Boolean).join(", ")
+    : `${cleanCep}, ${cidade}, ${uf}, Brasil`;
 
   let query = supabase.from("units").select("*").eq("status", "active");
   if (tenantId) query = query.eq("tenant_id", tenantId);
@@ -56,23 +63,27 @@ export async function runFindNearestUnit(
 
   if (googleMapsKey) {
     try {
+      // Destinos: máx 25 por request (limite da API). Usar lat,lng ou endereço quando disponível.
       const destinations = units
+        .slice(0, 25)
         .map((u: any) =>
-          u.lat && u.lng ? `${u.lat},${u.lng}` : u.address || `${u.cep}`
+          u.lat && u.lng ? `${u.lat},${u.lng}` : u.address || `${u.cep}, ${u.city || ""}, Brasil`
         )
+        .filter(Boolean)
         .join("|");
 
-      const dmResp = await fetch(
-        `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(clientAddress)}&destinations=${encodeURIComponent(destinations)}&key=${googleMapsKey}&language=pt-BR`
-      );
+      const dmUrl = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(clientAddress)}&destinations=${encodeURIComponent(destinations)}&mode=driving&key=${googleMapsKey}&language=pt-BR`;
+      const dmResp = await fetch(dmUrl);
       const dmData = (await dmResp.json()) as {
         status?: string;
+        error_message?: string;
         rows?: { elements: Array<{ status?: string; distance?: { value: number; text: string }; duration?: { value: number; text: string } }> }[];
       };
 
       if (dmData.status === "OK" && dmData.rows?.[0]?.elements) {
         const elements = dmData.rows[0].elements;
-        const results = units.map((unit: any, i: number) => {
+        const unitsToUse = units.slice(0, 25);
+        const results = unitsToUse.map((unit: any, i: number) => {
           const el = elements[i];
           const distMeters = el?.status === "OK" && el?.distance ? el.distance.value : Infinity;
           const durationSecs = el?.status === "OK" && el?.duration ? el.duration.value : null;
@@ -81,6 +92,7 @@ export async function runFindNearestUnit(
             unit_address: unit.address,
             unit_cep: unit.cep,
             city: unit.city,
+            distance_km: distMeters !== Infinity ? Math.round((distMeters / 1000) * 10) / 10 : null,
             distance_text: el?.status === "OK" && el?.distance ? el.distance.text : "indisponível",
             duration_text: el?.status === "OK" && el?.duration ? el.duration.text : "indisponível",
             distance_meters: distMeters === Infinity ? null : distMeters,
@@ -98,9 +110,17 @@ export async function runFindNearestUnit(
           method: "google_maps",
         };
       }
+      if (dmData.status && dmData.status !== "OK") {
+        console.warn(
+          "[find-nearest-unit] Google Maps API:", dmData.status,
+          dmData.error_message ? `— ${dmData.error_message}` : ""
+        );
+      }
     } catch (e) {
-      console.warn("Google Maps falhou, usando Haversine:", e);
+      console.warn("[find-nearest-unit] Google Maps falhou, usando Haversine:", e);
     }
+  } else {
+    console.warn("[find-nearest-unit] GOOGLE_MAPS_API_KEY não configurada — usando distância em linha reta (Haversine)");
   }
 
   let clientLat: number | null = null;
