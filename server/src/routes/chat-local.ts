@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
+import { msgLog } from "../utils/flow-logger.js";
 import { transcribeAudio, isAudioAttachment } from "../services/transcribe.js";
 import { buildSystemPrompt, getDispatcherPrompt } from "../services/prompts/registry.js";
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
@@ -40,15 +41,13 @@ async function getProviderApiKey(
       const encryptionKey = process.env.ENCRYPTION_KEY || process.env.ENCRYPTION_SECRET;
       if (provider.api_key_encrypted && encryptionKey) {
         try {
-          console.log("[Chat-Local] Descriptografando chave do provider:", providerId);
           const { decrypt } = await import("../services/crypto.js");
           apiKey = await decrypt(provider.api_key_encrypted, encryptionKey);
-          console.log("[Chat-Local] Chave descriptografada com sucesso, length:", apiKey.length);
         } catch (err) {
           const isGemini = /generativelanguage|googleapis/i.test(provider.base_url || "");
           apiKey = isGemini ? (geminiKey || openaiKey || "") : (openaiKey || geminiKey || "");
           if (apiKey) {
-            console.warn("[Chat-Local] Descriptografar falhou, usando fallback de env var. provider:", providerId, "err:", (err as Error)?.message);
+            msgLog.decryptFallback(providerId);
           } else {
             console.error("[Chat-Local] Falha ao descriptografar chave do provider:", providerId, err);
           }
@@ -56,9 +55,6 @@ async function getProviderApiKey(
       } else {
         const isGemini = /generativelanguage|googleapis/i.test(provider.base_url || "");
         apiKey = isGemini ? (geminiKey || openaiKey || "") : (openaiKey || geminiKey || "");
-        if (apiKey) {
-          console.log("[Chat-Local] Usando chave de env var (sem encryption), length:", apiKey.length, "isGemini:", isGemini);
-        }
       }
       const baseUrl = (provider.base_url || "https://api.openai.com/v1").replace(/\/+$/, "");
       if (apiKey) return { apiKey, baseUrl };
@@ -650,16 +646,11 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
 
       const providerConfig = await getProviderApiKey(agent.provider_id, supabase);
       if (!providerConfig) {
+        msgLog.chatError(agent_id, "No LLM provider configured");
         return reply.status(501).send({
           error: "No LLM provider configured. Set OPENAI_API_KEY or GEMINI_API_KEY, or configure provider with API key.",
         });
       }
-      console.log("[Chat-Local] Provider config:", {
-        hasApiKey: !!providerConfig.apiKey,
-        apiKeyLength: providerConfig.apiKey?.length,
-        baseUrl: providerConfig.baseUrl,
-        providerId: agent.provider_id,
-      });
 
       let model = agent.model || "gpt-4o-mini";
       const { openaiTools, nameToTool } = buildOpenAITools(tools, providerConfig.baseUrl);
@@ -669,9 +660,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       // Gemini 3 e 2.5 (thinking) exigem thought_signature em function calls - não suportado.
       // Fallback apenas em single-provider (quando Gemini recebe tools). Em dual-provider, Gemini conversacional não usa tools.
       if (useTools && !dispatcherProviderId && isGeminiProvider && /^gemini-(3|2\.5)-/i.test(model)) {
-        const fallback = "gemini-2.0-flash";
-        console.log(`[Chat-Local] Single-provider: modelo ${model} exige thought_signature com tools; usando ${fallback}`);
-        model = fallback;
+        model = "gemini-2.0-flash";
       }
 
       if (useTools && isGeminiProvider) {
@@ -688,14 +677,8 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         }
       }
 
-      if (useTools) {
-        console.log("[Chat-Local] Tools enviadas ao LLM:", JSON.stringify(openaiTools.map((t) => ({
-          name: t.function.name,
-          desc: t.function.description?.slice(0, 50),
-        })), null, 2));
-      }
-
       let responseConvId = conversation_id ?? null;
+      msgLog.chatStart(agent_id, model, useTools && dispatcherProviderId ? "dual" : "single");
 
       // Persistência: criar conversa e salvar mensagens (sandbox e chamadas diretas)
       try {
@@ -773,12 +756,10 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       if (useTools && dispatcherProviderId) {
         const dispatcherConfig = await getProviderApiKey(dispatcherProviderId, supabase);
         if (dispatcherConfig) {
-          console.log("[Chat-Local] Dual-provider: dispatcher (tools) + conversacional");
           const { openaiTools: dispatcherTools, nameToTool: dispatcherNameToTool } = buildOpenAITools(tools, dispatcherConfig.baseUrl);
           const dispatcherModel = (agentConfig.dispatcher_model as string)
             || (tenantSettings.dispatcher_model as string)
             || "gpt-4o-mini";
-          console.log("[Chat-Local] Dispatcher model:", dispatcherModel);
 
           const todayISO = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
           const tomorrowDate = new Date();
@@ -864,14 +845,6 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               tools: dispatcherTools,
               tool_choice: "auto",
             };
-
-            console.log("[Chat-Local] Dispatcher request:", {
-              url: dispatcherApiUrl,
-              model: dispatcherBody.model,
-              attempt: attempt + 1,
-              hasAuth: !!dispatcherConfig.apiKey,
-              authLength: dispatcherConfig.apiKey?.length,
-            });
 
             try {
               dispatcherResp = await fetch(dispatcherApiUrl, {
@@ -1209,18 +1182,6 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             ? `${convBase}/openai/chat/completions`
             : `${convBase}/chat/completions`;
 
-          console.log("[Chat-Local] Conversational request:", {
-            url: convApiUrl,
-            model: convBody.model,
-            hasAuth: !!providerConfig.apiKey,
-            authLength: providerConfig.apiKey?.length,
-            messagesCount: conversationalMessagesClean.length,
-            hasToolResults: toolResults.length > 0,
-          });
-          if (toolResults.length > 0) {
-            console.log("[Chat-Local] Tool results sendo enviados ao LLM conversacional:", toolResults.length, "results");
-          }
-
           let convResp: Response;
           try {
             convResp = await fetch(convApiUrl, {
@@ -1250,7 +1211,6 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             reply.raw.end();
             return;
           }
-          console.log("[Chat-Local] Conversational LLM response OK, iniciando streaming...");
 
           let debugDeltaCount = 0;
           let debugDeltaTotalLen = 0;
@@ -1301,7 +1261,6 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                       const accented = restorePortugueseAccents(toSend);
                       debugSendCount++;
                       debugSendTotalLen += accented.length;
-                      console.log("[Chat-Local] Streaming content chunk:", accented.slice(0, 50));
                       sendSse({ choices: [{ delta: { content: accented } }] });
                     }
                   }

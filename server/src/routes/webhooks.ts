@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
 import { stripChatwootNamePrefix } from "../utils/sanitize.js";
+import { msgLog } from "../utils/flow-logger.js";
 
 const API_BASE = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
 
@@ -186,18 +187,6 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         ? (body.payload as Record<string, unknown>)
         : body;
 
-      if (process.env.NODE_ENV !== "production") {
-        const event = payload.event ?? body.event;
-        const messageType = payload.message_type ?? body.message_type;
-        const content = (payload.content ?? body.content ?? (payload as any).message?.content ?? "") as string;
-        console.log("[Webhook] Incoming:", {
-          event,
-          message_type: messageType,
-          content_preview: content ? `${String(content).slice(0, 80)}${content.length > 80 ? "…" : ""}` : "(vazio)",
-          content_length: typeof content === "string" ? content.length : 0,
-          agent_id: req.query?.agent_id ?? (body.agent_id ?? payload.agent_id),
-        });
-      }
 
       if (payload.event && payload.event !== "message_created") {
         return reply.send({ status: "ignored", reason: `Event '${payload.event}' not handled` });
@@ -232,12 +221,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         .maybeSingle();
 
       if (agentErr || !agent) {
-        console.warn("[Webhook] Agent lookup failed:", {
-          agent_id: agentId,
-          error: agentErr?.message ?? agentErr,
-          code: (agentErr as any)?.code,
-          found: !!agent,
-        });
+        console.warn("[Webhook] Agent lookup failed agent=" + agentId + " err=" + (agentErr?.message ?? agentErr));
         return reply.status(401).send({ error: "Invalid agent_id" });
       }
 
@@ -427,6 +411,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           });
 
           if (resp.ok) {
+            msgLog.webhookQueued(agentId);
             return reply.status(202).send({
               status: "queued",
               agent_id: agentId,
@@ -435,7 +420,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           }
 
           const respText = await resp.text().catch(() => "");
-          console.warn("[Webhook] Queue dispatch retornou não-OK:", resp.status, "agent_id=" + agentId, "body=" + respText.slice(0, 200));
+          msgLog.webhookQueueFailed(agentId, resp.status, respText);
           if (earlyConvId && userMessage?.trim() && debounceMs > 0) {
             try {
               const normalizedContent = stripChatwootNamePrefix(userMessage);
@@ -462,7 +447,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           });
         } catch (e: any) {
           if (e.name === "AbortError") {
-            console.log("[Webhook] Queue fetch AbortError (timeout 1.5s) — processamento continua em background. agent_id=" + agentId);
+            msgLog.webhookQueueTimeout(agentId);
             return reply.status(202).send({
               status: "queued",
               agent_id: agentId,

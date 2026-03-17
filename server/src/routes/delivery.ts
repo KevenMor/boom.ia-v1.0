@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
+import { msgLog } from "../utils/flow-logger.js";
 import {
   getChatwootAuthHeaders,
   sendChatwootTextMessage,
@@ -174,8 +175,10 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
             ? (response_text || "").trim()
             : "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?";
           const partsToSend = hasContent ? (response_parts || []) : [];
-          if (!hasContent) {
-            console.warn("[Deliver] Resposta vazia — enviando fallback. agent_id=" + agent_id);
+          if (hasContent) {
+            msgLog.deliveryOk(agent_id, conversation_id ?? null);
+          } else {
+            msgLog.deliveryFallback(agent_id);
           }
           await replyToChatwoot(
             cfg.chatwoot_url,
