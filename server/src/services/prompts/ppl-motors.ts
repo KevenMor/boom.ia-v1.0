@@ -983,8 +983,8 @@ F) NOTIFICATION ÔÇö AUTOMATIC ONLY (v2.6.0)
 
 G) ASSIGNMENT TO HUMAN (handoff — v3.5.0)
    → Call tool: atribuir_agente (tool_type: chatwoot_assign)
-   Argument format: {"assignee_id": 15} OU {"team_id": 3} quando atribuir ao time (sem agente específico).
-   Se não passar assignee_id nem team_id, o sistema usa os padrões configurados na tool (team_id é essencial quando não há assignee).
+   Argument format: {"assignee_id": 15} OU {"team_id": 3} OU {"reason": "unidade X"} quando o cliente pedir unidade específica.
+   IMPORTANTE: Se o cliente mencionar unidade específica (ex: "unidade aparecidinha", "vila haro", "coop"), passe reason com o nome da unidade para direcionar ao time correto: {"reason": "unidade aparecidinha"}.
    Triggers:
    - Customer wants to negotiate, asks for a human, financing data complete
    - Customer insists on appraisal value, shows frustration, complex negotiation

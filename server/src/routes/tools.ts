@@ -389,7 +389,8 @@ export async function toolsRoutes(fastify: FastifyInstance) {
           let teamId = args?.team_id ?? execCfg.team_id;
           let matchedRule = "";
 
-          if (!args?.assignee_id && rules.length > 0) {
+          // Sempre tentar casar regras quando existirem — reconhece unidade específica mesmo com assignee padrão
+          if (rules.length > 0) {
             const reasonNorm = reason
               .toLowerCase()
               .normalize("NFD")

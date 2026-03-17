@@ -774,7 +774,8 @@ async function executeChatwootAssign(
     let teamId = (args?.team_id != null ? Number(args.team_id) : null) ?? (execCfg.team_id != null ? Number(execCfg.team_id) : null);
     let matchedRule = "";
 
-    if (assigneeId == null && rules.length > 0) {
+    // Sempre tentar casar regras quando existirem — permite reconhecer unidade específica (ex: "unidade aparecidinha") mesmo com assignee padrão
+    if (rules.length > 0) {
       const reasonNorm = reason
         .toLowerCase()
         .normalize("NFD")

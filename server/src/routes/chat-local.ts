@@ -1064,6 +1064,17 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   const cfg = (tool.execution_config || {}) as Record<string, unknown>;
                   if (args.assignee_id == null && cfg.assignee_id != null) args = { ...args, assignee_id: cfg.assignee_id };
                   if (args.team_id == null && cfg.team_id != null) args = { ...args, team_id: cfg.team_id };
+                  // Injetar reason das últimas mensagens do cliente para casar regras por unidade (ex: "unidade aparecidinha")
+                  const reason = String(args?.reason || "").trim();
+                  if ((!reason || reason === "escalation") && messagesToUse.length > 0) {
+                    const userMsgs = messagesToUse
+                      .filter((m) => (m as { role?: string }).role === "user")
+                      .slice(-3)
+                      .map((m) => (m as { content?: string }).content ?? "")
+                      .join(" ")
+                      .trim();
+                    if (userMsgs) args = { ...args, reason: userMsgs };
+                  }
                 }
                 if (tool.tool_type === "nearest_unit" || tool.tool_type === "consultar_unidade") {
                   if (!args.cep || String(args.cep).trim() === "") {
@@ -1743,6 +1754,17 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             const cfg = (tool.execution_config || {}) as Record<string, unknown>;
             if (args.assignee_id == null && cfg.assignee_id != null) args = { ...args, assignee_id: cfg.assignee_id };
             if (args.team_id == null && cfg.team_id != null) args = { ...args, team_id: cfg.team_id };
+            // Injetar reason das últimas mensagens do cliente para casar regras por unidade
+            const reasonSP = String(args?.reason || "").trim();
+            if ((!reasonSP || reasonSP === "escalation") && messagesToUse.length > 0) {
+              const userMsgsSP = messagesToUse
+                .filter((m) => (m as { role?: string }).role === "user")
+                .slice(-3)
+                .map((m) => (m as { content?: string }).content ?? "")
+                .join(" ")
+                .trim();
+              if (userMsgsSP) args = { ...args, reason: userMsgsSP };
+            }
           }
           if (tool.tool_type === "nearest_unit" || tool.tool_type === "consultar_unidade") {
             if (!args.cep || String(args.cep).trim() === "") {
