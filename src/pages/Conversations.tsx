@@ -591,9 +591,9 @@ export default function Conversations() {
                           </div>
                         )}
 
-                        {/* Bottom row: channel + message count */}
+                        {/* Bottom row: channel + labels + message count */}
                         <div className="flex items-center justify-between gap-2 mt-1">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <Badge
                               variant="outline"
                               className={cn(
@@ -603,6 +603,11 @@ export default function Conversations() {
                             >
                               {channel}
                             </Badge>
+                            {(conv.labels ?? []).filter((l) => /^leads/i.test(l)).map((label) => (
+                              <Badge key={label} variant="secondary" className="h-4 px-1.5 text-[9px] font-normal bg-primary/10 text-primary border-primary/20">
+                                {label}
+                              </Badge>
+                            ))}
                             {convCount > 1 && (
                               <span className="text-[9px] text-muted-foreground/60">
                                 {convCount} conversas
@@ -674,6 +679,11 @@ export default function Conversations() {
                       {getPhoneDisplay(selectedConv) || "Telefone não informado"}
                     </p>
                   </div>
+                  {(selectedConv?.labels ?? []).filter((l) => /^leads/i.test(l)).map((label) => (
+                    <Badge key={label} variant="secondary" className="text-[9px] font-normal bg-primary/10 text-primary border-primary/20 shrink-0">
+                      {label}
+                    </Badge>
+                  ))}
                   <Badge variant="outline" className="text-[9px] font-mono shrink-0">
                     {selectedConvIds.length > 1 ? `${selectedConvIds.length} conversas` : `#${(selectedConvIds[0] ?? "").slice(0, 8)}`}
                   </Badge>

@@ -8,6 +8,7 @@
     "start": "node dist/index.js",
     "migrate:tokens": "tsx scripts/run-token-migration.ts",
     "verify:tools": "tsx scripts/verify-agent-tools.ts",
+    "test:lead-label": "tsx scripts/test-lead-label.ts",
     "verify:tokens": "tsx scripts/verify-token-tracking.ts",
     "e2e": "tsx scripts/e2e-validation.ts",
     "e2e:ideal": "tsx scripts/e2e-autoescola-ideal.ts",

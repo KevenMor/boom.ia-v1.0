@@ -9,6 +9,7 @@ export interface Conversation {
   contact_avatar_url: string | null;
   chatwoot_conversation_id?: number | null;
   chatwoot_contact_id?: number | null;
+  labels?: string[];
   status: string;
   started_at: string;
   ended_at: string | null;

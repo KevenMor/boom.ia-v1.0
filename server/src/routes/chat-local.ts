@@ -657,17 +657,37 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       const { data: toolsData } = await supabase.rpc("load_agent_tools", {
         p_agent_id: agent_id,
       });
-      const tools = (toolsData || []) as ToolDef[];
+      let tools = (toolsData || []) as ToolDef[];
       const hasInventoryTool = tools.some((t) => t.tool_type === "inventory_query");
+
+      const leadLabelEnabled = !!agentConfig.lead_label_enabled;
+      if (leadLabelEnabled) {
+        tools = [
+          ...tools,
+          {
+            id: "marcar-lead-injected",
+            name: "Marcar Lead",
+            tool_type: "marcar_lead",
+            function_def: {
+              name: "marcar_lead",
+              description: "Marca o contato como novo lead (potencial cliente interessado em produtos/serviços, ainda não é cliente). Use quando identificar interesse genuíno.",
+              parameters: { type: "object", properties: {}, required: [] },
+            },
+          } as ToolDef,
+        ];
+      }
 
       const isPetHome = tenantSlug === "pet-home" || tenantSlug === "pet-home-tia-erica";
       const petContext = isPetHome ? buildPetGenderContext(messagesToUse) : null;
-      const systemPrompt = buildSystemPrompt(
+      let systemPrompt = buildSystemPrompt(
         agent.system_prompt || "",
         tenantSlug,
         hasInventoryTool,
         petContext
       );
+      if (leadLabelEnabled) {
+        systemPrompt += "\n\n[ETIQUETAGEM DE LEAD] Quando identificar que o contato é um novo lead (potencial cliente interessado em produtos/serviços, ainda não é cliente), chame marcar_lead. Não chame para clientes existentes, retornos ou saudações sem interesse.";
+      }
 
       const providerConfig = await getProviderApiKey(agent.provider_id, supabase);
       if (!providerConfig) {
@@ -1121,9 +1141,11 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   }
                 }
 
-                if (tool.tool_type === "chatwoot_assign") {
+                if (tool.tool_type === "chatwoot_assign" || tool.tool_type === "marcar_lead") {
                   if (responseConvId) args = { ...args, conversation_id: responseConvId };
                   if (chatwoot_conversation_id != null) args = { ...args, chatwoot_conversation_id };
+                }
+                if (tool.tool_type === "chatwoot_assign") {
                   // Quando o LLM não envia assignee_id/team_id, usar os padrões da config (team_id é essencial quando não há assignee)
                   const cfg = (tool.execution_config || {}) as Record<string, unknown>;
                   if (args.assignee_id == null && cfg.assignee_id != null) args = { ...args, assignee_id: cfg.assignee_id };
@@ -1815,9 +1837,11 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }
           }
 
-          if (tool.tool_type === "chatwoot_assign") {
+          if (tool.tool_type === "chatwoot_assign" || tool.tool_type === "marcar_lead") {
             if (responseConvId) args = { ...args, conversation_id: responseConvId };
             if (chatwoot_conversation_id != null) args = { ...args, chatwoot_conversation_id };
+          }
+          if (tool.tool_type === "chatwoot_assign") {
             // Quando o LLM não envia assignee_id/team_id, usar os padrões da config (team_id é essencial quando não há assignee)
             const cfg = (tool.execution_config || {}) as Record<string, unknown>;
             if (args.assignee_id == null && cfg.assignee_id != null) args = { ...args, assignee_id: cfg.assignee_id };

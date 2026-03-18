@@ -13,6 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { useAgents, useUpdateAgent } from "@/hooks/useAgents";
 import { useTenants } from "@/hooks/useTenants";
 import { useProviders } from "@/hooks/useProviders";
@@ -135,6 +136,7 @@ export default function EditAgent() {
   const [reminderTemplate, setReminderTemplate] = useState("");
   const [testAssigneeId, setTestAssigneeId] = useState("");
   const [agentAssigneeId, setAgentAssigneeId] = useState("");
+  const [leadLabelEnabled, setLeadLabelEnabled] = useState(false);
 
   const { register, handleSubmit, setValue, watch, reset } = useForm<FormData>({ resolver: zodResolver(schema) });
 
@@ -182,6 +184,7 @@ export default function EditAgent() {
       setReminderTemplate((cfg as any).reminder_template ?? "");
       setTestAssigneeId(String((cfg as any).test_assignee_id ?? ""));
       setAgentAssigneeId(String((cfg as any).agent_assignee_id ?? ""));
+      setLeadLabelEnabled((cfg as any).lead_label_enabled ?? false);
     }
   }, [agent, reset]);
 
@@ -223,6 +226,7 @@ export default function EditAgent() {
           reminder_template: reminderTemplate || undefined,
           test_assignee_id: testAssigneeId ? Number(testAssigneeId) : undefined,
           agent_assignee_id: agentAssigneeId ? Number(agentAssigneeId) : undefined,
+          lead_label_enabled: leadLabelEnabled,
         },
       });
       toast.success("Agente atualizado");
@@ -603,6 +607,13 @@ export default function EditAgent() {
             wahaApiKey={wahaApiKey} setWahaApiKey={setWahaApiKey}
             wahaSession={wahaSession} setWahaSession={setWahaSession}
           />
+          <div className="flex items-center justify-between rounded-lg border border-border/50 p-3 mt-3">
+            <div>
+              <Label className="text-sm font-medium text-foreground">Etiquetar novo lead automaticamente</Label>
+              <p className="text-xs text-muted-foreground">Quando o agente identificar um novo lead, aplica a etiqueta leadsDD-MM-YYYY no Chatwoot</p>
+            </div>
+            <Switch checked={leadLabelEnabled} onCheckedChange={setLeadLabelEnabled} />
+          </div>
         </div>
 
         {/* Business Hours */}

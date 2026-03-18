@@ -3,6 +3,7 @@ import { runFipeQuery } from "./fipe.js";
 import { runFindNearestUnit } from "./find-nearest-unit.js";
 import { buildHandoffNotification, isBlockedAsName } from "../utils/agendaNotification.js";
 import { sendNotificationToGroup } from "../utils/sendNotification.js";
+import { addLeadLabelToConversation } from "./chatwoot-labels.js";
 
 export interface ToolExecutionResult {
   success: boolean;
@@ -763,6 +764,108 @@ async function executeNearestUnit(args: Record<string, unknown>): Promise<ToolEx
   }
 }
 
+async function executeMarcarLead(
+  supabase: ReturnType<typeof createNexusClient>,
+  args: Record<string, unknown>,
+  agentId: string
+): Promise<ToolExecutionResult> {
+  try {
+    const { data: agentCfgRow } = await supabase
+      .from("agents")
+      .select("config")
+      .eq("id", agentId)
+      .single();
+    const agCfg = (agentCfgRow?.config || {}) as Record<string, unknown>;
+
+    if (!agCfg.lead_label_enabled) {
+      return {
+        success: false,
+        result: null,
+        error: "Etiquetagem de lead não está habilitada neste agente",
+      };
+    }
+
+    const cwUrl = agCfg.chatwoot_url as string | undefined;
+    const cwToken = agCfg.chatwoot_api_token as string | undefined;
+    const cwAccountId = agCfg.chatwoot_account_id as string | number | undefined;
+
+    if (!cwUrl || !cwToken || !cwAccountId) {
+      return {
+        success: false,
+        result: null,
+        error: "Chatwoot não configurado neste agente",
+      };
+    }
+
+    let cwConvId: number | null = null;
+    if (args?.chatwoot_conversation_id != null) {
+      cwConvId = Number(args.chatwoot_conversation_id);
+    }
+    if (cwConvId == null && args?.conversation_id) {
+      const { data: convRow } = await supabase
+        .from("conversations")
+        .select("chatwoot_conversation_id")
+        .eq("agent_id", agentId)
+        .eq("id", args.conversation_id)
+        .single();
+      cwConvId = convRow?.chatwoot_conversation_id != null ? Number(convRow.chatwoot_conversation_id) : null;
+    }
+    if (cwConvId == null) {
+      const { data: cwConvRows } = await supabase
+        .from("conversations")
+        .select("chatwoot_conversation_id")
+        .eq("agent_id", agentId)
+        .not("chatwoot_conversation_id", "is", null)
+        .order("started_at", { ascending: false })
+        .limit(1);
+      cwConvId = cwConvRows?.[0]?.chatwoot_conversation_id != null ? Number(cwConvRows[0].chatwoot_conversation_id) : null;
+    }
+
+    if (cwConvId == null) {
+      return {
+        success: false,
+        result: null,
+        error: "chatwoot_conversation_id é obrigatório. A conversa precisa estar vinculada ao Chatwoot.",
+      };
+    }
+
+    const labelTitle = await addLeadLabelToConversation(
+      {
+        chatwoot_url: cwUrl,
+        chatwoot_api_token: cwToken,
+        chatwoot_account_id: cwAccountId,
+      },
+      cwConvId
+    );
+
+    let convId: string | null = (args.conversation_id as string) ?? null;
+    if (!convId) {
+      const { data: convRow } = await supabase
+        .from("conversations")
+        .select("id")
+        .eq("agent_id", agentId)
+        .eq("chatwoot_conversation_id", cwConvId)
+        .single();
+      convId = convRow?.id ?? null;
+    }
+    if (convId) {
+      await supabase.rpc("append_conversation_label", {
+        p_agent_id: agentId,
+        p_conversation_id: convId,
+        p_label: labelTitle,
+      });
+    }
+
+    return {
+      success: true,
+      result: { message: "Lead etiquetado com sucesso" },
+    };
+  } catch (e: unknown) {
+    const err = e as Error;
+    return { success: false, result: null, error: err?.message || "Falha ao etiquetar lead" };
+  }
+}
+
 async function executeChatwootAssign(
   supabase: ReturnType<typeof createNexusClient>,
   tool: ToolDef,
@@ -919,6 +1022,9 @@ export async function executeTool(
 
     case "chatwoot_assign":
       return executeChatwootAssign(supabase, tool, args, agentId);
+
+    case "marcar_lead":
+      return executeMarcarLead(supabase, args, agentId);
 
     case "send_notification":
       return executeSendNotification(agentId, args);
