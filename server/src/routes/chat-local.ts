@@ -849,6 +849,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           if (hasAssignTool && isAutoescolaIdeal) {
             const lastAsst = [...messagesToUse].reverse().find((m) => m.role === "assistant");
             const lastUsr = [...messagesToUse].reverse().find((m) => m.role === "user");
+            const fullConvText = messagesToUse.map((m) => (m.content ?? "")).join(" ");
             const summaryHasUnit = lastAsst?.content && /Unidade de preferência:/i.test(lastAsst.content) && /Está tudo correto\?/i.test(lastAsst.content);
             const userTrim = lastUsr?.content?.trim() || "";
             const userConfirms = userTrim && (userTrim.length < 80) && /\b(sim|ok|está certo|tudo certo|confirmo|pode ser|perfeito|legal|beleza|bora|vamos|quero|fechado|tá certo|está ok|pode seguir|tudo ok)\b/i.test(userTrim);
@@ -857,6 +858,24 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               const unitName = unitMatch?.[1]?.trim();
               if (unitName) {
                 assignHint = `\n\n[RESUMO CONFIRMADO. OBRIGATÓRIO: chame atribuir_agente/chatwoot_assign com reason="${unitName}" para transferir ao time da unidade mais próxima da residência do cliente. NÃO retorne NO_TOOLS_NEEDED.]`;
+              }
+            }
+            if (!assignHint && lastAsst?.content && /encaminhar|time da unidade|encaminho/i.test(lastAsst.content)) {
+              const IDEAL_UNITS: Record<string, string> = {
+                coop: "Coop Zona Norte",
+                "vila haro": "Vila Haro",
+                "vila helena": "Vila Helena",
+                "júlio de mesquita": "Júlio de Mesquita",
+                julio: "Júlio de Mesquita",
+                aparecidinha: "Aparecidinha",
+                centro: "Centro",
+              };
+              const convLower = fullConvText.toLowerCase();
+              for (const [key, canonical] of Object.entries(IDEAL_UNITS)) {
+                if (convLower.includes(key)) {
+                  assignHint = `\n\n[ALUNO EXISTENTE — ENCAMINHAMENTO. O assistente disse que vai encaminhar para o time da unidade. OBRIGATÓRIO: chame atribuir_agente/chatwoot_assign com reason="${canonical}" para transferir ao time da unidade. NÃO retorne NO_TOOLS_NEEDED. NÃO chame consultar_cep nem nearest_unit.]`;
+                  break;
+                }
               }
             }
           }
