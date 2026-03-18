@@ -1011,6 +1011,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
 
           let conversationalMessages: typeof dispatcherMessages;
           let handoffAssigneeId: number | null = null;
+          let handoffTeamId: number | null = null;
 
           if (phase1ToolCalls.length > 0) {
             const assistantMsg: { role: "assistant"; content: string; tool_calls: Array<{ id: string; type: string; function: { name: string; arguments: string } }> } = {
@@ -1193,8 +1194,9 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   sendNotificationExecutedThisTurn = true;
                 }
                 if (tool.tool_type === "chatwoot_assign" && result.success && responseConvId) {
-                  const assigneeId = (result.result as { assignee_id?: number | null })?.assignee_id;
-                  if (assigneeId != null) handoffAssigneeId = assigneeId;
+                  const res = result.result as { assignee_id?: number | null; team_id?: number | null };
+                  if (res.assignee_id != null) handoffAssigneeId = res.assignee_id;
+                  if (res.team_id != null) handoffTeamId = res.team_id;
                   if (!sendNotificationExecutedThisTurn) {
                     sendHandoffNotification(agent_id, agent, messagesToUse, external_user_id).then(() => {}, () => {});
                   }
@@ -1524,7 +1526,8 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }
           }
 
-          sendSse(handoffAssigneeId != null ? { conversation_id: responseConvId, handoff_assignee_id: handoffAssigneeId } : { conversation_id: responseConvId });
+          const hasHandoff = handoffAssigneeId != null || handoffTeamId != null;
+          sendSse(hasHandoff ? { conversation_id: responseConvId, handoff_assignee_id: handoffAssigneeId ?? undefined, handoff_team_id: handoffTeamId ?? undefined } : { conversation_id: responseConvId });
           sendSse("[DONE]");
           reply.raw.end();
           return;
@@ -1536,6 +1539,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
       let iteration = 0;
       let singleProviderUsageAccum = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
       let handoffAssigneeIdSP: number | null = null;
+      let handoffTeamIdSP: number | null = null;
 
       while (iteration < MAX_TOOL_ITERATIONS) {
         iteration++;
@@ -1875,8 +1879,9 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             sendNotificationExecutedThisTurnSP = true;
           }
           if (tool.tool_type === "chatwoot_assign" && result.success && responseConvId) {
-            const assigneeId = (result.result as { assignee_id?: number | null })?.assignee_id;
-            if (assigneeId != null) handoffAssigneeIdSP = assigneeId;
+            const resSP = result.result as { assignee_id?: number | null; team_id?: number | null };
+            if (resSP.assignee_id != null) handoffAssigneeIdSP = resSP.assignee_id;
+            if (resSP.team_id != null) handoffTeamIdSP = resSP.team_id;
             if (!sendNotificationExecutedThisTurnSP) {
               sendHandoffNotification(agent_id, agent, messagesToUse, external_user_id).then(() => {}, () => {});
             }
@@ -1925,7 +1930,8 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           console.warn("[Chat-Local] save_message (single, with tools) failed:", (saveErr as Error)?.message);
         }
       }
-      sendSse(handoffAssigneeIdSP != null ? { conversation_id: responseConvId, handoff_assignee_id: handoffAssigneeIdSP } : { conversation_id: responseConvId });
+      const hasHandoffSP = handoffAssigneeIdSP != null || handoffTeamIdSP != null;
+      sendSse(hasHandoffSP ? { conversation_id: responseConvId, handoff_assignee_id: handoffAssigneeIdSP ?? undefined, handoff_team_id: handoffTeamIdSP ?? undefined } : { conversation_id: responseConvId });
       sendSse("[DONE]");
       reply.raw.end();
     }

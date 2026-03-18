@@ -26,6 +26,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
           response_parts?: string[];
           welcome_video_url?: string;
           assignee_id?: number;
+          team_id?: number;
         };
       }>,
       reply: FastifyReply
@@ -48,6 +49,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
         response_parts,
         welcome_video_url,
         assignee_id: handoff_assignee_id,
+        team_id: handoff_team_id,
       } = req.body;
 
       let agent: any = null;
@@ -111,14 +113,15 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
           console.warn("[Deliver] Chatwoot assignee check failed:", (e as Error)?.message);
         }
 
-        const assigneeId = handoff_assignee_id != null ? Number(handoff_assignee_id) : agentAssigneeId;
-        if (assigneeId != null) {
+        // Só atribuir ANTES do envio quando for o agente (bot). Em handoff, atribuímos APÓS o envio
+        // para evitar que o Chatwoot desvincule o humano quando a IA envia a mensagem.
+        if (handoff_assignee_id == null && agentAssigneeId != null) {
           try {
             const assignUrl = `${baseUrl}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${chatwoot_conversation_id}/assignments`;
             const assignResp = await fetch(assignUrl, {
               method: "POST",
               headers: { "Content-Type": "application/json", ...cwAuth },
-              body: JSON.stringify({ assignee_id: assigneeId }),
+              body: JSON.stringify({ assignee_id: agentAssigneeId }),
             });
             if (!assignResp.ok) {
               console.warn("[Deliver] Failed to assign conversation to agent:", assignResp.status, await assignResp.text().catch(() => ""));
@@ -219,16 +222,23 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
             humanization
           );
         }
-        if (handoff_assignee_id != null) {
+        // Atribuição APÓS envio da mensagem — evita que o Chatwoot desvincule o humano quando a IA envia.
+        if (handoff_assignee_id != null || handoff_team_id != null) {
           try {
             const assignUrl = `${baseUrl}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${chatwoot_conversation_id}/assignments`;
-            await fetch(assignUrl, {
+            const assignBody: Record<string, number> = {};
+            if (handoff_assignee_id != null) assignBody.assignee_id = Number(handoff_assignee_id);
+            if (handoff_team_id != null) assignBody.team_id = Number(handoff_team_id);
+            const assignResp = await fetch(assignUrl, {
               method: "POST",
               headers: { "Content-Type": "application/json", ...cwAuth },
-              body: JSON.stringify({ assignee_id: Number(handoff_assignee_id) }),
+              body: JSON.stringify(assignBody),
             });
-          } catch {
-            /* re-assign após envio para evitar que Chatwoot reassigne ao bot */
+            if (!assignResp.ok) {
+              console.warn("[Deliver] Falha ao atribuir após envio (handoff):", assignResp.status, await assignResp.text().catch(() => ""));
+            }
+          } catch (e: any) {
+            console.warn("[Deliver] Assign handoff após envio falhou:", e?.message);
           }
         }
       }
