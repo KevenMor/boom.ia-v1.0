@@ -151,7 +151,7 @@ export default function AgentSandbox() {
     loadConversations();
   }, [loadConversations]);
 
-  // Sanitize message content to remove leaked JSON dispatcher data
+  // Sanitize message content to remove leaked JSON dispatcher data and tool_code/assign_agent
   const sanitizeContent = (content: string): string => {
     if (!content) return content;
     // Remove lines that start with JSON-like patterns (dispatcher hints)
@@ -159,6 +159,12 @@ export default function AgentSandbox() {
       .replace(/^\s*\{["\s]*total[":].*$/gm, "")
       .replace(/^\s*\{["\s]*id[":].*$/gm, "")
       .replace(/^\s*\[?\{["\s]*id[":].*$/gm, "");
+    // Remove tool_code / assign_agent leakage (ex.: tool_code print(json.dumps(...)))
+    cleaned = cleaned
+      .replace(/\*\*?tool_code[\s\S]*?\)\s*\)\*\*?/gim, "")
+      .replace(/tool_code[\s\S]*?\)\s*\)(?=\s|$|\.|,|;)/gim, "")
+      .replace(/\b(assign_agent|atribuir_agente|chatwoot_assign)\s*\(\s*[^)]*\)/gim, "")
+      .replace(/\bprint\s*\(\s*(?:json\.dumps\s*)?\([^)]*assign_agent[^)]*\)\s*\)/gim, "");
     // If content is entirely JSON (starts with { or [), discard it
     const trimmed = cleaned.trim();
     if (trimmed.startsWith("{") && trimmed.endsWith("}")) {

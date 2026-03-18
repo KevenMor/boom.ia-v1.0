@@ -55,6 +55,11 @@ export function sanitizeLLMOutput(content: string): string {
   text = text.replace(/\bhorario_periodo\s*=\s*tool\s*\([^)]*\)\s*/gim, "");
   // consultar_base_conhecimento(pergunta="...") vazando como texto
   text = text.replace(/\bconsultar_base_conhecimento\s*\([^)]*\)\s*/gim, "");
+  // tool_code / assign_agent / chatwoot_assign vazando como texto (ex.: tool_code print(json.dumps(...)))
+  text = text.replace(/\*\*?tool_code[\s\S]*?\)\s*\)\*\*?/gim, "");
+  text = text.replace(/tool_code[\s\S]*?\)\s*\)(?=\s|$|\.|,|;)/gim, "");
+  text = text.replace(/\b(assign_agent|atribuir_agente|chatwoot_assign)\s*\(\s*[^)]*\)/gim, "");
+  text = text.replace(/\bprint\s*\(\s*(?:json\.dumps\s*)?\([^)]*assign_agent[^)]*\)\s*\)/gim, "");
   text = text.replace(/\n{3,}/g, "\n\n").trim();
 
   // Remove pergunta duplicada de nome (ambas perguntam a mesma coisa — "Com quem eu falo?" e "Como posso te chamar?")

@@ -25,6 +25,18 @@ function stripChatwootHeader(content: string): string {
   return content.replace(/^\[Atendente:[^\]]*\]\s*[^:]*:\s*/gm, "").trim();
 }
 
+/** Remove vazamento de tool_code/assign_agent em mensagens do assistente (ex.: tool_code print(json.dumps(...))) */
+function sanitizeAssistantContent(content: string): string {
+  if (!content) return content;
+  return content
+    .replace(/\*\*?tool_code[\s\S]*?\)\s*\)\*\*?/gim, "")
+    .replace(/tool_code[\s\S]*?\)\s*\)(?=\s|$|\.|,|;)/gim, "")
+    .replace(/\b(assign_agent|atribuir_agente|chatwoot_assign)\s*\(\s*[^)]*\)/gim, "")
+    .replace(/\bprint\s*\(\s*(?:json\.dumps\s*)?\([^)]*assign_agent[^)]*\)\s*\)/gim, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 /** Remove conteúdo repetido (ex.: mesmo texto 2x ou 3x — bug no painel ao exibir) */
 function deduplicateRepeatedContent(text: string): string {
   const t = text.trim();
@@ -735,7 +747,7 @@ export default function Conversations() {
                             const isUser = msg.role === "user";
                             const isSystem = msg.role === "system" || msg.role === "tool";
                             const audioInfo = isUser ? parseAudioTranscription(msg.content || "") : { isAudio: false, transcription: "", remainingText: msg.content || "" };
-                            const contentForExtraction = isUser ? audioInfo.remainingText : deduplicateRepeatedContent(stripChatwootHeader(msg.content || ""));
+                            const contentForExtraction = isUser ? audioInfo.remainingText : sanitizeAssistantContent(deduplicateRepeatedContent(stripChatwootHeader(msg.content || "")));
                             const { text, images } = extractImages(contentForExtraction);
 
                             if (isSystem) {
@@ -750,7 +762,7 @@ export default function Conversations() {
 
                             const bubbles: { text: string; images: string[]; isAudio?: boolean; transcription?: string }[] = [];
                             if (!isUser) {
-                              const rawContent = deduplicateRepeatedContent(stripChatwootHeader(msg.content || ""));
+                              const rawContent = sanitizeAssistantContent(deduplicateRepeatedContent(stripChatwootHeader(msg.content || "")));
                               const paragraphs = rawContent.split(/\n\n+/);
                               let currentBubble = { text: "", images: [] as string[] };
                               for (const para of paragraphs) {

@@ -57,7 +57,11 @@ function sanitizeContent(content: string): string {
   let cleaned = content
     .replace(/^\s*\{["\s]*total[":].*$/gm, "")
     .replace(/^\s*\{["\s]*id[":].*$/gm, "")
-    .replace(/^\s*\[?\{["\s]*id[":].*$/gm, "");
+    .replace(/^\s*\[?\{["\s]*id[":].*$/gm, "")
+    .replace(/\*\*?tool_code[\s\S]*?\)\s*\)\*\*?/gim, "")
+    .replace(/tool_code[\s\S]*?\)\s*\)(?=\s|$|\.|,|;)/gim, "")
+    .replace(/\b(assign_agent|atribuir_agente|chatwoot_assign)\s*\(\s*[^)]*\)/gim, "")
+    .replace(/\bprint\s*\(\s*(?:json\.dumps\s*)?\([^)]*assign_agent[^)]*\)\s*\)/gim, "");
   const trimmed = cleaned.trim();
   if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
     try { JSON.parse(trimmed); return ""; } catch {}
