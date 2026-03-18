@@ -8,7 +8,7 @@
 // - Follow-ups e Lembretes funcionam para QUALQUER tenant (filtro por tenant_id).
 // ============================================================
 
-import { BASE_GREETING, DEFAULT_DISPATCHER_PROMPT, GLOBAL_CONDUCT_RULES } from "./base.js";
+import { BASE_GREETING, DEFAULT_DISPATCHER_PROMPT, GLOBAL_CONDUCT_RULES, GLOBAL_HUMANIZATION } from "./base.js";
 import {
   SYSTEM_PROMPT as PPL_SYSTEM,
   COMMUNICATION_RULES as PPL_COMM_RULES,
@@ -175,6 +175,7 @@ export function buildSystemPrompt(
   const commRules = (shouldInjectComm && config?.communicationRules) ? "\n\n" + config.communicationRules : "";
   const greeting = "\n\n" + BASE_GREETING;
   const globalRules = "\n\n" + GLOBAL_CONDUCT_RULES;
+  const humanization = "\n\n" + GLOBAL_HUMANIZATION;
 
   // Inject current Brasilia datetime so the model knows "hoje" and "amanhã"
   const now = new Date();
@@ -185,7 +186,7 @@ export function buildSystemPrompt(
 
   const petContextBlock = petContext ? `\n\n${petContext}` : "";
 
-  return base + commRules + greeting + globalRules + dateContext + petContextBlock;
+  return base + commRules + greeting + globalRules + humanization + dateContext + petContextBlock;
 }
 
 /**
