@@ -130,10 +130,19 @@ const BLOCKLIST_NOME = new Set([
   "humano",
 ]);
 
-function isBlockedAsName(candidate: string): boolean {
+/**
+ * Verifica se o candidato não deve ser usado como nome do cliente.
+ * Bloqueia frases de agradecimento/confirmação (ex.: "Ok obrigada", "ah simm obrigada")
+ * que o extractClientNameFromMessages erroneamente capturava da última mensagem do usuário.
+ */
+export function isBlockedAsName(candidate: string): boolean {
   const norm = candidate.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   if (BLOCKLIST_NOME.has(norm)) return true;
   if (/\b(aguardar|followup|follow.?up)\b/i.test(norm)) return true;
+  // Bloquear frases que contêm ou terminam com obrigada/obrigado (ex.: "ok obrigada", "ah sim obrigada")
+  if (/\b(obrigad[oa]|obrigad[oa]s?)\b/i.test(norm)) return true;
+  // Bloquear "ok" ou "ah" + algo curto (ex.: "ok obrigada", "ah sim", "ah simm obrigada")
+  if (/^(ok|ah)\s+/i.test(norm) && norm.split(/\s+/).length <= 4) return true;
   return false;
 }
 

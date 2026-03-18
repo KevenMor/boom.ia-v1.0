@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatDateBR, toBrasiliaISO, buildFallbackAgendaNotification, buildCancelNotification, buildHandoffNotification, extractClientNameFromMessages } from "./agendaNotification.js";
+import { formatDateBR, toBrasiliaISO, buildFallbackAgendaNotification, buildCancelNotification, buildHandoffNotification, extractClientNameFromMessages, isBlockedAsName } from "./agendaNotification.js";
 
 describe("formatDateBR", () => {
   it("formata ISO com offset para dia_semana DD/MM/AAAA, HH:MM", () => {
@@ -114,12 +114,49 @@ describe("buildHandoffNotification", () => {
   });
 });
 
+describe("isBlockedAsName", () => {
+  it("bloqueia frases de agradecimento que vazavam como nome (bug Geovana)", () => {
+    expect(isBlockedAsName("Ok obrigada")).toBe(true);
+    expect(isBlockedAsName("ah simm obrigada")).toBe(true);
+    expect(isBlockedAsName("obrigada")).toBe(true);
+    expect(isBlockedAsName("obrigado")).toBe(true);
+    expect(isBlockedAsName("ah sim")).toBe(true);
+  });
+  it("permite nomes válidos", () => {
+    expect(isBlockedAsName("Geovana Proença")).toBe(false);
+    expect(isBlockedAsName("Henrique Carvalho")).toBe(false);
+    expect(isBlockedAsName("Vila Helena")).toBe(false);
+  });
+});
+
 describe("extractClientNameFromMessages", () => {
   it("extrai nome antes do CPF", () => {
     const messages = [
       { role: "user", content: "Itau Henrique Carvalho 000.001.001-45 05/03/1997" },
     ];
     expect(extractClientNameFromMessages(messages)).toBe("Henrique Carvalho");
+  });
+  it("não retorna agradecimentos como nome (bug Geovana — notificações com Nome: Ok obrigada)", () => {
+    const messages = [
+      { role: "assistant", content: "Perfeito! Aguarde um momento que vou encaminhar para o time." },
+      { role: "user", content: "Ok obrigada" },
+    ];
+    expect(extractClientNameFromMessages(messages)).toBeUndefined();
+  });
+  it("não retorna 'ah simm obrigada' como nome", () => {
+    const messages = [
+      { role: "assistant", content: "Vou encaminhar para o time da unidade." },
+      { role: "user", content: "ah simm obrigada" },
+    ];
+    expect(extractClientNameFromMessages(messages)).toBeUndefined();
+  });
+  it("retorna nome real quando há agradecimento como última mensagem (prioriza nome anterior)", () => {
+    const messages = [
+      { role: "user", content: "Geovana Proença" },
+      { role: "assistant", content: "Prazer! Qual unidade prefere?" },
+      { role: "user", content: "Ok obrigada" },
+    ];
+    expect(extractClientNameFromMessages(messages)).toBe("Geovana Proença");
   });
 });
 

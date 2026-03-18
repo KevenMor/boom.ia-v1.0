@@ -7,7 +7,10 @@ const GEMINI_EXTRACT_URL = "https://generativelanguage.googleapis.com/v1beta/mod
 
 const EXTRACT_PROMPT = `Analise este documento (RG, CNH ou comprovante de endereço) e extraia os dados em formato estruturado.
 Retorne APENAS um bloco JSON válido, sem markdown, sem explicações, com as chaves exatamente como abaixo.
-Para RG ou CNH: extraia nome_completo, cpf, rg_numero, rg_orgao_emissor. Se não conseguir ler algum campo, use null.
+
+IMPORTANTE - nome_completo: use SOMENTE o nome do TITULAR (portador do documento), encontrado no campo "Nome" ou "Name" da FRENTE do documento. NUNCA use nomes da seção "Filiação" (que contém nomes dos pais). Se a imagem mostrar apenas o verso com Filiação e não tiver o campo Nome do titular, retorne null para nome_completo.
+
+Para RG ou CNH: extraia nome_completo (só titular), cpf, rg_numero, rg_orgao_emissor. Se não conseguir ler algum campo, use null.
 Para comprovante de endereço: extraia endereco_completo (logradouro, número, bairro, cidade, UF, CEP). Se não for comprovante, retorne {}.
 Formato esperado:
 {"nome_completo": "string ou null", "cpf": "string ou null", "rg_numero": "string ou null", "rg_orgao_emissor": "string ou null", "endereco_completo": "string ou null"}`;
