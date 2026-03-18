@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { MessageSquare, Bot, ArrowLeft, Search, Send, Paperclip, Smile, CheckCheck, Bug, Trash2, Mic, Phone, Hash, Clock, Users, UserPlus } from "lucide-react";
+import { MessageSquare, Bot, ArrowLeft, Search, Send, Paperclip, Smile, CheckCheck, Bug, Trash2, Mic, Phone, Hash, Clock, Users, UserPlus, Tag } from "lucide-react";
 import { DebugBlock } from "@/components/sandbox/DebugBlock";
 import { callAPI } from "@/lib/api-client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { useAgents } from "@/hooks/useAgents";
 import { useTenantContext } from "@/contexts/TenantContext";
@@ -83,6 +84,7 @@ export default function Conversations() {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [selectedContactKey, setSelectedContactKey] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [labelFilter, setLabelFilter] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [newContactOpen, setNewContactOpen] = useState(false);
@@ -94,10 +96,17 @@ export default function Conversations() {
 
   const { data: conversations, isLoading: convsLoading } = useConversations(selectedAgentId);
 
-  const { deduplicatedConversations, contactConvIds } = useMemo(() => {
-    if (!conversations) return { deduplicatedConversations: [] as typeof conversations, contactConvIds: new Map<string, string[]>() };
+  const { deduplicatedConversations, contactConvIds, contactLabelsMap, allLabels } = useMemo(() => {
+    if (!conversations) return {
+      deduplicatedConversations: [] as typeof conversations,
+      contactConvIds: new Map<string, string[]>(),
+      contactLabelsMap: new Map<string, Set<string>>(),
+      allLabels: [] as string[],
+    };
     const contactMap = new Map<string, (typeof conversations)[number]>();
     const idsMap = new Map<string, string[]>();
+    const labelsMap = new Map<string, Set<string>>();
+    const labelsSet = new Set<string>();
 
     const resolveContactKey = (conv: (typeof conversations)[number]) => {
       const normalizePhoneKey = (v: unknown) => {
@@ -144,6 +153,13 @@ export default function Conversations() {
       if (!idsMap.has(contactKey)) idsMap.set(contactKey, []);
       idsMap.get(contactKey)!.push(conv.id);
 
+      const convLabels = conv.labels ?? [];
+      for (const lbl of convLabels) {
+        labelsSet.add(lbl);
+        if (!labelsMap.has(contactKey)) labelsMap.set(contactKey, new Set());
+        labelsMap.get(contactKey)!.add(lbl);
+      }
+
       if (!contactMap.has(contactKey)) {
         contactMap.set(contactKey, conv);
       } else {
@@ -154,7 +170,12 @@ export default function Conversations() {
         });
       }
     }
-    return { deduplicatedConversations: Array.from(contactMap.values()), contactConvIds: idsMap };
+    return {
+      deduplicatedConversations: Array.from(contactMap.values()),
+      contactConvIds: idsMap,
+      contactLabelsMap: labelsMap,
+      allLabels: Array.from(labelsSet).sort(),
+    };
   }, [conversations]);
 
   const selectedConvIds = useMemo(
@@ -180,7 +201,23 @@ export default function Conversations() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const getContactKeyForConv = (conv: (typeof deduplicatedConversations)[number]) => {
+    for (const [key, ids] of contactConvIds.entries()) {
+      if (ids.includes(conv.id)) return key;
+    }
+    const digits = String(conv?.external_user_id ?? "").replace(/\D/g, "");
+    if (digits.length >= 10) {
+      const normalized = digits.startsWith("55") && digits.length >= 12 ? digits.slice(-11) : digits;
+      return `phone:${normalized}`;
+    }
+    return conv?.contact_name || conv?.external_user_id || conv?.id;
+  };
+
   const filteredConversations = deduplicatedConversations.filter((c) => {
+    if (labelFilter) {
+      const key = getContactKeyForConv(c);
+      if (!contactLabelsMap.get(key)?.has(labelFilter)) return false;
+    }
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
@@ -506,6 +543,24 @@ export default function Conversations() {
                   />
                 </div>
               </div>
+
+              {/* Label filter */}
+              {allLabels.length > 0 && (
+                <div className="px-3 py-2 border-t border-border/50">
+                  <Select value={labelFilter ?? "all"} onValueChange={(v) => setLabelFilter(v === "all" ? null : v)}>
+                    <SelectTrigger className="h-8 text-xs border-border/50 bg-background gap-2">
+                      <Tag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <SelectValue placeholder="Filtrar por etiqueta" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas as etiquetas</SelectItem>
+                      {allLabels.map((lbl) => (
+                        <SelectItem key={lbl} value={lbl}>{lbl}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
             {/* Contact list */}

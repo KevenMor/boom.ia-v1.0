@@ -17,6 +17,10 @@ interface Props {
   setQuietEnd: (v: string) => void;
   followupPrompt?: string;
   setFollowupPrompt?: (v: string) => void;
+  negativeGuardEnabled?: boolean;
+  setNegativeGuardEnabled?: (v: boolean) => void;
+  thinkingDelayMinutes?: number;
+  setThinkingDelayMinutes?: (v: number) => void;
 }
 
 export function FollowUpConfigSection({
@@ -25,6 +29,10 @@ export function FollowUpConfigSection({
   quietStart, setQuietStart,
   quietEnd, setQuietEnd,
   followupPrompt, setFollowupPrompt,
+  negativeGuardEnabled = true,
+  setNegativeGuardEnabled,
+  thinkingDelayMinutes = 2880,
+  setThinkingDelayMinutes,
 }: Props) {
   const addInterval = () => {
     const last = intervals[intervals.length - 1] || 10;
@@ -101,6 +109,38 @@ export function FollowUpConfigSection({
               {" "}após a última resposta do agente
             </p>
           </div>
+
+          {/* Guard contexto negativo */}
+          {setNegativeGuardEnabled && (
+            <div className="flex items-center justify-between rounded-lg border border-border/50 p-3">
+              <div>
+                <Label className="text-xs font-medium text-foreground">Não enviar em contexto negativo</Label>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  Usa LLM para detectar se o cliente rejeitou ou desistiu; evita follow-up nesses casos
+                </p>
+              </div>
+              <Switch checked={negativeGuardEnabled} onCheckedChange={setNegativeGuardEnabled} />
+            </div>
+          )}
+
+          {/* Delay "vou pensar" (D+2) */}
+          {setThinkingDelayMinutes && (
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Delay quando cliente diz que vai pensar (minutos)</Label>
+              <Input
+                type="number"
+                min={60}
+                max={10080}
+                step={60}
+                value={thinkingDelayMinutes}
+                onChange={(e) => setThinkingDelayMinutes(Number(e.target.value) || 2880)}
+                className="h-10 w-32 font-mono"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Padrão 2880 (48h). Quando o cliente diz &quot;vou pensar&quot;, &quot;deixa eu ver&quot;, etc., o próximo follow-up é agendado para esse intervalo.
+              </p>
+            </div>
+          )}
 
           {/* Quiet hours */}
           <div className="space-y-2">

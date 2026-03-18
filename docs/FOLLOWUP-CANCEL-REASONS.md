@@ -53,7 +53,20 @@ O processamento dos follow-ups (rota `POST /api/queue/followups`, chamada a cada
 
 ---
 
-## 7. Última mensagem é do usuário (CENÁRIO “user replied”)
+## 7. Cliente disse que não tem interesse (client_no_interest)
+- **Condição:** Nas últimas 10 mensagens do usuário, alguma dá match em padrões explícitos de rejeição (ex.: "não", "não quero", "desisti", "sem interesse", "já encontrei").
+- **Ação:** Status → `cancelled`.
+
+---
+
+## 8. Contexto negativo (negative_context) — guard LLM
+- **Condição:** O guard de contexto (LLM) analisa o histórico e classifica como negativo: cliente rejeitou, desistiu, fechou com outro, ou contexto claramente negativo.
+- **Ação:** Status → `cancelled`.
+- **Config:** `followup_negative_guard_enabled` (default: true). Desative em `config` do agente para pular essa verificação.
+
+---
+
+## 9. Última mensagem é do usuário (CENÁRIO “user replied”)
 - **Condição:** No histórico carregado por `load_conversation_messages`, a **última** mensagem tem `role === "user"`.
 - **Ação:** Status → `cancelled` (interpretação: “cliente já respondeu, não mandar follow-up”).
 - **No seu caso:** Você disse que o cliente **não** interagiu. Então, em tese, a última mensagem deveria ser do assistente. Possíveis explicações:
@@ -62,7 +75,7 @@ O processamento dos follow-ups (rota `POST /api/queue/followups`, chamada a cada
 
 ---
 
-## 8. Substituído por novo agendamento (schedule_followup)
+## 10. Substituído por novo agendamento (schedule_followup)
 - **Condição:** A função `schedule_followup` foi chamada (ex.: ao enviar a primeira mensagem ou ao agendar a próxima tentativa) e existiam follow-ups pendentes para a mesma conversa.
 - **Ação:** Os pendentes são cancelados com `cancel_reason = 'superseded'` antes de inserir o novo.
 - **No seu caso:** Pode ocorrer se houver duplicatas ou se um novo follow-up substitui um anterior (ex.: reagendamento).

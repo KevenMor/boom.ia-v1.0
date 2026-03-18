@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
 import { msgLog } from "../utils/flow-logger.js";
+import { isThinkingAboutIt, getThinkingDelayMinutes } from "../utils/followup-utils.js";
 import {
   getChatwootAuthHeaders,
   sendChatwootTextMessage,
@@ -27,6 +28,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
           welcome_video_url?: string;
           assignee_id?: number;
           team_id?: number;
+          user_message?: string;
         };
       }>,
       reply: FastifyReply
@@ -50,6 +52,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
         welcome_video_url,
         assignee_id: handoff_assignee_id,
         team_id: handoff_team_id,
+        user_message,
       } = req.body;
 
       let agent: any = null;
@@ -250,7 +253,9 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
           ? cfg.followup_intervals
           : [10, 20, 30];
         const maxAttempts = Math.max(intervals.length, Number(cfg.followup_max_attempts) || 0);
-        const firstDelay = intervals[0] || 10;
+        const firstDelay = isThinkingAboutIt(user_message)
+          ? getThinkingDelayMinutes(cfg)
+          : intervals[0] || 10;
 
         try {
           const { data: followupId } = await supabase.rpc("schedule_followup", {
@@ -276,7 +281,8 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
             const { addFollowUpJob } = await import("../services/followup-queue.js");
             await addFollowUpJob(followupId, firstDelay * 60 * 1000);
           }
-          console.log(`[FollowUp] Agendado 1/${maxAttempts} | conv=${conversation_id?.slice(0, 8)}… | delay=${firstDelay}min | id=${followupId ?? "—"}`);
+          const delayLabel = isThinkingAboutIt(user_message) ? `${firstDelay}min (vou pensar → D+2)` : `${firstDelay}min`;
+          console.log(`[FollowUp] Agendado 1/${maxAttempts} | conv=${conversation_id?.slice(0, 8)}… | delay=${delayLabel} | id=${followupId ?? "—"}`);
         } catch (e: any) {
           console.warn("[Deliver] Schedule follow-up failed:", e.message);
         }

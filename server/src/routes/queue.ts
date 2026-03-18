@@ -18,6 +18,8 @@ import {
   isInQuietHours,
   getNextSlotOutsideQuietHours,
 } from "../utils/brasiliaTime.js";
+import { isThinkingAboutIt, getThinkingDelayMinutes } from "../utils/followup-utils.js";
+import { shouldSkipFollowUpByContext } from "../services/followup-guard.js";
 
 const API_BASE = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
 
@@ -475,6 +477,34 @@ export async function processFollowUpItem(
     }
   }
 
+  // Guard: contexto negativo (LLM) — não enviar se cliente rejeitou/desistiu
+  const guardEnabled = cfg.followup_negative_guard_enabled !== false;
+  if (guardEnabled) {
+    const guardResult = await shouldSkipFollowUpByContext(
+      (base, key, aid, msgs, cid, att, ext, cwId) =>
+        callChatAgent(base, key, aid, msgs, cid, att, ext, cwId).then((r) => ({
+          error: r.error,
+          fullContent: r.fullContent,
+        })),
+      baseUrl,
+      nexusKey,
+      item.agent_id as string,
+      conversationMessages,
+      item.conversation_id as string | null,
+      item.external_user_id as string | null,
+      (item.chatwoot_conversation_id as number) ?? null
+    );
+    if (guardResult === "skip") {
+      console.log(`[FollowUp] CANCELLED negative_context | item=${(item.id as string)?.slice(0, 8)}…`);
+      followupLog.cancelled(item.id as string, "negative_context");
+      await supabase
+        .from("follow_up_queue")
+        .update({ status: "cancelled", cancel_reason: "negative_context", updated_at: new Date().toISOString() })
+        .eq("id", item.id);
+      return { processed: false, skipped: true };
+    }
+  }
+
   const attempt = (item.attempt as number) || 1;
   const intervals: number[] = (() => {
     const fromCfg = Array.isArray(cfg.followup_intervals) ? cfg.followup_intervals : null;
@@ -576,7 +606,12 @@ export async function processFollowUpItem(
     .eq("id", item.id);
 
   if (attempt < maxAttempts) {
-    const nextDelay = intervals[attempt] || intervals[intervals.length - 1] || 30;
+    const lastUserMsg = [...conversationMessages].reverse().find((m) => m.role === "user");
+    const lastUserContent = lastUserMsg?.content ?? "";
+    const useThinkingDelay = isThinkingAboutIt(lastUserContent);
+    const nextDelay = useThinkingDelay
+      ? getThinkingDelayMinutes(cfg)
+      : intervals[attempt] || intervals[intervals.length - 1] || 30;
     const nextAttempt = attempt + 1;
     try {
       const { data: nextId } = await supabase.rpc("schedule_followup", {
@@ -598,7 +633,8 @@ export async function processFollowUpItem(
         .eq("status", "cancelled")
         .is("cancel_reason", null);
       const dueAt = new Date(Date.now() + nextDelay * 60 * 1000);
-      console.log(`[FollowUp] ${nextAttempt}/${maxAttempts} agendado | conv=${(item.conversation_id as string)?.slice(0, 8)}… | em ${nextDelay}min (às ${dueAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}) | id=${nextId ?? "—"}`);
+      const delayLabel = useThinkingDelay ? `${nextDelay}min (vou pensar → D+2)` : `${nextDelay}min`;
+      console.log(`[FollowUp] ${nextAttempt}/${maxAttempts} agendado | conv=${(item.conversation_id as string)?.slice(0, 8)}… | em ${delayLabel} (às ${dueAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}) | id=${nextId ?? "—"}`);
       followupLog.nextScheduled(item.conversation_id as string, nextAttempt, maxAttempts, nextDelay);
       return { processed: true, nextId: nextId as string | undefined, nextDelay };
     } catch (e: unknown) {
@@ -938,6 +974,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
         chatwoot_conversation_id,
         response_text: sanitizedContent,
         response_parts: responseParts,
+        user_message: finalMessage ?? undefined,
       };
       if (result.handoffAssigneeId != null) {
         deliverBody.assignee_id = result.handoffAssigneeId;

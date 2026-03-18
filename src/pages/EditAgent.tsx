@@ -127,6 +127,8 @@ export default function EditAgent() {
   const [followupQuietEnd, setFollowupQuietEnd] = useState("08:00");
   const [followupPrompt, setFollowupPrompt] = useState("");
   const [followupAgentId, setFollowupAgentId] = useState("");
+  const [followupNegativeGuardEnabled, setFollowupNegativeGuardEnabled] = useState(true);
+  const [followupThinkingDelayMinutes, setFollowupThinkingDelayMinutes] = useState(2880);
   const [businessHoursEnabled, setBusinessHoursEnabled] = useState(false);
   const [businessHours, setBusinessHours] = useState<BusinessHours>(DEFAULT_BUSINESS_HOURS);
   const [offlineMessage, setOfflineMessage] = useState("");
@@ -175,6 +177,8 @@ export default function EditAgent() {
       setFollowupQuietEnd((cfg as any).followup_quiet_end ?? "08:00");
       setFollowupPrompt((cfg as any).followup_prompt ?? "");
       setFollowupAgentId((cfg as any).followup_agent_id ?? "");
+      setFollowupNegativeGuardEnabled((cfg as any).followup_negative_guard_enabled !== false);
+      setFollowupThinkingDelayMinutes((cfg as any).followup_thinking_delay_minutes ?? 2880);
       setBusinessHoursEnabled((cfg as any).business_hours_enabled ?? false);
       setBusinessHours((cfg as any).business_hours ?? DEFAULT_BUSINESS_HOURS);
       setOfflineMessage((cfg as any).business_hours_offline_message ?? "");
@@ -217,6 +221,8 @@ export default function EditAgent() {
           followup_quiet_end: followupQuietEnd || undefined,
           followup_prompt: followupPrompt || undefined,
           followup_agent_id: followupAgentId || undefined,
+          followup_negative_guard_enabled: followupNegativeGuardEnabled,
+          followup_thinking_delay_minutes: followupThinkingDelayMinutes,
           business_hours_enabled: businessHoursEnabled,
           business_hours: businessHours,
           business_hours_offline_message: offlineMessage || undefined,
@@ -633,6 +639,8 @@ export default function EditAgent() {
             quietStart={followupQuietStart} setQuietStart={setFollowupQuietStart}
             quietEnd={followupQuietEnd} setQuietEnd={setFollowupQuietEnd}
             followupPrompt={followupPrompt} setFollowupPrompt={setFollowupPrompt}
+            negativeGuardEnabled={followupNegativeGuardEnabled} setNegativeGuardEnabled={setFollowupNegativeGuardEnabled}
+            thinkingDelayMinutes={followupThinkingDelayMinutes} setThinkingDelayMinutes={setFollowupThinkingDelayMinutes}
           />
         </div>
 

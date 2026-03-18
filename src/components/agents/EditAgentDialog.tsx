@@ -68,6 +68,8 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
   const [followupQuietEnd, setFollowupQuietEnd] = useState("08:00");
   const [followupPrompt, setFollowupPrompt] = useState("");
   const [followupAgentId, setFollowupAgentId] = useState("");
+  const [followupNegativeGuardEnabled, setFollowupNegativeGuardEnabled] = useState(true);
+  const [followupThinkingDelayMinutes, setFollowupThinkingDelayMinutes] = useState(2880);
   const { register, handleSubmit, setValue, watch, reset } = useForm<FormData>({ resolver: zodResolver(schema) });
 
   useEffect(() => {
@@ -99,6 +101,8 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
       setFollowupQuietEnd((cfg as any).followup_quiet_end ?? "08:00");
       setFollowupPrompt((cfg as any).followup_prompt ?? "");
       setFollowupAgentId((cfg as any).followup_agent_id ?? "");
+      setFollowupNegativeGuardEnabled((cfg as any).followup_negative_guard_enabled !== false);
+      setFollowupThinkingDelayMinutes((cfg as any).followup_thinking_delay_minutes ?? 2880);
     }
   }, [agent, reset]);
 
@@ -126,6 +130,8 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
           followup_quiet_end: followupQuietEnd || undefined,
           followup_prompt: followupPrompt || undefined,
           followup_agent_id: followupAgentId || undefined,
+          followup_negative_guard_enabled: followupNegativeGuardEnabled,
+          followup_thinking_delay_minutes: followupThinkingDelayMinutes,
         },
       });
       toast.success("Agente atualizado");
@@ -348,6 +354,8 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
             quietStart={followupQuietStart} setQuietStart={setFollowupQuietStart}
             quietEnd={followupQuietEnd} setQuietEnd={setFollowupQuietEnd}
             followupPrompt={followupPrompt} setFollowupPrompt={setFollowupPrompt}
+            negativeGuardEnabled={followupNegativeGuardEnabled} setNegativeGuardEnabled={setFollowupNegativeGuardEnabled}
+            thinkingDelayMinutes={followupThinkingDelayMinutes} setThinkingDelayMinutes={setFollowupThinkingDelayMinutes}
           />
 
           {/* Status */}
