@@ -82,6 +82,35 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
         const cwAuth = getChatwootAuthHeaders(cfg.chatwoot_api_token, cfg);
 
         const agentAssigneeId = cfg.agent_assignee_id != null ? Number(cfg.agent_assignee_id) : null;
+
+        // Se a conversa já tem um assignee diferente do bot, não enviar mensagem nem atribuir
+        try {
+          const convUrl = `${baseUrl}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${chatwoot_conversation_id}`;
+          const convResp = await fetch(convUrl, { headers: cwAuth, signal: AbortSignal.timeout(10_000) });
+          if (convResp.ok) {
+            const raw = (await convResp.json()) as Record<string, unknown>;
+            const convData = ((raw.payload as Record<string, unknown>) || raw) as Record<string, unknown>;
+            const meta = (convData.meta || convData) as Record<string, unknown>;
+            const assignee = (meta.assignee || convData.assignee) as { id?: number | string } | null;
+            const currentAssigneeId = assignee?.id != null ? Number(assignee.id) : null;
+
+            const isAgentOwnConversation = agentAssigneeId != null && currentAssigneeId === agentAssigneeId;
+            const hasHumanAssigned = currentAssigneeId != null && !isAgentOwnConversation;
+
+            if (hasHumanAssigned) {
+              console.log(`[Deliver] SKIPPED human_assigned | conv=${chatwoot_conversation_id} currentAssignee=${currentAssigneeId} agentAssignee=${agentAssigneeId ?? "—"}`);
+              return reply.send({
+                status: "skipped",
+                reason: "human_assigned",
+                conversation_id,
+                message: "Conversa já atribuída a outro agente; mensagem não enviada",
+              });
+            }
+          }
+        } catch (e: unknown) {
+          console.warn("[Deliver] Chatwoot assignee check failed:", (e as Error)?.message);
+        }
+
         const assigneeId = handoff_assignee_id != null ? Number(handoff_assignee_id) : agentAssigneeId;
         if (assigneeId != null) {
           try {
