@@ -8,7 +8,7 @@
 // - Follow-ups e Lembretes funcionam para QUALQUER tenant (filtro por tenant_id).
 // ============================================================
 
-import { BASE_GREETING, DEFAULT_DISPATCHER_PROMPT, GLOBAL_CONDUCT_RULES, GLOBAL_HUMANIZATION } from "./base.js";
+import { BASE_GREETING, DEFAULT_DISPATCHER_PROMPT, GLOBAL_CONDUCT_RULES, GLOBAL_HUMANIZATION, GLOBAL_LANGUAGE_RULES } from "./base.js";
 import {
   SYSTEM_PROMPT as PPL_SYSTEM,
   COMMUNICATION_RULES as PPL_COMM_RULES,
@@ -161,7 +161,8 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
  * 2. Regras de comunicação do tenant (se existir e agente tem inventory tool)
  * 3. Instruções base de saudação (sempre)
  * 4. Regras globais de conduta (nome/dados só do que o cliente informou — sempre)
- * 5. Contexto de pet (nome + gênero inferido) para Pet Home, quando aplicável
+ * 5. Humanização e idioma (português-BR exclusivo)
+ * 6. Contexto de pet (nome + gênero inferido) para Pet Home, quando aplicável
  */
 export function buildSystemPrompt(
   agentSystemPrompt: string,
@@ -176,6 +177,7 @@ export function buildSystemPrompt(
   const greeting = "\n\n" + BASE_GREETING;
   const globalRules = "\n\n" + GLOBAL_CONDUCT_RULES;
   const humanization = "\n\n" + GLOBAL_HUMANIZATION;
+  const languageRules = "\n\n" + GLOBAL_LANGUAGE_RULES;
 
   // Inject current Brasilia datetime so the model knows "hoje" and "amanhã"
   const now = new Date();
@@ -186,7 +188,7 @@ export function buildSystemPrompt(
 
   const petContextBlock = petContext ? `\n\n${petContext}` : "";
 
-  return base + commRules + greeting + globalRules + humanization + dateContext + petContextBlock;
+  return base + commRules + greeting + globalRules + humanization + languageRules + dateContext + petContextBlock;
 }
 
 /**
