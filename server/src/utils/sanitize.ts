@@ -22,6 +22,7 @@ export function sanitizeLLMOutput(content: string): string {
   }
 
   text = text.replace(/^.*ENVIAR_FOTOS?_VEICULOS?[:\s].*$/gim, "");
+  text = text.replace(/^.*ENVIAR_VIDEO_DETALHES[:\s].*$/gim, "");
   text = text.replace(/^.*HANDOFF_COMERCIAL.*$/gim, "");
   text = text.replace(/^.*\b(TOOL_CALL|FUNCTION_CALL|ACTION_OUTPUT)[:\s].*$/gim, "");
   text = text.replace(
@@ -60,6 +61,19 @@ export function sanitizeLLMOutput(content: string): string {
   text = text.replace(/tool_code[\s\S]*?\)\s*\)(?=\s|$|\.|,|;)/gim, "");
   text = text.replace(/\b(assign_agent|atribuir_agente|chatwoot_assign)\s*\(\s*[^)]*\)/gim, "");
   text = text.replace(/\bprint\s*\(\s*(?:json\.dumps\s*)?\([^)]*assign_agent[^)]*\)\s*\)/gim, "");
+  // Marcador explícito de dispatcher/tool vazando para o cliente (ex.: [CHAMAR FERRAMENTA marcar_lead])
+  text = text.replace(/\[\s*CHAMAR\s+FERRAMENTA[^\]]*\]/gim, "");
+  // Sentinel interno do dispatcher não deve aparecer para o cliente
+  text = text.replace(/\bNO_TOOLS_NEEDED\b/gim, "");
+  // Guard interno de follow-up jamais deve vazar para o cliente
+  text = text.replace(/^\s*\[SISTEMA\s+INTERNO\s*[-—]\s*FOLLOW-UP\s+GUARD\]\s*$/gim, "");
+  text = text.replace(/^.*Responda\s+APENAS\s+com\s+uma\s+destas\s+palavras:.*$/gim, "");
+  text = text.replace(/^\s*[-•]?\s*SEND\s*=\s*.*$/gim, "");
+  text = text.replace(/^\s*[-•]?\s*SKIP\s*=\s*.*$/gim, "");
+  text = text.replace(/^.*Analise\s+o\s+hist[óo]rico\s+desta\s+conversa\..*$/gim, "");
+  text = text.replace(/^.*O\s+cliente\s+deixou\s+claro\s+que\s+N[ÃA]O\s+quer\s+prosseguir.*$/gim, "");
+  // Resposta do guard isolada também não deve ir ao cliente
+  if (/^\s*(SEND|SKIP)\s*$/im.test(text.trim())) return "";
   text = text.replace(/\n{3,}/g, "\n\n").trim();
 
   // Remove pergunta duplicada de nome (ambas perguntam a mesma coisa — "Com quem eu falo?" e "Como posso te chamar?")
@@ -173,8 +187,18 @@ export function isCommandLine(line: string): boolean {
   if (!t) return false;
   return (
     /^.*ENVIAR_FOTOS?_VEICULOS?[:\s].*$/im.test(t) ||
+    /^.*ENVIAR_VIDEO_DETALHES[:\s].*$/im.test(t) ||
     /^.*HANDOFF_COMERCIAL.*$/im.test(t) ||
     /^.*\b(TOOL_CALL|FUNCTION_CALL|ACTION_OUTPUT)[:\s].*$/im.test(t) ||
+    /\[\s*CHAMAR\s+FERRAMENTA[^\]]*\]/im.test(t) ||
+    /^\s*NO_TOOLS_NEEDED\s*$/im.test(t) ||
+    /^\s*\[SISTEMA\s+INTERNO\s*[-—]\s*FOLLOW-UP\s+GUARD\]\s*$/im.test(t) ||
+    /^.*Responda\s+APENAS\s+com\s+uma\s+destas\s+palavras:.*$/im.test(t) ||
+    /^\s*[-•]?\s*SEND\s*=\s*.*$/im.test(t) ||
+    /^\s*[-•]?\s*SKIP\s*=\s*.*$/im.test(t) ||
+    /^\s*(SEND|SKIP)\s*$/im.test(t) ||
+    /^.*Analise\s+o\s+hist[óo]rico\s+desta\s+conversa\..*$/im.test(t) ||
+    /^.*O\s+cliente\s+deixou\s+claro\s+que\s+N[ÃA]O\s+quer\s+prosseguir.*$/im.test(t) ||
     /^.*(?:Chamada da ferramenta|Consultando a ferramenta|Vou consultar a ferramenta)\s+(?:consultar_estoque|consultar_agenda|consultar_base_conhecimento|inventory_query)/im.test(t) ||
     /^.*\b(consultar_estoque|consultar_agenda|consultar_base_conhecimento|inventory_query|calendar_query|rag_search)\s*[:\s]\s*\{/im.test(t) ||
     /\b(consultar_estoque|consultar_agenda|consultar_base_conhecimento|inventory_query|calendar_query|rag_search)\s*\(/im.test(t) ||
