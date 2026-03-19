@@ -94,6 +94,12 @@ export default function Conversations() {
   const [sendingNewContact, setSendingNewContact] = useState(false);
   const queryClient = useQueryClient();
 
+  // Ao trocar de tenant, limpar seleção para refletir a nova empresa
+  useEffect(() => {
+    setSelectedAgentId(null);
+    setSelectedContactKey(null);
+  }, [selectedTenantId]);
+
   const { data: conversations, isLoading: convsLoading } = useConversations(selectedAgentId);
 
   const { deduplicatedConversations, contactConvIds, contactLabelsMap, allLabels } = useMemo(() => {

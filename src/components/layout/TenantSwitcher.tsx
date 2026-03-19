@@ -53,7 +53,7 @@ export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => setSelectedTenantId(null)}
-            className="gap-2"
+            className="gap-2 py-2"
           >
             <span className="flex-1 truncate font-medium">Todos os tenants</span>
             {!selectedTenantId && <Check className="h-4 w-4 text-primary" />}
@@ -63,7 +63,7 @@ export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
             <DropdownMenuItem
               key={t.id}
               onClick={() => setSelectedTenantId(t.id)}
-              className="gap-2"
+              className="gap-2 py-2"
             >
               <span className="flex-1 truncate">{t.name}</span>
               {selectedTenantId === t.id && <Check className="h-4 w-4 text-primary" />}
@@ -89,20 +89,20 @@ export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={() => setSelectedTenantId(null)}
-          className="gap-2"
+          className="gap-2 py-2"
         >
           <span className="flex-1 truncate text-sm font-medium">Todos os tenants</span>
           {!selectedTenantId && <Check className="h-4 w-4 text-primary shrink-0" />}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         {isLoading && (
-          <DropdownMenuItem disabled className="text-xs text-muted-foreground">Carregando...</DropdownMenuItem>
+          <DropdownMenuItem disabled className="text-xs text-muted-foreground py-2">Carregando...</DropdownMenuItem>
         )}
         {activeTenants.map((t) => (
           <DropdownMenuItem
             key={t.id}
             onClick={() => setSelectedTenantId(t.id)}
-            className="gap-2"
+            className="gap-2 py-2"
           >
             <span className="flex-1 truncate text-sm">{t.name}</span>
             {selectedTenantId === t.id && <Check className="h-4 w-4 text-primary shrink-0" />}

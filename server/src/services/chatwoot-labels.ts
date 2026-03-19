@@ -15,10 +15,16 @@ export interface ChatwootLabelConfig {
 
 /** Formato da etiqueta: leadsDD-MM-YYYY (Brasília) */
 function getLeadLabelTitle(): string {
-  const now = new Date();
-  const day = String(now.getDate()).padStart(2, "0");
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const year = now.getFullYear();
+  const formatter = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+  const parts = formatter.formatToParts(new Date());
+  const day = parts.find((p) => p.type === "day")?.value ?? "01";
+  const month = parts.find((p) => p.type === "month")?.value ?? "01";
+  const year = parts.find((p) => p.type === "year")?.value ?? String(new Date().getFullYear());
   return `leads${day}-${month}-${year}`;
 }
 
@@ -49,9 +55,14 @@ export async function ensureLeadLabelExists(config: ChatwootLabelConfig): Promis
     throw new Error(`Chatwoot GET labels failed (${listRes.status}): ${errText.slice(0, 200)}`);
   }
 
-  const listData = (await listRes.json()) as { payload?: Array<{ title?: string; name?: string }> };
-  const labels = Array.isArray(listData?.payload) ? listData.payload : [];
-  const exists = labels.some((l) => (l.title || l.name || "") === title);
+  const listData = (await listRes.json()) as {
+    payload?: Array<string | { title?: string; name?: string }>;
+  };
+  const rawLabels = Array.isArray(listData?.payload) ? listData.payload : [];
+  const labelTitles = rawLabels.map((l) =>
+    typeof l === "string" ? l : (l?.title || l?.name || "")
+  );
+  const exists = labelTitles.includes(title);
   if (exists) return title;
 
   // POST /labels - criar etiqueta (Rails: params.require(:label).permit(...))

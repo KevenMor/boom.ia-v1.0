@@ -670,7 +670,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
             tool_type: "marcar_lead",
             function_def: {
               name: "marcar_lead",
-              description: "Marca o contato como novo lead (potencial cliente interessado em produtos/serviços, ainda não é cliente). Use quando identificar interesse genuíno.",
+              description: "Marca o contato como novo lead aplicando a etiqueta do dia no Chatwoot (formato leadsDD-MM-AAAA, ex: leads19-03-2026). OBRIGATÓRIO chamar quando identificar que é um novo lead (potencial cliente interessado, ainda não é cliente).",
               parameters: { type: "object", properties: {}, required: [] },
             },
           } as ToolDef,
@@ -686,7 +686,8 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         petContext
       );
       if (leadLabelEnabled) {
-        systemPrompt += "\n\n[ETIQUETAGEM DE LEAD] Quando identificar que o contato é um novo lead (potencial cliente interessado em produtos/serviços, ainda não é cliente), chame marcar_lead. Não chame para clientes existentes, retornos ou saudações sem interesse.";
+        systemPrompt +=
+          "\n\n[ETIQUETAGEM DE LEAD - OBRIGATÓRIO] Todo contato que for identificado como NOVO LEAD (potencial cliente interessado em produtos/serviços, ainda não é cliente) DEVE ser marcado chamando marcar_lead. A etiqueta será criada automaticamente no formato leadsDD-MM-AAAA (ex: leads19-03-2026). Chame marcar_lead assim que identificar interesse genuíno. NÃO chame para clientes existentes, retornos ou saudações sem interesse.";
       }
 
       const providerConfig = await getProviderApiKey(agent.provider_id, supabase);
