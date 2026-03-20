@@ -67,7 +67,7 @@ export function stripThoughtAndReasoningBlocks(text: string): string {
 
   let result = out.join("\n");
 
-  result = result.replace(/` <think>[\s\S]*?`</think>`/g, "");
+  result = result.replace(/<think>[\s\S]*?<\/think>/gi, "");
   result = result.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "");
   result = result.replace(/```(?:thinking|reasoning)\s*[\s\S]*?```/gi, "");
 
