@@ -44,6 +44,7 @@ type Msg = {
   edgeLogs?: LogEntry[];
   tokenUsage?: TokenUsageData;
   userAttachments?: UserAttachmentMeta[];
+  metadata?: { type?: string; video_url?: string };
 };
 type Conversation = {
   id: string;
@@ -196,8 +197,9 @@ export default function AgentSandbox() {
             role: m.role as "user" | "assistant",
             content: m.role === "assistant" ? sanitizeContent(m.content) : m.content,
             timestamp: new Date(m.created_at),
+            metadata: m.metadata as { type?: string; video_url?: string } | undefined,
           }))
-          .filter((m) => m.content.trim() !== "")
+          .filter((m) => m.content.trim() !== "" || (m.metadata?.type === "welcome_video" && m.metadata?.video_url))
       );
       setConversationId(convId);
       setShowHistory(false);
@@ -421,6 +423,21 @@ export default function AgentSandbox() {
               continue;
             }
 
+            if (parsed.metadata?.type === "welcome_video" && parsed.metadata?.video_url) {
+              hasAssistantContent = true;
+              const meta = { type: "welcome_video" as const, video_url: parsed.metadata.video_url };
+              setMessages((prev) => {
+                const last = prev[prev.length - 1];
+                if (last?.role === "assistant") {
+                  return prev.map((m, i) =>
+                    i === prev.length - 1 ? { ...m, metadata: meta } : m
+                  );
+                }
+                return [...prev, { role: "assistant" as const, content: "", timestamp: new Date(), metadata: meta }];
+              });
+              continue;
+            }
+
             if (parsed.error) {
               const errMsg = typeof parsed.error === "string" ? parsed.error : JSON.stringify(parsed.error);
               hasAssistantContent = true;
@@ -591,6 +608,13 @@ export default function AgentSandbox() {
               </div>
             )}
 
+            {/* Vídeo institucional (welcome_video do Chat ao Vivo) */}
+            {!isUser && msg.metadata?.type === "welcome_video" && msg.metadata?.video_url && (
+              <div className="mb-1 -mx-1 -mt-0.5">
+                <VideoPlayer src={msg.metadata.video_url} />
+              </div>
+            )}
+
             {/* Assistant videos */}
             {videoUrls.length > 0 && (
               <div className="space-y-1 mb-1 -mx-1 -mt-0.5">
@@ -631,8 +655,8 @@ export default function AgentSandbox() {
               </div>
             )}
 
-            {/* Text content */}
-            {text.trim() && (
+            {/* Text content (oculta apenas placeholder "[Vídeo institucional enviado]" do delivery) */}
+            {text.trim() && text.trim() !== "[Vídeo institucional enviado]" && (
               !isUser ? (
                 <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:my-0.5 [&>p]:leading-relaxed text-[13px]">
                   <ReactMarkdown>{text}</ReactMarkdown>

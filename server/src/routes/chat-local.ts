@@ -12,6 +12,8 @@ import { sendNotificationToGroup } from "../utils/sendNotification.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 const MAX_TOOL_ITERATIONS = 5;
+/** Quantidade de mensagens user/assistant no retry quando resposta vazia (evita reinício genérico da conversa) */
+const RETRY_CONTEXT_MESSAGE_LIMIT = 12;
 
 /** Mensagem amigável quando a API do provedor (OpenAI/Gemini) retorna erro HTTP */
 function providerErrorMessage(status: number, errText: string): string {
@@ -808,6 +810,13 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         "Access-Control-Allow-Credentials": "true",
       });
 
+      // Sandbox: enviar welcome_video no primeiro contato (paridade com Chat ao Vivo)
+      const isFirstContact = messagesToUse.filter((m) => m.role === "assistant").length === 0;
+      const welcomeVideoUrl = (agentConfig.welcome_video_url as string)?.trim();
+      if (isFirstContact && welcomeVideoUrl) {
+        sendSse({ metadata: { type: "welcome_video", video_url: welcomeVideoUrl } });
+      }
+
       // Dual-provider: OpenAI para tools (dispatcher), Gemini para conversacional
       if (useTools && dispatcherProviderId) {
         const dispatcherConfig = await getProviderApiKey(dispatcherProviderId, supabase);
@@ -1389,7 +1398,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 debugSendTotalLen += accented.length;
                 sendSse({ choices: [{ delta: { content: accented } }] });
               }
-              // Primeiro contato: pergunta do nome só se NÃO tiver vídeo de boas-vindas e o cliente AINDA NÃO informou o nome
+              // Primeiro contato: pergunta do nome. Em produção (com Chatwoot) o delivery envia; no sandbox precisamos enviar aqui.
               const isFirstContact = messagesToUse.filter((m) => m.role === "assistant").length === 0;
               const agentCfg = (agent?.config || {}) as Record<string, unknown>;
               const hasWelcomeVideo = !!(agentCfg.welcome_video_url as string)?.trim();
@@ -1398,8 +1407,11 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 convFullContent.toLowerCase().includes(nameQuestion.toLowerCase()) ||
                 convFullContent.toLowerCase().includes("com quem eu falo?");
               const clientAlreadyGaveName = userHasProvidedNameInMessages(messagesToUse);
-              if (isFirstContact && nameQuestion && !hasWelcomeVideo && !alreadyHasNameQuestion && !clientAlreadyGaveName) {
+              const isSandbox = !chatwoot_conversation_id;
+              const shouldAddNameQuestion = isFirstContact && nameQuestion && !alreadyHasNameQuestion && !clientAlreadyGaveName;
+              if (shouldAddNameQuestion && (isSandbox || !hasWelcomeVideo)) {
                 const nqContent = "\n\n" + nameQuestion;
+                convFullContent += nqContent;
                 debugSendCount++;
                 debugSendTotalLen += nqContent.length;
                 sendSse({ choices: [{ delta: { content: nqContent } }] });
@@ -1431,10 +1443,15 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
 
           if (debugSendTotalLen === 0) {
+            const msgCountInput = messagesToUse.length;
+            const convMsgCount = conversationalMessagesClean.filter((m) => m.role === "user" || m.role === "assistant").length;
             console.warn("[Chat-Local] Resposta vazia do conversacional", {
               debugDeltaCount,
               debugDeltaTotalLen,
               debugSendCount,
+              messagesToUseCount: msgCountInput,
+              conversationalUserAssistantCount: convMsgCount,
+              responseConvId,
               streamFilterBufferPreview: streamFilterBuffer.slice(0, 120),
               convFullContentPreview: convFullContent.slice(0, 120),
               hint: debugDeltaTotalLen > 0 && debugSendTotalLen === 0 ? "conteúdo filtrado por filterCommandLines" : "modelo retornou vazio ou sem deltas",
@@ -1444,8 +1461,13 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             // #endregion
             try {
               const retryMessages = conversationalMessagesClean.slice(0, 1).concat(
-                conversationalMessagesClean.filter((m) => m.role === "user" || m.role === "assistant").slice(-4)
+                conversationalMessagesClean.filter((m) => m.role === "user" || m.role === "assistant").slice(-RETRY_CONTEXT_MESSAGE_LIMIT)
               );
+              console.warn("[Chat-Local] Retry usando contexto reduzido", {
+                retryMessagesCount: retryMessages.length,
+                originalConversationalCount: conversationalMessagesClean.length,
+                responseConvId,
+              });
               if (toolResults.length > 0 && naturalToolResultsText) {
                 retryMessages.push({ role: "user", content: `Resultados obtidos:\n${naturalToolResultsText}\n\nCom base nesses resultados, responda ao cliente de forma natural e objetiva. NÃO inclua JSON, nomes de ferramentas ou artefatos técnicos.` });
               }
@@ -1553,6 +1575,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 p_tokens_input: 0,
                 p_tokens_output: 0,
                 p_latency_ms: null,
+                p_metadata: isFirstContact && welcomeVideoUrl ? { type: "welcome_video", video_url: welcomeVideoUrl } : undefined,
               });
             } catch (saveErr) {
               console.warn("[Chat-Local] save_message (dual) failed:", (saveErr as Error)?.message);
@@ -1685,7 +1708,9 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               content.toLowerCase().includes(nameQuestionSingle.toLowerCase()) ||
               content.toLowerCase().includes("com quem eu falo?");
             const clientAlreadyGaveNameSingle = userHasProvidedNameInMessages(messagesToUse);
-            if (isFirstContact && nameQuestionSingle && !hasWelcomeVideoSingle && !alreadyHasNameQuestionSingle && !clientAlreadyGaveNameSingle) {
+            const isSandboxSingle = !chatwoot_conversation_id;
+            const shouldAddNameQuestionSingle = isFirstContact && nameQuestionSingle && !alreadyHasNameQuestionSingle && !clientAlreadyGaveNameSingle;
+            if (shouldAddNameQuestionSingle && (isSandboxSingle || !hasWelcomeVideoSingle)) {
               const nqContentSingle = "\n\n" + nameQuestionSingle;
               content += nqContentSingle;
               sendSse({ choices: [{ delta: { content: nqContentSingle } }] });
@@ -1762,6 +1787,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 p_tokens_input: 0,
                 p_tokens_output: 0,
                 p_latency_ms: null,
+                p_metadata: isFirstContact && welcomeVideoUrl ? { type: "welcome_video", video_url: welcomeVideoUrl } : undefined,
               });
             } catch (saveErr) {
               console.warn("[Chat-Local] save_message (single, no tools) failed:", (saveErr as Error)?.message);
@@ -1960,6 +1986,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             p_tokens_input: 0,
             p_tokens_output: 0,
             p_latency_ms: null,
+            p_metadata: isFirstContact && welcomeVideoUrl ? { type: "welcome_video", video_url: welcomeVideoUrl } : undefined,
           });
         } catch (saveErr) {
           console.warn("[Chat-Local] save_message (single, with tools) failed:", (saveErr as Error)?.message);
