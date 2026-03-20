@@ -328,7 +328,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               p_contact_name: chatwoot.contactName,
               p_contact_avatar_url: chatwoot.contactAvatarUrl,
             });
-            upsertCrmContact(supabase, agent.tenant_id, chatwoot.externalUserId, chatwoot.contactName).catch(() => {});
+            upsertCrmContact(supabase, agent.tenant_id, chatwoot.externalUserId, chatwoot.contactName, chatwoot.contactAvatarUrl).catch(() => {});
             if (newConvId && chatwoot.message?.trim()) {
               const likelyEcho = await isLikelyEchoOfBotMessage(supabase, agentId, newConvId, chatwoot.message, 120);
               if (likelyEcho) {
@@ -406,7 +406,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         });
         earlyConvId = existingConvId;
         if (earlyConvId && (externalUserId || contactName)) {
-          upsertCrmContact(supabase, agent.tenant_id, externalUserId, contactName).catch(() => {});
+          upsertCrmContact(supabase, agent.tenant_id, externalUserId, contactName, contactAvatarUrl).catch(() => {});
         }
         if (earlyConvId) {
           const likelyEcho = userMessage?.trim()

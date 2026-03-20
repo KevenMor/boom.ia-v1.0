@@ -856,7 +856,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
       }
       if (convId && tenantId && (contact_name || external_user_id)) {
         const { upsertCrmContact } = await import("../services/crm-contact-sync.js");
-        upsertCrmContact(supabase, tenantId, external_user_id || "", contact_name || null).catch(() => {});
+        upsertCrmContact(supabase, tenantId, external_user_id || "", contact_name || null, contact_avatar_url).catch(() => {});
       }
 
       if (convId && (contact_name || contact_avatar_url)) {

@@ -1,5 +1,95 @@
+/**
+ * Remove blocos de raciocínio interno (THOUGHT, thinking, etc.) que não devem ir ao cliente.
+ * Heurística: após cabeçalho THOUGHT, descarta linhas até aparecer texto que parece resposta ao cliente em PT-BR.
+ */
+export function stripThoughtAndReasoningBlocks(text: string): string {
+  const lines = text.split(/\r?\n/);
+  const out: string[] = [];
+  let skippingThought = false;
+
+  const isThoughtHeader = (l: string) => {
+    const t = l.trim();
+    return (
+      /^\*{0,2}\s*THOUGHT\s*\*{0,2}\s*:?\s*$/i.test(t) ||
+      /^\*{0,2}\s*THOUGHT\s*\*{0,2}\s+\S/i.test(t) ||
+      /^\s*THOUGHT\s*:?\s*$/i.test(t) ||
+      /^\s*THOUGHT\s+\S/i.test(t)
+    );
+  };
+  const looksLikePortugueseReplyLine = (l: string) => {
+    const s = l.trim();
+    if (!s) return false;
+    if (/[áãâéêíóôõúçÁÃÂÉÊÍÓÔÕÚÇ]/.test(s)) return true;
+    return /\b(ol[áa]|oi[!,.]?|^oi$|você|obrigad|obrigado|obrigada|não|sim[,!]|certo[!,.]?|perfeito|fico\s+aguardando|pode\s+ser|qual\s|quando\s|onde\s|temos|disponível|horário|agendamento|consulta|valor|preço|reais|r\$)\b/i.test(s);
+  };
+  const looksLikeEnglishReasoningLine = (l: string) => {
+    const s = l.trim();
+    if (!s) return false;
+    return (
+      /^(I need to|It's important|My previous|This is|Acknowledge|Clarify|Reiterate|However|Therefore|Note that)\b/i.test(s) ||
+      /^\s*[-•*]\s+(Acknowledge|Clarify|Wait|No question)/i.test(s) ||
+      /^\s*The user (?:is|has|was|provided|asked|wants|said|tells?|just|will|can)\b/i.test(s)
+    );
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmedLine = line.trim();
+
+    if (isThoughtHeader(trimmedLine)) {
+      skippingThought = true;
+      continue;
+    }
+
+    if (skippingThought) {
+      if (trimmedLine === "") continue;
+      if (looksLikePortugueseReplyLine(line)) {
+        skippingThought = false;
+        out.push(line);
+        continue;
+      }
+      if (looksLikeEnglishReasoningLine(line)) continue;
+      if (/^\s*[-•*]\s/.test(line) && !looksLikePortugueseReplyLine(line)) continue;
+      if (/^\s*I need to:\s*$/i.test(trimmedLine)) continue;
+      if (
+        trimmedLine.length > 0 &&
+        !/[áãâéêíóôõúç]/.test(line) &&
+        /^[A-Z]/.test(trimmedLine) &&
+        trimmedLine.length > 35
+      ) {
+        continue;
+      }
+      continue;
+    }
+
+    out.push(line);
+  }
+
+  let result = out.join("\n");
+
+  result = result.replace(/` <think>[\s\S]*?`</think>`/g, "");
+  result = result.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "");
+  result = result.replace(/```(?:thinking|reasoning)\s*[\s\S]*?```/gi, "");
+
+  result = result.replace(/(?:^|\n)\s*THOUGHT\s*:?\s*\n[\s\S]*?(?=\n\n[^\n]*[áãâéêíóôõúç])/gi, "\n\n");
+
+  return result.replace(/\n{3,}/g, "\n\n").trim();
+}
+
+/** Remove vazamento de ferramentas / instruções internas de lead e dispatcher */
+export function stripToolNameLeakage(text: string): string {
+  let t = text;
+  t = t.replace(/\bmarcar_lead\s*\([^)]*\)/gim, "");
+  t = t.replace(/\bMARCAR\s+LEAD\b[^\n\r]*/gim, "");
+  t = t.replace(/\[ETIQUETAGEM\s+DE\s+LEAD[^\]]*\]/gim, "");
+  t = t.replace(/\[CHAMAR\s+FERRAMENTA[^\]]*marcar_lead[^\]]*\]/gim, "");
+  t = t.replace(/^\s*marcar_lead\s*$/gim, "");
+  t = t.replace(/\n\s*marca[r]?\s*lead\s*:?\s*[^\n]*/gi, "");
+  return t;
+}
+
 export function sanitizeLLMOutput(content: string): string {
-  let text = content;
+  let text = stripThoughtAndReasoningBlocks(stripToolNameLeakage(content || ""));
 
   const trimmed = text.trim();
   if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
@@ -48,7 +138,11 @@ export function sanitizeLLMOutput(content: string): string {
   // Linhas que contêm chamada de ferramenta no formato nome(...) — remover a linha inteira
   text = text
     .split("\n")
-    .filter((line) => !/\b(consultar_estoque|consultar_agenda|consultar_base_conhecimento|inventory_query|calendar_query|rag_search)\s*\(/.test(line))
+    .filter(
+      (line) =>
+        !/\b(consultar_estoque|consultar_agenda|consultar_base_conhecimento|inventory_query|calendar_query|rag_search|marcar_lead)\s*\(/.test(line) &&
+        !/^\s*MARCAR\s+LEAD\b/i.test(line.trim())
+    )
     .join("\n");
   // Blocos JSON de memória (ex.: {"memory":{"nome_cliente":"..."}})
   text = text.replace(/\s*\{\s*"memory"\s*:\s*\{[^}]*\}\s*\}\s*/g, "");
@@ -186,6 +280,11 @@ export function isCommandLine(line: string): boolean {
   const t = (line || "").trim();
   if (!t) return false;
   return (
+    /^\s*THOUGHT\b/im.test(t) ||
+    /\bmarcar_lead\s*\(/im.test(t) ||
+    /\bMARCAR\s+LEAD\b/im.test(t) ||
+    /^\s*The user (?:is|has|was|provided|asked|wants|said|tells?|just|will|can)\b/im.test(t) ||
+    /^\s*I need to:\s*$/im.test(t) ||
     /^.*ENVIAR_FOTOS?_VEICULOS?[:\s].*$/im.test(t) ||
     /^.*ENVIAR_VIDEO_DETALHES[:\s].*$/im.test(t) ||
     /^.*HANDOFF_COMERCIAL.*$/im.test(t) ||

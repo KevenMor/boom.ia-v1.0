@@ -92,6 +92,7 @@ export interface Contact {
   zip_code: string | null;
   notes: string | null;
   metadata?: Record<string, unknown> | null;
+  avatar_url: string | null;
   created_at: string;
   updated_at: string;
   tenants?: { name: string } | null;

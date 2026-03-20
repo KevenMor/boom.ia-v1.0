@@ -34,7 +34,7 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
         const orderAsc = order_dir === "asc";
         let query = supabase
           .from("contacts")
-          .select("id, tenant_id, name, email, phone, cpf_cnpj, address, city, state, zip_code, notes, metadata, created_at, updated_at, tenants(name)", { count: "exact" })
+          .select("id, tenant_id, name, email, phone, cpf_cnpj, address, city, state, zip_code, notes, metadata, avatar_url, created_at, updated_at, tenants(name)", { count: "exact" })
           .order(orderCol, { ascending: orderAsc });
 
         if (tenant_id) query = query.eq("tenant_id", tenant_id);
@@ -105,7 +105,7 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
         const { id } = req.params;
         const body = req.body as Record<string, unknown>;
         const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-        const allowed = ["name", "email", "phone", "cpf_cnpj", "address", "city", "state", "zip_code", "notes", "metadata"];
+        const allowed = ["name", "email", "phone", "cpf_cnpj", "address", "city", "state", "zip_code", "notes", "metadata", "avatar_url"];
         for (const key of allowed) {
           if (body[key] !== undefined) {
             updates[key] = key === "metadata" && typeof body[key] !== "string"
@@ -299,32 +299,40 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
           (a: { tenant_id: string }) => !tenantIdFilter || a.tenant_id === tenantIdFilter
         );
 
-        const seen = new Map<string, string | null>();
+        const seen = new Map<string, { name: string | null; avatar_url: string | null }>();
 
         for (const agent of agentsList) {
           const { data: convs } = await supabase.rpc("list_agent_conversations", {
             p_agent_id: agent.id,
             p_limit: 500,
           });
-          const list = (convs ?? []) as Array<{ external_user_id: string | null; contact_name: string | null }>;
+          const list = (convs ?? []) as Array<{
+            external_user_id: string | null;
+            contact_name: string | null;
+            contact_avatar_url: string | null;
+          }>;
           for (const c of list) {
             const ext = (c.external_user_id || "").trim();
             if (!ext || ext === "anonymous") continue;
             const key = `${agent.tenant_id}::${ext}`;
             const contactName = (c.contact_name || "").trim() || null;
+            const avatarUrl = (c.contact_avatar_url || "").trim() || null;
             const prev = seen.get(key);
-            if (!prev && contactName) seen.set(key, contactName);
-            else if (!prev) seen.set(key, null);
-            else if (contactName && !prev) seen.set(key, contactName);
+            if (!prev) {
+              seen.set(key, { name: contactName, avatar_url: avatarUrl });
+            } else {
+              if (contactName && !prev.name) prev.name = contactName;
+              if (avatarUrl && !prev.avatar_url) prev.avatar_url = avatarUrl;
+            }
           }
         }
 
         let synced = 0;
-        for (const [key, contactName] of seen) {
+        for (const [key, info] of seen) {
           const [tenantId, ...parts] = key.split("::");
           const ext = parts.join("::");
           if (tenantId && ext) {
-            await upsertCrmContact(supabase, tenantId, ext, contactName);
+            await upsertCrmContact(supabase, tenantId, ext, info.name, info.avatar_url);
             synced++;
           }
         }

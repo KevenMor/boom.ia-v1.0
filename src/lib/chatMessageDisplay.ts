@@ -1,7 +1,87 @@
 /**
  * Utilitários compartilhados entre Chat ao Vivo e pré-visualização em Contatos.
  * Mantém o mesmo filtro e saneamento para “espelhar” a conversa.
+ * (Alinhado a server/src/utils/sanitize.ts — stripThought / stripToolNameLeakage)
  */
+
+/** Remove THOUGHT / reasoning em inglês até linha que parece resposta em PT-BR */
+export function stripThoughtAndReasoningBlocks(content: string): string {
+  const lines = content.split(/\r?\n/);
+  const out: string[] = [];
+  let skippingThought = false;
+
+  const isThoughtHeader = (l: string) => {
+    const t = l.trim();
+    return (
+      /^\*{0,2}\s*THOUGHT\s*\*{0,2}\s*:?\s*$/i.test(t) ||
+      /^\*{0,2}\s*THOUGHT\s*\*{0,2}\s+\S/i.test(t) ||
+      /^\s*THOUGHT\s*:?\s*$/i.test(t) ||
+      /^\s*THOUGHT\s+\S/i.test(t)
+    );
+  };
+  const looksLikePortugueseReplyLine = (l: string) => {
+    const s = l.trim();
+    if (!s) return false;
+    if (/[áãâéêíóôõúçÁÃÂÉÊÍÓÔÕÚÇ]/.test(s)) return true;
+    return /\b(ol[áa]|oi[!,.]?|^oi$|você|obrigad|obrigado|obrigada|não|sim[,!]|certo[!,.]?|perfeito|fico\s+aguardando|pode\s+ser|qual\s|quando\s|onde\s|temos|disponível|horário|agendamento|consulta|valor|preço|reais|r\$)\b/i.test(s);
+  };
+  const looksLikeEnglishReasoningLine = (l: string) => {
+    const s = l.trim();
+    if (!s) return false;
+    return (
+      /^(I need to|It's important|My previous|This is|Acknowledge|Clarify|Reiterate|However|Therefore|Note that)\b/i.test(s) ||
+      /^\s*[-•*]\s+(Acknowledge|Clarify|Wait|No question)/i.test(s) ||
+      /^\s*The user (?:is|has|was|provided|asked|wants|said|tells?|just|will|can)\b/i.test(s)
+    );
+  };
+
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    if (isThoughtHeader(trimmedLine)) {
+      skippingThought = true;
+      continue;
+    }
+    if (skippingThought) {
+      if (trimmedLine === "") continue;
+      if (looksLikePortugueseReplyLine(line)) {
+        skippingThought = false;
+        out.push(line);
+        continue;
+      }
+      if (looksLikeEnglishReasoningLine(line)) continue;
+      if (/^\s*[-•*]\s/.test(line) && !looksLikePortugueseReplyLine(line)) continue;
+      if (/^\s*I need to:\s*$/i.test(trimmedLine)) continue;
+      if (
+        trimmedLine.length > 0 &&
+        !/[áãâéêíóôõúç]/.test(line) &&
+        /^[A-Z]/.test(trimmedLine) &&
+        trimmedLine.length > 35
+      ) {
+        continue;
+      }
+      continue;
+    }
+    out.push(line);
+  }
+
+  let result = out.join("\n");
+  result = result.replace(/` <think>[\s\S]*?`</think>`/g, "");
+  result = result.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "");
+  result = result.replace(/```(?:thinking|reasoning)\s*[\s\S]*?```/gi, "");
+  result = result.replace(/(?:^|\n)\s*THOUGHT\s*:?\s*\n[\s\S]*?(?=\n\n[^\n]*[áãâéêíóôõúç])/gi, "\n\n");
+  return result.replace(/\n{3,}/g, "\n\n").trim();
+}
+
+export function stripToolNameLeakageForDisplay(content: string): string {
+  let t = content;
+  t = t.replace(/\bmarcar_lead\s*\([^)]*\)/gim, "");
+  t = t.replace(/\bMARCAR\s+LEAD\b[^\n\r]*/gim, "");
+  t = t.replace(/\[ETIQUETAGEM\s+DE\s+LEAD[^\]]*\]/gim, "");
+  t = t.replace(/\[CHAMAR\s+FERRAMENTA[^\]]*marcar_lead[^\]]*\]/gim, "");
+  t = t.replace(/^\s*marcar_lead\s*$/gim, "");
+  t = t.replace(/\n\s*marca[r]?\s*lead\s*:?\s*[^\n]*/gi, "");
+  return t;
+}
 
 export function stripChatwootHeader(content: string): string {
   return content.replace(/^\[Atendente:[^\]]*\]\s*[^:]*:\s*/gm, "").trim();
@@ -10,7 +90,8 @@ export function stripChatwootHeader(content: string): string {
 /** Remove vazamentos comuns de tools / prompts internos no texto do assistente */
 export function sanitizeAssistantContent(content: string): string {
   if (!content) return content;
-  let text = content
+  let text = stripThoughtAndReasoningBlocks(stripToolNameLeakageForDisplay(content));
+  text = text
     .replace(/\*\*?tool_code[\s\S]*?\)\s*\)\*\*?/gim, "")
     .replace(/tool_code[\s\S]*?\)\s*\)(?=\s|$|\.|,|;)/gim, "")
     .replace(/\b(assign_agent|atribuir_agente|chatwoot_assign)\s*\(\s*[^)]*\)/gim, "")

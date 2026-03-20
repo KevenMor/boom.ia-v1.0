@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card";
 import {
@@ -324,6 +324,7 @@ export default function ContactsPage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <Avatar className="h-9 w-9 rounded-full">
+                            {contact.avatar_url && <AvatarImage src={contact.avatar_url} alt="" />}
                             <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
                               {getInitials(contact.name)}
                             </AvatarFallback>

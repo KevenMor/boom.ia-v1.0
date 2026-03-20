@@ -13,13 +13,14 @@ function normalizePhone(raw: string): string {
 
 /**
  * Insere ou atualiza contato no CRM quando recebe mensagem via webhook/Chat ao Vivo.
- * Usa (tenant_id, phone) como chave; atualiza nome se vier dado novo.
+ * Usa (tenant_id, phone) como chave; atualiza nome e avatar_url se vierem dados novos.
  */
 export async function upsertCrmContact(
   supabase: SupabaseClient,
   tenantId: string,
   externalUserId: string,
-  contactName: string | null
+  contactName: string | null,
+  avatarUrl?: string | null
 ): Promise<void> {
   const phone = normalizePhone(externalUserId);
   if (!phone) return;
@@ -29,17 +30,21 @@ export async function upsertCrmContact(
   try {
     const { data: existing } = await supabase
       .from("contacts")
-      .select("id, name")
+      .select("id, name, avatar_url")
       .eq("tenant_id", tenantId)
       .eq("phone", phone)
       .maybeSingle();
 
     if (existing) {
+      const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
       if (contactName && contactName.trim() && existing.name !== contactName.trim()) {
-        await supabase
-          .from("contacts")
-          .update({ name: contactName.trim(), updated_at: new Date().toISOString() })
-          .eq("id", existing.id);
+        updates.name = contactName.trim();
+      }
+      if (avatarUrl != null && avatarUrl !== existing.avatar_url) {
+        updates.avatar_url = avatarUrl || null;
+      }
+      if (Object.keys(updates).length > 1) {
+        await supabase.from("contacts").update(updates).eq("id", existing.id);
       }
       return;
     }
@@ -55,6 +60,7 @@ export async function upsertCrmContact(
       state: null,
       zip_code: null,
       notes: null,
+      avatar_url: avatarUrl || null,
     });
   } catch (e) {
     console.warn("[CRM] upsertCrmContact failed:", (e as Error)?.message ?? e);
