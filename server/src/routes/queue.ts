@@ -849,6 +849,16 @@ export async function queueRoutes(fastify: FastifyInstance) {
         }
       }
 
+      let tenantId = (req.body as { tenant_id?: string })?.tenant_id;
+      if (convId && (contact_name || external_user_id) && !tenantId) {
+        const { data: ag } = await supabase.from("agents").select("tenant_id").eq("id", agent_id).maybeSingle();
+        tenantId = ag?.tenant_id ?? null;
+      }
+      if (convId && tenantId && (contact_name || external_user_id)) {
+        const { upsertCrmContact } = await import("../services/crm-contact-sync.js");
+        upsertCrmContact(supabase, tenantId, external_user_id || "", contact_name || null).catch(() => {});
+      }
+
       if (convId && (contact_name || contact_avatar_url)) {
         try {
           await supabase.rpc("update_conversation_contact", {
@@ -958,12 +968,25 @@ export async function queueRoutes(fastify: FastifyInstance) {
         }
       }
 
-      const responseParts =
+      const rawParts =
         result.responseParts.length > 0
-          ? result.responseParts.map((p) => sanitizeLLMOutput(p.trim())).filter(Boolean)
+          ? result.responseParts
           : sanitizedContent
             ? [sanitizedContent]
             : [];
+
+      const videoInventoryIdRegex = /ENVIAR_VIDEO_DETALHES[:\s].*?\|\s*id:\s*([a-f0-9-]{36})/gi;
+      const videoInventoryIds: string[] = [];
+      for (const p of rawParts) {
+        let m: RegExpExecArray | null;
+        while ((m = videoInventoryIdRegex.exec(p)) !== null) {
+          if (m[1] && !videoInventoryIds.includes(m[1])) videoInventoryIds.push(m[1]);
+        }
+      }
+
+      const responseParts = rawParts
+        .map((p) => sanitizeLLMOutput(p.trim()))
+        .filter(Boolean);
 
       const isFirstReply = conversationMessages.filter((m) => m.role === "assistant").length === 0;
       const deliverBody: Record<string, unknown> = {
@@ -976,6 +999,9 @@ export async function queueRoutes(fastify: FastifyInstance) {
         response_parts: responseParts,
         user_message: finalMessage ?? undefined,
       };
+      if (videoInventoryIds.length > 0) {
+        deliverBody.video_inventory_ids = videoInventoryIds;
+      }
       if (result.handoffAssigneeId != null) {
         deliverBody.assignee_id = result.handoffAssigneeId;
       }

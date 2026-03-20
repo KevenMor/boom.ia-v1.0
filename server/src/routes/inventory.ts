@@ -4,6 +4,28 @@ import { createNexusClient } from "../services/supabase.js";
 const LISTING_URL = "https://pplmotors.com.br/Veiculos";
 const PPL_MOTORS_TENANT_ID = "bc4a1dc9-a205-4b4b-9b6c-47bf677a2728";
 
+interface InventoryRecord {
+  id?: string;
+  external_id?: string | null;
+  tenant_id: string;
+  brand: string;
+  model: string;
+  version?: string | null;
+  year?: number | null;
+  price?: number | null;
+  mileage?: number | null;
+  color?: string | null;
+  transmission?: string | null;
+  fuel_type?: string | null;
+  photo_url?: string | null;
+  photos?: string | unknown;
+  detail_url?: string | null;
+  description?: string | null;
+  status?: string;
+  video_details?: string | null;
+  raw_data?: unknown;
+}
+
 interface VehicleCard {
   external_id: string;
   brand: string;
@@ -225,102 +247,261 @@ function extractListItems(html: string, out: string[]): void {
 }
 
 export async function inventoryRoutes(fastify: FastifyInstance) {
-  fastify.post("/inventory/sync", async (req: FastifyRequest, reply: FastifyReply) => {
-    const nexusAuth = (req.headers["x-nexus-auth"] as string) || "";
-    const supabase = createNexusClient(nexusAuth);
+  const supabase = createNexusClient();
 
-    const tenant_id = PPL_MOTORS_TENANT_ID;
-
-    try {
-      const listResp = await fetch(LISTING_URL, {
-        headers: { "User-Agent": "NexusAI-Bot/1.0" },
-      });
-      if (!listResp.ok) {
-        throw new Error(`Failed to fetch listing page: HTTP ${listResp.status}`);
-      }
-      const listHtml = await listResp.text();
-      const vehicles = parseListingPage(listHtml);
-
-      if (vehicles.length === 0) {
-        return reply.send({ success: false, error: "No vehicles found on page" });
-      }
-
-      const results = { synced: 0, errors: 0, total: vehicles.length };
-      const BATCH_SIZE = 6;
-
-      async function processVehicle(vehicle: VehicleCard) {
-        let photos: string[] = vehicle.photo_url ? [vehicle.photo_url] : [];
-        const features: string[] = [];
-        const optionals: string[] = [];
-
-        try {
-          const controller = new AbortController();
-          setTimeout(() => controller.abort(), 5000);
-          const detailResp = await fetch(vehicle.detail_url, {
-            headers: { "User-Agent": "NexusAI-Bot/1.0" },
-            signal: controller.signal,
-          });
-          if (detailResp.ok) {
-            const detailHtml = await detailResp.text();
-            const detail = parseDetailPage(detailHtml);
-            if (detail.photos.length > 0) photos = detail.photos;
-            features.push(...detail.features);
-            optionals.push(...detail.optionals);
-          }
-        } catch (e) {
-          console.warn(`Detail fetch timeout/error for ${vehicle.external_id}`);
-        }
-
-        const description = inferVehicleType(vehicle.brand, vehicle.model, vehicle.version);
-
-        const record = {
-          external_id: vehicle.external_id,
-          tenant_id,
-          brand: vehicle.brand,
-          model: vehicle.model,
-          version: vehicle.version,
-          year: vehicle.year,
-          price: vehicle.price,
-          mileage: vehicle.mileage,
-          color: vehicle.color,
-          transmission: vehicle.transmission,
-          fuel_type: vehicle.fuel_type,
-          photo_url: vehicle.photo_url,
-          photos: JSON.stringify(photos),
-          detail_url: vehicle.detail_url,
-          description,
-          status: "available",
-          raw_data: JSON.stringify({ photos, features, optionals }),
-          last_synced_at: new Date().toISOString(),
-        };
-
-        const { error: upsertErr } = await supabase
+  // GET /api/inventory — lista veículos
+  fastify.get(
+    "/inventory",
+    async (
+      req: FastifyRequest<{
+        Querystring: { tenant_id?: string; status?: string; limit?: string; offset?: string; search?: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const { tenant_id, status, limit = "100", offset = "0", search } = req.query;
+        let query = supabase
           .from("inventory")
-          .upsert(record, { onConflict: "external_id" });
+          .select("id, external_id, tenant_id, brand, model, version, year, price, mileage, color, transmission, fuel_type, photo_url, photos, detail_url, description, status, video_details, raw_data, last_synced_at, created_at, updated_at, tenants(name)", { count: "exact" })
+          .order("updated_at", { ascending: false });
 
-        if (upsertErr) {
-          results.errors++;
-        } else {
-          results.synced++;
+        if (tenant_id) query = query.eq("tenant_id", tenant_id);
+        if (status) query = query.eq("status", status);
+        if (search && search.trim()) {
+          const term = `%${search.trim()}%`;
+          query = query.or(`brand.ilike.${term},model.ilike.${term},version.ilike.${term}`);
         }
+
+        const limitNum = Math.min(parseInt(limit, 10) || 100, 500);
+        const offsetNum = Math.max(0, parseInt(offset, 10) || 0);
+        query = query.range(offsetNum, offsetNum + limitNum - 1);
+
+        const { data, error, count } = await query;
+        if (error) throw error;
+        return reply.send({ data: data ?? [], total: count ?? 0 });
+      } catch (err: any) {
+        console.error("inventory list error:", err);
+        return reply.status(500).send({ error: err.message });
       }
-
-      for (let i = 0; i < vehicles.length; i += BATCH_SIZE) {
-        const batch = vehicles.slice(i, i + BATCH_SIZE);
-        await Promise.all(batch.map(processVehicle));
-      }
-
-      const syncedIds = vehicles.map((v) => v.external_id);
-      await supabase
-        .from("inventory")
-        .update({ status: "sold", last_synced_at: new Date().toISOString() })
-        .eq("status", "available")
-        .not("external_id", "in", `(${syncedIds.join(",")})`);
-
-      return reply.send({ success: true, ...results });
-    } catch (err: any) {
-      console.error("sync-inventory error:", err);
-      return reply.status(500).send({ error: err.message });
     }
-  });
+  );
+
+  // POST /api/inventory — cria veículo manual
+  fastify.post(
+    "/inventory",
+    async (
+      req: FastifyRequest<{ Body: Partial<InventoryRecord> }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const body = req.body as Record<string, unknown>;
+        const record: Record<string, unknown> = {
+          tenant_id: body.tenant_id ?? PPL_MOTORS_TENANT_ID,
+          brand: body.brand ?? "",
+          model: body.model ?? "",
+          version: body.version ?? null,
+          year: body.year ?? null,
+          price: body.price ?? null,
+          mileage: body.mileage ?? null,
+          color: body.color ?? null,
+          transmission: body.transmission ?? null,
+          fuel_type: body.fuel_type ?? null,
+          photo_url: body.photo_url ?? null,
+          photos: typeof body.photos === "string" ? body.photos : JSON.stringify(body.photos ?? []),
+          detail_url: body.detail_url ?? null,
+          description: body.description ?? null,
+          status: body.status ?? "available",
+          video_details: body.video_details ?? null,
+          raw_data: typeof body.raw_data === "string" ? body.raw_data : JSON.stringify(body.raw_data ?? {}),
+        };
+        if (body.external_id) record.external_id = body.external_id;
+
+        const { data, error } = await supabase.from("inventory").insert(record).select().single();
+        if (error) throw error;
+        return reply.send(data);
+      } catch (err: any) {
+        console.error("inventory create error:", err);
+        return reply.status(500).send({ error: err.message });
+      }
+    }
+  );
+
+  // PATCH /api/inventory/:id — atualiza veículo
+  fastify.patch(
+    "/inventory/:id",
+    async (
+      req: FastifyRequest<{ Params: { id: string }; Body: Partial<InventoryRecord> }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const { id } = req.params;
+        const body = req.body as Record<string, unknown>;
+        const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        const allowed = ["brand", "model", "version", "year", "price", "mileage", "color", "transmission", "fuel_type", "photo_url", "photos", "detail_url", "description", "status", "video_details", "external_id"];
+        for (const key of allowed) {
+          if (body[key] !== undefined) {
+            if (key === "photos") updates[key] = typeof body[key] === "string" ? body[key] : JSON.stringify(body[key] ?? []);
+            else updates[key] = body[key];
+          }
+        }
+
+        const { data, error } = await supabase.from("inventory").update(updates).eq("id", id).select().single();
+        if (error) throw error;
+        return reply.send(data);
+      } catch (err: any) {
+        console.error("inventory update error:", err);
+        return reply.status(500).send({ error: err.message });
+      }
+    }
+  );
+
+  // DELETE /api/inventory/:id — remove veículo
+  fastify.delete(
+    "/inventory/:id",
+    async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      try {
+        const { id } = req.params;
+        const { error } = await supabase.from("inventory").delete().eq("id", id);
+        if (error) throw error;
+        return reply.send({ success: true });
+      } catch (err: any) {
+        console.error("inventory delete error:", err);
+        return reply.status(500).send({ error: err.message });
+      }
+    }
+  );
+
+  // POST /api/inventory/sync — sync via scraping
+  fastify.post(
+    "/inventory/sync",
+    async (
+      req: FastifyRequest<{ Body: { tenant_id?: string } }>,
+      reply: FastifyReply
+    ) => {
+      const nexusAuth = (req.headers["x-nexus-auth"] as string) || "";
+      const supabase = createNexusClient(nexusAuth);
+
+      const bodyTenantId = (req.body as { tenant_id?: string })?.tenant_id;
+      let tenant_id: string;
+      let listingUrl: string;
+
+      if (bodyTenantId) {
+        const { data: tenant, error: tenantErr } = await supabase
+          .from("tenants")
+          .select("id, settings")
+          .eq("id", bodyTenantId)
+          .maybeSingle();
+        if (tenantErr || !tenant) {
+          return reply.status(400).send({ error: "Tenant não encontrado" });
+        }
+        const syncUrl = (tenant.settings as { sync_url?: string })?.sync_url;
+        tenant_id = tenant.id;
+        if (syncUrl && syncUrl.trim()) {
+          listingUrl = syncUrl.trim();
+        } else if (tenant_id === PPL_MOTORS_TENANT_ID) {
+          listingUrl = LISTING_URL;
+        } else {
+          return reply.status(400).send({
+            error: "Tenant não tem sync_url configurada. Configure em Editar Tenant.",
+          });
+        }
+      } else {
+        tenant_id = PPL_MOTORS_TENANT_ID;
+        listingUrl = LISTING_URL;
+      }
+
+      try {
+        const listResp = await fetch(listingUrl, {
+          headers: { "User-Agent": "NexusAI-Bot/1.0" },
+        });
+        if (!listResp.ok) {
+          throw new Error(`Failed to fetch listing page: HTTP ${listResp.status}`);
+        }
+        const listHtml = await listResp.text();
+        const vehicles = parseListingPage(listHtml);
+
+        if (vehicles.length === 0) {
+          return reply.send({ success: false, error: "No vehicles found on page" });
+        }
+
+        const results = { synced: 0, errors: 0, total: vehicles.length };
+        const BATCH_SIZE = 6;
+
+        async function processVehicle(vehicle: VehicleCard) {
+          let photos: string[] = vehicle.photo_url ? [vehicle.photo_url] : [];
+          const features: string[] = [];
+          const optionals: string[] = [];
+
+          try {
+            const controller = new AbortController();
+            setTimeout(() => controller.abort(), 5000);
+            const detailResp = await fetch(vehicle.detail_url, {
+              headers: { "User-Agent": "NexusAI-Bot/1.0" },
+              signal: controller.signal,
+            });
+            if (detailResp.ok) {
+              const detailHtml = await detailResp.text();
+              const detail = parseDetailPage(detailHtml);
+              if (detail.photos.length > 0) photos = detail.photos;
+              features.push(...detail.features);
+              optionals.push(...detail.optionals);
+            }
+          } catch (e) {
+            console.warn(`Detail fetch timeout/error for ${vehicle.external_id}`);
+          }
+
+          const description = inferVehicleType(vehicle.brand, vehicle.model, vehicle.version);
+
+          const record = {
+            external_id: vehicle.external_id,
+            tenant_id,
+            brand: vehicle.brand,
+            model: vehicle.model,
+            version: vehicle.version,
+            year: vehicle.year,
+            price: vehicle.price,
+            mileage: vehicle.mileage,
+            color: vehicle.color,
+            transmission: vehicle.transmission,
+            fuel_type: vehicle.fuel_type,
+            photo_url: vehicle.photo_url,
+            photos: JSON.stringify(photos),
+            detail_url: vehicle.detail_url,
+            description,
+            status: "available",
+            raw_data: JSON.stringify({ photos, features, optionals }),
+            last_synced_at: new Date().toISOString(),
+          };
+
+          const { error: upsertErr } = await supabase
+            .from("inventory")
+            .upsert(record, { onConflict: "external_id" });
+
+          if (upsertErr) {
+            results.errors++;
+          } else {
+            results.synced++;
+          }
+        }
+
+        for (let i = 0; i < vehicles.length; i += BATCH_SIZE) {
+          const batch = vehicles.slice(i, i + BATCH_SIZE);
+          await Promise.all(batch.map(processVehicle));
+        }
+
+        const syncedIds = vehicles.map((v) => v.external_id);
+        await supabase
+          .from("inventory")
+          .update({ status: "sold", last_synced_at: new Date().toISOString() })
+          .eq("tenant_id", tenant_id)
+          .eq("status", "available")
+          .not("external_id", "in", `(${syncedIds.join(",")})`);
+
+        return reply.send({ success: true, ...results });
+      } catch (err: any) {
+        console.error("sync-inventory error:", err);
+        return reply.status(500).send({ error: err.message });
+      }
+    }
+  );
 }

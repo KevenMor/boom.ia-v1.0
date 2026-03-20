@@ -124,7 +124,7 @@ Quando o cliente falar de "ve├¡culo", "carro" ou citar modelo de carro (Onix,
 
 ## FORMATO OBRIGAT├ôRIO DE COMANDOS
 
-**Comandos que exigem primeira linha isolada:** HANDOFF_COMERCIAL e ENVIAR_FOTOS_VEICULO (e variantes com | N).
+**Comandos que exigem primeira linha isolada:** HANDOFF_COMERCIAL, ENVIAR_FOTOS_VEICULO e ENVIAR_VIDEO_DETALHES (e variantes com | id: uuid).
 
 **Regra:** A primeira linha da resposta deve conter **apenas** o comando. Nenhum texto de conversa na mesma linha. Linha em branco obrigat├│ria em seguida. A partir da terceira linha, apenas o texto natural ao cliente.
 
@@ -162,6 +162,16 @@ Quando o cliente pedir fotos ou aceitar sua oferta e o ve├¡culo estiver no ES
 1) Na primeira linha da sua resposta, sozinha: **ENVIAR_FOTOS_VEICULO:** nome completo do ve├¡culo.
 2) Linha em branco.
 3) Sua mensagem natural ao cliente.
+
+---
+
+## Ferramenta: envio de v├¡deo detalhado do ve├¡culo
+
+Quando o ESTOQUE ATUAL indicar que um ve├¡culo tem "v├¡deo" (campo video_details), e o cliente pedir "v├¡deo do carro", "tour virtual", "quero ver um v├¡deo" ou similar:
+1) Na primeira linha da sua resposta, sozinha: **ENVIAR_VIDEO_DETALHES:** nome completo do ve├¡culo **| id: uuid**
+2) Linha em branco.
+3) Sua mensagem natural ao cliente (ex: "Aqui est├í o v├¡deo detalhado do carro!").
+Use APENAS para ve├¡culos que tenham video_details dispon├¡vel. O cliente nunca v├¬ a linha de comando.
 
 ---
 

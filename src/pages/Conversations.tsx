@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { MessageSquare, Bot, ArrowLeft, Search, Send, Paperclip, Smile, CheckCheck, Bug, Trash2, Mic, Phone, Hash, Clock, Users, UserPlus, Tag } from "lucide-react";
-import { DebugBlock } from "@/components/sandbox/DebugBlock";
+import { MessageSquare, Bot, ArrowLeft, Search, Send, Paperclip, Smile, Bug, Trash2, Users, UserPlus, Tag } from "lucide-react";
+import { ConversationMessagesView } from "@/components/chat/ConversationMessagesView";
 import { callAPI } from "@/lib/api-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -12,70 +12,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { useAgents } from "@/hooks/useAgents";
 import { useTenantContext } from "@/contexts/TenantContext";
 import { useConversations, useMultiConversationMessages } from "@/hooks/useConversations";
 import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import ReactMarkdown from "react-markdown";
 
-function stripChatwootHeader(content: string): string {
-  // Remove prefixes like "[Atendente: Cadastro Teste] Tia Ana:" from Chatwoot echoed messages
-  return content.replace(/^\[Atendente:[^\]]*\]\s*[^:]*:\s*/gm, "").trim();
-}
+const AVATAR_COLORS = ["#019FA2", "#0d9488", "#0ea5e9", "#64748b", "#14b8a6", "#475569"];
 
-/** Remove vazamento de tool_code/assign_agent em mensagens do assistente (ex.: tool_code print(json.dumps(...))) */
-function sanitizeAssistantContent(content: string): string {
-  if (!content) return content;
-  return content
-    .replace(/\*\*?tool_code[\s\S]*?\)\s*\)\*\*?/gim, "")
-    .replace(/tool_code[\s\S]*?\)\s*\)(?=\s|$|\.|,|;)/gim, "")
-    .replace(/\b(assign_agent|atribuir_agente|chatwoot_assign)\s*\(\s*[^)]*\)/gim, "")
-    .replace(/\bprint\s*\(\s*(?:json\.dumps\s*)?\([^)]*assign_agent[^)]*\)\s*\)/gim, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-/** Remove conteúdo repetido (ex.: mesmo texto 2x ou 3x — bug no painel ao exibir) */
-function deduplicateRepeatedContent(text: string): string {
-  const t = text.trim();
-  if (t.length < 60) return t;
-  const len = t.length;
-  const half = Math.floor(len / 2);
-  const first = t.slice(0, half).trim();
-  const second = t.slice(half).trim();
-  if (first.length > 30 && first === second) return first;
-  const third = Math.floor(len / 3);
-  const unit = t.slice(0, third).trim();
-  if (unit.length > 20) {
-    const r2 = t.slice(third, 2 * third).trim();
-    const r3 = t.slice(2 * third).trim();
-    if (unit === r2 && unit === r3) return unit;
-  }
-  return t;
-}
-
-function extractImages(content: string): { text: string; images: string[] } {
-  const imgRegex = /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g;
-  const images: string[] = [];
-  const text = stripChatwootHeader(content).replace(imgRegex, (_, _alt, url) => {
-    images.push(url);
-    return "";
-  }).trim();
-  return { text, images };
-}
-
-function parseAudioTranscription(content: string): { isAudio: boolean; transcription: string; remainingText: string } {
-  const audioRegex = /\[Áudio do cliente\s*-?\s*transcrição\]:\s*"([^"]*)"/i;
-  const match = content.match(audioRegex);
-  if (match) {
-    const transcription = match[1] || "";
-    const remainingText = content.replace(audioRegex, "").trim();
-    return { isAudio: true, transcription, remainingText };
-  }
-  return { isAudio: false, transcription: "", remainingText: content };
+function getAvatarColor(name: string): string {
+  let h = 0;
+  for (let i = 0; i < (name || "").length; i++) h = (h << 5) - h + name.charCodeAt(i);
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
 }
 
 export default function Conversations() {
@@ -232,13 +181,6 @@ export default function Conversations() {
       c.channel?.toLowerCase().includes(term)
     );
   });
-
-  const groupedMessages = messages?.reduce((groups: Record<string, typeof messages>, msg) => {
-    const date = format(new Date(msg.created_at), "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
-    if (!groups[date]) groups[date] = [];
-    groups[date].push(msg);
-    return groups;
-  }, {} as Record<string, typeof messages>);
 
   const hasDebugData = (messages ?? []).some(
     (msg) => !!msg.metadata?.debug?.length || !!msg.metadata?.token_usage
@@ -440,18 +382,63 @@ export default function Conversations() {
           </div>
         </div>
       ) : (
-        /* ─── CRM Layout: Contact List + Chat ─── */
-        <div className="flex h-full overflow-hidden">
-          {/* ─── Left: Contact List (CRM style) ─── */}
+        /* ─── CRM Layout: Contact List + Chat (estilo ChatApp) ─── */
+        <div className="chat-app-style flex h-full overflow-hidden">
+          {/* ─── Left: Contact List ─── */}
           <div
             className={cn(
-              "w-full flex-col border-r border-border bg-card md:w-[340px] lg:w-[380px] md:shrink-0 overflow-hidden",
+              "chat-sidebar w-full flex-col md:w-[300px] lg:w-[320px] md:shrink-0 overflow-hidden flex",
               selectedContactKey ? "hidden md:flex" : "flex"
             )}
           >
+            {/* Search */}
+            <div className="shrink-0 p-3.5 pb-2 border-b border-border">
+              <div className="flex items-center rounded-lg overflow-hidden border border-border bg-muted/30">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Buscar conversa..."
+                  className="flex-1 border-0 bg-transparent px-3 py-2 text-xs outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground"
+                />
+                <button type="button" className="p-2 text-primary bg-primary/10 hover:bg-primary/15 transition-colors">
+                  <Search className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex gap-1.5 px-3 py-2.5 border-b border-border">
+              <button
+                type="button"
+                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-[11px] font-semibold bg-primary text-primary-foreground"
+              >
+                Recentes
+                {filteredConversations.length > 0 && (
+                  <span className="min-w-4 h-4 flex items-center justify-center rounded-full bg-white/30 text-[9px]">
+                    {Math.min(filteredConversations.length, 99)}
+                  </span>
+                )}
+              </button>
+              {allLabels.length > 0 && (
+                <Select value={labelFilter ?? "all"} onValueChange={(v) => setLabelFilter(v === "all" ? null : v)}>
+                  <SelectTrigger className="flex-1 h-8 text-[11px] font-semibold border-0 bg-primary/10 text-primary gap-1">
+                    <Tag className="h-3 w-3 shrink-0" />
+                    <SelectValue placeholder="Etiquetas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    {allLabels.map((lbl) => (
+                      <SelectItem key={lbl} value={lbl}>{lbl}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+
             {/* Contact list header */}
             <div className="shrink-0 border-b border-border">
-              <div className="flex items-center justify-between px-4 py-3">
+              <div className="flex items-center justify-between px-4 py-2.5">
                 <div className="flex items-center gap-2">
                   <Users className="h-4 w-4 text-muted-foreground" />
                   <h2 className="text-sm font-semibold tracking-tight">Contatos</h2>
@@ -524,7 +511,7 @@ export default function Conversations() {
 
               {/* Agent info bar */}
               {selectedAgent && (
-                <div className="flex items-center gap-2.5 border-t border-border/50 bg-muted/30 px-4 py-2">
+                <div className="flex items-center gap-2.5 border-t border-border bg-muted/30 px-4 py-2">
                   {selectedAgent.avatar_url ? (
                     <img src={selectedAgent.avatar_url} alt="" className="h-6 w-6 rounded-lg object-cover" />
                   ) : (
@@ -537,40 +524,13 @@ export default function Conversations() {
                 </div>
               )}
 
-              {/* Search */}
-              <div className="px-3 py-2 border-t border-border/50">
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar contato..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="h-8 pl-8 text-xs border-border/50 bg-background"
-                  />
-                </div>
-              </div>
-
-              {/* Label filter */}
-              {allLabels.length > 0 && (
-                <div className="px-3 py-2 border-t border-border/50">
-                  <Select value={labelFilter ?? "all"} onValueChange={(v) => setLabelFilter(v === "all" ? null : v)}>
-                    <SelectTrigger className="h-8 text-xs border-border/50 bg-background gap-2">
-                      <Tag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      <SelectValue placeholder="Filtrar por etiqueta" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todas as etiquetas</SelectItem>
-                      {allLabels.map((lbl) => (
-                        <SelectItem key={lbl} value={lbl}>{lbl}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
             </div>
 
             {/* Contact list */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto py-1.5">
+              <div className="px-4 py-2 pt-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                CONVERSAS
+              </div>
               {convsLoading && (
                 <div className="space-y-px">
                   {Array.from({ length: 8 }).map((_, i) => (
@@ -592,7 +552,7 @@ export default function Conversations() {
                 </div>
               )}
 
-              <div className="divide-y divide-border/30">
+              <div className="space-y-0.5">
                 {filteredConversations?.map((conv) => {
                   const isSelected = selectedContactKey === getContactKey(conv);
                   const phone = getPhoneDisplay(conv);
@@ -601,84 +561,52 @@ export default function Conversations() {
                   const name = displayName(conv);
                   const convCount = contactConvIds.get(getContactKey(conv))?.length ?? 1;
 
+                  const avatarColor = getAvatarColor(name);
                   return (
                     <button
                       key={conv.id}
                       onClick={() => setSelectedContactKey(getContactKey(conv))}
                       className={cn(
-                        "flex w-full items-start gap-3 px-4 py-3 text-start transition-all duration-150",
-                        isSelected
-                          ? "bg-primary/8 border-l-2 border-l-primary"
-                          : "border-l-2 border-l-transparent hover:bg-muted/50"
+                        "chat-contact-item flex w-full items-center gap-2.5 px-4 py-2.5 mx-2 rounded-lg text-start border-l-[3px]",
+                        isSelected ? "active border-l-primary" : "border-l-transparent"
                       )}
                     >
                       {/* Avatar */}
-                      <div className="relative shrink-0 mt-0.5">
-                        <Avatar className="h-10 w-10">
-                          {conv.contact_avatar_url && (
-                            <AvatarImage src={conv.contact_avatar_url} alt={conv.contact_name || ""} />
+                      <div className="relative shrink-0">
+                        <div
+                          className="h-10 w-10 rounded-full flex items-center justify-center text-white font-bold text-[13px] shadow-sm"
+                          style={{
+                            background: `linear-gradient(135deg, ${avatarColor}dd, ${avatarColor})`,
+                            boxShadow: `0 2px 8px ${avatarColor}44`,
+                          }}
+                        >
+                          {conv.contact_avatar_url ? (
+                            <img src={conv.contact_avatar_url} alt="" className="h-full w-full rounded-full object-cover" />
+                          ) : (
+                            initials(conv)
                           )}
-                          <AvatarFallback className={cn(
-                            "text-xs font-semibold",
-                            isSelected ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
-                          )}>
-                            {initials(conv)}
-                          </AvatarFallback>
-                        </Avatar>
+                        </div>
                         {conv.status === "open" && (
-                          <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-card bg-success" />
+                          <span className="absolute bottom-0.5 right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-success" />
                         )}
                       </div>
 
                       {/* Contact info */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
-                          <p className={cn(
-                            "text-sm truncate",
-                            isSelected ? "font-semibold text-foreground" : "font-medium text-foreground"
-                          )}>
+                          <p className="text-[13px] truncate max-w-[130px] font-semibold text-foreground">
                             {name}
                           </p>
-                          <span className="shrink-0 text-[10px] text-muted-foreground whitespace-nowrap">
-                            {timestamp}
-                          </span>
+                          <span className="text-[10px] text-muted-foreground shrink-0">{timestamp}</span>
                         </div>
-
-                        {/* Phone number */}
-                        {phone && (
-                          <div className="flex items-center gap-1 mt-0.5">
-                            <Phone className="h-3 w-3 text-muted-foreground/60" />
-                            <span className="text-[11px] text-muted-foreground truncate">{phone}</span>
-                          </div>
-                        )}
-
-                        {/* Bottom row: channel + labels + message count */}
-                        <div className="flex items-center justify-between gap-2 mt-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "h-4 px-1.5 text-[9px] font-normal border-border/50",
-                                channel === "WhatsApp" && "text-success border-success/30 bg-success/5"
-                              )}
-                            >
-                              {channel}
-                            </Badge>
-                            {(conv.labels ?? []).filter((l) => /^leads/i.test(l)).map((label) => (
-                              <Badge key={label} variant="secondary" className="h-4 px-1.5 text-[9px] font-normal bg-primary/10 text-primary border-primary/20">
-                                {label}
-                              </Badge>
-                            ))}
-                            {convCount > 1 && (
-                              <span className="text-[9px] text-muted-foreground/60">
-                                {convCount} conversas
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <MessageSquare className="h-3 w-3 text-muted-foreground/40" />
-                            <span className="text-[10px] text-muted-foreground">{conv.message_count}</span>
-                          </div>
+                        <div className="flex items-center justify-between gap-2 mt-0.5">
+                          <span className="text-[11px] text-muted-foreground truncate max-w-[140px]">
+                            {conv.message_count} mensagens
+                            {channel === "WhatsApp" && " • WhatsApp"}
+                          </span>
+                          {(conv.labels ?? []).filter((l) => /^leads/i.test(l)).length > 0 && (
+                            <span className="text-primary text-xs">✓✓</span>
+                          )}
                         </div>
                       </div>
                     </button>
@@ -691,7 +619,7 @@ export default function Conversations() {
           {/* ─── Right: Chat Panel ─── */}
           <div
             className={cn(
-              "flex-1 flex-col min-w-0 bg-background overflow-hidden",
+              "flex-1 flex-col min-w-0 overflow-hidden flex",
               !selectedContactKey ? "hidden md:flex" : "flex"
             )}
           >
@@ -712,62 +640,62 @@ export default function Conversations() {
             ) : (
               <>
                 {/* Chat header */}
-                <div className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3 bg-card">
+                <div className="flex shrink-0 items-center gap-3 border-b border-border px-5 py-3 bg-card">
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8 md:hidden"
+                    className="h-8 w-8 md:hidden shrink-0"
                     onClick={() => setSelectedContactKey(null)}
                   >
                     <ArrowLeft className="h-4 w-4" />
                   </Button>
-                  <div className="relative">
-                    <Avatar className="h-9 w-9">
-                      {selectedConv?.contact_avatar_url && (
-                        <AvatarImage src={selectedConv.contact_avatar_url} alt={selectedConv.contact_name || ""} />
+                  <div className="relative shrink-0">
+                    <div
+                      className="h-10 w-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm"
+                      style={{
+                        background: `linear-gradient(135deg, ${getAvatarColor(displayName(selectedConv))}dd, ${getAvatarColor(displayName(selectedConv))})`,
+                      }}
+                    >
+                      {selectedConv?.contact_avatar_url ? (
+                        <img src={selectedConv.contact_avatar_url} alt="" className="h-full w-full rounded-full object-cover" />
+                      ) : (
+                        initials(selectedConv)
                       )}
-                      <AvatarFallback className="text-xs bg-primary/10 text-primary font-semibold">
-                        {initials(selectedConv)}
-                      </AvatarFallback>
-                    </Avatar>
+                    </div>
                     {selectedConv?.status === "open" && (
-                      <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-card bg-success" />
+                      <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-success" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{displayName(selectedConv)}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {getPhoneDisplay(selectedConv) || "Telefone não informado"}
+                    <p className="text-sm font-bold text-foreground truncate">{displayName(selectedConv)}</p>
+                    <p className={cn(
+                      "text-[11px]",
+                      selectedConv?.status === "open" ? "text-success" : "text-muted-foreground"
+                    )}>
+                      {selectedConv?.status === "open" ? "online" : "offline"} • {getPhoneDisplay(selectedConv) || "—"}
                     </p>
                   </div>
-                  {(selectedConv?.labels ?? []).filter((l) => /^leads/i.test(l)).map((label) => (
-                    <Badge key={label} variant="secondary" className="text-[9px] font-normal bg-primary/10 text-primary border-primary/20 shrink-0">
-                      {label}
-                    </Badge>
-                  ))}
-                  <Badge variant="outline" className="text-[9px] font-mono shrink-0">
-                    {selectedConvIds.length > 1 ? `${selectedConvIds.length} conversas` : `#${(selectedConvIds[0] ?? "").slice(0, 8)}`}
-                  </Badge>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className={cn("h-8 w-8 shrink-0", showDebug ? "text-primary" : "text-muted-foreground")}
-                    onClick={() => setShowDebug(!showDebug)}
-                    title={showDebug ? "Ocultar debug" : "Mostrar debug"}
-                    aria-pressed={showDebug}
-                  >
-                    <Bug className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-                    onClick={handleClearConversation}
-                    disabled={clearing}
-                    title="Limpar histórico deste contato"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={cn("h-8 w-8", showDebug ? "text-primary" : "text-muted-foreground")}
+                      onClick={() => setShowDebug(!showDebug)}
+                      title={showDebug ? "Ocultar debug" : "Mostrar debug"}
+                    >
+                      <Bug className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      onClick={handleClearConversation}
+                      disabled={clearing}
+                      title="Limpar histórico"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
 
                 {showDebug && !hasDebugData && (
@@ -777,208 +705,22 @@ export default function Conversations() {
                 )}
 
                 {/* Messages area */}
-                <div className="flex-1 overflow-y-auto px-4 py-4">
-                  <div className="space-y-6">
-                    {msgsLoading && (
-                      <div className="space-y-3">
-                        {Array.from({ length: 4 }).map((_, i) => (
-                          <div key={i} className={cn("flex", i % 2 === 0 ? "justify-start" : "justify-end")}>
-                            <div className="h-12 w-2/3 rounded-2xl bg-muted/50 animate-pulse" />
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {groupedMessages && Object.entries(groupedMessages).map(([date, msgs]) => (
-                      <div key={date}>
-                        <div className="flex items-center gap-3 mb-4">
-                          <Separator className="flex-1" />
-                          <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                            {date}
-                          </span>
-                          <Separator className="flex-1" />
-                        </div>
-
-                        <div className="space-y-3">
-                          {(() => {
-                            const filtered = msgs?.filter((msg) => {
-                              if (msg.role === "user" && msg.content?.startsWith("[SISTEMA INTERNO")) return false;
-                              if (msg.role === "user" && msg.content?.trim().startsWith("{") && (msg.content.includes('"_hint"') || msg.content.includes('"vehicles"') || msg.content.includes('"total"'))) return false;
-                              if (msg.role === "user" && msg.content?.trim().startsWith("{") && msg.content.includes('"tool_results"')) return false;
-                              if ((msg.role === "tool" || msg.role === "system") && !showDebug) {
-                                const c = (msg.content || "").trim();
-                                if (c.startsWith("{") || c.startsWith("[")) return false;
-                                if (c.startsWith("[Resultado da ferramenta")) return false;
-                                if (c.startsWith("⚠️")) return false;
-                              }
-                              return true;
-                            }) ?? [];
-                            return filtered;
-                          })().map((msg) => {
-                            const isUser = msg.role === "user";
-                            const isSystem = msg.role === "system" || msg.role === "tool";
-                            const audioInfo = isUser ? parseAudioTranscription(msg.content || "") : { isAudio: false, transcription: "", remainingText: msg.content || "" };
-                            const contentForExtraction = isUser ? audioInfo.remainingText : sanitizeAssistantContent(deduplicateRepeatedContent(stripChatwootHeader(msg.content || "")));
-                            const { text, images } = extractImages(contentForExtraction);
-
-                            if (isSystem) {
-                              return (
-                                <div key={msg.id} className="flex justify-center py-1">
-                                  <span className="text-[9px] bg-muted/60 text-muted-foreground px-3 py-1 rounded-full italic max-w-[80%] truncate">
-                                    {msg.content?.slice(0, 100)}
-                                  </span>
-                                </div>
-                              );
-                            }
-
-                            const bubbles: { text: string; images: string[]; isAudio?: boolean; transcription?: string }[] = [];
-                            if (!isUser) {
-                              const rawContent = sanitizeAssistantContent(deduplicateRepeatedContent(stripChatwootHeader(msg.content || "")));
-                              const paragraphs = rawContent.split(/\n\n+/);
-                              let currentBubble = { text: "", images: [] as string[] };
-                              for (const para of paragraphs) {
-                                const { text: pText, images: pImages } = extractImages(para);
-                                if (pImages.length > 0) {
-                                  if (currentBubble.text.trim()) {
-                                    bubbles.push({ ...currentBubble });
-                                    currentBubble = { text: "", images: [] };
-                                  }
-                                  for (let i = 0; i < pImages.length; i += 3) {
-                                    bubbles.push({ text: pText && i === 0 ? pText : "", images: pImages.slice(i, i + 3) });
-                                  }
-                                } else if (pText.trim()) {
-                                  currentBubble.text += (currentBubble.text ? "\n\n" : "") + pText;
-                                }
-                              }
-                              if (currentBubble.text.trim()) bubbles.push(currentBubble);
-                              if (bubbles.length === 0 && text) bubbles.push({ text, images });
-                              // #region agent log
-                              if (bubbles.length > 1) fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'12d224'},body:JSON.stringify({sessionId:'12d224',location:'Conversations.tsx:bubbles',message:'assistant msg split into multiple bubbles',data:{msgId:msg.id,bubbleCount:bubbles.length,rawContentLen:(msg.content||'').length},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
-                              // #endregion
-                            } else {
-                              if (audioInfo.isAudio) {
-                                bubbles.push({ text: "", images: [], isAudio: true, transcription: audioInfo.transcription });
-                              }
-                              if (text.trim() || images.length > 0) {
-                                bubbles.push({ text, images });
-                              }
-                            }
-
-                            return (
-                              <div key={msg.id} className="space-y-1.5">
-                                {!isUser && !isSystem && showDebug && (msg.metadata?.debug?.length || msg.metadata?.token_usage) && (
-                                  <div className="flex justify-end mb-1">
-                                    <DebugBlock
-                                      debug={msg.metadata?.debug ?? []}
-                                      tokenUsage={msg.metadata?.token_usage}
-                                    />
-                                  </div>
-                                )}
-                                {bubbles.map((bubble, bIdx) => (
-                                  <div key={`${msg.id}-${bIdx}`} className={cn("flex", isUser ? "justify-start" : "justify-end")}>
-                                    <div className={cn("max-w-[75%]", isUser && bIdx === 0 && "flex gap-2.5")}>
-                                      {/* User avatar on first bubble */}
-                                      {isUser && bIdx === 0 && (
-                                        <Avatar className="h-7 w-7 shrink-0 mt-1">
-                                          {selectedConv?.contact_avatar_url && (
-                                            <AvatarImage src={selectedConv.contact_avatar_url} />
-                                          )}
-                                          <AvatarFallback className="text-[10px] bg-accent/20 text-accent-foreground font-semibold">
-                                            {initials(selectedConv)}
-                                          </AvatarFallback>
-                                        </Avatar>
-                                      )}
-                                      <div
-                                        className={cn(
-                                          "rounded-2xl px-3.5 py-2.5",
-                                          isUser
-                                            ? "rounded-tl-md bg-accent border border-border"
-                                            : "rounded-br-md bg-primary text-primary-foreground"
-                                        )}
-                                      >
-                                        {bubble.isAudio && (
-                                          <div className="flex items-start gap-2.5">
-                                            <div className="flex items-center justify-center h-8 w-8 rounded-full bg-accent/20 shrink-0 mt-0.5">
-                                              <Mic className="h-4 w-4 text-accent-foreground" />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                              <div className="flex items-center gap-1.5 mb-1">
-                                                <span className="text-[10px] font-medium uppercase tracking-wider opacity-70">Áudio transcrito</span>
-                                              </div>
-                                              <p className="text-sm whitespace-pre-wrap break-words italic">
-                                                "{bubble.transcription}"
-                                              </p>
-                                            </div>
-                                          </div>
-                                        )}
-
-                                        {bubble.images.length > 0 && (
-                                          <div className="mb-1.5 grid gap-1 grid-cols-1">
-                                            {bubble.images.map((img, idx) => (
-                                              <a key={idx} href={img} target="_blank" rel="noopener noreferrer">
-                                                <img
-                                                  src={img}
-                                                  alt=""
-                                                  className="rounded-lg w-full h-auto max-h-48 object-cover hover:opacity-90 transition-opacity"
-                                                  loading="lazy"
-                                                />
-                                              </a>
-                                            ))}
-                                          </div>
-                                        )}
-
-                                        {bubble.text && !bubble.isAudio && (
-                                          <div className="prose prose-sm max-w-none [&_p]:m-0 [&_p]:leading-relaxed">
-                                            <ReactMarkdown
-                                              components={{
-                                                p: ({ children }) => <p className="text-sm whitespace-pre-wrap break-words">{children}</p>,
-                                                a: ({ href, children }) => (
-                                                  <a href={href} target="_blank" rel="noopener noreferrer" className="underline opacity-80 hover:opacity-100">
-                                                    {children}
-                                                  </a>
-                                                ),
-                                                strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-                                              }}
-                                            >
-                                              {bubble.text}
-                                            </ReactMarkdown>
-                                          </div>
-                                        )}
-                                      </div>
-
-                                      {bIdx === bubbles.length - 1 && (
-                                        <div className={cn(
-                                          "mt-1 flex items-center gap-1 px-1",
-                                          isUser ? "justify-start" : "justify-end"
-                                        )}>
-                                          <span className="text-[10px] text-muted-foreground">
-                                            {format(new Date(msg.created_at), "HH:mm")}
-                                          </span>
-                                          {!isUser && (
-                                            <CheckCheck className="h-3 w-3 text-primary" />
-                                          )}
-                                          {!isUser && msg.model && (
-                                            <span className="text-[9px] text-muted-foreground/50 ml-1">
-                                              ↳ {msg.model}
-                                            </span>
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                    <div ref={messagesEndRef} />
-                  </div>
+                <div className="chat-messages-area flex-1 overflow-y-auto min-h-0 px-5 py-5">
+                  <ConversationMessagesView
+                    messages={messages}
+                    isLoading={msgsLoading}
+                    contactAvatarUrl={selectedConv?.contact_avatar_url}
+                    contactInitials={initials(selectedConv)}
+                    agentName={selectedAgent?.name}
+                    agentAvatarUrl={selectedAgent?.avatar_url}
+                    showDebug={showDebug}
+                    variant="chat-app"
+                  />
+                  <div ref={messagesEndRef} className="h-0" />
                 </div>
 
                 {/* Footer — send message */}
-                <div className="shrink-0 border-t border-border px-4 py-3 bg-card">
+                <div className="chat-input-area shrink-0 px-5 py-3">
                   <form
                     onSubmit={async (e) => {
                       e.preventDefault();
@@ -1000,13 +742,18 @@ export default function Conversations() {
                         input.focus();
                       }
                     }}
-                    className="flex items-end gap-2"
+                    className="flex items-center gap-2.5"
                   >
-                    <Textarea
+                    <button type="button" className="h-9 w-9 rounded-lg flex items-center justify-center bg-muted text-muted-foreground hover:bg-muted/80 transition-colors">
+                      <Paperclip className="h-4 w-4" />
+                    </button>
+                    <button type="button" className="h-9 w-9 rounded-lg flex items-center justify-center bg-muted text-muted-foreground hover:bg-muted/80 transition-colors">
+                      <Smile className="h-4 w-4" />
+                    </button>
+                    <input
                       name="operator-msg"
-                      className="min-h-[40px] max-h-[120px] resize-none text-sm"
+                      className="flex-1 border border-border rounded-xl px-4 py-2.5 text-[13px] outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-muted/50 text-foreground placeholder:text-muted-foreground font-[inherit]"
                       placeholder="Digite uma mensagem..."
-                      rows={1}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && !e.shiftKey) {
                           e.preventDefault();
@@ -1014,9 +761,12 @@ export default function Conversations() {
                         }
                       }}
                     />
-                    <Button type="submit" size="icon" className="h-8 w-8 shrink-0 mb-0.5">
+                    <button
+                      type="submit"
+                      className="h-9 w-9 rounded-lg flex items-center justify-center bg-primary text-white hover:opacity-95 transition-all shadow-[0_4px_12px_hsl(var(--primary)/0.33)] hover:scale-105"
+                    >
                       <Send className="h-4 w-4" />
-                    </Button>
+                    </button>
                   </form>
                 </div>
               </>

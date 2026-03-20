@@ -99,10 +99,6 @@ export function useMultiConversationMessages(agentId: string | null, conversatio
         }
       }
       merged.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-      // #region agent log
-      const assistantMsgs = merged.filter((m) => m.role === "assistant");
-      fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'12d224'},body:JSON.stringify({sessionId:'12d224',location:'useConversations.ts:merged',message:'merged messages',data:{total:merged.length,assistantCount:assistantMsgs.length,assistantIds:assistantMsgs.map(m=>m.id),convIds:conversationIds},timestamp:Date.now(),hypothesisId:'H1,H3,H4'})}).catch(()=>{});
-      // #endregion
       return merged;
     },
     enabled: !!agentId && conversationIds.length > 0,

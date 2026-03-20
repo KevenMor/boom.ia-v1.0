@@ -26,6 +26,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
           response_text?: string;
           response_parts?: string[];
           welcome_video_url?: string;
+          video_inventory_ids?: string[];
           assignee_id?: number;
           team_id?: number;
           user_message?: string;
@@ -50,6 +51,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
         response_text,
         response_parts,
         welcome_video_url,
+        video_inventory_ids,
         assignee_id: handoff_assignee_id,
         team_id: handoff_team_id,
         user_message,
@@ -210,9 +212,24 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
             ? (response_text || "").trim()
             : "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?";
           const partsToSend = hasContent ? (response_parts || []) : [];
+
+          if (Array.isArray(video_inventory_ids) && video_inventory_ids.length > 0) {
+            const { data: inventoryRows } = await supabase
+              .from("inventory")
+              .select("id, video_details")
+              .in("id", video_inventory_ids);
+            const videoUrls = (inventoryRows ?? [])
+              .filter((r: { video_details?: string | null }) => r.video_details && r.video_details.trim())
+              .map((r: { video_details: string }) => r.video_details);
+            for (const videoUrl of videoUrls) {
+              await sendChatwootMediaMessage(msgUrl, cwAuth, videoUrl, "video/mp4", "");
+              await new Promise((r) => setTimeout(r, applyJitter(3000)));
+            }
+          }
+
           if (hasContent) {
             msgLog.deliveryOk(agent_id, conversation_id ?? null);
-          } else {
+          } else if (!video_inventory_ids?.length) {
             msgLog.deliveryFallback(agent_id);
           }
           await replyToChatwoot(

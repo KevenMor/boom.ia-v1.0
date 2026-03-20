@@ -84,7 +84,7 @@ async function executeInventoryQuery(
 
     let query = supabase
       .from("inventory")
-      .select("id, external_id, brand, model, version, year, price, mileage, color, transmission, fuel_type, photo_url, photos, detail_url, description, raw_data")
+      .select("id, external_id, brand, model, version, year, price, mileage, color, transmission, fuel_type, photo_url, photos, detail_url, description, raw_data, video_details")
       .eq("tenant_id", tenantId)
       .eq("status", "available")
       .limit(50);
@@ -266,6 +266,7 @@ async function executeInventoryQuery(
       photos: string | unknown;
       detail_url: string;
       description?: string;
+      video_details?: string | null;
       raw_data?: { photos?: string[]; features?: string[]; optionals?: string[] };
     }>;
 
@@ -352,6 +353,7 @@ async function executeInventoryQuery(
         })(),
         caracteristicas: features,
         opcionais: optionals,
+        video_details: v.video_details ?? null,
       };
     });
 
@@ -367,12 +369,16 @@ async function executeInventoryQuery(
               .map((url) => `![foto](${url})`)
               .join("\n");
 
+    const hasVideoDetails = vehicles.some((v) => v.video_details);
     let hint: string;
     if (formatted.length > 0) {
-      const baseHint =
+      let baseHint =
         formatted.length > 1
           ? `ESTOQUE ATUAL (${formatted.length} veículo(s)). Cada veículo tem seu próprio bloco "Fotos do veículo ... (id: ...)" abaixo. NÃO inclua fotos agora. Liste APENAS dados em texto (modelo, ano, km, preço, cor) e pergunte se o cliente quer ver fotos. Quando o cliente PEDIR ou ACEITAR ver fotos de UM veículo, inclua na sua resposta APENAS o bloco de fotos DESSE veículo (o que tiver o id indicado em ENVIAR_FOTOS_VEICULO: nome | id: uuid) e a linha ENVIAR_FOTOS_VEICULO. Nunca inclua fotos de outros veículos.`
           : `ESTOQUE ATUAL (${formatted.length} veículo(s)). Fotos disponíveis em photos_markdown — NÃO inclua fotos agora. Liste APENAS dados em texto (modelo, ano, km, preço, cor) e pergunte se o cliente quer ver fotos. Quando o cliente PEDIR ou ACEITAR ver fotos, aí sim inclua o conteúdo de photos_markdown na resposta junto com ENVIAR_FOTOS_VEICULO.`;
+      if (hasVideoDetails) {
+        baseHint += ` Alguns veículos têm vídeo detalhado. Quando o cliente pedir "vídeo do carro", "tour virtual" ou similar, use ENVIAR_VIDEO_DETALHES: nome do veículo | id: uuid (apenas para veículos que tenham video_details).`;
+      }
       if (corFallbackUsed && corOriginal) {
         const availableColors = [...new Set(formatted.map((v) => v.cor).filter(Boolean))];
         hint = `${baseHint}\nNOTA: O cliente pediu na cor "${corOriginal}", mas não temos nessa cor exata. Temos o mesmo modelo nas cores: ${availableColors.join(", ")}. Informe o cliente que não há na cor "${corOriginal}" mas apresente as opções disponíveis com entusiasmo.`;

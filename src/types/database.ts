@@ -78,3 +78,47 @@ export interface Profile {
   created_at: string;
   updated_at: string;
 }
+
+export interface Contact {
+  id: string;
+  tenant_id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  cpf_cnpj: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zip_code: string | null;
+  notes: string | null;
+  metadata?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+  tenants?: { name: string } | null;
+}
+
+export interface InventoryItem {
+  id: string;
+  external_id: string | null;
+  tenant_id: string;
+  brand: string;
+  model: string;
+  version: string | null;
+  year: number | null;
+  price: number | null;
+  mileage: number | null;
+  color: string | null;
+  transmission: string | null;
+  fuel_type: string | null;
+  photo_url: string | null;
+  photos: string[] | string | null;
+  detail_url: string | null;
+  description: string | null;
+  status: string;
+  video_details: string | null;
+  raw_data?: { photos?: string[]; features?: string[]; optionals?: string[] } | null;
+  last_synced_at: string | null;
+  created_at: string;
+  updated_at: string;
+  tenants?: { name: string } | null;
+}

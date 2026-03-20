@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
 import { stripChatwootNamePrefix } from "../utils/sanitize.js";
 import { msgLog } from "../utils/flow-logger.js";
+import { upsertCrmContact } from "../services/crm-contact-sync.js";
 
 const API_BASE = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
 
@@ -327,6 +328,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               p_contact_name: chatwoot.contactName,
               p_contact_avatar_url: chatwoot.contactAvatarUrl,
             });
+            upsertCrmContact(supabase, agent.tenant_id, chatwoot.externalUserId, chatwoot.contactName).catch(() => {});
             if (newConvId && chatwoot.message?.trim()) {
               const likelyEcho = await isLikelyEchoOfBotMessage(supabase, agentId, newConvId, chatwoot.message, 120);
               if (likelyEcho) {
@@ -403,6 +405,9 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           p_contact_avatar_url: contactAvatarUrl,
         });
         earlyConvId = existingConvId;
+        if (earlyConvId && (externalUserId || contactName)) {
+          upsertCrmContact(supabase, agent.tenant_id, externalUserId, contactName).catch(() => {});
+        }
         if (earlyConvId) {
           const likelyEcho = userMessage?.trim()
             ? await isLikelyEchoOfBotMessage(supabase, agentId, earlyConvId, userMessage, 300)
@@ -470,6 +475,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         const processQueueUrl = `${API_BASE.replace(/\/+$/, "").replace(/\/api$/, "")}/api/queue/process`;
         const payload = {
           agent_id: agentId,
+          tenant_id: agent.tenant_id,
           conversation_id: earlyConvId,
           external_user_id: externalUserId,
           channel,

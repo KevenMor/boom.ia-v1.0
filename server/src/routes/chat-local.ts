@@ -227,7 +227,7 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
     return "Agendamento cancelado.";
   }
   // consultar_estoque: incluir resumo dos veículos E photos_markdown para o LLM poder enviar as fotos
-  const vehicles = obj.vehicles as Array<{ id?: string; nome_completo?: string; ano?: number; preco?: number; preco_formatado?: string; km?: number; cor?: string; photos_markdown?: string }> | undefined;
+  const vehicles = obj.vehicles as Array<{ id?: string; nome_completo?: string; ano?: number; preco?: number; preco_formatado?: string; km?: number; cor?: string; photos_markdown?: string; video_details?: string | null }> | undefined;
   const photosMarkdown = obj.photos_markdown as string | undefined;
   if (Array.isArray(vehicles) && vehicles.length > 0) {
     const lines: string[] = [];
@@ -253,6 +253,16 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
       lines.push("");
       lines.push("FOTOS (copie o bloco abaixo literalmente na sua resposta quando o cliente pedir ou aceitar ver fotos):");
       lines.push(photosMarkdown);
+    }
+    const withVideoDetails = vehicles.some((v) => v.video_details && v.video_details.trim());
+    if (withVideoDetails) {
+      lines.push("");
+      lines.push("VÍDEO DETALHADO (quando o cliente pedir vídeo do carro, tour virtual, etc., use ENVIAR_VIDEO_DETALHES: nome do veículo | id: uuid):");
+      for (const v of vehicles) {
+        if (v.video_details && v.video_details.trim()) {
+          lines.push(`- ${v.nome_completo ?? "?"} (id: ${v.id ?? "?"}) — tem vídeo`);
+        }
+      }
     }
     return lines.join("\n");
   }

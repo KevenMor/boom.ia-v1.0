@@ -278,6 +278,46 @@
   }
 }
 
+/* Chat ao Vivo — paleta alinhada ao sistema (primary teal + neutros) */
+.chat-app-style {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+.chat-app-style .chat-sidebar {
+  background: hsl(var(--card));
+  border-right: 1px solid hsl(var(--border));
+}
+.chat-app-style .chat-contact-item {
+  border-radius: 10px;
+  transition: all 0.15s;
+}
+.chat-app-style .chat-contact-item:hover {
+  background: hsl(var(--muted));
+}
+.chat-app-style .chat-contact-item.active {
+  background: hsl(var(--primary) / 0.08);
+  border-left: 3px solid hsl(var(--primary));
+}
+.chat-app-style .chat-messages-area {
+  background: linear-gradient(180deg, hsl(var(--muted)) 0%, hsl(var(--background)) 100%);
+}
+.chat-app-style .chat-input-area {
+  background: hsl(var(--card));
+  border-top: 1px solid hsl(var(--border));
+}
+.chat-app-style .chat-bubble-user {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 18px 18px 18px 4px;
+  box-shadow: 0 1px 3px hsl(var(--border) / 0.5);
+}
+.chat-app-style .chat-bubble-assistant {
+  background: linear-gradient(135deg, hsl(var(--primary)), hsl(174 99% 28%));
+  color: hsl(var(--primary-foreground));
+  border-radius: 18px 18px 4px 18px;
+  box-shadow: 0 2px 12px hsl(var(--primary) / 0.25);
+}
+
 /* FullCalendar theme overrides */
 .calendar-wrapper .fc {
   --fc-border-color: hsl(var(--border));

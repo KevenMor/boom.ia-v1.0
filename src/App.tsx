@@ -27,6 +27,8 @@ import PromptsPage from "@/pages/PromptsPage";
 import ProfilePage from "@/pages/ProfilePage";
 import CalendarPage from "@/pages/CalendarPage";
 import FollowUpsPage from "@/pages/FollowUpsPage";
+import InventoryPage from "@/pages/InventoryPage";
+import ContactsPage from "@/pages/ContactsPage";
 import TokenAnalytics from "@/pages/TokenAnalytics";
 import PublicSandbox from "@/pages/PublicSandbox";
 import NotFound from "@/pages/NotFound";
@@ -62,6 +64,8 @@ const App = () => (
               <Route path="/conversations" element={<Conversations />} />
               <Route path="/calendar" element={<CalendarPage />} />
               <Route path="/followups" element={<FollowUpsPage />} />
+              <Route path="/inventory" element={<InventoryPage />} />
+              <Route path="/contacts" element={<ContactsPage />} />
               <Route path="/tools" element={<Tools />} />
               <Route path="/tools/:toolId/edit" element={<EditTool />} />
               <Route path="/providers" element={<Providers />} />

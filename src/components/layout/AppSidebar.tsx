@@ -23,6 +23,8 @@ import {
   CalendarDays,
   BarChart3,
   Bell,
+  Car,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebar } from "@/contexts/SidebarContext";
@@ -56,6 +58,8 @@ const navGroups: NavGroup[] = [
       { to: "/agents", icon: Bot, label: "Agentes" },
       { to: "/calendar", icon: CalendarDays, label: "Agenda" },
       { to: "/followups", icon: Bell, label: "Follow-ups" },
+      { to: "/inventory", icon: Car, label: "Inventário" },
+      { to: "/contacts", icon: Users, label: "Leads" },
     ],
   },
   {

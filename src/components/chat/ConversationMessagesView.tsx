@@ -1,0 +1,305 @@
+import { useMemo } from "react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { Mic, CheckCheck, Bot } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Separator } from "@/components/ui/separator";
+import { DebugBlock } from "@/components/sandbox/DebugBlock";
+import { cn } from "@/lib/utils";
+import {
+  stripChatwootHeader,
+  sanitizeAssistantContent,
+  deduplicateRepeatedContent,
+  extractImages,
+  parseAudioTranscription,
+  shouldShowChatMessage,
+  dedupeAndSortConversationMessages,
+} from "@/lib/chatMessageDisplay";
+
+export type ConversationMessageRow = {
+  id: string;
+  role: string;
+  content: string;
+  created_at: string;
+  model?: string | null;
+  metadata?: { debug?: unknown[]; token_usage?: Record<string, unknown> } | null;
+};
+
+export interface ConversationMessagesViewProps {
+  messages: ConversationMessageRow[] | undefined | null;
+  isLoading?: boolean;
+  /** Avatar do contato (primeira bolha do usuário) */
+  contactAvatarUrl?: string | null;
+  contactInitials: string;
+  /** Nome do agente IA que responde (exibido nas mensagens do assistente) */
+  agentName?: string | null;
+  /** Avatar URL do agente IA */
+  agentAvatarUrl?: string | null;
+  showDebug?: boolean;
+  className?: string;
+  /** Estilo ChatApp: bolhas com gradiente e bordas arredondadas */
+  variant?: "default" | "chat-app";
+}
+
+function getAgentInitials(name: string | null | undefined): string {
+  if (!name?.trim()) return "IA";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+
+export function ConversationMessagesView({
+  messages,
+  isLoading,
+  contactAvatarUrl,
+  contactInitials,
+  agentName,
+  agentAvatarUrl,
+  showDebug = false,
+  className,
+  variant = "default",
+}: ConversationMessagesViewProps) {
+  const isChatApp = variant === "chat-app";
+  const normalizedMessages = useMemo(
+    () => dedupeAndSortConversationMessages(messages ?? []),
+    [messages]
+  );
+
+  const visibleMessages = useMemo(
+    () => normalizedMessages.filter((m) => shouldShowChatMessage(m, showDebug)),
+    [normalizedMessages, showDebug]
+  );
+
+  const groupedMessages = useMemo(() => {
+    return visibleMessages.reduce((groups: Record<string, ConversationMessageRow[]>, msg) => {
+      const date = format(new Date(msg.created_at), "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
+      if (!groups[date]) groups[date] = [];
+      groups[date].push(msg);
+      return groups;
+    }, {} as Record<string, ConversationMessageRow[]>);
+  }, [visibleMessages]);
+
+  if (isLoading) {
+    return (
+      <div className={cn("space-y-3 px-4 py-4", className)}>
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className={cn("flex", i % 2 === 0 ? "justify-start" : "justify-end")}>
+            <div className="h-12 w-2/3 rounded-2xl bg-muted/50 animate-pulse" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn("space-y-6 px-4 py-4", className)}>
+      {Object.entries(groupedMessages).map(([date, msgs]) => (
+        <div key={date}>
+          <div className="flex items-center gap-3 mb-4">
+            <Separator className="flex-1" />
+            <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              {date}
+            </span>
+            <Separator className="flex-1" />
+          </div>
+
+          <div className="space-y-3">
+            {msgs.map((msg) => {
+              const isUser = msg.role === "user";
+              const isSystem = msg.role === "system" || msg.role === "tool";
+              const audioInfo = isUser
+                ? parseAudioTranscription(msg.content || "")
+                : { isAudio: false, transcription: "", remainingText: msg.content || "" };
+              const contentForExtraction = isUser
+                ? audioInfo.remainingText
+                : sanitizeAssistantContent(deduplicateRepeatedContent(stripChatwootHeader(msg.content || "")));
+              const { text, images } = extractImages(contentForExtraction);
+
+              if (isSystem) {
+                return (
+                  <div key={msg.id} className="flex justify-center py-1">
+                    <span className="text-[9px] bg-muted/60 text-muted-foreground px-3 py-1 rounded-full italic max-w-[80%] truncate">
+                      {msg.content?.slice(0, 100)}
+                    </span>
+                  </div>
+                );
+              }
+
+              const bubbles: {
+                text: string;
+                images: string[];
+                isAudio?: boolean;
+                transcription?: string;
+              }[] = [];
+
+              if (!isUser) {
+                const rawContent = sanitizeAssistantContent(
+                  deduplicateRepeatedContent(stripChatwootHeader(msg.content || ""))
+                );
+                // Mesma lógica do delivery: split por \n\n = cada bloco vira bolha separada (como no WhatsApp)
+                const paragraphs = rawContent.split(/\n\n+/);
+                for (const para of paragraphs) {
+                  const { text: pText, images: pImages } = extractImages(para);
+                  if (pImages.length > 0) {
+                    for (let i = 0; i < pImages.length; i += 3) {
+                      bubbles.push({ text: pText && i === 0 ? pText : "", images: pImages.slice(i, i + 3) });
+                    }
+                  } else if (pText.trim()) {
+                    bubbles.push({ text: pText.trim(), images: [] });
+                  }
+                }
+                if (bubbles.length === 0 && text) bubbles.push({ text, images });
+              } else {
+                if (audioInfo.isAudio) {
+                  bubbles.push({ text: "", images: [], isAudio: true, transcription: audioInfo.transcription });
+                }
+                if (text.trim() || images.length > 0) {
+                  bubbles.push({ text, images });
+                }
+              }
+
+              if (bubbles.length === 0) return null;
+
+              return (
+                <div key={msg.id} className="space-y-1.5">
+                  {!isUser && !isSystem && showDebug && (msg.metadata?.debug?.length || msg.metadata?.token_usage) && (
+                    <div className="flex justify-end mb-1">
+                      <DebugBlock
+                        debug={msg.metadata?.debug ?? []}
+                        tokenUsage={msg.metadata?.token_usage}
+                      />
+                    </div>
+                  )}
+                  {bubbles.map((bubble, bIdx) => (
+                    <div
+                      key={`${msg.id}-${bIdx}`}
+                      className={cn(
+                        "flex gap-2 items-end",
+                        isUser ? "justify-start" : "justify-end"
+                      )}
+                    >
+                      {isUser && bIdx === 0 && (
+                        <Avatar className="h-10 w-10 shrink-0 mt-1">
+                          {contactAvatarUrl && <AvatarImage src={contactAvatarUrl} alt="" />}
+                          <AvatarFallback className="text-xs bg-accent/20 text-accent-foreground font-semibold">
+                            {contactInitials}
+                          </AvatarFallback>
+                        </Avatar>
+                      )}
+                      <div className={cn("max-w-[75%]", isUser && bIdx === 0 && "flex gap-2.5")}>
+                        <div
+                          className={cn(
+                            "rounded-2xl px-3.5 py-2.5",
+                            isChatApp
+                              ? isUser
+                                ? "chat-bubble-user rounded-tl-md"
+                                : "chat-bubble-assistant rounded-br-md"
+                              : isUser
+                                ? "rounded-tl-md bg-accent border border-border"
+                                : "rounded-br-md bg-primary text-primary-foreground"
+                          )}
+                        >
+                          {bubble.isAudio && (
+                            <div className="flex items-start gap-2.5">
+                              <div className="flex items-center justify-center h-8 w-8 rounded-full bg-accent/20 shrink-0 mt-0.5">
+                                <Mic className="h-4 w-4 text-accent-foreground" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <span className="text-[10px] font-medium uppercase tracking-wider opacity-70">
+                                    Áudio transcrito
+                                  </span>
+                                </div>
+                                <p className="text-sm whitespace-pre-wrap break-words italic">
+                                  &quot;{bubble.transcription}&quot;
+                                </p>
+                              </div>
+                            </div>
+                          )}
+
+                          {bubble.images.length > 0 && (
+                            <div className="mb-1.5 grid gap-1 grid-cols-1">
+                              {bubble.images.map((img, idx) => (
+                                <a key={idx} href={img} target="_blank" rel="noopener noreferrer">
+                                  <img
+                                    src={img}
+                                    alt=""
+                                    className="rounded-lg w-full h-auto max-h-48 object-cover hover:opacity-90 transition-opacity"
+                                    loading="lazy"
+                                  />
+                                </a>
+                              ))}
+                            </div>
+                          )}
+
+                          {bubble.text && !bubble.isAudio && (
+                            <div className="prose prose-sm max-w-none dark:prose-invert [&_p]:m-0 [&_p]:leading-relaxed">
+                              <ReactMarkdown
+                                components={{
+                                  p: ({ children }) => (
+                                    <p className="text-sm whitespace-pre-wrap break-words">{children}</p>
+                                  ),
+                                  a: ({ href, children }) => (
+                                    <a
+                                      href={href}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="underline opacity-80 hover:opacity-100"
+                                    >
+                                      {children}
+                                    </a>
+                                  ),
+                                  strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                                }}
+                              >
+                                {bubble.text}
+                              </ReactMarkdown>
+                            </div>
+                          )}
+                        </div>
+
+                        {bIdx === bubbles.length - 1 && (
+                          <div
+                            className={cn(
+                              "mt-1.5 flex items-center gap-1.5 px-1",
+                              isUser ? "justify-start" : "justify-end"
+                            )}
+                          >
+                            <span className="text-sm font-semibold tabular-nums text-foreground/90">
+                              {format(new Date(msg.created_at), "HH:mm")}
+                            </span>
+                            {!isUser && (
+                              <CheckCheck className="h-3.5 w-3.5 text-primary" />
+                            )}
+                            {!isUser && (agentName || msg.model) && (
+                              <span className="text-xs text-muted-foreground ml-1">↳ {agentName || msg.model}</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {!isUser && bIdx === 0 && (
+                        <Avatar className="h-10 w-10 shrink-0 mt-1">
+                          {agentAvatarUrl ? (
+                            <AvatarImage src={agentAvatarUrl} alt={agentName || "IA"} />
+                          ) : null}
+                          <AvatarFallback className="bg-primary text-primary-foreground font-semibold">
+                            {agentAvatarUrl ? (
+                              <span className="text-xs">{getAgentInitials(agentName)}</span>
+                            ) : (
+                              <Bot className="h-5 w-5" aria-hidden />
+                            )}
+                          </AvatarFallback>
+                        </Avatar>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
