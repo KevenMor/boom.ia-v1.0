@@ -79,6 +79,8 @@ export interface Profile {
   updated_at: string;
 }
 
+export type ContactType = "lead" | "client";
+
 export interface Contact {
   id: string;
   tenant_id: string;
@@ -93,9 +95,26 @@ export interface Contact {
   notes: string | null;
   metadata?: Record<string, unknown> | null;
   avatar_url: string | null;
+  contact_type?: ContactType;
   created_at: string;
   updated_at: string;
   tenants?: { name: string } | null;
+}
+
+export type ContactInvoiceStatus = "pending" | "paid" | "overdue" | "cancelled";
+
+export interface ContactInvoice {
+  id: string;
+  contact_id: string;
+  tenant_id: string;
+  amount: number;
+  due_date: string;
+  paid_at: string | null;
+  status: ContactInvoiceStatus;
+  description: string | null;
+  metadata?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface InventoryItem {

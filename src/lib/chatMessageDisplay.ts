@@ -80,6 +80,15 @@ export function stripToolNameLeakageForDisplay(content: string): string {
   t = t.replace(/\[CHAMAR\s+FERRAMENTA[^\]]*marcar_lead[^\]]*\]/gim, "");
   t = t.replace(/^\s*marcar_lead\s*$/gim, "");
   t = t.replace(/\n\s*marca[r]?\s*lead\s*:?\s*[^\n]*/gi, "");
+  t = t.replace(/\[CONTEXTO\s+ADICIONAL\][\s\S]*?(?=\n\n[^\[]|\n\n\[|$)/gim, "");
+  t = t.replace(/\[NOVO\s+LEAD\s+DETECTADO[^\]]*\]/gim, "");
+  t = t.replace(/\[HINT\s+OBRIGAT[ÓO]RIO\][^\n]*/gim, "");
+  t = t.replace(/\[RESUMO\s+CONFIRMADO\][\s\S]*?(?=\n\n|$)/gim, "");
+  t = t.replace(/\[ALUNO\s+EXISTENTE\][^\n]*/gim, "");
+  t = t.replace(/\[CEP\s+DETECTADO[^\]]*\]/gim, "");
+  t = t.replace(/\[ENTIDADES\s+DETECTADAS[^\]]*\]/gim, "");
+  t = t.replace(/\[CONTEXTO\s+DE\s+FLUXO\][^\n]*/gim, "");
+  t = t.replace(/\b(consultar_unidade|nearest_unit)\s*\(\s*[^)]*\)/gim, "");
   return t;
 }
 
@@ -99,7 +108,7 @@ export function sanitizeAssistantContent(content: string): string {
   text = text
     .replace(/\*\*?tool_code[\s\S]*?\)\s*\)\*\*?/gim, "")
     .replace(/tool_code[\s\S]*?\)\s*\)(?=\s|$|\.|,|;)/gim, "")
-    .replace(/\b(assign_agent|atribuir_agente|chatwoot_assign)\s*\(\s*[^)]*\)/gim, "")
+    .replace(/\b(assign_agent|atribuir_agente|chatwoot_assign|consultar_unidade|nearest_unit)\s*\(\s*[^)]*\)/gim, "")
     .replace(/\bprint\s*\(\s*(?:json\.dumps\s*)?\([^)]*assign_agent[^)]*\)\s*\)/gim, "")
     .replace(/\[\s*CHAMAR\s+FERRAMENTA[^\]]*\]/gim, "")
     .replace(/\bNO_TOOLS_NEEDED\b/gim, "")
@@ -187,26 +196,30 @@ export function shouldShowChatMessage(
 
 const DEDUPE_TIME_BUCKET_MS = 5000;
 
+type DedupeMsg = { id: string; role: string; content: string; created_at: string; metadata?: { chatwoot_message_id?: string } | null };
+
 /**
- * Ordena por created_at e remove duplicatas (mesmo id ou mesmo role+conteúdo no mesmo bucket de tempo),
- * alinhado ao merge do Chat ao Vivo (`useMultiConversationMessages`).
+ * Ordena por created_at e remove duplicatas (mesmo id, role+conteúdo no bucket, ou chatwoot_message_id).
+ * Alinhado ao merge do Chat ao Vivo (`useMultiConversationMessages`).
  */
-export function dedupeAndSortConversationMessages<
-  T extends { id: string; role: string; content: string; created_at: string },
->(messages: T[]): T[] {
+export function dedupeAndSortConversationMessages<T extends DedupeMsg>(messages: T[]): T[] {
   const sorted = [...messages].sort(
     (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
   );
   const seenIds = new Set<string>();
   const seenContentKeys = new Set<string>();
+  const seenChatwootIds = new Set<string>();
   const out: T[] = [];
   for (const m of sorted) {
     const t = Math.floor(new Date(m.created_at).getTime() / DEDUPE_TIME_BUCKET_MS);
     const ck = `${m.role}\t${(m.content || "").trim()}\t${t}`;
+    const cwId = m.metadata?.chatwoot_message_id;
     if (seenIds.has(m.id)) continue;
     if (seenContentKeys.has(ck)) continue;
+    if (cwId && seenChatwootIds.has(cwId)) continue;
     seenIds.add(m.id);
     seenContentKeys.add(ck);
+    if (cwId) seenChatwootIds.add(cwId);
     out.push(m);
   }
   return out;

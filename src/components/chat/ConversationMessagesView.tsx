@@ -151,10 +151,12 @@ export function ConversationMessagesView({
                 metaAttachments.length > 0;
 
               if (isMediaPlaceholder) {
-                const imageUrls = metaAttachments
-                  .filter((a) => /^image\b|jpg|jpeg|png|gif|webp/i.test(a.file_type || "") || (a.data_url || "").startsWith("data:image/"))
-                  .map((a) => a.data_url)
-                  .filter((u): u is string => !!u);
+                const imageUrls = [...new Set(
+                  metaAttachments
+                    .filter((a) => /^image\b|jpg|jpeg|png|gif|webp/i.test(a.file_type || "") || (a.data_url || "").startsWith("data:image/"))
+                    .map((a) => a.data_url)
+                    .filter((u): u is string => !!u)
+                )];
                 const videoAttachments = metaAttachments.filter(
                   (a) => /^video\b|mp4|webm/i.test(a.file_type || "") || (a.data_url || "").includes("video")
                 );
@@ -169,11 +171,17 @@ export function ConversationMessagesView({
                     bubbles.push({ text: "", images: imageUrls.slice(i, i + 3), mediaAttachments: [] });
                   }
                 }
+                const seenVideoUrls = new Set<string>();
                 for (const v of videoAttachments) {
-                  if (v.data_url) bubbles.push({ text: "", images: [], videoUrl: v.data_url, mediaAttachments: [] });
+                  if (v.data_url && !seenVideoUrls.has(v.data_url)) {
+                    seenVideoUrls.add(v.data_url);
+                    bubbles.push({ text: "", images: [], videoUrl: v.data_url, mediaAttachments: [] });
+                  }
                 }
+                const seenAudioUrls = new Set<string>();
                 for (const a of audioAttachments) {
-                  if (a.data_url)
+                  if (a.data_url && !seenAudioUrls.has(a.data_url)) {
+                    seenAudioUrls.add(a.data_url);
                     bubbles.push({
                       text: "",
                       images: [],
@@ -181,6 +189,7 @@ export function ConversationMessagesView({
                       transcription: "",
                       mediaAttachments: [{ file_type: a.file_type, data_url: a.data_url }],
                     });
+                  }
                 }
                 const otherFiles = metaAttachments.filter(
                   (a) =>
@@ -190,10 +199,12 @@ export function ConversationMessagesView({
                   bubbles.push({ text: "", images: [], mediaAttachments: otherFiles });
                 }
                 if (bubbles.length === 0 && metaAttachments.length > 0) {
-                  const fallbackImages = metaAttachments
-                    .filter((a) => (a.data_url || "").startsWith("data:image/") || (a.data_url || "").match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i))
-                    .map((a) => a.data_url!)
-                    .filter(Boolean);
+                  const fallbackImages = [...new Set(
+                    metaAttachments
+                      .filter((a) => (a.data_url || "").startsWith("data:image/") || (a.data_url || "").match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i))
+                      .map((a) => a.data_url!)
+                      .filter(Boolean)
+                  )];
                   if (fallbackImages.length > 0) {
                     bubbles.push({ text: "", images: fallbackImages, mediaAttachments: [] });
                   } else {

@@ -29,6 +29,8 @@ import CalendarPage from "@/pages/CalendarPage";
 import FollowUpsPage from "@/pages/FollowUpsPage";
 import InventoryPage from "@/pages/InventoryPage";
 import ContactsPage from "@/pages/ContactsPage";
+import ClientsPage from "@/pages/ClientsPage";
+import ContactProfilePage from "@/pages/ContactProfilePage";
 import TokenAnalytics from "@/pages/TokenAnalytics";
 import PublicSandbox from "@/pages/PublicSandbox";
 import NotFound from "@/pages/NotFound";
@@ -66,6 +68,9 @@ const App = () => (
               <Route path="/followups" element={<FollowUpsPage />} />
               <Route path="/inventory" element={<InventoryPage />} />
               <Route path="/contacts" element={<ContactsPage />} />
+              <Route path="/clients" element={<ClientsPage />} />
+              <Route path="/contacts/:contactId" element={<ContactProfilePage />} />
+              <Route path="/clients/:contactId" element={<ContactProfilePage />} />
               <Route path="/tools" element={<Tools />} />
               <Route path="/tools/:toolId/edit" element={<EditTool />} />
               <Route path="/providers" element={<Providers />} />

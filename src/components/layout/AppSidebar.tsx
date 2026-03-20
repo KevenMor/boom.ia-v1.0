@@ -60,6 +60,7 @@ const navGroups: NavGroup[] = [
       { to: "/followups", icon: Bell, label: "Follow-ups" },
       { to: "/inventory", icon: Car, label: "Inventário" },
       { to: "/contacts", icon: Users, label: "Leads" },
+      { to: "/clients", icon: Building2, label: "Clientes" },
     ],
   },
   {

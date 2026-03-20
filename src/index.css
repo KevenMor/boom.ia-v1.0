@@ -50,13 +50,13 @@
 
     --radius: 0.5rem;
 
-    --sidebar-background: 222 40% 20%;
+    --sidebar-background: 222 47% 12%;
     --sidebar-foreground: 220 20% 72%;
     --sidebar-primary: 174 99% 42%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 30% 26%;
+    --sidebar-accent: 222 40% 18%;
     --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 222 30% 24%;
+    --sidebar-border: 222 40% 16%;
     --sidebar-ring: 174 99% 42%;
 
     font-family: Poppins, system-ui, -apple-system, sans-serif;
@@ -110,13 +110,13 @@
 
     --radius: 0.5rem;
 
-    --sidebar-background: 222 30% 6%;
+    --sidebar-background: 222 45% 5%;
     --sidebar-foreground: 218 12% 55%;
     --sidebar-primary: 174 80% 45%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 18% 13%;
+    --sidebar-accent: 222 35% 10%;
     --sidebar-accent-foreground: 220 20% 93%;
-    --sidebar-border: 222 18% 14%;
+    --sidebar-border: 222 35% 8%;
     --sidebar-ring: 174 80% 40%;
   }
 }

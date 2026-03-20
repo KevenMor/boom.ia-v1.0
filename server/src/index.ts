@@ -104,9 +104,22 @@ async function build() {
       try {
         const body = ["POST", "PUT", "PATCH"].includes(request.method) && request.body ? JSON.stringify(request.body) : undefined;
         const res = await fetch(targetUrl, { method: request.method, headers, body });
-        const text = await res.text();
+        let text = await res.text();
         reply.code(res.status);
         res.headers.forEach((v, k) => { if (!["transfer-encoding"].includes(k.toLowerCase())) reply.header(k, v); });
+        // Supabase auth client espera JSON; corpo vazio ou HTML causa "Unexpected end of JSON input"
+        const isAuthPath = /\/auth\/v1\//.test(suffix);
+        const isEmpty = !text || !text.trim();
+        const looksLikeHtml = text.trim().toLowerCase().startsWith("<!");
+        if (isAuthPath && (isEmpty || looksLikeHtml)) {
+          reply.header("content-type", "application/json");
+          text = JSON.stringify({
+            error: isEmpty ? "empty_response" : "invalid_response",
+            error_description: isEmpty
+              ? (res.ok ? "Resposta vazia do Supabase" : `Supabase retornou ${res.status} sem corpo`)
+              : `Supabase retornou HTML em vez de JSON (status ${res.status}). Verifique se o Supabase está acessível.`,
+          });
+        }
         return reply.send(text);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

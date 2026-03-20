@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { callAPI } from "@/lib/api-client";
-import type { Contact } from "@/types/database";
+import type { Contact, ContactType, ContactInvoice } from "@/types/database";
 
 interface ContactsListParams {
   tenant_id?: string | null;
@@ -9,10 +9,11 @@ interface ContactsListParams {
   search?: string;
   order_by?: "name" | "updated_at";
   order_dir?: "asc" | "desc";
+  type?: ContactType;
 }
 
 export function useContacts(params: ContactsListParams = {}) {
-  const { tenant_id, limit = 100, offset = 0, search, order_by, order_dir } = params;
+  const { tenant_id, limit = 100, offset = 0, search, order_by, order_dir, type } = params;
   const queryParams = new URLSearchParams();
   if (tenant_id) queryParams.set("tenant_id", tenant_id);
   queryParams.set("limit", String(limit));
@@ -20,9 +21,10 @@ export function useContacts(params: ContactsListParams = {}) {
   if (search?.trim()) queryParams.set("search", search.trim());
   if (order_by) queryParams.set("order_by", order_by);
   if (order_dir) queryParams.set("order_dir", order_dir);
+  if (type) queryParams.set("type", type);
 
   return useQuery({
-    queryKey: ["crm-contacts", tenant_id, limit, offset, search, order_by, order_dir],
+    queryKey: ["crm-contacts", tenant_id, limit, offset, search, order_by, order_dir, type],
     queryFn: async () => {
       const res = await callAPI<{ data: Contact[]; total: number }>(
         `/crm-contacts?${queryParams.toString()}`,
@@ -30,6 +32,20 @@ export function useContacts(params: ContactsListParams = {}) {
       );
       return res;
     },
+  });
+}
+
+export function useContact(contactId: string | null) {
+  return useQuery({
+    queryKey: ["crm-contacts", contactId],
+    queryFn: async () => {
+      const data = await callAPI<Contact>(
+        `/crm-contacts/${contactId}`,
+        { method: "GET" }
+      );
+      return data;
+    },
+    enabled: !!contactId,
   });
 }
 
@@ -110,5 +126,111 @@ export function useSyncContactsFromConversations() {
       return res;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-contacts"] }),
+  });
+}
+
+export function useMergeDuplicateContacts() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (tenantId?: string | null) => {
+      const res = await callAPI<{ success: boolean; deleted: number; merged_groups: number }>(
+        "/crm-contacts/merge-duplicates",
+        { method: "POST", body: tenantId ? { tenant_id: tenantId } : {} }
+      );
+      return res;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-contacts"] }),
+  });
+}
+
+export interface ImportContactRow {
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  cpf_cnpj?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip_code?: string | null;
+  notes?: string | null;
+}
+
+export function useImportContacts() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      tenant_id,
+      rows,
+    }: {
+      tenant_id: string;
+      rows: ImportContactRow[];
+    }) => {
+      const res = await callAPI<{
+        success: boolean;
+        imported: number;
+        total_rows: number;
+      }>("/crm-contacts/import", {
+        method: "POST",
+        body: { tenant_id, rows },
+      });
+      return res;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-contacts"] }),
+  });
+}
+
+// --- Faturas ---
+export function useContactInvoices(contactId: string | null) {
+  return useQuery({
+    queryKey: ["crm-contacts", contactId, "invoices"],
+    queryFn: async () => {
+      const res = await callAPI<{ data: ContactInvoice[] }>(
+        `/crm-contacts/${contactId}/invoices`,
+        { method: "GET" }
+      );
+      return res.data;
+    },
+    enabled: !!contactId,
+  });
+}
+
+export function useCreateContactInvoice(contactId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (item: { amount: number; due_date: string; description?: string; status?: string }) => {
+      const data = await callAPI<ContactInvoice>(`/crm-contacts/${contactId}/invoices`, {
+        method: "POST",
+        body: item,
+      });
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-contacts", contactId, "invoices"] }),
+  });
+}
+
+export function useUpdateContactInvoice(contactId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      invoiceId,
+      ...updates
+    }: Partial<ContactInvoice> & { invoiceId: string }) => {
+      const data = await callAPI<ContactInvoice>(
+        `/crm-contacts/${contactId}/invoices/${invoiceId}`,
+        { method: "PATCH", body: updates }
+      );
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-contacts", contactId, "invoices"] }),
+  });
+}
+
+export function useDeleteContactInvoice(contactId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (invoiceId: string) => {
+      await callAPI(`/crm-contacts/${contactId}/invoices/${invoiceId}`, { method: "DELETE" });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-contacts", contactId, "invoices"] }),
   });
 }

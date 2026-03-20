@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { MessageSquare, Bot, ArrowLeft, Search, Send, Paperclip, Smile, Bug, Trash2, Users, UserPlus, Tag } from "lucide-react";
+import { MessageSquare, Bot, ArrowLeft, Search, Send, Paperclip, Smile, Bug, Trash2, Users, UserPlus, Tag, UserCircle } from "lucide-react";
 import { ConversationMessagesView } from "@/components/chat/ConversationMessagesView";
 import { callAPI } from "@/lib/api-client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -35,6 +35,7 @@ export default function Conversations() {
   const [selectedContactKey, setSelectedContactKey] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [labelFilter, setLabelFilter] = useState<string | null>(null);
+  const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [newContactOpen, setNewContactOpen] = useState(false);
@@ -51,21 +52,29 @@ export default function Conversations() {
   useEffect(() => {
     setSelectedAgentId(null);
     setSelectedContactKey(null);
+    setAssigneeFilter(null);
+    setLabelFilter(null);
   }, [selectedTenantId]);
 
   const { data: conversations, isLoading: convsLoading } = useConversations(selectedAgentId);
 
-  const { deduplicatedConversations, contactConvIds, contactLabelsMap, allLabels } = useMemo(() => {
+  const agentName = agents?.find((a) => a.id === selectedAgentId)?.name ?? null;
+
+  const { deduplicatedConversations, contactConvIds, contactLabelsMap, contactAssigneesMap, allLabels, allAssignees } = useMemo(() => {
     if (!conversations) return {
       deduplicatedConversations: [] as typeof conversations,
       contactConvIds: new Map<string, string[]>(),
       contactLabelsMap: new Map<string, Set<string>>(),
+      contactAssigneesMap: new Map<string, Set<string>>(),
       allLabels: [] as string[],
+      allAssignees: [] as string[],
     };
     const contactMap = new Map<string, (typeof conversations)[number]>();
     const idsMap = new Map<string, string[]>();
     const labelsMap = new Map<string, Set<string>>();
+    const assigneesMap = new Map<string, Set<string>>();
     const labelsSet = new Set<string>();
+    const assigneesSet = new Set<string>();
 
     const resolveContactKey = (conv: (typeof conversations)[number]) => {
       const normalizePhoneKey = (v: unknown) => {
@@ -119,6 +128,19 @@ export default function Conversations() {
         labelsMap.get(contactKey)!.add(lbl);
       }
 
+      const assigneeName = conv.chatwoot_assignee_name?.trim();
+      if (assigneeName) {
+        assigneesSet.add(assigneeName);
+        if (!assigneesMap.has(contactKey)) assigneesMap.set(contactKey, new Set());
+        assigneesMap.get(contactKey)!.add(assigneeName);
+      }
+      // Conversas sem atendente humano (com a agente IA) também aparecem no filtro pelo nome da agente
+      if (!assigneeName && agentName) {
+        assigneesSet.add(agentName);
+        if (!assigneesMap.has(contactKey)) assigneesMap.set(contactKey, new Set());
+        assigneesMap.get(contactKey)!.add(agentName);
+      }
+
       if (!contactMap.has(contactKey)) {
         contactMap.set(contactKey, conv);
       } else {
@@ -134,9 +156,11 @@ export default function Conversations() {
       deduplicatedConversations: Array.from(contactMap.values()),
       contactConvIds: idsMap,
       contactLabelsMap: labelsMap,
+      contactAssigneesMap: assigneesMap,
       allLabels: Array.from(labelsSet).sort(),
+      allAssignees: Array.from(assigneesSet).sort(),
     };
-  }, [conversations]);
+  }, [conversations, agentName]);
 
   const selectedConvIds = useMemo(
     () => selectedContactKey ? (contactConvIds.get(selectedContactKey) ?? []) : [],
@@ -177,6 +201,10 @@ export default function Conversations() {
     if (labelFilter) {
       const key = getContactKeyForConv(c);
       if (!contactLabelsMap.get(key)?.has(labelFilter)) return false;
+    }
+    if (assigneeFilter) {
+      const key = getContactKeyForConv(c);
+      if (!contactAssigneesMap.get(key)?.has(assigneeFilter)) return false;
     }
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
@@ -456,6 +484,20 @@ export default function Conversations() {
                     <SelectItem value="all">Todas</SelectItem>
                     {allLabels.map((lbl) => (
                       <SelectItem key={lbl} value={lbl}>{lbl}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              {allAssignees.length > 0 && (
+                <Select value={assigneeFilter ?? "all"} onValueChange={(v) => setAssigneeFilter(v === "all" ? null : v)}>
+                  <SelectTrigger className="flex-1 h-8 text-[11px] font-semibold border-0 bg-primary/10 text-primary gap-1">
+                    <UserCircle className="h-3 w-3 shrink-0" />
+                    <SelectValue placeholder="Atendente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    {allAssignees.map((name) => (
+                      <SelectItem key={name} value={name}>{name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

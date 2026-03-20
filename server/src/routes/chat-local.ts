@@ -303,6 +303,92 @@ function extractCepFromText(text: string): string | null {
   return digits.length === 8 ? digits : null;
 }
 
+/** Mapa de aliases de unidade → nome canônico para Autoescola Ideal (chatwoot_assign reason). */
+const IDEAL_UNITS_MAP: Record<string, string> = {
+  coop: "Coop Zona Norte",
+  "zona norte": "Coop Zona Norte",
+  "vila haro": "Vila Haro",
+  "vila helena": "Vila Helena",
+  "júlio de mesquita": "Júlio de Mesquita",
+  julio: "Júlio de Mesquita",
+  "julio de mesquita": "Júlio de Mesquita",
+  aparecidinha: "Aparecidinha",
+  aparecida: "Aparecidinha",
+  centro: "Centro",
+};
+
+/**
+ * Constrói hint para marcar_lead quando cliente demonstra interesse e ainda não é cliente.
+ * Usado em dual e single-provider para garantir etiquetagem consistente de novos leads.
+ */
+function buildLeadHint(
+  messages: Array<{ role: string; content: string }>,
+  leadLabelEnabled: boolean
+): string {
+  if (!leadLabelEnabled) return "";
+  const fullText = messages.map((m) => (m.content ?? "")).join(" ").toLowerCase();
+  const hasInterest =
+    /\b(interesse|quero\s+saber|quero\s+tirar|gostaria\s+de\s+informa|tenho\s+interesse|como\s+funciona|quero\s+informa|preciso\s+de\s+informa|quero\s+cnh|tirar\s+cnh|primeira\s+habilita)\b/i.test(fullText);
+  const isExistingCustomer =
+    /\b(j[áa]\s+[ée]sou?\s+aluno|estou\s+matriculado|sou\s+aluno|j[áa]\s+[ée]s\s+cliente)\b/i.test(fullText) ||
+    (/\bj[áa]\s+[ée]\s+aluno\s+da\s+ideal\??/i.test(fullText) && /\b(sim|sou|estou)\b/i.test(fullText));
+  const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+  const userShowsInterest = lastUserMsg?.content && /\b(interesse|quero|gostaria|como\s+funciona|informa|cnh)\b/i.test(lastUserMsg.content);
+  if (hasInterest && !isExistingCustomer && (userShowsInterest || messages.length <= 4)) {
+    return `\n\n[NOVO LEAD DETECTADO. OBRIGATÓRIO: chame marcar_lead para etiquetar o contato como lead do dia. O cliente demonstrou interesse e ainda não é aluno/cliente. NÃO retorne NO_TOOLS_NEEDED.]`;
+  }
+  return "";
+}
+
+/**
+ * Constrói hint obrigatório para atribuir_agente quando Autoescola Ideal deve transferir.
+ * Usado em dual (dispatcher) e single-provider para garantir chamada consistente da tool.
+ */
+function buildAutoescolaIdealAssignHint(
+  messages: Array<{ role: string; content: string }>,
+  hasAssignTool: boolean,
+  tenantSlug: string | null
+): string {
+  const isAutoescolaIdeal = tenantSlug === "ideal" || tenantSlug === "autoescola-ideal" || tenantSlug === "auto-escola-ideal";
+  if (!hasAssignTool || !isAutoescolaIdeal) return "";
+
+  const lastAsst = [...messages].reverse().find((m) => m.role === "assistant");
+  const lastUsr = [...messages].reverse().find((m) => m.role === "user");
+  const fullConvText = messages.map((m) => (m.content ?? "")).join(" ");
+  const convLower = fullConvText.toLowerCase();
+
+  // Path 1: Resumo confirmado — Unidade de preferência: + pergunta de confirmação (ampliada)
+  const summaryHasUnit =
+    lastAsst?.content &&
+    /Unidade de preferência:/i.test(lastAsst.content) &&
+    /(Está tudo correto|tudo certo|confere|pode confirmar|confirma|está ok)\s*\??/i.test(lastAsst.content);
+  const userTrim = lastUsr?.content?.trim() || "";
+  const userConfirms =
+    userTrim &&
+    userTrim.length < 160 &&
+    /\b(sim|ok|está certo|tudo certo|confirmo|pode ser|perfeito|legal|beleza|bora|vamos|quero|fechado|tá certo|está ok|pode seguir|tudo ok|isso mesmo|certinho|confirmado|manda|fechou|pode encaminhar)\b/i.test(userTrim);
+
+  if (summaryHasUnit && userConfirms && lastAsst?.content) {
+    const unitMatch = lastAsst.content.match(/Unidade de preferência:\s*(.+?)(?:\n|$)/i);
+    const unitName = unitMatch?.[1]?.trim();
+    if (unitName) {
+      return `\n\n[RESUMO CONFIRMADO. OBRIGATÓRIO: chame atribuir_agente/chatwoot_assign com reason="${unitName}" para transferir ao time da unidade mais próxima da residência do cliente. NÃO retorne NO_TOOLS_NEEDED.]`;
+    }
+  }
+
+  // Path 2: Aluno existente — assistente disse que vai encaminhar/transferir (frases ampliadas)
+  const forwardPhrases = /encaminhar|time da unidade|encaminho|transferir|passo para|equipe da unidade|redirecion|vou passar/i;
+  if (lastAsst?.content && forwardPhrases.test(lastAsst.content)) {
+    for (const [key, canonical] of Object.entries(IDEAL_UNITS_MAP)) {
+      if (convLower.includes(key)) {
+        return `\n\n[ALUNO EXISTENTE — ENCAMINHAMENTO. O assistente disse que vai encaminhar para o time da unidade. OBRIGATÓRIO: chame atribuir_agente/chatwoot_assign com reason="${canonical}" para transferir ao time da unidade. NÃO retorne NO_TOOLS_NEEDED. NÃO chame consultar_cep nem nearest_unit.]`;
+      }
+    }
+  }
+
+  return "";
+}
+
 /**
  * Sanitiza nome de função para OpenAI e Gemini.
  * OpenAI exige: ^[a-zA-Z0-9_-]+$
@@ -889,43 +975,11 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           const hasAssignTool = tools.some((t) => t.tool_type === "chatwoot_assign");
           const isAutoescolaIdeal = tenantSlug === "ideal" || tenantSlug === "autoescola-ideal" || tenantSlug === "auto-escola-ideal";
           const promptCachingEnabled = isAutoescolaIdeal || !!(tenantSettings.prompt_caching_enabled as boolean);
-          let assignHint = "";
-          if (hasAssignTool && isAutoescolaIdeal) {
-            const lastAsst = [...messagesToUse].reverse().find((m) => m.role === "assistant");
-            const lastUsr = [...messagesToUse].reverse().find((m) => m.role === "user");
-            const fullConvText = messagesToUse.map((m) => (m.content ?? "")).join(" ");
-            const summaryHasUnit = lastAsst?.content && /Unidade de preferência:/i.test(lastAsst.content) && /Está tudo correto\?/i.test(lastAsst.content);
-            const userTrim = lastUsr?.content?.trim() || "";
-            const userConfirms = userTrim && (userTrim.length < 80) && /\b(sim|ok|está certo|tudo certo|confirmo|pode ser|perfeito|legal|beleza|bora|vamos|quero|fechado|tá certo|está ok|pode seguir|tudo ok)\b/i.test(userTrim);
-            if (summaryHasUnit && userConfirms && lastAsst?.content) {
-              const unitMatch = lastAsst.content.match(/Unidade de preferência:\s*(.+?)(?:\n|$)/i);
-              const unitName = unitMatch?.[1]?.trim();
-              if (unitName) {
-                assignHint = `\n\n[RESUMO CONFIRMADO. OBRIGATÓRIO: chame atribuir_agente/chatwoot_assign com reason="${unitName}" para transferir ao time da unidade mais próxima da residência do cliente. NÃO retorne NO_TOOLS_NEEDED.]`;
-              }
-            }
-            if (!assignHint && lastAsst?.content && /encaminhar|time da unidade|encaminho/i.test(lastAsst.content)) {
-              const IDEAL_UNITS: Record<string, string> = {
-                coop: "Coop Zona Norte",
-                "vila haro": "Vila Haro",
-                "vila helena": "Vila Helena",
-                "júlio de mesquita": "Júlio de Mesquita",
-                julio: "Júlio de Mesquita",
-                aparecidinha: "Aparecidinha",
-                centro: "Centro",
-              };
-              const convLower = fullConvText.toLowerCase();
-              for (const [key, canonical] of Object.entries(IDEAL_UNITS)) {
-                if (convLower.includes(key)) {
-                  assignHint = `\n\n[ALUNO EXISTENTE — ENCAMINHAMENTO. O assistente disse que vai encaminhar para o time da unidade. OBRIGATÓRIO: chame atribuir_agente/chatwoot_assign com reason="${canonical}" para transferir ao time da unidade. NÃO retorne NO_TOOLS_NEEDED. NÃO chame consultar_cep nem nearest_unit.]`;
-                  break;
-                }
-              }
-            }
-          }
+          const assignHint = buildAutoescolaIdealAssignHint(messagesToUse, hasAssignTool, tenantSlug);
+          const leadHint = buildLeadHint(messagesToUse, leadLabelEnabled);
 
           const staticDispatcherPrompt = getDispatcherPrompt(tenantSlug) + dispatcherDateContext;
-          const hintsBlock = [entityHint, cepHint, assignHint, schedulingHint].filter(Boolean).join("");
+          const hintsBlock = [entityHint, cepHint, assignHint, leadHint, schedulingHint].filter(Boolean).join("");
           const messagesForDispatcher = promptCachingEnabled && hintsBlock && messagesToUse.length > 0
             ? (() => {
                 const last = messagesToUse[messagesToUse.length - 1];
@@ -1609,6 +1663,20 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
       }
 
       let llmMessages = toOpenAIMessages(systemPrompt, messagesToUse);
+      const hasAssignToolSP = tools.some((t) => t.tool_type === "chatwoot_assign");
+      const assignHintSP = buildAutoescolaIdealAssignHint(messagesToUse, hasAssignToolSP, tenantSlug);
+      const leadHintSP = buildLeadHint(messagesToUse, leadLabelEnabled);
+      const hintsSP = [assignHintSP, leadHintSP].filter(Boolean).join("\n");
+      if (hintsSP && useTools) {
+        for (let i = llmMessages.length - 1; i >= 0; i--) {
+          const m = llmMessages[i] as { role?: string; content?: string };
+          if (m?.role === "user" && "content" in m) {
+            (llmMessages[i] as { role: string; content: string }).content =
+              `${m.content || ""}\n\n[CONTEXTO ADICIONAL]\n${hintsSP.trim()}`;
+            break;
+          }
+        }
+      }
       let fullContent = "";
       let iteration = 0;
       let singleProviderUsageAccum = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };

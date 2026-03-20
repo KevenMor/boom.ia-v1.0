@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -9,12 +9,21 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useUpdateContact } from "@/hooks/useContacts";
 import { toast } from "sonner";
+import { fetchAddressByCep } from "@/lib/viacep";
+import { capitalizeName } from "@/lib/capitalizeName";
 import type { Contact } from "@/types/database";
 
 const schema = z.object({
@@ -27,6 +36,7 @@ const schema = z.object({
   state: z.string().optional(),
   zip_code: z.string().optional(),
   notes: z.string().optional(),
+  contact_type: z.enum(["lead", "client"]).optional(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -40,9 +50,10 @@ interface EditContactDialogProps {
 export function EditContactDialog({ contact, open, onOpenChange }: EditContactDialogProps) {
   const updateContact = useUpdateContact();
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<FormData>({
+  const [cepLoading, setCepLoading] = useState(false);
+  const { register, handleSubmit, reset, formState: { errors }, setValue, watch } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: {
+      defaultValues: {
       name: "",
       email: "",
       phone: "",
@@ -52,8 +63,11 @@ export function EditContactDialog({ contact, open, onOpenChange }: EditContactDi
       state: "",
       zip_code: "",
       notes: "",
+      contact_type: "lead" as const,
     },
   });
+
+  const contactType = watch("contact_type");
 
   useEffect(() => {
     if (contact) {
@@ -67,6 +81,7 @@ export function EditContactDialog({ contact, open, onOpenChange }: EditContactDi
         state: contact.state || "",
         zip_code: contact.zip_code || "",
         notes: contact.notes || "",
+        contact_type: (contact.contact_type === "client" ? "client" : "lead") as "lead" | "client",
       });
     }
   }, [contact, reset]);
@@ -76,7 +91,7 @@ export function EditContactDialog({ contact, open, onOpenChange }: EditContactDi
     try {
       await updateContact.mutateAsync({
         id: contact.id,
-        name: data.name,
+        name: capitalizeName(data.name),
         email: data.email || null,
         phone: data.phone || null,
         cpf_cnpj: data.cpf_cnpj || null,
@@ -85,6 +100,7 @@ export function EditContactDialog({ contact, open, onOpenChange }: EditContactDi
         state: data.state || null,
         zip_code: data.zip_code || null,
         notes: data.notes || null,
+        contact_type: data.contact_type === "client" ? "client" : "lead",
       });
       toast.success("Contato atualizado!");
       onOpenChange(false);
@@ -110,6 +126,22 @@ export function EditContactDialog({ contact, open, onOpenChange }: EditContactDi
             {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message}</p>}
           </div>
 
+          <div>
+            <Label>Tipo</Label>
+            <Select value={contactType} onValueChange={(v) => setValue("contact_type", v as "lead" | "client")}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="lead">Lead</SelectItem>
+                <SelectItem value="client">Cliente</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Clientes têm acesso ao perfil completo (foto, faturas) na página Clientes.
+            </p>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="email">E-mail</Label>
@@ -127,23 +159,57 @@ export function EditContactDialog({ contact, open, onOpenChange }: EditContactDi
             <Input id="cpf_cnpj" {...register("cpf_cnpj")} />
           </div>
 
-          <div>
-            <Label htmlFor="address">Endereço</Label>
-            <Input id="address" {...register("address")} />
-          </div>
-
           <div className="grid grid-cols-3 gap-4">
-            <div>
-              <Label htmlFor="city">Cidade</Label>
-              <Input id="city" {...register("city")} />
-            </div>
-            <div>
-              <Label htmlFor="state">Estado</Label>
-              <Input id="state" {...register("state")} maxLength={2} />
+            <div className="col-span-2">
+              <Label htmlFor="address">Endereço</Label>
+              <Input id="address" {...register("address")} placeholder="Rua, número, complemento" />
             </div>
             <div>
               <Label htmlFor="zip_code">CEP</Label>
-              <Input id="zip_code" {...register("zip_code")} />
+              <Input
+                id="zip_code"
+                placeholder="01310-100"
+                disabled={cepLoading}
+                {...(() => {
+                  const { onBlur, ...rest } = register("zip_code");
+                  return {
+                    ...rest,
+                    onBlur: async (e: React.FocusEvent<HTMLInputElement>) => {
+                      onBlur(e);
+                      const cep = e.target.value.trim();
+                      if (cep.replace(/\D/g, "").length !== 8) return;
+                      setCepLoading(true);
+                      try {
+                        const result = await fetchAddressByCep(cep);
+                        if (result) {
+                          setValue("address", result.address);
+                          setValue("city", result.city);
+                          setValue("state", result.state);
+                          toast.success("Endereço preenchido automaticamente");
+                        } else {
+                          toast.error("CEP não encontrado");
+                        }
+                      } finally {
+                        setCepLoading(false);
+                      }
+                    },
+                  };
+                })()}
+              />
+              {cepLoading && (
+                <p className="text-xs text-muted-foreground mt-0.5">Buscando...</p>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="city">Cidade</Label>
+              <Input id="city" {...register("city")} placeholder="São Paulo" />
+            </div>
+            <div>
+              <Label htmlFor="state">Estado</Label>
+              <Input id="state" {...register("state")} placeholder="SP" maxLength={2} />
             </div>
           </div>
 

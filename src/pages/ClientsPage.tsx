@@ -7,12 +7,12 @@ import {
   Trash2,
   Mail,
   Phone,
-  RefreshCw,
   Eye,
   Filter,
   ChevronLeft,
   ChevronRight,
   Download,
+  Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,7 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useContacts, useSyncContactsFromConversations } from "@/hooks/useContacts";
+import { useContacts } from "@/hooks/useContacts";
 import { useTenantContext } from "@/contexts/TenantContext";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -42,6 +42,7 @@ import { CreateContactDialog } from "@/components/contacts/CreateContactDialog";
 import { EditContactDialog } from "@/components/contacts/EditContactDialog";
 import { DeleteContactDialog } from "@/components/contacts/DeleteContactDialog";
 import { ContactConversationModal } from "@/components/contacts/ContactConversationModal";
+import { ImportClientsDialog } from "@/components/contacts/ImportClientsDialog";
 import { callAPI } from "@/lib/api-client";
 import { exportContactsCsv } from "@/lib/exportCsv";
 import type { Contact } from "@/types/database";
@@ -78,29 +79,14 @@ function formatCreatedAt(createdAt: string | undefined): string {
   }
 }
 
-function getLeadStatusBadge(contact: Contact) {
-  const meta = (contact.metadata ?? {}) as Record<string, unknown>;
-  const status = (meta.lead_status ?? meta.status ?? "") as string;
-  if (!status) return null;
-  const variants: Record<string, string> = {
-    new: "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400",
-    prospect: "bg-primary/10 text-primary",
-    lead: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
-    qualified: "bg-success/10 text-success",
-    closed: "bg-muted text-muted-foreground",
-  };
-  const key = status.toLowerCase().replace(/\s+/g, "_");
-  const cls = variants[key] ?? "bg-muted text-muted-foreground";
-  return <Badge variant="secondary" className={cls}>{status}</Badge>;
-}
-
-export default function ContactsPage() {
+export default function ClientsPage() {
   const { selectedTenantId } = useTenantContext();
   const [search, setSearch] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
   const [page, setPage] = useState(0);
   const [sort, setSort] = useState<(typeof SORT_OPTIONS)[number]["value"]>("recent");
   const [createOpen, setCreateOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editContact, setEditContact] = useState<Contact | null>(null);
   const [deleteContact, setDeleteContact] = useState<Contact | null>(null);
   const [selectedContactForConversation, setSelectedContactForConversation] = useState<Contact | null>(null);
@@ -119,7 +105,7 @@ export default function ContactsPage() {
     offset: page * PAGE_SIZE,
     order_by: order.order_by,
     order_dir: order.order_dir,
-    type: "lead",
+    type: "client",
   });
 
   const paginatedContacts = data?.data ?? [];
@@ -128,32 +114,21 @@ export default function ContactsPage() {
   const from = total === 0 ? 0 : page * PAGE_SIZE + 1;
   const to = Math.min((page + 1) * PAGE_SIZE, total);
 
-  const syncMutation = useSyncContactsFromConversations();
-
-  const handleSyncFromConversations = async () => {
-    try {
-      const res = await syncMutation.mutateAsync(selectedTenantId ?? undefined);
-      toast.success(`Sincronizado: ${res.synced} contato(s) do Chat ao Vivo`);
-    } catch (err: unknown) {
-      toast.error("Erro ao sincronizar: " + (err instanceof Error ? err.message : "erro desconhecido"));
-    }
-  };
-
   const handleExportCsv = async () => {
     try {
       const params = new URLSearchParams();
       if (tenantId) params.set("tenant_id", tenantId);
-      params.set("type", "lead");
+      params.set("type", "client");
       params.set("limit", "500");
       params.set("offset", "0");
       if (search.trim()) params.set("search", search.trim());
       const res = await callAPI<{ data: Contact[] }>(`/crm-contacts?${params.toString()}`, { method: "GET" });
       const list = res?.data ?? [];
       if (list.length === 0) {
-        toast.info("Nenhum contato para exportar");
+        toast.info("Nenhum cliente para exportar");
         return;
       }
-      exportContactsCsv(list);
+      exportContactsCsv(list, "clientes.csv");
       toast.success("CSV exportado");
     } catch (err: unknown) {
       toast.error("Erro ao exportar: " + (err instanceof Error ? err.message : "erro desconhecido"));
@@ -163,7 +138,6 @@ export default function ContactsPage() {
   return (
     <div className="min-h-[calc(100vh-4rem)] w-full bg-muted/30">
       <div className="w-full px-4 py-6 sm:px-6 lg:px-8">
-        {/* Breadcrumb */}
         <Breadcrumb className="mb-4">
           <BreadcrumbList>
             <BreadcrumbItem>
@@ -179,14 +153,13 @@ export default function ContactsPage() {
             </BreadcrumbItem>
             <BreadcrumbSeparator />
             <BreadcrumbItem>
-              <BreadcrumbPage>Leads</BreadcrumbPage>
+              <BreadcrumbPage>Clientes</BreadcrumbPage>
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
 
-        {/* Page header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-lg font-medium text-foreground">Leads</h1>
+          <h1 className="text-lg font-medium text-foreground">Clientes</h1>
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
@@ -201,11 +174,10 @@ export default function ContactsPage() {
           </div>
         </div>
 
-        {/* Card */}
         <Card className="overflow-hidden border-border bg-card shadow-sm">
           <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-4 border-b border-border/50 pb-4">
             <div className="flex items-center gap-2">
-              <h2 className="text-base font-semibold text-foreground">Leads</h2>
+              <h2 className="text-base font-semibold text-foreground">Clientes</h2>
               <Badge variant="secondary" className="rounded-full bg-primary/10 text-primary text-xs">
                 {total}
               </Badge>
@@ -215,12 +187,11 @@ export default function ContactsPage() {
                 variant="outline"
                 size="sm"
                 className="gap-1.5"
-                onClick={handleSyncFromConversations}
-                disabled={syncMutation.isPending}
-                title="Importar contatos das conversas do Chat ao Vivo"
+                onClick={() => setImportOpen(true)}
+                title="Importar lista de clientes (CSV)"
               >
-                <RefreshCw className={`h-4 w-4 ${syncMutation.isPending ? "animate-spin" : ""}`} />
-                Importar do Chat
+                <Upload className="h-4 w-4" />
+                Importar CSV
               </Button>
               <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExportCsv}>
                 <Download className="h-4 w-4" />
@@ -240,12 +211,11 @@ export default function ContactsPage() {
               </Select>
               <Button size="sm" className="gap-1.5" onClick={() => setCreateOpen(true)}>
                 <Plus className="h-4 w-4" />
-                Criar Lead
+                Novo Cliente
               </Button>
             </div>
           </CardHeader>
 
-          {/* Search */}
           <div className="border-b border-border/50 px-6 py-3">
             <div className="relative max-w-xs">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -266,7 +236,7 @@ export default function ContactsPage() {
           <CardContent className="p-0">
             {error && (
               <p className="px-6 py-4 text-sm text-destructive">
-                Erro ao carregar contatos: {error.message}
+                Erro ao carregar clientes: {error.message}
               </p>
             )}
 
@@ -275,16 +245,13 @@ export default function ContactsPage() {
                 <thead>
                   <tr className="border-b border-border/50">
                     <th className="px-4 py-3.5 text-left text-sm font-medium text-muted-foreground">
-                      Contato
+                      Cliente
                     </th>
                     <th className="px-4 py-3.5 text-left text-sm font-medium text-muted-foreground">
                       Empresa
                     </th>
                     <th className="px-4 py-3.5 text-left text-sm font-medium text-muted-foreground">
                       E-mail
-                    </th>
-                    <th className="px-4 py-3.5 text-left text-sm font-medium text-muted-foreground">
-                      Status
                     </th>
                     <th className="px-4 py-3.5 text-left text-sm font-medium text-muted-foreground">
                       Telefone
@@ -301,7 +268,7 @@ export default function ContactsPage() {
                   {isLoading &&
                     Array.from({ length: 5 }).map((_, i) => (
                       <tr key={i}>
-                        <td className="px-4 py-4" colSpan={7}>
+                        <td className="px-4 py-4" colSpan={6}>
                           <Skeleton className="h-12 w-full" />
                         </td>
                       </tr>
@@ -310,10 +277,10 @@ export default function ContactsPage() {
                   {!isLoading && paginatedContacts.length === 0 && (
                     <tr>
                       <td
-                        colSpan={7}
+                        colSpan={6}
                         className="px-4 py-12 text-center text-sm text-muted-foreground"
                       >
-                        Nenhum contato encontrado. Use &quot;Criar Lead&quot; para adicionar.
+                        Nenhum cliente encontrado. Use &quot;Importar CSV&quot; ou &quot;Novo Cliente&quot; para adicionar.
                       </td>
                     </tr>
                   )}
@@ -332,7 +299,7 @@ export default function ContactsPage() {
                             </AvatarFallback>
                           </Avatar>
                           <Link
-                            to={`/contacts/${contact.id}`}
+                            to={`/clients/${contact.id}`}
                             className="font-medium text-foreground hover:text-primary hover:underline text-left"
                           >
                             {contact.name}
@@ -352,11 +319,6 @@ export default function ContactsPage() {
                             {contact.email}
                           </a>
                         ) : (
-                          <span className="text-sm text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        {getLeadStatusBadge(contact) ?? (
                           <span className="text-sm text-muted-foreground">—</span>
                         )}
                       </td>
@@ -461,7 +423,12 @@ export default function ContactsPage() {
         </Card>
       </div>
 
-      <CreateContactDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <CreateContactDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        contactType="client"
+      />
+      <ImportClientsDialog open={importOpen} onOpenChange={setImportOpen} />
       <EditContactDialog
         contact={editContact}
         open={!!editContact}

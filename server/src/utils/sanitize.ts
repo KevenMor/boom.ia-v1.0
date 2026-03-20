@@ -85,6 +85,17 @@ export function stripToolNameLeakage(text: string): string {
   t = t.replace(/\[CHAMAR\s+FERRAMENTA[^\]]*marcar_lead[^\]]*\]/gim, "");
   t = t.replace(/^\s*marcar_lead\s*$/gim, "");
   t = t.replace(/\n\s*marca[r]?\s*lead\s*:?\s*[^\n]*/gi, "");
+  // Blocos de hint/contexto interno que não devem ir ao cliente
+  t = t.replace(/\[CONTEXTO\s+ADICIONAL\][\s\S]*?(?=\n\n[^\[]|\n\n\[|$)/gim, "");
+  t = t.replace(/\[NOVO\s+LEAD\s+DETECTADO[^\]]*\]/gim, "");
+  t = t.replace(/\[HINT\s+OBRIGAT[ÓO]RIO\][^\n]*/gim, "");
+  t = t.replace(/\[RESUMO\s+CONFIRMADO\][\s\S]*?(?=\n\n|$)/gim, "");
+  t = t.replace(/\[ALUNO\s+EXISTENTE\][^\n]*/gim, "");
+  t = t.replace(/\[CEP\s+DETECTADO[^\]]*\]/gim, "");
+  t = t.replace(/\[ENTIDADES\s+DETECTADAS[^\]]*\]/gim, "");
+  t = t.replace(/\[CONTEXTO\s+DE\s+FLUXO\][^\n]*/gim, "");
+  // consultar_unidade / nearest_unit vazando como texto
+  t = t.replace(/\b(consultar_unidade|nearest_unit)\s*\(\s*[^)]*\)/gim, "");
   return t;
 }
 
@@ -140,8 +151,11 @@ export function sanitizeLLMOutput(content: string): string {
     .split("\n")
     .filter(
       (line) =>
-        !/\b(consultar_estoque|consultar_agenda|consultar_base_conhecimento|inventory_query|calendar_query|rag_search|marcar_lead)\s*\(/.test(line) &&
-        !/^\s*MARCAR\s+LEAD\b/i.test(line.trim())
+        !/\b(consultar_estoque|consultar_agenda|consultar_base_conhecimento|inventory_query|calendar_query|rag_search|marcar_lead|consultar_unidade|nearest_unit)\s*\(/.test(line) &&
+        !/^\s*MARCAR\s+LEAD\b/i.test(line.trim()) &&
+        !/\[CONTEXTO\s+ADICIONAL\]/i.test(line) &&
+        !/\[NOVO\s+LEAD\s+DETECTADO/i.test(line) &&
+        !/\[HINT\s+OBRIGAT[ÓO]RIO\]/i.test(line)
     )
     .join("\n");
   // Blocos JSON de memória (ex.: {"memory":{"nome_cliente":"..."}})
@@ -157,6 +171,16 @@ export function sanitizeLLMOutput(content: string): string {
   text = text.replace(/\bprint\s*\(\s*(?:json\.dumps\s*)?\([^)]*assign_agent[^)]*\)\s*\)/gim, "");
   // Marcador explícito de dispatcher/tool vazando para o cliente (ex.: [CHAMAR FERRAMENTA marcar_lead])
   text = text.replace(/\[\s*CHAMAR\s+FERRAMENTA[^\]]*\]/gim, "");
+  // Blocos de hint/contexto interno
+  text = text.replace(/\[CONTEXTO\s+ADICIONAL\][\s\S]*?(?=\n\n[^\[]|\n\n\[|$)/gim, "");
+  text = text.replace(/\[NOVO\s+LEAD\s+DETECTADO[^\]]*\]/gim, "");
+  text = text.replace(/\[HINT\s+OBRIGAT[ÓO]RIO\][^\n]*/gim, "");
+  text = text.replace(/\[RESUMO\s+CONFIRMADO\][\s\S]*?(?=\n\n|$)/gim, "");
+  text = text.replace(/\[ALUNO\s+EXISTENTE\][^\n]*/gim, "");
+  text = text.replace(/\[CEP\s+DETECTADO[^\]]*\]/gim, "");
+  text = text.replace(/\[ENTIDADES\s+DETECTADAS[^\]]*\]/gim, "");
+  text = text.replace(/\[CONTEXTO\s+DE\s+FLUXO\][^\n]*/gim, "");
+  text = text.replace(/\b(consultar_unidade|nearest_unit)\s*\(\s*[^)]*\)/gim, "");
   // Sentinel interno do dispatcher não deve aparecer para o cliente
   text = text.replace(/\bNO_TOOLS_NEEDED\b/gim, "");
   // Guard interno de follow-up jamais deve vazar para o cliente
@@ -300,7 +324,10 @@ export function isCommandLine(line: string): boolean {
     /^.*O\s+cliente\s+deixou\s+claro\s+que\s+N[ÃA]O\s+quer\s+prosseguir.*$/im.test(t) ||
     /^.*(?:Chamada da ferramenta|Consultando a ferramenta|Vou consultar a ferramenta)\s+(?:consultar_estoque|consultar_agenda|consultar_base_conhecimento|inventory_query)/im.test(t) ||
     /^.*\b(consultar_estoque|consultar_agenda|consultar_base_conhecimento|inventory_query|calendar_query|rag_search)\s*[:\s]\s*\{/im.test(t) ||
-    /\b(consultar_estoque|consultar_agenda|consultar_base_conhecimento|inventory_query|calendar_query|rag_search)\s*\(/im.test(t) ||
+    /\b(consultar_estoque|consultar_agenda|consultar_base_conhecimento|inventory_query|calendar_query|rag_search|consultar_unidade|nearest_unit)\s*\(/im.test(t) ||
+    /\[CONTEXTO\s+ADICIONAL\]/im.test(t) ||
+    /\[NOVO\s+LEAD\s+DETECTADO/im.test(t) ||
+    /\[HINT\s+OBRIGAT[ÓO]RIO\]/im.test(t) ||
     // Tool call vazando como texto (horario_periodo, busca_contexto, etc.)
     /\bhorario_periodo\s*=\s*tool\s*\(/im.test(t) ||
     /\btool\s*\(\s*["']horario_periodo["']/im.test(t) ||
