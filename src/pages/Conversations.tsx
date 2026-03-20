@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAgents } from "@/hooks/useAgents";
 import { useTenantContext } from "@/contexts/TenantContext";
 import { useConversations, useMultiConversationMessages } from "@/hooks/useConversations";
@@ -41,6 +42,9 @@ export default function Conversations() {
   const [newContactName, setNewContactName] = useState("");
   const [newContactMessage, setNewContactMessage] = useState("");
   const [sendingNewContact, setSendingNewContact] = useState(false);
+  const [newLabelInput, setNewLabelInput] = useState("");
+  const [addingLabel, setAddingLabel] = useState(false);
+  const [labelPopoverOpen, setLabelPopoverOpen] = useState(false);
   const queryClient = useQueryClient();
 
   // Ao trocar de tenant, limpar seleção para refletir a nova empresa
@@ -122,6 +126,7 @@ export default function Conversations() {
         contactMap.set(contactKey, {
           ...existing,
           message_count: existing.message_count + conv.message_count,
+          chatwoot_assignee_name: conv.chatwoot_assignee_name || existing.chatwoot_assignee_name,
         });
       }
     }
@@ -203,6 +208,27 @@ export default function Conversations() {
       toast.error("Erro ao limpar histórico: " + (e?.message || "erro desconhecido"));
     } finally {
       setClearing(false);
+    }
+  };
+
+  const currentLabels = selectedContactKey ? Array.from(contactLabelsMap.get(selectedContactKey) ?? []) : [];
+
+  const handleAddLabel = async () => {
+    const label = newLabelInput.trim();
+    if (!label || !selectedAgentId || !selectedConvIds.length) return;
+    setAddingLabel(true);
+    try {
+      await callAPI("/contacts/add-label", {
+        body: { agent_id: selectedAgentId, conversation_ids: selectedConvIds, label },
+      });
+      toast.success(`Etiqueta "${label}" adicionada`);
+      setNewLabelInput("");
+      setLabelPopoverOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    } catch (e: any) {
+      toast.error("Erro ao adicionar etiqueta: " + (e?.message || "erro desconhecido"));
+    } finally {
+      setAddingLabel(false);
     }
   };
 
@@ -672,10 +698,64 @@ export default function Conversations() {
                       "text-[11px]",
                       selectedConv?.status === "open" ? "text-success" : "text-muted-foreground"
                     )}>
-                      {selectedConv?.status === "open" ? "online" : "offline"} • {getPhoneDisplay(selectedConv) || "—"}
+                      {selectedConv?.status === "open" ? "online" : "offline"}
+                      {getPhoneDisplay(selectedConv) ? ` • ${getPhoneDisplay(selectedConv)}` : ""}
+                      {selectedConv?.chatwoot_assignee_name ? ` • Atendente: ${selectedConv.chatwoot_assignee_name}` : ""}
+                      {!getPhoneDisplay(selectedConv) && !selectedConv?.chatwoot_assignee_name ? " • —" : ""}
                     </p>
+                    {currentLabels.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {currentLabels.map((lbl) => (
+                          <Badge key={lbl} variant="secondary" className="text-[10px] font-medium px-1.5 py-0">
+                            {lbl}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    <Popover open={labelPopoverOpen} onOpenChange={setLabelPopoverOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-primary"
+                          title="Adicionar etiqueta"
+                        >
+                          <Tag className="h-4 w-4" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-64" align="end">
+                        <div className="space-y-3">
+                          <p className="text-sm font-medium">Etiquetas</p>
+                          {currentLabels.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {currentLabels.map((lbl) => (
+                                <Badge key={lbl} variant="secondary" className="text-[10px]">
+                                  {lbl}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder="Nova etiqueta..."
+                              value={newLabelInput}
+                              onChange={(e) => setNewLabelInput(e.target.value)}
+                              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddLabel())}
+                              className="h-8 text-sm"
+                            />
+                            <Button
+                              size="sm"
+                              onClick={handleAddLabel}
+                              disabled={!newLabelInput.trim() || addingLabel}
+                            >
+                              {addingLabel ? "..." : "Adicionar"}
+                            </Button>
+                          </div>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                     <Button
                       variant="ghost"
                       size="icon"

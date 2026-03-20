@@ -690,12 +690,15 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       }
 
       const isPetHome = tenantSlug === "pet-home" || tenantSlug === "pet-home-tia-erica";
+      const isAutoescolaIdealEarly = tenantSlug === "ideal" || tenantSlug === "autoescola-ideal" || tenantSlug === "auto-escola-ideal";
+      const promptCachingEnabledEarly = isAutoescolaIdealEarly || !!(tenantSettings.prompt_caching_enabled as boolean);
       const petContext = isPetHome ? buildPetGenderContext(messagesToUse) : null;
       let systemPrompt = buildSystemPrompt(
         agent.system_prompt || "",
         tenantSlug,
         hasInventoryTool,
-        petContext
+        petContext,
+        promptCachingEnabledEarly
       );
       if (leadLabelEnabled) {
         systemPrompt +=
@@ -885,6 +888,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
 
           const hasAssignTool = tools.some((t) => t.tool_type === "chatwoot_assign");
           const isAutoescolaIdeal = tenantSlug === "ideal" || tenantSlug === "autoescola-ideal" || tenantSlug === "auto-escola-ideal";
+          const promptCachingEnabled = isAutoescolaIdeal || !!(tenantSettings.prompt_caching_enabled as boolean);
           let assignHint = "";
           if (hasAssignTool && isAutoescolaIdeal) {
             const lastAsst = [...messagesToUse].reverse().find((m) => m.role === "assistant");
@@ -920,9 +924,22 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }
           }
 
+          const staticDispatcherPrompt = getDispatcherPrompt(tenantSlug) + dispatcherDateContext;
+          const hintsBlock = [entityHint, cepHint, assignHint, schedulingHint].filter(Boolean).join("");
+          const messagesForDispatcher = promptCachingEnabled && hintsBlock && messagesToUse.length > 0
+            ? (() => {
+                const last = messagesToUse[messagesToUse.length - 1];
+                const rest = messagesToUse.slice(0, -1);
+                const lastWithHints = last?.role === "user"
+                  ? { ...last, content: `${last.content || ""}\n\n[CONTEXTO ADICIONAL]\n${hintsBlock.trim()}` }
+                  : last;
+                return lastWithHints ? [...rest, lastWithHints] : messagesToUse;
+              })()
+            : messagesToUse;
+          const dispatcherSystemPrompt = promptCachingEnabled ? staticDispatcherPrompt : staticDispatcherPrompt + hintsBlock;
           const dispatcherMessages = toOpenAIMessages(
-            getDispatcherPrompt(tenantSlug) + dispatcherDateContext + entityHint + cepHint + assignHint + schedulingHint,
-            messagesToUse
+            dispatcherSystemPrompt,
+            promptCachingEnabled ? messagesForDispatcher : messagesToUse
           );
 
           const base = dispatcherConfig.baseUrl.replace(/\/+$/, "");
@@ -947,6 +964,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               temperature: 0.2,
               tools: dispatcherTools,
               tool_choice: "auto",
+              ...(promptCachingEnabled && !isGeminiBase && { prompt_cache_key: `agent:${agent_id}:tenant:${tenantSlug || "default"}:date:${todayISO}` }),
             };
 
             try {
@@ -1600,12 +1618,16 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
       while (iteration < MAX_TOOL_ITERATIONS) {
         iteration++;
 
+        const baseSP = providerConfig.baseUrl.replace(/\/+$/, "");
+        const isGeminiBaseSP = /generativelanguage\.googleapis\.com/i.test(baseSP);
+        const todayISOSP = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
         const body: Record<string, unknown> = {
           model,
           messages: llmMessages,
           stream: true,
           stream_options: { include_usage: true },
           temperature: agent.temperature ?? 0.7,
+          ...(promptCachingEnabledEarly && !isGeminiBaseSP && { prompt_cache_key: `agent:${agent_id}:tenant:${tenantSlug || "default"}:date:${todayISOSP}` }),
         };
 
         if (useTools && iteration === 1) {
@@ -1614,8 +1636,8 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
         }
 
         // Gemini: endpoint OpenAI-compatible é /openai/chat/completions
-        const base = providerConfig.baseUrl.replace(/\/+$/, "");
-        const isGeminiBase = /generativelanguage\.googleapis\.com/i.test(base);
+        const base = baseSP;
+        const isGeminiBase = isGeminiBaseSP;
         const apiUrl =
           isGeminiBase && !base.includes("/openai")
             ? `${base}/openai/chat/completions`

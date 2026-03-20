@@ -293,4 +293,45 @@ export async function contactsRoutes(fastify: FastifyInstance) {
       });
     }
   );
+
+  fastify.post(
+    "/contacts/add-label",
+    async (
+      req: FastifyRequest<{ Body: { agent_id: string; conversation_ids: string[]; label: string } }>,
+      reply: FastifyReply
+    ) => {
+      const nexusUrl = process.env.NEXUS_DB_URL;
+      const nexusKey = process.env.NEXUS_SERVICE_ROLE_KEY || process.env.NEXUS_DB_ANON_KEY;
+      if (!nexusUrl || !nexusKey) {
+        return reply.status(500).send({ error: "Missing server config" });
+      }
+
+      const { agent_id, conversation_ids, label } = req.body;
+      if (!agent_id || !label?.trim()) {
+        return reply.status(400).send({ error: "Missing agent_id or label" });
+      }
+      const ids = Array.isArray(conversation_ids) ? conversation_ids.filter(Boolean) : [];
+      if (ids.length === 0) {
+        return reply.status(400).send({ error: "conversation_ids array required" });
+      }
+
+      const supabase = createClient(nexusUrl, nexusKey);
+      const trimmedLabel = label.trim();
+      let added = 0;
+      for (const convId of ids) {
+        try {
+          await supabase.rpc("append_conversation_label", {
+            p_agent_id: agent_id,
+            p_conversation_id: convId,
+            p_label: trimmedLabel,
+          });
+          added++;
+        } catch (e: any) {
+          console.warn("[Contacts] append_conversation_label failed:", e?.message);
+        }
+      }
+
+      return reply.send({ success: true, added, label: trimmedLabel });
+    }
+  );
 }

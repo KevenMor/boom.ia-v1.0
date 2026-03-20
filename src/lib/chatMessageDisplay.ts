@@ -87,6 +87,11 @@ export function stripChatwootHeader(content: string): string {
   return content.replace(/^\[Atendente:[^\]]*\]\s*[^:]*:\s*/gm, "").trim();
 }
 
+/** Remove prefixo "Nome: " de mensagens user (grupos/encaminhamentos WhatsApp). */
+export function stripUserNamePrefix(content: string): string {
+  return (content || "").replace(/^(?!https?:)([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s]{0,24}):\s*/m, "").trim();
+}
+
 /** Remove vazamentos comuns de tools / prompts internos no texto do assistente */
 export function sanitizeAssistantContent(content: string): string {
   if (!content) return content;

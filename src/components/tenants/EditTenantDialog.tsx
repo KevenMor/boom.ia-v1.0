@@ -18,6 +18,7 @@ import type { Tenant } from "@/types/database";
 import { useEffect } from "react";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 
 const schema = z.object({
   name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
@@ -26,6 +27,7 @@ const schema = z.object({
   status: z.string(),
   sync_url: z.string().optional(),
   dispatcher_provider_id: z.string().optional(),
+  prompt_caching_enabled: z.boolean(),
   temperature: z.number().min(0).max(2),
   top_p: z.number().min(0).max(1),
   top_k: z.number().min(1).max(100),
@@ -42,14 +44,15 @@ interface EditTenantDialogProps {
 export function EditTenantDialog({ tenant, open, onOpenChange }: EditTenantDialogProps) {
   const updateTenant = useUpdateTenant();
   const { data: providers } = useProviders();
-  const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, setValue, watch, reset, formState: { errors } } =   useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { temperature: 0.5, top_p: 0.8, top_k: 40 },
+    defaultValues: { temperature: 0.5, top_p: 0.8, top_k: 40, prompt_caching_enabled: false },
   });
 
   const temperature = watch("temperature");
   const topP = watch("top_p");
   const topK = watch("top_k");
+  const promptCachingEnabled = watch("prompt_caching_enabled");
 
   useEffect(() => {
     if (tenant) {
@@ -62,6 +65,7 @@ export function EditTenantDialog({ tenant, open, onOpenChange }: EditTenantDialo
         status: tenant.status,
         sync_url: (settings as any).sync_url || "",
         dispatcher_provider_id: (settings as any).dispatcher_provider_id || "",
+        prompt_caching_enabled: !!(settings as any).prompt_caching_enabled,
         temperature: llm.temperature ?? 0.5,
         top_p: llm.top_p ?? 0.8,
         top_k: llm.top_k ?? 40,
@@ -77,6 +81,7 @@ export function EditTenantDialog({ tenant, open, onOpenChange }: EditTenantDialo
         ...currentSettings,
         sync_url: data.sync_url || undefined,
         dispatcher_provider_id: data.dispatcher_provider_id || undefined,
+        prompt_caching_enabled: data.prompt_caching_enabled,
         llm_config: { temperature: data.temperature, top_p: data.top_p, top_k: data.top_k },
       };
       await updateTenant.mutateAsync({
@@ -164,6 +169,22 @@ export function EditTenantDialog({ tenant, open, onOpenChange }: EditTenantDialo
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <Separator className="my-2" />
+
+          {/* Prompt Caching */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="text-sm font-medium text-muted-foreground">Otimizar prompt para cache</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">Reduz custo de tokens de input (OpenAI/Gemini). Prefixo estável = mais cache hits.</p>
+              </div>
+              <Switch
+                checked={promptCachingEnabled}
+                onCheckedChange={(v) => setValue("prompt_caching_enabled", v)}
+              />
+            </div>
           </div>
 
           <Separator className="my-2" />

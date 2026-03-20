@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -86,6 +86,13 @@ export default function FollowUpsPage() {
   const [localTenantId, setLocalTenantId] = useState<string>("");
   const selectedTenantId = globalTenantId || localTenantId;
 
+  // Auto-seleciona tenant quando há apenas um e nenhum está selecionado
+  useEffect(() => {
+    if (!globalTenantId && !localTenantId && tenants?.length === 1) {
+      setLocalTenantId(tenants[0].id);
+    }
+  }, [globalTenantId, localTenantId, tenants]);
+
   const { data: list, isLoading, error, refetch, isFetching } = useFollowUpQueue(
     selectedTenantId || undefined
   );
@@ -94,7 +101,7 @@ export default function FollowUpsPage() {
   );
   const { data: agents } = useAgents(selectedTenantId ?? undefined);
 
-  const [statusFilter, setStatusFilter] = useState<string>("pending");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [agentFilter, setAgentFilter] = useState<string>("all");
   const [reminderStatusFilter, setReminderStatusFilter] = useState<string>("all");
   const [reminderAgentFilter, setReminderAgentFilter] = useState<string>("all");
@@ -252,7 +259,7 @@ export default function FollowUpsPage() {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>Agendado para</TableHead>
+                            <TableHead>Data</TableHead>
                             <TableHead>Cliente</TableHead>
                             <TableHead>Agente</TableHead>
                             <TableHead>Tentativa</TableHead>
@@ -376,12 +383,13 @@ function FollowUpRow({ item }: { item: FollowUpQueueItem }) {
       : item.status === "sent"
         ? "secondary"
         : "outline";
+  const dateValue = item.status === "sent" ? item.updated_at : item.scheduled_at;
   return (
     <TableRow>
-      <TableCell className="font-mono text-xs whitespace-nowrap">
+      <TableCell className="font-mono text-xs whitespace-nowrap" title={item.status === "sent" ? "Enviado em" : "Agendado para"}>
         <span className="flex items-center gap-1.5">
-          <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-          {formatScheduledAt(item.scheduled_at)}
+          <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          {formatScheduledAt(dateValue)}
         </span>
       </TableCell>
       <TableCell>

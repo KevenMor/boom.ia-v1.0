@@ -169,6 +169,8 @@ export function buildSystemPrompt(
   tenantSlug: string | null,
   hasInventoryTool: boolean,
   petContext?: string | null,
+  /** Quando true, usa apenas data do dia (sem hora) para maximizar cache de prompt */
+  useSimplifiedDateContext?: boolean,
 ): string {
   const config = tenantSlug ? TENANT_PROMPTS[tenantSlug] : undefined;
   const base = config?.systemPrompt || agentSystemPrompt || "You are a helpful AI assistant.";
@@ -179,12 +181,19 @@ export function buildSystemPrompt(
   const humanization = "\n\n" + GLOBAL_HUMANIZATION;
   const languageRules = "\n\n" + GLOBAL_LANGUAGE_RULES;
 
-  // Inject current Brasilia datetime so the model knows "hoje" and "amanhã"
   const now = new Date();
-  const brasiliaFormatter = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-  const nowStr = brasiliaFormatter.format(now);
   const todayISO = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(now);
-  const dateContext = `\n\n[CONTEXTO TEMPORAL] Agora: ${nowStr} (Brasília). Hoje: ${todayISO}. Use estas datas como referência ao falar de "hoje", "amanhã", dias da semana, etc.`;
+  const tomorrowDate = new Date(now);
+  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+  const tomorrowISO = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(tomorrowDate);
+
+  const dateContext = useSimplifiedDateContext
+    ? `\n\n[CONTEXTO TEMPORAL] Hoje: ${todayISO}. Amanhã: ${tomorrowISO}. Use como referência para "hoje", "amanhã", dias da semana, etc.`
+    : (() => {
+        const brasiliaFormatter = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+        const nowStr = brasiliaFormatter.format(now);
+        return `\n\n[CONTEXTO TEMPORAL] Agora: ${nowStr} (Brasília). Hoje: ${todayISO}. Use estas datas como referência ao falar de "hoje", "amanhã", dias da semana, etc.`;
+      })();
 
   const petContextBlock = petContext ? `\n\n${petContext}` : "";
 

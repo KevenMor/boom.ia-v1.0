@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTenants, useUpdateTenant } from "@/hooks/useTenants";
 import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
@@ -22,6 +23,7 @@ const schema = z.object({
   plan: z.string(),
   status: z.string(),
   sync_url: z.string().optional(),
+  prompt_caching_enabled: z.boolean(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -95,7 +97,10 @@ export default function EditTenant() {
 
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
+    defaultValues: { prompt_caching_enabled: false },
   });
+
+  const promptCachingEnabled = watch("prompt_caching_enabled");
 
   useEffect(() => {
     if (tenant) {
@@ -104,6 +109,7 @@ export default function EditTenant() {
       reset({
         name: tenant.name, slug: tenant.slug, plan: tenant.plan, status: tenant.status,
         sync_url: (settings as any).sync_url || "",
+        prompt_caching_enabled: !!(settings as any).prompt_caching_enabled,
       });
     }
   }, [tenant, reset]);
@@ -116,6 +122,7 @@ export default function EditTenant() {
         ...currentSettings,
         sync_url: data.sync_url || undefined,
         logo_url: logoUrl || undefined,
+        prompt_caching_enabled: data.prompt_caching_enabled,
       };
       await updateTenant.mutateAsync({
         id: tenant.id, name: data.name, slug: data.slug, plan: data.plan, status: data.status, settings: newSettings,
@@ -207,6 +214,17 @@ export default function EditTenant() {
           <div className="space-y-3">
             <Label className="text-sm font-medium text-muted-foreground">URL de Sync (Inventário)</Label>
             <Input {...register("sync_url")} placeholder="https://exemplo.com.br/Veiculos" className="h-11 rounded-lg bg-background border-border text-sm" />
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-4">
+            <div>
+              <Label className="text-sm font-medium text-muted-foreground">Otimizar prompt para cache</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">Reduz custo de tokens de input (OpenAI/Gemini). Prefixo estável = mais cache hits.</p>
+            </div>
+            <Switch
+              checked={promptCachingEnabled}
+              onCheckedChange={(v) => setValue("prompt_caching_enabled", v)}
+            />
           </div>
         </div>
 

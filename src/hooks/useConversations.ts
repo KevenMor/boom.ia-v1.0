@@ -10,6 +10,7 @@ export interface Conversation {
   chatwoot_conversation_id?: number | null;
   chatwoot_contact_id?: number | null;
   labels?: string[];
+  chatwoot_assignee_name?: string | null;
   status: string;
   started_at: string;
   ended_at: string | null;

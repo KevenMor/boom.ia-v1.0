@@ -674,7 +674,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
         .from("follow_up_queue")
         .select("id, agent_id, conversation_id, external_user_id, channel, chatwoot_conversation_id, attempt, max_attempts, scheduled_at, status, cancel_reason, created_at, updated_at, agents(id, name)")
         .in("agent_id", agentIds)
-        .order("scheduled_at", { ascending: true })
+        .order("updated_at", { ascending: false })
         .limit(500);
       if (listErr) {
         return reply.status(500).send({ error: listErr.message });
@@ -706,6 +706,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
           debounce_ms?: number;
           buffer_created_at?: string;
           attachments?: any[];
+          chatwoot_message_id?: string;
         };
       }>,
       reply: FastifyReply
@@ -734,6 +735,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
         debounce_ms = 0,
         buffer_created_at,
         attachments,
+        chatwoot_message_id,
       } = req.body;
 
       let finalMessage = user_message;
@@ -810,10 +812,18 @@ export async function queueRoutes(fastify: FastifyInstance) {
       }
 
       if (!finalMessage && hasAttachments) {
-        finalMessage = "";
+        finalMessage = "[Mídia enviada pelo cliente]";
       }
 
       finalMessage = stripChatwootNamePrefix(finalMessage || "");
+
+      const attachmentsForMetadata = hasAttachments && (attachments as any[]).length > 0
+        ? (attachments as any[]).map((a: any) => ({ file_type: a.file_type, data_url: a.data_url }))
+        : undefined;
+      const userMessageMetadata =
+        attachmentsForMetadata || chatwoot_message_id
+          ? { ...(attachmentsForMetadata && { attachments: attachmentsForMetadata }), ...(chatwoot_message_id && { chatwoot_message_id }) }
+          : undefined;
 
       let convId = conversation_id;
 
@@ -897,7 +907,23 @@ export async function queueRoutes(fastify: FastifyInstance) {
         ? conversationMessages
         : [...conversationMessages, { role: "user", content: finalMessage }];
 
-      if (convId && !lastIsSameUserMessage) {
+      let userMessageSaved = false;
+      if (convId && chatwoot_message_id && attachmentsForMetadata && attachmentsForMetadata.length > 0) {
+        try {
+          const { data: updatedRows } = await supabase.rpc("update_message_attachments", {
+            p_agent_id: agent_id,
+            p_conversation_id: convId,
+            p_chatwoot_message_id: chatwoot_message_id,
+            p_attachments: attachmentsForMetadata,
+          });
+          if (updatedRows && Number(updatedRows) > 0) {
+            userMessageSaved = true;
+          }
+        } catch (e: any) {
+          console.warn("[ProcessQueue] update_message_attachments failed:", e?.message);
+        }
+      }
+      if (convId && !lastIsSameUserMessage && !userMessageSaved) {
         try {
           await supabase.rpc("save_message", {
             p_agent_id: agent_id,
@@ -908,6 +934,7 @@ export async function queueRoutes(fastify: FastifyInstance) {
             p_tokens_input: 0,
             p_tokens_output: 0,
             p_latency_ms: null,
+            ...(userMessageMetadata && { p_metadata: userMessageMetadata }),
           });
         } catch (e: any) {
           console.warn("[ProcessQueue] save user message failed:", e?.message);

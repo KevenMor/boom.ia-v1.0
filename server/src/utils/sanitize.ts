@@ -344,7 +344,12 @@ export function stripEmojis(content: string): string {
     .trim();
 }
 
-/** Remove prefixo "*Nome:*" do Chatwoot para normalizar conteúdo e evitar duplicata ao salvar (webhook + queue). */
+/** Remove prefixo "*Nome:*" e "Nome: " do Chatwoot/WhatsApp (grupos, encaminhamentos) ao salvar mensagens user. */
 export function stripChatwootNamePrefix(content: string): string {
-  return (content || "").replace(/^\*{1,2}[^*\n]+:\*{1,2}\s*\n?/gm, "").trim();
+  let t = (content || "")
+    .replace(/^\*{1,2}[^*\n]+:\*{1,2}\s*\n?/gm, "")
+    .trim();
+  // Remove "Jorge: 40" (nome do remetente em grupos/encaminhamentos WhatsApp)
+  t = t.replace(/^(?!https?:)([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s]{0,24}):\s*/m, "");
+  return t.trim();
 }

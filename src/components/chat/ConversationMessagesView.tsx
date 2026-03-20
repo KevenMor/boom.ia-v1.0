@@ -9,6 +9,7 @@ import { DebugBlock } from "@/components/sandbox/DebugBlock";
 import { cn } from "@/lib/utils";
 import {
   stripChatwootHeader,
+  stripUserNamePrefix,
   sanitizeAssistantContent,
   deduplicateRepeatedContent,
   extractImages,
@@ -16,6 +17,7 @@ import {
   shouldShowChatMessage,
   dedupeAndSortConversationMessages,
 } from "@/lib/chatMessageDisplay";
+import { VideoPlayer, AudioPlayer } from "@/components/sandbox/MediaBubble";
 
 export type ConversationMessageRow = {
   id: string;
@@ -23,7 +25,14 @@ export type ConversationMessageRow = {
   content: string;
   created_at: string;
   model?: string | null;
-  metadata?: { debug?: unknown[]; token_usage?: Record<string, unknown> } | null;
+  metadata?: {
+    debug?: unknown[];
+    token_usage?: Record<string, unknown>;
+    type?: string;
+    video_url?: string;
+    sender_name?: string;
+    attachments?: Array<{ file_type?: string; data_url?: string }>;
+  } | null;
 };
 
 export interface ConversationMessagesViewProps {
@@ -112,7 +121,7 @@ export function ConversationMessagesView({
                 ? parseAudioTranscription(msg.content || "")
                 : { isAudio: false, transcription: "", remainingText: msg.content || "" };
               const contentForExtraction = isUser
-                ? audioInfo.remainingText
+                ? stripUserNamePrefix(audioInfo.remainingText)
                 : sanitizeAssistantContent(deduplicateRepeatedContent(stripChatwootHeader(msg.content || "")));
               const { text, images } = extractImages(contentForExtraction);
 
@@ -131,31 +140,106 @@ export function ConversationMessagesView({
                 images: string[];
                 isAudio?: boolean;
                 transcription?: string;
+                videoUrl?: string;
+                mediaAttachments?: Array<{ file_type?: string; data_url?: string }>;
               }[] = [];
 
-              if (!isUser) {
-                const rawContent = sanitizeAssistantContent(
-                  deduplicateRepeatedContent(stripChatwootHeader(msg.content || ""))
+              const metaAttachments = (msg.metadata?.attachments as Array<{ file_type?: string; data_url?: string }>) ?? [];
+              const isMediaPlaceholder =
+                ((msg.content || "").trim() === "[Mídia enviada pelo atendente]" ||
+                  (msg.content || "").trim() === "[Mídia enviada pelo cliente]") &&
+                metaAttachments.length > 0;
+
+              if (isMediaPlaceholder) {
+                const imageUrls = metaAttachments
+                  .filter((a) => /^image\b|jpg|jpeg|png|gif|webp/i.test(a.file_type || "") || (a.data_url || "").startsWith("data:image/"))
+                  .map((a) => a.data_url)
+                  .filter((u): u is string => !!u);
+                const videoAttachments = metaAttachments.filter(
+                  (a) => /^video\b|mp4|webm/i.test(a.file_type || "") || (a.data_url || "").includes("video")
                 );
-                // Mesma lógica do delivery: split por \n\n = cada bloco vira bolha separada (como no WhatsApp)
-                const paragraphs = rawContent.split(/\n\n+/);
-                for (const para of paragraphs) {
-                  const { text: pText, images: pImages } = extractImages(para);
-                  if (pImages.length > 0) {
-                    for (let i = 0; i < pImages.length; i += 3) {
-                      bubbles.push({ text: pText && i === 0 ? pText : "", images: pImages.slice(i, i + 3) });
-                    }
-                  } else if (pText.trim()) {
-                    bubbles.push({ text: pText.trim(), images: [] });
+                const audioAttachments = metaAttachments.filter(
+                  (a) =>
+                    /^audio\b|voice|ogg|mp3|m4a|webm|opus|aac/i.test(a.file_type || "") ||
+                    (a.data_url || "").includes("audio") ||
+                    (a.data_url || "").match(/\.(ogg|mp3|m4a|webm|opus|aac)(\?|$)/i)
+                );
+                if (imageUrls.length > 0) {
+                  for (let i = 0; i < imageUrls.length; i += 3) {
+                    bubbles.push({ text: "", images: imageUrls.slice(i, i + 3), mediaAttachments: [] });
                   }
                 }
-                if (bubbles.length === 0 && text) bubbles.push({ text, images });
-              } else {
-                if (audioInfo.isAudio) {
-                  bubbles.push({ text: "", images: [], isAudio: true, transcription: audioInfo.transcription });
+                for (const v of videoAttachments) {
+                  if (v.data_url) bubbles.push({ text: "", images: [], videoUrl: v.data_url, mediaAttachments: [] });
                 }
-                if (text.trim() || images.length > 0) {
-                  bubbles.push({ text, images });
+                for (const a of audioAttachments) {
+                  if (a.data_url)
+                    bubbles.push({
+                      text: "",
+                      images: [],
+                      isAudio: true,
+                      transcription: "",
+                      mediaAttachments: [{ file_type: a.file_type, data_url: a.data_url }],
+                    });
+                }
+                const otherFiles = metaAttachments.filter(
+                  (a) =>
+                    !/^image\b|jpg|jpeg|png|gif|webp|video\b|mp4|webm|audio\b|ogg|mp3|m4a/i.test(a.file_type || "")
+                );
+                if (otherFiles.length > 0) {
+                  bubbles.push({ text: "", images: [], mediaAttachments: otherFiles });
+                }
+                if (bubbles.length === 0 && metaAttachments.length > 0) {
+                  const fallbackImages = metaAttachments
+                    .filter((a) => (a.data_url || "").startsWith("data:image/") || (a.data_url || "").match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i))
+                    .map((a) => a.data_url!)
+                    .filter(Boolean);
+                  if (fallbackImages.length > 0) {
+                    bubbles.push({ text: "", images: fallbackImages, mediaAttachments: [] });
+                  } else {
+                    bubbles.push({ text: "", images: [], mediaAttachments: metaAttachments });
+                  }
+                }
+              }
+
+              if (bubbles.length === 0) {
+                if (!isUser) {
+                  const meta = msg.metadata as { type?: string; video_url?: string } | undefined;
+                  const isWelcomeVideo =
+                    (msg.content || "").trim() === "[Vídeo institucional enviado]" &&
+                    meta?.type === "welcome_video" &&
+                    meta?.video_url;
+
+                  if (isWelcomeVideo) {
+                    bubbles.push({
+                      text: "",
+                      images: [],
+                      videoUrl: meta!.video_url!,
+                    });
+                  } else {
+                    const rawContent = sanitizeAssistantContent(
+                      deduplicateRepeatedContent(stripChatwootHeader(msg.content || ""))
+                    );
+                    const paragraphs = rawContent.split(/\n\n+/);
+                    for (const para of paragraphs) {
+                      const { text: pText, images: pImages } = extractImages(para);
+                      if (pImages.length > 0) {
+                        for (let i = 0; i < pImages.length; i += 3) {
+                          bubbles.push({ text: pText && i === 0 ? pText : "", images: pImages.slice(i, i + 3) });
+                        }
+                      } else if (pText.trim()) {
+                        bubbles.push({ text: pText.trim(), images: [] });
+                      }
+                    }
+                    if (bubbles.length === 0 && text) bubbles.push({ text, images });
+                  }
+                } else {
+                  if (audioInfo.isAudio) {
+                    bubbles.push({ text: "", images: [], isAudio: true, transcription: audioInfo.transcription });
+                  }
+                  if (text.trim() || images.length > 0) {
+                    bubbles.push({ text, images });
+                  }
                 }
               }
 
@@ -200,21 +284,32 @@ export function ConversationMessagesView({
                                 : "rounded-br-md bg-primary text-primary-foreground"
                           )}
                         >
+                          {bubble.videoUrl && (
+                            <div className="mb-1.5">
+                              <VideoPlayer src={bubble.videoUrl} />
+                            </div>
+                          )}
                           {bubble.isAudio && (
                             <div className="flex items-start gap-2.5">
-                              <div className="flex items-center justify-center h-8 w-8 rounded-full bg-accent/20 shrink-0 mt-0.5">
-                                <Mic className="h-4 w-4 text-accent-foreground" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1.5 mb-1">
-                                  <span className="text-[10px] font-medium uppercase tracking-wider opacity-70">
-                                    Áudio transcrito
-                                  </span>
-                                </div>
-                                <p className="text-sm whitespace-pre-wrap break-words italic">
-                                  &quot;{bubble.transcription}&quot;
-                                </p>
-                              </div>
+                              {bubble.mediaAttachments?.[0]?.data_url ? (
+                                <AudioPlayer src={bubble.mediaAttachments[0].data_url} />
+                              ) : (
+                                <>
+                                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-accent/20 shrink-0 mt-0.5">
+                                    <Mic className="h-4 w-4 text-accent-foreground" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5 mb-1">
+                                      <span className="text-[10px] font-medium uppercase tracking-wider opacity-70">
+                                        Áudio transcrito
+                                      </span>
+                                    </div>
+                                    <p className="text-sm whitespace-pre-wrap break-words italic">
+                                      &quot;{bubble.transcription}&quot;
+                                    </p>
+                                  </div>
+                                </>
+                              )}
                             </div>
                           )}
 
@@ -230,6 +325,24 @@ export function ConversationMessagesView({
                                   />
                                 </a>
                               ))}
+                            </div>
+                          )}
+
+                          {bubble.mediaAttachments && bubble.mediaAttachments.length > 0 && !bubble.isAudio && bubble.images.length === 0 && !bubble.videoUrl && (
+                            <div className="mb-1.5 space-y-1">
+                              {bubble.mediaAttachments.map((att, idx) =>
+                                att.data_url ? (
+                                  <a
+                                    key={idx}
+                                    href={att.data_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="block text-sm underline opacity-90 hover:opacity-100"
+                                  >
+                                    📎 {att.file_type === "file" || att.file_type === "document" ? "Documento" : att.file_type || "Arquivo"}
+                                  </a>
+                                ) : null
+                              )}
                             </div>
                           )}
 
@@ -272,19 +385,21 @@ export function ConversationMessagesView({
                             {!isUser && (
                               <CheckCheck className="h-3.5 w-3.5 text-primary" />
                             )}
-                            {!isUser && (agentName || msg.model) && (
-                              <span className="text-xs text-muted-foreground ml-1">↳ {agentName || msg.model}</span>
+                            {!isUser && (msg.metadata?.sender_name ?? agentName ?? msg.model) && (
+                              <span className="text-xs text-muted-foreground ml-1">↳ {msg.metadata?.sender_name ?? agentName ?? msg.model}</span>
                             )}
                           </div>
                         )}
                       </div>
                       {!isUser && bIdx === 0 && (
                         <Avatar className="h-10 w-10 shrink-0 mt-1">
-                          {agentAvatarUrl ? (
+                          {agentAvatarUrl && !msg.metadata?.sender_name ? (
                             <AvatarImage src={agentAvatarUrl} alt={agentName || "IA"} />
                           ) : null}
                           <AvatarFallback className="bg-primary text-primary-foreground font-semibold">
-                            {agentAvatarUrl ? (
+                            {msg.metadata?.sender_name ? (
+                              <span className="text-xs">{getAgentInitials(msg.metadata.sender_name)}</span>
+                            ) : agentAvatarUrl ? (
                               <span className="text-xs">{getAgentInitials(agentName)}</span>
                             ) : (
                               <Bot className="h-5 w-5" aria-hidden />
