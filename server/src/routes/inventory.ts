@@ -452,6 +452,14 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
 
           const description = inferVehicleType(vehicle.brand, vehicle.model, vehicle.version);
 
+          // Preservar video_details editado manualmente no sistema — sync não deve sobrescrever
+          const { data: existing } = await supabase
+            .from("inventory")
+            .select("video_details")
+            .eq("external_id", vehicle.external_id)
+            .eq("tenant_id", tenant_id)
+            .maybeSingle();
+
           const record = {
             external_id: vehicle.external_id,
             tenant_id,
@@ -471,6 +479,9 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
             status: "available",
             raw_data: JSON.stringify({ photos, features, optionals }),
             last_synced_at: new Date().toISOString(),
+            ...(existing?.video_details != null && String(existing.video_details).trim() !== ""
+              ? { video_details: existing.video_details }
+              : {}),
           };
 
           const { error: upsertErr } = await supabase

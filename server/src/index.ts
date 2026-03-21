@@ -47,6 +47,15 @@ async function build() {
   fastify.addContentTypeParser("text/plain", { parseAs: "string" }, emptyBody);
   fastify.addContentTypeParser("application/x-www-form-urlencoded", { parseAs: "string" }, emptyBody);
 
+  // Aceitar upload de vídeo/binário (Supabase Storage via proxy) — evita 415 Unsupported Media Type
+  const rawBufferParser = (_req: unknown, payload: Buffer, done: (err: Error | null, body?: Buffer) => void) => done(null, payload);
+  fastify.addContentTypeParser(/^video\//i, { parseAs: "buffer" }, rawBufferParser);
+  fastify.addContentTypeParser(/^application\/octet-stream/i, { parseAs: "buffer" }, rawBufferParser);
+  fastify.addContentTypeParser(/^multipart\/form-data/i, { parseAs: "buffer" }, rawBufferParser);
+  fastify.addContentTypeParser(/^image\//i, { parseAs: "buffer" }, rawBufferParser);
+  // Catch-all: tipos não reconhecidos (ex.: Content-Type vazio ou incomum) — evita 415
+  fastify.addContentTypeParser("*", { parseAs: "buffer" }, rawBufferParser);
+
   const extraOrigins = (process.env.CORS_ORIGINS || "")
     .split(",")
     .map((o) => o.trim())
@@ -102,7 +111,10 @@ async function build() {
         if (v && !["host", "connection", "content-length"].includes(k.toLowerCase())) headers[k] = Array.isArray(v) ? v[0] : v;
       }
       try {
-        const body = ["POST", "PUT", "PATCH"].includes(request.method) && request.body ? JSON.stringify(request.body) : undefined;
+        let body: string | Buffer | undefined;
+        if (["POST", "PUT", "PATCH"].includes(request.method) && request.body !== undefined) {
+          body = Buffer.isBuffer(request.body) ? request.body : JSON.stringify(request.body);
+        }
         const res = await fetch(targetUrl, { method: request.method, headers, body });
         let text = await res.text();
         reply.code(res.status);

@@ -1570,36 +1570,36 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                     // #region agent log
                     fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1089',message:'Fallback sanitize',data:{fallback:fallback,fallbackLen:fallback.length,retryContentPreview:retryContent.slice(0,300)},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
                     // #endregion
-                    dualContentToSave = fallback || "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?";
+                    dualContentToSave = fallback || "Opa, tive um problema na última mensagem enviada, pode me reenviar?";
                     if (fallback) {
                       console.log("[Chat-Local] sanitize retornou vazio, usando fallback:", fallback.slice(0, 80));
                       sendSse({ choices: [{ delta: { content: fallback } }] });
                     } else {
                       console.warn("[Chat-Local] sanitize retornou vazio, retryContent preview:", retryContent.slice(0, 200));
-                      sendSse({ choices: [{ delta: { content: "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?" } }] });
+                      sendSse({ choices: [{ delta: { content: "Opa, tive um problema na última mensagem enviada, pode me reenviar?" } }] });
                     }
                   }
                 } else {
-                  dualContentToSave = "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?";
+                  dualContentToSave = "Opa, tive um problema na última mensagem enviada, pode me reenviar?";
                   // #region agent log
                   fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1102',message:'Retry retornou vazio',data:{},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
                   // #endregion
                   console.warn("[Chat-Local] Retry também retornou vazio, enviando mensagem neutra");
-                  sendSse({ choices: [{ delta: { content: "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?" } }] });
+                  sendSse({ choices: [{ delta: { content: "Opa, tive um problema na última mensagem enviada, pode me reenviar?" } }] });
                 }
               } else {
-                dualContentToSave = "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?";
+                dualContentToSave = "Opa, tive um problema na última mensagem enviada, pode me reenviar?";
                 const errText = await retryResp.text();
                 // #region agent log
                 fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1111',message:'Retry HTTP falhou',data:{status:retryResp.status,errText:errText.slice(0,200)},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
                 // #endregion
                 console.warn("[Chat-Local] Retry falhou:", retryResp.status, errText.slice(0, 150));
-                sendSse({ choices: [{ delta: { content: "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?" } }] });
+                sendSse({ choices: [{ delta: { content: "Opa, tive um problema na última mensagem enviada, pode me reenviar?" } }] });
               }
             } catch (retryErr) {
-              dualContentToSave = "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?";
+              dualContentToSave = "Opa, tive um problema na última mensagem enviada, pode me reenviar?";
               console.error("[Chat-Local] Retry error:", retryErr);
-              sendSse({ choices: [{ delta: { content: "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?" } }] });
+              sendSse({ choices: [{ delta: { content: "Opa, tive um problema na última mensagem enviada, pode me reenviar?" } }] });
             }
           } else {
             dualContentToSave = sanitizeLLMOutput((convFullContent + streamFilterBuffer).trim());

@@ -1,3 +1,9 @@
+import { toDirectDownloadUrl } from "../utils/videoUrl.js";
+
+const VIDEO_SIZE_LIMIT_MB = 16;
+const VIDEO_SIZE_LIMIT_BYTES = VIDEO_SIZE_LIMIT_MB * 1024 * 1024;
+const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
+
 /**
  * Headers de autenticação para API Chatwoot.
  * Por padrão usa api_access_token (documentação oficial).
@@ -142,6 +148,67 @@ async function sendChatwootMediaMessage(
     });
     return resp.ok;
   } catch {
+    return false;
+  }
+}
+
+/**
+ * Envia vídeo ao Chatwoot com suporte a Google Drive, tamanhos até 100MB e fallback para link.
+ * - Até 16MB: envia como vídeo (reprodução nativa)
+ * - 16–100MB: envia como documento (application/octet-stream)
+ * - Se falhar: envia link como mensagem de texto
+ */
+async function sendChatwootVideoMessage(
+  msgUrl: string,
+  authHeaders: Record<string, string>,
+  videoUrl: string,
+  sendTextMessage: (url: string, auth: Record<string, string>, content: string) => Promise<boolean>
+): Promise<boolean> {
+  const directUrl = toDirectDownloadUrl(videoUrl);
+  try {
+    const mediaResp = await fetch(directUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      },
+    });
+    if (!mediaResp.ok) {
+      console.warn(`[Deliver] Video fetch failed ${mediaResp.status}: ${directUrl.slice(0, 80)}...`);
+      await sendTextMessage(msgUrl, authHeaders, `Vídeo do veículo: ${videoUrl}`);
+      return false;
+    }
+    const mediaBlob = await mediaResp.blob();
+    const sizeBytes = mediaBlob.size;
+
+    if (sizeBytes > MAX_VIDEO_BYTES) {
+      console.warn(`[Deliver] Video exceeds 100MB (${(sizeBytes / 1024 / 1024).toFixed(1)}MB), sending link`);
+      await sendTextMessage(msgUrl, authHeaders, `Vídeo do veículo (arquivo grande): ${videoUrl}`);
+      return true;
+    }
+
+    const contentType = sizeBytes <= VIDEO_SIZE_LIMIT_BYTES ? "video/mp4" : "application/octet-stream";
+    const parsedUrl = new URL(directUrl);
+    const filename = parsedUrl.pathname.split("/").pop() || "video.mp4";
+
+    const formData = new FormData();
+    formData.append("message_type", "outgoing");
+    formData.append("private", "false");
+    formData.append("attachments[]", new Blob([await mediaBlob.arrayBuffer()], { type: contentType }), filename);
+
+    const resp = await fetch(msgUrl, {
+      method: "POST",
+      headers: { ...authHeaders },
+      body: formData,
+    });
+
+    if (!resp.ok) {
+      console.warn(`[Deliver] Video send failed ${resp.status}, sending link as fallback`);
+      await sendTextMessage(msgUrl, authHeaders, `Vídeo do veículo: ${videoUrl}`);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn(`[Deliver] Video send error:`, (e as Error)?.message, "— sending link as fallback");
+    await sendTextMessage(msgUrl, authHeaders, `Vídeo do veículo: ${videoUrl}`);
     return false;
   }
 }
@@ -360,6 +427,7 @@ export {
   sendChatwootTextMessage,
   sendChatwootImageMessage,
   sendChatwootMediaMessage,
+  sendChatwootVideoMessage,
   sendChatwootPrivateNote,
   getHumanizationConfig,
   replyToChatwoot,

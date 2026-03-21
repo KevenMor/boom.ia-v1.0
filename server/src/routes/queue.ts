@@ -941,7 +941,13 @@ export async function queueRoutes(fastify: FastifyInstance) {
         }
       }
 
-      const result = await callChatAgent(
+      const FALLBACK_PHRASE = "tive um problema na última";
+      const isEmptyOrFallback = (r: { fullContent: string }) => {
+        const t = (r.fullContent || "").trim();
+        return !t || t.includes(FALLBACK_PHRASE);
+      };
+
+      let result = await callChatAgent(
         baseUrl,
         authKey,
         agent_id,
@@ -957,13 +963,37 @@ export async function queueRoutes(fastify: FastifyInstance) {
         return reply.status(502).send({ error: "Agent processing failed", detail: result.error });
       }
 
+      if (isEmptyOrFallback(result)) {
+        console.warn("[ProcessQueue] Resposta vazia ou fallback na 1ª tentativa, retry em 2s…", { agent_id, convId });
+        await new Promise((r) => setTimeout(r, 2000));
+        result = await callChatAgent(
+          baseUrl,
+          authKey,
+          agent_id,
+          messages,
+          convId ?? null,
+          attachmentsForChat,
+          external_user_id ?? null,
+          chatwoot_conversation_id ?? null
+        );
+        if (result.error) {
+          msgLog.queueChatFailed(agent_id, result.error);
+          return reply.status(502).send({ error: "Agent processing failed", detail: result.error });
+        }
+        if (isEmptyOrFallback(result)) {
+          console.warn("[ProcessQueue] Retry também retornou vazio/fallback");
+        } else {
+          console.log("[ProcessQueue] Retry OK, conteúdo recebido");
+        }
+      }
+
       msgLog.queueChatOk(agent_id, convId);
 
       const responseConvId = result.responseConvId ?? convId ?? null;
       const rawContent = result.fullContent?.trim() || "";
       const sanitizedContent = rawContent
         ? sanitizeLLMOutput(rawContent)
-        : "Desculpe, tive um problema ao processar. Pode repetir, por favor?";
+        : "Opa, tive um problema na última mensagem enviada, pode me reenviar?";
       if (!rawContent) {
         msgLog.queueContentEmpty(agent_id);
       }

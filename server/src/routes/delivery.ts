@@ -7,6 +7,7 @@ import {
   sendChatwootTextMessage,
   sendChatwootImageMessage,
   sendChatwootMediaMessage,
+  sendChatwootVideoMessage,
   getHumanizationConfig,
   replyToChatwoot,
   applyJitter,
@@ -170,12 +171,11 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
             await new Promise((r) => setTimeout(r, 2000));
           }
 
-          await sendChatwootMediaMessage(
+          await sendChatwootVideoMessage(
             msgUrl,
             cwAuth,
             welcome_video_url,
-            "video/mp4",
-            ""
+            sendChatwootTextMessage
           );
           await new Promise((r) => setTimeout(r, 8000));
 
@@ -210,7 +210,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
           const hasContent = (response_text || "").trim() || (response_parts || []).some((p: string) => (p || "").trim());
           const contentToSend = hasContent
             ? (response_text || "").trim()
-            : "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?";
+            : "Opa, tive um problema na última mensagem enviada, pode me reenviar?";
           const partsToSend = hasContent ? (response_parts || []) : [];
 
           if (Array.isArray(video_inventory_ids) && video_inventory_ids.length > 0) {
@@ -222,7 +222,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
               .filter((r: { video_details?: string | null }) => r.video_details && r.video_details.trim())
               .map((r: { video_details: string }) => r.video_details);
             for (const videoUrl of videoUrls) {
-              await sendChatwootMediaMessage(msgUrl, cwAuth, videoUrl, "video/mp4", "");
+              await sendChatwootVideoMessage(msgUrl, cwAuth, videoUrl, sendChatwootTextMessage);
               await new Promise((r) => setTimeout(r, applyJitter(3000)));
             }
           }

@@ -25,11 +25,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useUpdateInventory } from "@/hooks/useInventory";
-import { useTenantContext } from "@/contexts/TenantContext";
 import { toast } from "sonner";
 import type { InventoryItem } from "@/types/database";
-import { useEffect } from "react";
-import { InventoryVideoUpload } from "./InventoryVideoUpload";
+import { useEffect, useState } from "react";
+import { toDirectDownloadUrl } from "@/lib/videoUrl";
 
 const schema = z.object({
   brand: z.string().min(1, "Marca é obrigatória"),
@@ -58,7 +57,6 @@ interface EditInventoryDialogProps {
 
 export function EditInventoryDialog({ item, open, onOpenChange }: EditInventoryDialogProps) {
   const updateInventory = useUpdateInventory();
-  const { selectedTenantId } = useTenantContext();
 
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -81,6 +79,8 @@ export function EditInventoryDialog({ item, open, onOpenChange }: EditInventoryD
   });
 
   const videoDetails = watch("video_details");
+  const [showPreview, setShowPreview] = useState(false);
+  const hasVideoUrl = (videoDetails ?? "").trim().length > 0;
 
   useEffect(() => {
     if (item) {
@@ -130,10 +130,6 @@ export function EditInventoryDialog({ item, open, onOpenChange }: EditInventoryD
     }
   };
 
-  const handleVideoUploaded = (url: string) => {
-    setValue("video_details", url);
-  };
-
   const allPhotoUrls = useMemo(() => {
     if (!item) return [];
     const urls = new Set<string>();
@@ -181,14 +177,37 @@ export function EditInventoryDialog({ item, open, onOpenChange }: EditInventoryD
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-2">
           <div>
-            <Label>Vídeo detalhado</Label>
-            <InventoryVideoUpload
-              inventoryId={item.id}
-              tenantId={selectedTenantId ?? undefined}
-              currentUrl={videoDetails ?? item.video_details}
-              onUploaded={handleVideoUploaded}
+            <Label htmlFor="video_link">Vídeo detalhado (link)</Label>
+            <Input
+              id="video_link"
+              type="url"
+              placeholder="https://drive.google.com/file/d/... ou URL direta do vídeo"
+              value={videoDetails ?? ""}
+              onChange={(e) => setValue("video_details", e.target.value || null)}
               className="mt-1"
             />
+            {hasVideoUrl && (
+              <div className="mt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowPreview((p) => !p)}
+                >
+                  {showPreview ? "Ocultar preview" : "Visualizar"}
+                </Button>
+                {showPreview && (
+                  <div className="mt-2 rounded-lg overflow-hidden bg-muted aspect-video">
+                    <video
+                      src={toDirectDownloadUrl((videoDetails ?? "").trim())}
+                      controls
+                      className="w-full h-full object-contain"
+                      playsInline
+                    />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
