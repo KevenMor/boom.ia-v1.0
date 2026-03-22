@@ -111,11 +111,11 @@ async function build() {
         if (v && !["host", "connection", "content-length"].includes(k.toLowerCase())) headers[k] = Array.isArray(v) ? v[0] : v;
       }
       try {
-        let body: string | Buffer | undefined;
+        let body: string | Uint8Array | undefined;
         if (["POST", "PUT", "PATCH"].includes(request.method) && request.body !== undefined) {
-          body = Buffer.isBuffer(request.body) ? request.body : JSON.stringify(request.body);
+          body = Buffer.isBuffer(request.body) ? new Uint8Array(request.body) : JSON.stringify(request.body);
         }
-        const res = await fetch(targetUrl, { method: request.method, headers, body });
+        const res = await fetch(targetUrl, { method: request.method, headers, body: body as RequestInit["body"] });
         let text = await res.text();
         reply.code(res.status);
         res.headers.forEach((v, k) => { if (!["transfer-encoding"].includes(k.toLowerCase())) reply.header(k, v); });
