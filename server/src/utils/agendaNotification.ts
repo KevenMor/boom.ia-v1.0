@@ -81,26 +81,8 @@ function extractVeiculoFromMessages(messages: Array<{ role: string; content: str
   return undefined;
 }
 
-/**
- * Verifica se o cliente já informou o nome nas mensagens (ex.: "Eu sou a Maria", "Me chamo João").
- * Usado para NÃO injetar "Como posso te chamar?" quando o nome já foi dado.
- */
-export function userHasProvidedNameInMessages(messages: Array<{ role: string; content: string }>): boolean {
-  const patterns = [
-    /(?:eu\s+)?sou\s+(?:a\s+|o\s+)?([A-Za-zÀ-ÿ]{2,30})/i,
-    /(?:me\s+)?chamo\s+([A-Za-zÀ-ÿ]{2,30})/i,
-    /(?:pode\s+me\s+chamar\s+de|me\s+chame\s+de)\s+([A-Za-zÀ-ÿ]{2,30})/i,
-    /(?:meu\s+)?nome\s+(?:e|eh|é)\s+([A-Za-zÀ-ÿ]{2,30})/i,
-  ];
-  for (const m of messages) {
-    if (m?.role !== "user") continue;
-    const text = (m.content || "").trim();
-    if (!text) continue;
-    for (const re of patterns) {
-      if (re.test(text)) return true;
-    }
-  }
-  return false;
+function normalizeNameToken(s: string): string {
+  return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
 /** Frases que nunca devem ser usadas como nome do cliente. */
@@ -139,19 +121,133 @@ export function isBlockedAsName(candidate: string): boolean {
   const norm = candidate.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   if (BLOCKLIST_NOME.has(norm)) return true;
   if (/\b(aguardar|followup|follow.?up)\b/i.test(norm)) return true;
-  // Bloquear frases que contêm ou terminam com obrigada/obrigado (ex.: "ok obrigada", "ah sim obrigada")
   if (/\b(obrigad[oa]|obrigad[oa]s?)\b/i.test(norm)) return true;
-  // Bloquear "ok" ou "ah" + algo curto (ex.: "ok obrigada", "ah sim", "ah simm obrigada")
   if (/^(ok|ah)\s+/i.test(norm) && norm.split(/\s+/).length <= 4) return true;
   return false;
 }
 
 /**
+ * Bancos, financeiras e marcas frequentes em conversas de veículos — não usar como nome da pessoa.
+ */
+const INSTITUTION_NAME_TOKENS = new Set(
+  [
+    "sicred",
+    "sicredi",
+    "bradesco",
+    "itau",
+    "santander",
+    "nubank",
+    "caixa",
+    "cef",
+    "banco",
+    "inter",
+    "c6",
+    "neon",
+    "original",
+    "safra",
+    "pan",
+    "bv",
+    "btg",
+    "mercadopago",
+    "picpay",
+    "bancodobrasil",
+    "financiamento",
+    "financeira",
+    "credsystem",
+    "omni",
+    "yamaha",
+    "honda",
+    "bmw",
+    "fiat",
+    "vw",
+    "volkswagen",
+    "chevrolet",
+    "toyota",
+    "renault",
+    "jeep",
+    "hyundai",
+  ].map((t) => normalizeNameToken(t))
+);
+
+/** Texto exibido na notificação de handoff quando o nome não foi inferido do histórico. */
+export const HANDOFF_NAME_NOT_IDENTIFIED = "Nome não foi identificado";
+
+export function containsInstitutionNameToken(candidate: string): boolean {
+  const words = candidate.trim().split(/\s+/).filter((w) => w.length > 0);
+  for (const w of words) {
+    const base = w.replace(/^[.,]+|[.,]+$/g, "");
+    if (base.length < 2) continue;
+    const n = normalizeNameToken(base);
+    if (INSTITUTION_NAME_TOKENS.has(n)) return true;
+  }
+  return false;
+}
+
+const EXPLICIT_NAME_CAPTURES: RegExp[] = [
+  /(?:eu\s+)?sou\s+(?:a\s+|o\s+)?([A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+){0,3})/i,
+  /(?:me\s+)?chamo\s+([A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+){0,3})/i,
+  /(?:pode\s+me\s+chamar\s+de|me\s+chame\s+de)\s+([A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+){0,3})/i,
+  /(?:meu\s+)?nome\s+(?:e|eh|é)\s+([A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+){0,3})/i,
+];
+
+function tryExtractExplicitNameFromText(text: string): string | undefined {
+  const t = text.trim();
+  if (!t) return undefined;
+  for (const re of EXPLICIT_NAME_CAPTURES) {
+    const m = t.match(re);
+    if (!m?.[1]) continue;
+    const raw = m[1].replace(/[,.;:!?]+$/g, "").trim();
+    if (raw.length < 2 || raw.length > 80) continue;
+    if (isBlockedAsName(raw)) continue;
+    if (containsInstitutionNameToken(raw)) continue;
+    return raw;
+  }
+  return undefined;
+}
+
+function isValidHistoryPersonName(candidate: string): boolean {
+  if (!candidate.trim()) return false;
+  if (isBlockedAsName(candidate)) return false;
+  if (containsInstitutionNameToken(candidate)) return false;
+  return true;
+}
+
+/**
+ * Verifica se o cliente já informou o nome nas mensagens (ex.: "Eu sou a Maria", "Me chamo João").
+ * Usado para NÃO injetar "Como posso te chamar?" quando o nome já foi dado.
+ */
+export function userHasProvidedNameInMessages(messages: Array<{ role: string; content: string }>): boolean {
+  for (const m of messages) {
+    if (m?.role !== "user") continue;
+    const text = (m.content || "").trim();
+    if (!text) continue;
+    if (tryExtractExplicitNameFromText(text)) return true;
+    const line = text.split(/\n/)[0];
+    const words = line.split(/\s+/).filter((w) => w.length > 0);
+    if (words.length >= 1 && words.length <= 4 && words.every((w) => /^[A-Za-zÀ-ÿ]+$/.test(w))) {
+      if (isValidHistoryPersonName(line.trim())) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Extrai nome do cliente das ultimas mensagens (ex.: apos pergunta "Como posso te chamar?" ou junto com CPF/dados).
+ * Ordem: frases explicitas ("me chamo..."), linha com CPF, linha 2-4 palavras só letras, uma palavra só se não for instituição.
  */
 export function extractClientNameFromMessages(messages: Array<{ role: string; content: string }>): string | undefined {
   const recent = messages.slice(-15);
   const cpfPattern = /\d{3}\s*\.?\s*\d{3}\s*\.?\s*\d{3}\s*[-.]?\s*\d{2}/;
+
+  for (let i = recent.length - 1; i >= 0; i--) {
+    const m = recent[i];
+    if (m?.role !== "user") continue;
+    const text = (m.content || "").trim();
+    if (!text || text.length < 2) continue;
+    const explicit = tryExtractExplicitNameFromText(text);
+    if (explicit) return explicit;
+  }
+
   for (let i = recent.length - 1; i >= 0; i--) {
     const m = recent[i];
     if (m?.role !== "user") continue;
@@ -164,16 +260,83 @@ export function extractClientNameFromMessages(messages: Array<{ role: string; co
       if (words.length >= 2 && words.length <= 4) {
         const name = words.length >= 3 ? words.slice(-2).join(" ") : words.join(" ");
         const cleaned = name.replace(/[,.]/g, "").trim();
-        if (cleaned && !isBlockedAsName(cleaned)) return cleaned;
+        if (cleaned && isValidHistoryPersonName(cleaned)) return cleaned;
       }
     }
     if (line.length >= 2 && line.length <= 60 && !cpfPattern.test(line) && !/^\d+$/.test(line)) {
       const words = line.split(/\s+/).filter((w) => w.length > 0);
-      if (words.length >= 1 && words.length <= 4 && words.every((w) => /^[A-Za-zÀ-ÿ]+$/.test(w))) {
+      if (words.length >= 2 && words.length <= 4 && words.every((w) => /^[A-Za-zÀ-ÿ]+$/.test(w))) {
         const candidate = line.trim();
-        if (!isBlockedAsName(candidate)) return candidate;
+        if (isValidHistoryPersonName(candidate)) return candidate;
+      }
+      if (words.length === 1 && words.every((w) => /^[A-Za-zÀ-ÿ]+$/.test(w))) {
+        const candidate = line.trim();
+        if (isValidHistoryPersonName(candidate)) return candidate;
       }
     }
+  }
+  return undefined;
+}
+
+/** Dígitos do telefone (BR / WhatsApp): pelo menos 10 para considerar válido. */
+export function isPhoneLikeDigits(value: string): boolean {
+  const d = value.replace(/\D/g, "");
+  return d.length >= 10;
+}
+
+/**
+ * Extrai número de telefone nas últimas mensagens do usuário (padrões comuns BR).
+ */
+export function extractPhoneFromMessages(messages: Array<{ role: string; content: string }>): string | undefined {
+  const recent = messages.slice(-20);
+  const patterns: RegExp[] = [
+    /\+?55\s*\(?\d{2}\)?\s*\d{4,5}\s*[-.\s]?\d{4}\b/g,
+    /\(?\d{2}\)?\s*\d{4,5}\s*[-.\s]?\d{4}\b/g,
+    /\b\d{2}\s+\d{8,9}\b/g,
+    /\b(?:whatsapp|zap|cel|fone|telefone)\s*[:\s]?\s*(\+?55?\s*\d[\d\s().-]{8,18}\d)/gi,
+  ];
+
+  for (let i = recent.length - 1; i >= 0; i--) {
+    const m = recent[i];
+    if (m?.role !== "user") continue;
+    const text = m.content || "";
+    if (!text.trim()) continue;
+
+    for (const re of patterns) {
+      re.lastIndex = 0;
+      let match: RegExpExecArray | null;
+      const matches: string[] = [];
+      while ((match = re.exec(text)) !== null) {
+        const g = (match[1] || match[0]).trim();
+        if (g) matches.push(g);
+      }
+      for (const raw of matches.reverse()) {
+        if (isPhoneLikeDigits(raw)) return raw;
+      }
+    }
+
+    const digitRuns = text.match(/\d[\d\s().-]{8,22}\d/g);
+    if (digitRuns) {
+      for (const run of digitRuns.reverse()) {
+        if (isPhoneLikeDigits(run)) return run.trim();
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Telefone para notificação: prioriza external_user_id se tiver dígitos suficientes; senão extrai do histórico.
+ */
+export function resolveHandoffPhone(
+  externalUserId?: string | null,
+  messages?: Array<{ role: string; content: string }>
+): string | undefined {
+  const ext = externalUserId?.trim() ?? "";
+  if (ext && isPhoneLikeDigits(ext)) return ext;
+  if (messages && messages.length > 0) {
+    const fromMsg = extractPhoneFromMessages(messages);
+    if (fromMsg) return fromMsg;
   }
   return undefined;
 }
@@ -275,8 +438,15 @@ export function buildHandoffNotification(
   _veiculoInteresse?: string,
   _messages?: Array<{ role: string; content: string }>
 ): string {
-  const nome = (nomeCliente || "").trim() || "Cliente";
-  const telefone = telefoneCliente?.trim() ? formatPhone(telefoneCliente.trim()) : "Não informado";
+  const trimmedNome = (nomeCliente || "").trim();
+  const nome =
+    !trimmedNome || /^cliente$/i.test(trimmedNome) ? HANDOFF_NAME_NOT_IDENTIFIED : trimmedNome;
+
+  let telefone = "Não informado";
+  const rawTel = telefoneCliente?.trim();
+  if (rawTel && isPhoneLikeDigits(rawTel)) {
+    telefone = formatPhone(rawTel);
+  }
 
   const lines: string[] = [
     "Aguarda um atendimento humano",

@@ -1,5 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { formatDateBR, toBrasiliaISO, buildFallbackAgendaNotification, buildCancelNotification, buildHandoffNotification, extractClientNameFromMessages, isBlockedAsName } from "./agendaNotification.js";
+import {
+  formatDateBR,
+  toBrasiliaISO,
+  buildFallbackAgendaNotification,
+  buildCancelNotification,
+  buildHandoffNotification,
+  extractClientNameFromMessages,
+  extractPhoneFromMessages,
+  resolveHandoffPhone,
+  HANDOFF_NAME_NOT_IDENTIFIED,
+  isBlockedAsName,
+} from "./agendaNotification.js";
 
 describe("formatDateBR", () => {
   it("formata ISO com offset para dia_semana DD/MM/AAAA, HH:MM", () => {
@@ -112,6 +123,18 @@ describe("buildHandoffNotification", () => {
     expect(result).toContain("Telefone:");
     expect(result).not.toContain("Data e hora:");
   });
+
+  it("usa texto explícito quando nome vazio ou genérico Cliente", () => {
+    expect(buildHandoffNotification("", "159998023871")).toContain(`Nome: ${HANDOFF_NAME_NOT_IDENTIFIED}`);
+    expect(buildHandoffNotification("Cliente", "159998023871")).toContain(`Nome: ${HANDOFF_NAME_NOT_IDENTIFIED}`);
+    expect(buildHandoffNotification("  ", undefined)).toContain(`Nome: ${HANDOFF_NAME_NOT_IDENTIFIED}`);
+  });
+
+  it("Telefone Não informado quando valor sem dígitos suficientes", () => {
+    const result = buildHandoffNotification("Maria", "abc");
+    expect(result).toContain("Nome: Maria");
+    expect(result).toContain("Telefone: Não informado");
+  });
 });
 
 describe("isBlockedAsName", () => {
@@ -157,6 +180,38 @@ describe("extractClientNameFromMessages", () => {
       { role: "user", content: "Ok obrigada" },
     ];
     expect(extractClientNameFromMessages(messages)).toBe("Geovana Proença");
+  });
+
+  it("não retorna Sicred (banco) como nome", () => {
+    expect(
+      extractClientNameFromMessages([{ role: "user", content: "Sicred" }])
+    ).toBeUndefined();
+    expect(
+      extractClientNameFromMessages([{ role: "user", content: "financiei pelo Sicred" }])
+    ).toBeUndefined();
+  });
+
+  it("extrai nome explícito me chamo / nome é", () => {
+    expect(
+      extractClientNameFromMessages([{ role: "user", content: "me chamo João Silva" }])
+    ).toBe("João Silva");
+    expect(
+      extractClientNameFromMessages([{ role: "user", content: "meu nome é Ana Júlia" }])
+    ).toBe("Ana Júlia");
+  });
+});
+
+describe("extractPhoneFromMessages e resolveHandoffPhone", () => {
+  it("extrai telefone do texto do usuário", () => {
+    const messages = [{ role: "user", content: "meu cel é (19) 99778-9482" }];
+    const p = extractPhoneFromMessages(messages);
+    expect(p).toBeTruthy();
+    expect(p!.replace(/\D/g, "").length).toBeGreaterThanOrEqual(10);
+  });
+
+  it("resolveHandoffPhone usa histórico quando external_user_id não é telefone", () => {
+    const messages = [{ role: "user", content: "pode ligar no 15 99694-3416" }];
+    expect(resolveHandoffPhone("chatwoot-user", messages)).toBeTruthy();
   });
 });
 

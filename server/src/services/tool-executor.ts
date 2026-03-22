@@ -1,7 +1,7 @@
 import { createNexusClient } from "./supabase.js";
 import { runFipeQuery } from "./fipe.js";
 import { runFindNearestUnit } from "./find-nearest-unit.js";
-import { buildHandoffNotification, isBlockedAsName } from "../utils/agendaNotification.js";
+import { buildHandoffNotification, containsInstitutionNameToken, isBlockedAsName } from "../utils/agendaNotification.js";
 import { sendNotificationToGroup } from "../utils/sendNotification.js";
 import { addLeadLabelToConversation } from "./chatwoot-labels.js";
 
@@ -1057,8 +1057,10 @@ async function executeSendNotification(
   agentId: string,
   args: Record<string, unknown>
 ): Promise<ToolExecutionResult> {
-  let nome = String(args?.nome ?? args?.nome_cliente ?? args?.name ?? "").trim() || "Cliente";
-  if (isBlockedAsName(nome)) nome = "Cliente";
+  let nome = String(args?.nome ?? args?.nome_cliente ?? args?.name ?? "").trim();
+  if (!nome || /^cliente$/i.test(nome) || isBlockedAsName(nome) || containsInstitutionNameToken(nome)) {
+    nome = "";
+  }
   const telefone = String(
     args?.telefone ?? args?.telefone_cliente ?? args?.phone ?? args?.numero ?? ""
   ).trim();

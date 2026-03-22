@@ -7,7 +7,19 @@ import { buildSystemPrompt, getDispatcherPrompt } from "../services/prompts/regi
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
 import { filterCommandLinesFromStream, sanitizeLLMOutput, fallbackSanitizeForRetry, restorePortugueseAccents } from "../utils/sanitize.js";
 import { buildPetGenderContext } from "../utils/petGenderByName.js";
-import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification, buildHandoffNotification, extractClientNameFromMessages, userHasProvidedNameInMessages, toBrasiliaISO } from "../utils/agendaNotification.js";
+import {
+  formatDateBR,
+  buildFallbackAgendaNotification,
+  buildCancelNotification,
+  buildHandoffNotification,
+  extractClientNameFromMessages,
+  userHasProvidedNameInMessages,
+  toBrasiliaISO,
+  resolveHandoffPhone,
+  isPhoneLikeDigits,
+  containsInstitutionNameToken,
+  isBlockedAsName,
+} from "../utils/agendaNotification.js";
 import { sendNotificationToGroup } from "../utils/sendNotification.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
@@ -597,19 +609,53 @@ async function sendAgendaNotification(
  * Dispara notificação de handoff (cliente aguardando atendimento) quando o assistente usa HANDOFF_COMERCIAL.
  * Mesmo padrão do agendamento: nome, telefone, veículo de interesse.
  */
+function isEnviarNotificacaoTool(tool: ToolDef): boolean {
+  if (tool.tool_type === "send_notification") return true;
+  const fnName = (tool.function_def as Record<string, unknown>)?.name as string;
+  return /enviar[_ ]?notific(a|a[cç])[oõ]a?/i.test(fnName || "");
+}
+
+/** Sobrescreve args do modelo com nome/telefone inferidos do histórico quando o valor enviado é inválido. */
+function enrichEnviarNotificacaoArgs(
+  messages: Array<{ role: string; content: string }>,
+  externalUserId: string | null | undefined,
+  args: Record<string, unknown>
+): Record<string, unknown> {
+  const out = { ...args };
+  const extractedName = extractClientNameFromMessages(messages);
+  const resolvedPhone = resolveHandoffPhone(externalUserId, messages);
+  const nome = String(out.nome ?? out.nome_cliente ?? out.name ?? "").trim();
+  const nomeRuim =
+    !nome ||
+    /^cliente$/i.test(nome) ||
+    isBlockedAsName(nome) ||
+    containsInstitutionNameToken(nome);
+  if (nomeRuim) {
+    const n = extractedName ?? "";
+    out.nome = n;
+    out.nome_cliente = n;
+    out.name = n;
+  }
+  const tel = String(out.telefone ?? out.telefone_cliente ?? out.phone ?? out.numero ?? "").trim();
+  const telRuim = !tel || !isPhoneLikeDigits(tel);
+  if (telRuim && resolvedPhone) {
+    out.telefone = resolvedPhone;
+    out.telefone_cliente = resolvedPhone;
+    out.phone = resolvedPhone;
+    out.numero = resolvedPhone;
+  }
+  return out;
+}
+
 async function sendHandoffNotification(
   agentId: string,
   agent: { config?: Record<string, unknown>; tenant_id?: string },
   messages: Array<{ role: string; content: string }>,
   externalUserId?: string | null
 ): Promise<void> {
-  const nomeCliente = extractClientNameFromMessages(messages);
-  const message = buildHandoffNotification(
-    nomeCliente || "Cliente",
-    externalUserId?.trim() || undefined,
-    undefined,
-    messages
-  );
+  const nomeCliente = extractClientNameFromMessages(messages) ?? "";
+  const telefoneHandoff = resolveHandoffPhone(externalUserId, messages);
+  const message = buildHandoffNotification(nomeCliente, telefoneHandoff, undefined, messages);
   await sendNotificationToGroup(agentId, message);
 }
 
@@ -1270,6 +1316,9 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   if (!args.tenant_id && agent?.tenant_id) {
                     args = { ...args, tenant_id: agent.tenant_id };
                   }
+                }
+                if (isEnviarNotificacaoTool(tool)) {
+                  args = enrichEnviarNotificacaoArgs(messagesToUse, external_user_id, args);
                 }
                 console.log("[Chat-Local] Executando tool:", tc.function.name, "| args:", JSON.stringify(args));
                 debugEntries.push({ type: "tool_call", tool: tc.function.name, args, tool_type: "function" });
@@ -2000,6 +2049,9 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             if (!args.tenant_id && agent?.tenant_id) {
               args = { ...args, tenant_id: agent.tenant_id };
             }
+          }
+          if (isEnviarNotificacaoTool(tool)) {
+            args = enrichEnviarNotificacaoArgs(messagesToUse, external_user_id, args);
           }
           console.log("[Chat-Local] Executando tool (single-provider):", tc.function.name, "| args:", JSON.stringify(args));
           const result = await executeTool(tool, args, agent_id);
