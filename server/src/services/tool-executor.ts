@@ -21,13 +21,13 @@ function normalizeForSearch(str: string): string {
 
 /**
  * Remove fragmentos de frase que o LLM às vezes inclui ao extrair marca/modelo.
- * Ex: "Cruze e queria" ou "Cruze e " → "Cruze" (a conjunção "e" + resto da frase é removida).
+ * Ex: "Cruze e queria", "Cruze e ", "Accord e" → "Cruze"/"Accord" (conjunção "e" + resto é removida).
  */
 function sanitizeVehicleParam(val: string | undefined): string | undefined {
   if (val == null || typeof val !== "string") return val;
   const trimmed = val.trim();
   if (!trimmed) return undefined;
-  // Remove " e " ou " e" + resto da frase (ex: "Cruze e ", "Cruze e", "Cruze e queria")
+  // Remove " e " ou " e" + resto da frase (ex: "Cruze e queria", "Accord e")
   const cleaned = trimmed.replace(/\s+e\s*.*$/i, "").trim();
   return cleaned || undefined;
 }
@@ -96,7 +96,7 @@ async function executeInventoryQuery(
     const faixaPreco = (args.faixa_preco || args.faixaPreco) as string | undefined;
     const precoMin = args.preco_min ?? args.precoMin;
     const precoMax = args.preco_max ?? args.precoMax;
-    const tipoRaw = (args.tipo || args.modelo || args.model) as string | undefined;
+    const tipoRaw = sanitizeVehicleParam((args.tipo || args.modelo || args.model) as string | undefined) ?? undefined;
     const cambio = (args.cambio || args.transmission) as string | undefined;
     const motorizacao = (args.motorizacao || args.engine) as string | undefined;
 
