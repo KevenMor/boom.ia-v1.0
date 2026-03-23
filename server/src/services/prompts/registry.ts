@@ -39,6 +39,12 @@ import {
   DISPATCHER_PROMPT as IDEAL_DISPATCHER,
   FOLLOWUP_PROMPT as IDEAL_FOLLOWUP,
 } from "./autoescola-ideal.js";
+import {
+  SYSTEM_PROMPT as DURCE_SYSTEM,
+  COMMUNICATION_RULES as DURCE_COMM_RULES,
+  DISPATCHER_PROMPT as DURCE_DISPATCHER,
+  FOLLOWUP_PROMPT as DURCE_FOLLOWUP,
+} from "./durce-vita.js";
 
 /**
  * Configuração de prompt por tenant.
@@ -98,6 +104,42 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     alwaysInjectCommRules: true,
     version: "v1.2.0",
     description: "Mariana — Recepcionista Instituto Vicentim Maekawa (Odontologia Sorocaba/SP)",
+  },
+  "eliane-durce": {
+    systemPrompt: DURCE_SYSTEM,
+    communicationRules: DURCE_COMM_RULES,
+    dispatcherPrompt: DURCE_DISPATCHER,
+    followupPrompt: DURCE_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.2.1",
+    description: "Juliana — Recepcionista Clinica Odontologica Durce Vita (Odontologia Sao Paulo/SP)",
+  },
+  "durce-vita": {
+    systemPrompt: DURCE_SYSTEM,
+    communicationRules: DURCE_COMM_RULES,
+    dispatcherPrompt: DURCE_DISPATCHER,
+    followupPrompt: DURCE_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.2.1",
+    description: "Juliana — Recepcionista Clinica Odontologica Durce Vita (Odontologia Sao Paulo/SP)",
+  },
+  "durce-vitta": {
+    systemPrompt: DURCE_SYSTEM,
+    communicationRules: DURCE_COMM_RULES,
+    dispatcherPrompt: DURCE_DISPATCHER,
+    followupPrompt: DURCE_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.2.1",
+    description: "Juliana — Recepcionista Clinica Odontologica Durce Vita (Odontologia Sao Paulo/SP)",
+  },
+  "eliane-durce-vitta": {
+    systemPrompt: DURCE_SYSTEM,
+    communicationRules: DURCE_COMM_RULES,
+    dispatcherPrompt: DURCE_DISPATCHER,
+    followupPrompt: DURCE_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.2.1",
+    description: "Juliana — Recepcionista Clinica Odontologica Durce Vita (Odontologia Sao Paulo/SP)",
   },
   "pet-home": {
     systemPrompt: PH_SYSTEM,
