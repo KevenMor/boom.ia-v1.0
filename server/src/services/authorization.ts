@@ -22,7 +22,7 @@ function normalizeRole(role: RawAccessRole | string | null | undefined): AccessR
   return "tenant_user";
 }
 
-function getBearerToken(req: FastifyRequest): string {
+export function getBearerToken(req: FastifyRequest): string {
   const auth = (req.headers.authorization as string) || "";
   const alt = (req.headers["x-nexus-auth"] as string) || "";
   const token = auth || alt;

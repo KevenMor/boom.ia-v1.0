@@ -165,48 +165,6 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
   );
 
-  fastify.get<{ Querystring: { slug?: string } }>(
-    "/admin/prompts",
-    async (req: FastifyRequest<{ Querystring: { slug?: string } }>, reply: FastifyReply) => {
-      const slug = req.query?.slug;
-
-      if (slug) {
-        const config = getPromptConfig(slug);
-        if (!config) {
-          return reply.status(404).send({ error: "Tenant not found in prompt registry" });
-        }
-        const fullSystemPrompt = buildSystemPrompt("", slug, true);
-        const dispatcherPrompt = getDispatcherPrompt(slug);
-        const followupPrompt = getFollowupPrompt(slug);
-
-        return reply.send({
-          slug: config.slug,
-          version: config.version,
-          description: config.description,
-          systemPrompt: config.systemPrompt || "(uses agent's database prompt)",
-          communicationRules: config.communicationRules || "(none)",
-          dispatcherPrompt,
-          followupPrompt: followupPrompt || "(usa prompt padrão do sistema)",
-          fullComposedPrompt: fullSystemPrompt,
-          fullPromptLength: fullSystemPrompt.length,
-        });
-      }
-
-      const allConfigs = getAllPromptConfigs();
-      const summary = Object.entries(allConfigs).map(([, config]) => ({
-        slug: config.slug,
-        version: config.version,
-        description: config.description,
-        systemPromptLength: (config.systemPrompt || "").length,
-        communicationRulesLength: (config.communicationRules || "").length,
-        dispatcherPromptLength: config.dispatcherPrompt.length,
-        followupPromptLength: (config.followupPrompt || "").length,
-      }));
-
-      return reply.send({ tenants: summary });
-    }
-  );
-
   fastify.post("/admin/prompts", async (req: FastifyRequest, reply: FastifyReply) => {
     const body = req.body as { slug?: string };
     const slug = body?.slug;
