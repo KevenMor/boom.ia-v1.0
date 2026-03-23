@@ -16,7 +16,8 @@ function normalizeRole(role: RawAccessRole | string | null | undefined): AccessR
     .trim()
     .toLowerCase()
     .replace(/[\s-]+/g, "_");
-  if (normalized === "superadmin" || normalized === "super_admin" || normalized === "admin") return "superadmin";
+  if (normalized === "superadmin" || normalized === "super_admin") return "superadmin";
+  if (normalized === "admin") return "tenant_admin";
   if (normalized === "tenant_admin") return "tenant_admin";
   return "tenant_user";
 }

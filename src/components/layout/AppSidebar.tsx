@@ -160,7 +160,12 @@ function CollapsibleGroup({
 }
 
 function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
-  const { signOut, user, isSuperAdmin } = useAuth();
+  const { signOut, user, profile, isSuperAdmin } = useAuth();
+  const footerDisplayName =
+    profile?.full_name?.trim() || user?.email?.split("@")[0] || "Utilizador";
+  const footerInitials = (
+    profile?.full_name?.trim()?.slice(0, 2) || user?.email?.slice(0, 2) || "?"
+  ).toUpperCase();
   const location = useLocation();
   const isMobile = useIsMobile();
   const { setMobileOpen, toggle } = useSidebar();
@@ -274,11 +279,11 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
             <DropdownMenuTrigger asChild>
               <button className="flex w-full items-center gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-white/10">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent text-[11px] font-bold text-white">
-                  {user?.email?.slice(0, 2).toUpperCase() ?? "AD"}
+                  {footerInitials}
                 </div>
                 <div className="flex flex-1 flex-col min-w-0">
                   <span className="text-sm font-medium text-white truncate">
-                    Admin
+                    {footerDisplayName}
                   </span>
                   <span className="text-[11px] text-white/45 truncate">
                     {user?.email ?? "—"}

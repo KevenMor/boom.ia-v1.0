@@ -86,7 +86,7 @@ const App = () => (
               <Route
                 path="/users"
                 element={
-                  <ModuleRoute moduleKey="tenants" requiredRoles={["superadmin", "admin"]}>
+                  <ModuleRoute moduleKey="tenants" requiredRoles={["superadmin"]}>
                     <UsersManagementPage />
                   </ModuleRoute>
                 }

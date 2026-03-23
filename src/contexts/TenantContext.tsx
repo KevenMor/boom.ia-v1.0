@@ -1,6 +1,16 @@
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  type ReactNode,
+} from "react";
 import type { Tenant } from "@/types/database";
 import { nexusDb } from "@/integrations/supabase/nexus-client";
+import { relationName } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 
 type TenantModulesMap = Record<string, boolean>;
@@ -14,12 +24,14 @@ interface TenantContextValue {
   selectedTenantModules: TenantModulesMap | null;
   tenantModulesLoading: boolean;
   isModuleEnabled: (moduleKey: string) => boolean;
+  /** Nome do tenant selecionado (membership + objeto do switcher); não depende só de useTenants. */
+  scopedTenantDisplayName: string | undefined;
 }
 
 const TenantContext = createContext<TenantContextValue | undefined>(undefined);
 
 export function TenantProvider({ children }: { children: ReactNode }) {
-  const { canAccessTenant, isSuperAdmin } = useAuth();
+  const { canAccessTenant, isSuperAdmin, memberships, loading: authLoading } = useAuth();
   const [selectedTenantId, setSelectedTenantIdRaw] = useState<string | null>(() => {
     try {
       return localStorage.getItem("boomia-selected-tenant") || null;
@@ -31,25 +43,63 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   const [selectedTenantModules, setSelectedTenantModules] = useState<TenantModulesMap | null>(null);
   const [tenantModulesLoading, setTenantModulesLoading] = useState(false);
 
-  const setSelectedTenantId = useCallback((id: string | null) => {
-    if (id && !isSuperAdmin && !canAccessTenant(id)) {
-      return;
+  const setSelectedTenantId = useCallback(
+    (id: string | null) => {
+      if (!isSuperAdmin) {
+        if (id === null) {
+          return;
+        }
+        if (!canAccessTenant(id)) {
+          return;
+        }
+      }
+      setSelectedTenantIdRaw(id);
+      try {
+        if (id) localStorage.setItem("boomia-selected-tenant", id);
+        else localStorage.removeItem("boomia-selected-tenant");
+      } catch {
+        return;
+      }
+    },
+    [canAccessTenant, isSuperAdmin]
+  );
+
+  const membershipTenantIds = useMemo(
+    () => memberships.map((m) => m.tenant_id).filter(Boolean),
+    [memberships]
+  );
+
+  useLayoutEffect(() => {
+    if (authLoading || isSuperAdmin) return;
+    if (membershipTenantIds.length === 0) return;
+    const allowed = new Set(membershipTenantIds);
+    const next =
+      selectedTenantId && allowed.has(selectedTenantId)
+        ? selectedTenantId
+        : membershipTenantIds[0];
+    if (next !== selectedTenantId) {
+      setSelectedTenantIdRaw(next);
+      try {
+        localStorage.setItem("boomia-selected-tenant", next);
+      } catch {
+        /* ignore */
+      }
     }
-    setSelectedTenantIdRaw(id);
-    try {
-      if (id) localStorage.setItem("boomia-selected-tenant", id);
-      else localStorage.removeItem("boomia-selected-tenant");
-    } catch {
-      return;
-    }
-  }, [canAccessTenant, isSuperAdmin]);
+  }, [authLoading, isSuperAdmin, membershipTenantIds, selectedTenantId]);
 
   useEffect(() => {
     if (selectedTenantId && !isSuperAdmin && !canAccessTenant(selectedTenantId)) {
-      setSelectedTenantIdRaw(null);
+      const fallback = membershipTenantIds[0] ?? null;
+      setSelectedTenantIdRaw(fallback);
       setSelectedTenant(null);
+      try {
+        if (fallback) localStorage.setItem("boomia-selected-tenant", fallback);
+        else localStorage.removeItem("boomia-selected-tenant");
+      } catch {
+        /* ignore */
+      }
     }
-  }, [selectedTenantId, isSuperAdmin, canAccessTenant]);
+  }, [selectedTenantId, isSuperAdmin, canAccessTenant, membershipTenantIds]);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,12 +140,25 @@ export function TenantProvider({ children }: { children: ReactNode }) {
 
   const isModuleEnabled = useCallback(
     (moduleKey: string) => {
+      if (!isSuperAdmin && membershipTenantIds.length > 0 && !selectedTenantId) {
+        return false;
+      }
       if (!selectedTenantId) return true;
       if (!selectedTenantModules) return true;
       return selectedTenantModules[moduleKey] !== false;
     },
-    [selectedTenantId, selectedTenantModules]
+    [isSuperAdmin, membershipTenantIds.length, selectedTenantId, selectedTenantModules]
   );
+
+  const scopedTenantDisplayName = useMemo(() => {
+    if (!selectedTenantId) return undefined;
+    const row = memberships.find((m) => m.tenant_id === selectedTenantId);
+    const fromMembership = relationName((row as { tenants?: unknown } | undefined)?.tenants);
+    if (fromMembership) return fromMembership;
+    const fromSelected = selectedTenant?.name?.trim();
+    if (fromSelected) return fromSelected;
+    return undefined;
+  }, [selectedTenantId, memberships, selectedTenant?.name]);
 
   return (
     <TenantContext.Provider
@@ -107,6 +170,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         selectedTenantModules,
         tenantModulesLoading,
         isModuleEnabled,
+        scopedTenantDisplayName,
       }}
     >
       {children}

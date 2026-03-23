@@ -11,12 +11,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
 
 export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
   const { data: tenants, isLoading } = useTenants();
   const { isSuperAdmin } = useAuth();
-  const { selectedTenantId, setSelectedTenantId, selectedTenant, setSelectedTenant } = useTenantContext();
+  const { selectedTenantId, setSelectedTenantId, selectedTenant, setSelectedTenant, scopedTenantDisplayName } =
+    useTenantContext();
 
   // Sync full tenant object when tenants load or selection changes
   useEffect(() => {
@@ -25,21 +25,37 @@ export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
       const found = tenants.find((t) => t.id === selectedTenantId);
       if (found) {
         setSelectedTenant(found);
-      } else {
-        // Invalid stored ID, reset
+      } else if (isSuperAdmin) {
         setSelectedTenantId(null);
+        setSelectedTenant(null);
+      } else {
+        const first =
+          tenants.find((t) => t.status === "active") ?? tenants[0];
+        if (first) setSelectedTenantId(first.id);
         setSelectedTenant(null);
       }
     } else {
       setSelectedTenant(null);
     }
-  }, [tenants, selectedTenantId]);
+  }, [tenants, selectedTenantId, isSuperAdmin, setSelectedTenantId, setSelectedTenant]);
 
   const visibleTenants = isSuperAdmin
     ? (tenants ?? [])
-    : (tenants?.filter((t) => t.status === "active") ?? []);
-  const displayName = selectedTenant?.name ?? "Todos os tenants";
-  const initials = selectedTenant?.name?.slice(0, 2).toUpperCase() ?? "ALL";
+    : (tenants ?? []);
+  const nameForSelectedId =
+    selectedTenantId && tenants?.length
+      ? tenants.find((t) => t.id === selectedTenantId)?.name
+      : undefined;
+  const displayName = isSuperAdmin
+    ? (selectedTenant?.name ?? nameForSelectedId ?? (!selectedTenantId ? "Todos os tenants" : "—"))
+    : (selectedTenant?.name
+        ?? nameForSelectedId
+        ?? scopedTenantDisplayName
+        ?? (isLoading ? "Carregando..." : (visibleTenants[0]?.name ?? "Empresa")));
+  const initialsSource =
+    selectedTenant?.name ?? nameForSelectedId ?? scopedTenantDisplayName ?? visibleTenants[0]?.name;
+  const initials =
+    initialsSource?.slice(0, 2).toUpperCase() ?? (isSuperAdmin ? "ALL" : "—");
 
   if (collapsed) {
     return (
@@ -55,14 +71,18 @@ export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
         <DropdownMenuContent side="right" align="start" className="w-56">
           <DropdownMenuLabel className="text-xs text-muted-foreground">Alterar conta</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => setSelectedTenantId(null)}
-            className="gap-2 py-2"
-          >
-            <span className="flex-1 truncate font-medium">Todos os tenants</span>
-            {!selectedTenantId && <Check className="h-4 w-4 text-primary" />}
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
+          {isSuperAdmin && (
+            <>
+              <DropdownMenuItem
+                onClick={() => setSelectedTenantId(null)}
+                className="gap-2 py-2"
+              >
+                <span className="flex-1 truncate font-medium">Todos os tenants</span>
+                {!selectedTenantId && <Check className="h-4 w-4 text-primary" />}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </>
+          )}
           {visibleTenants.map((t) => (
             <DropdownMenuItem
               key={t.id}
@@ -91,14 +111,18 @@ export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
       <DropdownMenuContent side="bottom" align="start" className="w-[228px]">
         <DropdownMenuLabel className="text-xs text-muted-foreground">Alterar conta</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={() => setSelectedTenantId(null)}
-          className="gap-2 py-2"
-        >
-          <span className="flex-1 truncate text-sm font-medium">Todos os tenants</span>
-          {!selectedTenantId && <Check className="h-4 w-4 text-primary shrink-0" />}
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
+        {isSuperAdmin && (
+          <>
+            <DropdownMenuItem
+              onClick={() => setSelectedTenantId(null)}
+              className="gap-2 py-2"
+            >
+              <span className="flex-1 truncate text-sm font-medium">Todos os tenants</span>
+              {!selectedTenantId && <Check className="h-4 w-4 text-primary shrink-0" />}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
         {isLoading && (
           <DropdownMenuItem disabled className="text-xs text-muted-foreground py-2">Carregando...</DropdownMenuItem>
         )}

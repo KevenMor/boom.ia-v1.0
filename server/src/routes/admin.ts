@@ -455,7 +455,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
       if (!existing) return reply.status(404).send({ error: "usuário não encontrado" });
 
       const existingRole = String((existing as { role?: string }).role ?? "").toLowerCase();
-      if (existingRole === "superadmin" || existingRole === "admin") {
+      if (existingRole === "superadmin" || existingRole === "super_admin") {
         return reply.status(403).send({ error: "não é permitido alterar membros de super admin por esta rota" });
       }
 

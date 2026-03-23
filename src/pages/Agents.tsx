@@ -16,6 +16,7 @@ import { EditAgentDialog } from "@/components/agents/EditAgentDialog";
 import { DeleteAgentDialog } from "@/components/agents/DeleteAgentDialog";
 import { toast } from "sonner";
 import { getApiBase } from "@/lib/api-client";
+import { relationName } from "@/lib/utils";
 import type { Agent } from "@/types/database";
 
 const WEBHOOK_BASE = `${getApiBase()}/webhooks`;
@@ -23,7 +24,7 @@ const WEBHOOK_BASE = `${getApiBase()}/webhooks`;
 export default function Agents() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
-  const { selectedTenantId } = useTenantContext();
+  const { selectedTenantId, scopedTenantDisplayName } = useTenantContext();
   const { data: agents, isLoading, error } = useAgents(selectedTenantId ?? undefined);
   const { data: tenants } = useTenants();
   const [createOpen, setCreateOpen] = useState(false);
@@ -33,7 +34,7 @@ export default function Agents() {
   const filtered = (agents ?? []).filter(
     (a) =>
       a.name.toLowerCase().includes(search.toLowerCase()) ||
-      (a.tenants as any)?.name?.toLowerCase().includes(search.toLowerCase())
+      (relationName(a.tenants)?.toLowerCase() ?? "").includes(search.toLowerCase())
   );
   const tenantNameById = new Map((tenants ?? []).map((t) => [t.id, t.name]));
 
@@ -87,10 +88,12 @@ export default function Agents() {
           const isTest = agent.status === "test";
           const isInactive = agent.status === "inactive";
           const tenantName =
-            (agent.tenants as any)?.name
+            relationName(agent.tenants)
             ?? tenantNameById.get(agent.tenant_id)
+            ?? scopedTenantDisplayName
+            ?? (selectedTenantId ? "Empresa" : undefined)
             ?? "Sem tenant";
-          const providerName = (agent.providers as any)?.name;
+          const providerName = relationName(agent.providers);
           const webhookUrl = `${WEBHOOK_BASE}?agent_id=${agent.id}`;
           const demoUrl = `${window.location.origin}/demo/${agent.id}`;
 

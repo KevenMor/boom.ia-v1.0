@@ -44,8 +44,8 @@ function emptyRow(tenants: { id: string }[]): MembershipDraft {
 }
 
 function isSuperProfile(role: string) {
-  const r = role.toLowerCase();
-  return r === "superadmin" || r === "admin";
+  const r = role.toLowerCase().replace(/[\s-]+/g, "_");
+  return r === "superadmin" || r === "super_admin";
 }
 
 export default function UsersManagementPage() {

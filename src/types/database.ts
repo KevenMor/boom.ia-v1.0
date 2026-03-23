@@ -89,6 +89,8 @@ export interface TenantMembership {
   role: "tenant_admin" | "tenant_user";
   created_at: string;
   updated_at: string;
+  /** Preenchido quando o scope carrega com `select('*, tenants(name)')`. */
+  tenants?: { name: string } | null;
 }
 
 export type ContactType = "lead" | "client";

@@ -24,7 +24,7 @@ function isSuperAdminRole(role: Profile["role"] | "admin" | string | null | unde
     .trim()
     .toLowerCase()
     .replace(/[\s-]+/g, "_");
-  return normalized === "superadmin" || normalized === "super_admin" || normalized === "admin";
+  return normalized === "superadmin" || normalized === "super_admin";
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -52,7 +52,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userId = nextSession.user.id;
       const [{ data: profileData }, { data: membershipsData }] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
-        supabase.from("tenant_memberships").select("*").eq("user_id", userId),
+        supabase
+          .from("tenant_memberships")
+          .select("id, tenant_id, user_id, role, created_at, updated_at, tenants(name)")
+          .eq("user_id", userId),
       ]);
 
       let hasAdminAccess = false;

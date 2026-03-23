@@ -19,7 +19,7 @@ import { useTenantContext } from "@/contexts/TenantContext";
 import { useConversations, useMultiConversationMessages } from "@/hooks/useConversations";
 import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { cn } from "@/lib/utils";
+import { cn, relationName } from "@/lib/utils";
 
 const AVATAR_COLORS = ["#019FA2", "#0d9488", "#0ea5e9", "#64748b", "#14b8a6", "#475569"];
 
@@ -30,7 +30,7 @@ function getAvatarColor(name: string): string {
 }
 
 export default function Conversations() {
-  const { selectedTenantId } = useTenantContext();
+  const { selectedTenantId, scopedTenantDisplayName } = useTenantContext();
   const { data: agents, isLoading: agentsLoading } = useAgents(selectedTenantId ?? undefined);
   const { data: tenants } = useTenants();
   const tenantNameById = useMemo(
@@ -426,8 +426,10 @@ export default function Conversations() {
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-foreground truncate">{agent.name}</p>
                     <p className="text-xs text-muted-foreground truncate">
-                      {(agent.tenants as { name?: string } | null)?.name
+                      {relationName(agent.tenants)
                         ?? tenantNameById.get(agent.tenant_id)
+                        ?? scopedTenantDisplayName
+                        ?? (selectedTenantId ? "Empresa" : undefined)
                         ?? "Sem tenant"}
                     </p>
                   </div>
