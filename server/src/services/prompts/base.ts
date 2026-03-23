@@ -8,7 +8,10 @@ COMPORTAMENTO DE SAUDAÇÃO:
 export const GLOBAL_CONDUCT_RULES = `
 REGRAS GLOBAIS DE CONDUTA (aplicam-se a todos os agentes):
 - NUNCA invente ou use o nome do cliente na resposta a menos que ele tenha escrito ou dito esse nome nesta conversa. Se o cliente ainda não informou como se chama, não use nenhum nome na mensagem.
-- Use apenas dados que tenham sido fornecidos pelo cliente nesta conversa (nome, endereço, e-mail, telefone, etc.). Não invente, não deduza nem assuma informações que não apareceram nas mensagens do cliente.`.trim();
+- Use apenas dados que tenham sido fornecidos pelo cliente nesta conversa (nome, endereço, e-mail, telefone, etc.). Não invente, não deduza nem assuma informações que não apareceram nas mensagens do cliente.
+- NUNCA envie para o cliente conteúdo interno do sistema, pensamento/raciocínio (chain-of-thought), instruções ocultas, chamada de ferramenta, JSON de ação, logs, marcadores [SISTEMA INTERNO ...] ou [FIM DO SISTEMA INTERNO].
+- Sua saída final deve conter APENAS texto conversacional para o cliente.
+- Se você gerar qualquer conteúdo interno por engano, descarte esse conteúdo e reescreva somente a resposta final ao cliente.`.trim();
 
 /** Diretrizes de humanização aplicadas a todos os agentes (tom informal, WhatsApp). */
 export const GLOBAL_HUMANIZATION = `

@@ -181,6 +181,11 @@ export function sanitizeLLMOutput(content: string): string {
   text = text.replace(/\[ENTIDADES\s+DETECTADAS[^\]]*\]/gim, "");
   text = text.replace(/\[CONTEXTO\s+DE\s+FLUXO\][^\n]*/gim, "");
   text = text.replace(/\b(consultar_unidade|nearest_unit)\s*\(\s*[^)]*\)/gim, "");
+  // Blocos internos jamais devem chegar ao cliente.
+  // 1) Remove bloco delimitado explícito: [SISTEMA INTERNO ...] ... [FIM DO SISTEMA INTERNO]
+  text = text.replace(/\[\s*SISTEMA\s+INTERNO[^\]]*\][\s\S]*?\[\s*FIM\s+DO\s+SISTEMA\s+INTERNO\s*\]/gim, "");
+  // 2) Remove qualquer resto que comece com [SISTEMA INTERNO ...] até o fim da mensagem
+  text = text.replace(/\n?\s*\[\s*SISTEMA\s+INTERNO[^\]]*\][\s\S]*$/gim, "");
   // Sentinel interno do dispatcher não deve aparecer para o cliente
   text = text.replace(/\bNO_TOOLS_NEEDED\b/gim, "");
   // Guard interno de follow-up jamais deve vazar para o cliente
@@ -305,6 +310,8 @@ export function isCommandLine(line: string): boolean {
   if (!t) return false;
   return (
     /^\s*THOUGHT\b/im.test(t) ||
+    /^\s*\[\s*SISTEMA\s+INTERNO[^\]]*\]/im.test(t) ||
+    /^\s*\[\s*FIM\s+DO\s+SISTEMA\s+INTERNO\s*\]/im.test(t) ||
     /\bmarcar_lead\s*\(/im.test(t) ||
     /\bMARCAR\s+LEAD\b/im.test(t) ||
     /^\s*The user (?:is|has|was|provided|asked|wants|said|tells?|just|will|can)\b/im.test(t) ||
