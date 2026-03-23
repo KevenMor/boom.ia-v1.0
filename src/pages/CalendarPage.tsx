@@ -29,6 +29,7 @@ import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { Calendar } from "@/types/calendar";
+import { CalendarServicesTab } from "@/components/calendar/CalendarServicesTab";
 
 const EVENT_COLORS: Record<string, { bg: string; border: string; label: string }> = {
   primary: { bg: "hsl(262 72% 62%)", border: "hsl(262 72% 62%)", label: "Padrão" },
@@ -687,6 +688,15 @@ export default function CalendarPage() {
         </Card>
 
         <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Serviços</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CalendarServicesTab tenantId={selectedTenantId || null} />
+          </CardContent>
+        </Card>
+
+        <Card>
           <CardHeader className="flex-row items-center justify-between pb-2">
             <CardTitle className="text-base flex items-center gap-1.5">
               <Bell className="h-4 w-4 text-primary" />
@@ -782,6 +792,10 @@ export default function CalendarPage() {
                 <Button size="sm" variant="outline" className="mt-2 w-full" disabled={!selectedTenantId} onClick={() => { setNewCalDialogOpen(true); setSidebarSheetOpen(false); }}>
                   <Plus className="h-4 w-4 mr-1" /> Nova Agenda
                 </Button>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold mb-3">Serviços</h3>
+                <CalendarServicesTab tenantId={selectedTenantId || null} />
               </div>
               <div>
                 <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5">

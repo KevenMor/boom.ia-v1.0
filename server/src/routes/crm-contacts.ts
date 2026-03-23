@@ -701,6 +701,233 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
     }
   );
 
+  // --- Resumo do contato ---
+  fastify.get(
+    "/crm-contacts/:id/summary",
+    async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
+        const { id: contactId } = req.params;
+        const { data: contact, error: contactErr } = await supabase
+          .from("contacts")
+          .select("id, tenant_id")
+          .eq("id", contactId)
+          .maybeSingle();
+        if (contactErr || !contact) return reply.status(404).send({ error: "Contato não encontrado" });
+        if (!canAccessTenant(auth, contact.tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
+
+        const now = new Date().toISOString();
+        const [invoicesRes, packagesRes, appointmentsRes] = await Promise.all([
+          supabase.from("contact_invoices").select("amount, status").eq("contact_id", contactId),
+          supabase.from("contact_packages").select("id").eq("contact_id", contactId).eq("status", "active"),
+          supabase.from("calendar_events").select("id").eq("contact_id", contactId).gte("start_at", now),
+        ]);
+
+        const invoices = (invoicesRes.data ?? []) as Array<{ amount: number; status: string }>;
+        const total_invoiced = invoices.reduce((s, i) => s + Number(i.amount), 0);
+        const total_paid = invoices.filter(i => i.status === "paid").reduce((s, i) => s + Number(i.amount), 0);
+        const total_overdue = invoices.filter(i => i.status === "overdue").reduce((s, i) => s + Number(i.amount), 0);
+
+        return reply.send({
+          total_invoiced,
+          total_paid,
+          total_overdue,
+          invoice_count: invoices.length,
+          active_packages: (packagesRes.data ?? []).length,
+          upcoming_appointments: (appointmentsRes.data ?? []).length,
+        });
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return reply.status(500).send({ error: msg });
+      }
+    }
+  );
+
+  // --- Pacotes / Serviços Contratados ---
+  fastify.get(
+    "/crm-contacts/:id/packages",
+    async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
+        const { id: contactId } = req.params;
+        const { data: contact, error: contactErr } = await supabase
+          .from("contacts").select("id, tenant_id").eq("id", contactId).maybeSingle();
+        if (contactErr || !contact) return reply.status(404).send({ error: "Contato não encontrado" });
+        if (!canAccessTenant(auth, contact.tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
+        const { data, error } = await supabase
+          .from("contact_packages").select("*").eq("contact_id", contactId).order("created_at", { ascending: false });
+        if (error) throw error;
+        return reply.send({ data: data ?? [] });
+      } catch (err: unknown) {
+        return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  );
+
+  fastify.post(
+    "/crm-contacts/:id/packages",
+    async (req: FastifyRequest<{ Params: { id: string }; Body: Record<string, unknown> }>, reply: FastifyReply) => {
+      try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
+        const { id: contactId } = req.params;
+        const body = req.body as Record<string, unknown>;
+        const { data: contact, error: contactErr } = await supabase
+          .from("contacts").select("id, tenant_id").eq("id", contactId).maybeSingle();
+        if (contactErr || !contact) return reply.status(404).send({ error: "Contato não encontrado" });
+        if (!canManageTenant(auth, contact.tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
+        if (!body.name || typeof body.name !== "string") return reply.status(400).send({ error: "name é obrigatório" });
+        const validStatuses = ["active", "paused", "completed", "cancelled"];
+        const status = validStatuses.includes(String(body.status || "")) ? String(body.status) : "active";
+        const record: Record<string, unknown> = {
+          contact_id: contactId,
+          tenant_id: contact.tenant_id,
+          name: String(body.name).trim(),
+          description: body.description ?? null,
+          status,
+          price: body.price != null ? Number(body.price) : null,
+          start_date: body.start_date ?? null,
+          end_date: body.end_date ?? null,
+          sessions_total: body.sessions_total != null ? Number(body.sessions_total) : null,
+          sessions_used: 0,
+          metadata: typeof body.metadata === "string" ? body.metadata : JSON.stringify(body.metadata ?? {}),
+        };
+        const { data, error } = await supabase.from("contact_packages").insert(record).select().single();
+        if (error) throw error;
+        return reply.send(data);
+      } catch (err: unknown) {
+        return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  );
+
+  fastify.patch(
+    "/crm-contacts/:contactId/packages/:packageId",
+    async (req: FastifyRequest<{ Params: { contactId: string; packageId: string }; Body: Record<string, unknown> }>, reply: FastifyReply) => {
+      try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
+        const { contactId, packageId } = req.params;
+        const body = req.body as Record<string, unknown>;
+        const { data: contact } = await supabase.from("contacts").select("tenant_id").eq("id", contactId).maybeSingle();
+        if (!contact || !canManageTenant(auth, contact.tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
+        const allowed = ["name", "description", "status", "price", "start_date", "end_date", "sessions_total", "sessions_used", "metadata"];
+        const updates: Record<string, unknown> = {};
+        for (const key of allowed) {
+          if (body[key] !== undefined) {
+            updates[key] = key === "metadata" && typeof body[key] !== "string" ? JSON.stringify(body[key] ?? {}) : body[key];
+          }
+        }
+        const { data, error } = await supabase
+          .from("contact_packages").update(updates).eq("id", packageId).eq("contact_id", contactId).select().single();
+        if (error) throw error;
+        return reply.send(data);
+      } catch (err: unknown) {
+        return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  );
+
+  fastify.delete(
+    "/crm-contacts/:contactId/packages/:packageId",
+    async (req: FastifyRequest<{ Params: { contactId: string; packageId: string } }>, reply: FastifyReply) => {
+      try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
+        const { contactId, packageId } = req.params;
+        const { data: contact } = await supabase.from("contacts").select("tenant_id").eq("id", contactId).maybeSingle();
+        if (!contact || !canManageTenant(auth, contact.tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
+        const { error } = await supabase.from("contact_packages").delete().eq("id", packageId).eq("contact_id", contactId);
+        if (error) throw error;
+        return reply.send({ success: true });
+      } catch (err: unknown) {
+        return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  );
+
+  // --- Agendamentos (vínculo com calendar_events) ---
+  fastify.get(
+    "/crm-contacts/:id/appointments",
+    async (req: FastifyRequest<{ Params: { id: string }; Querystring: { upcoming?: string } }>, reply: FastifyReply) => {
+      try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
+        const { id: contactId } = req.params;
+        const { upcoming } = req.query;
+        const { data: contact, error: contactErr } = await supabase
+          .from("contacts").select("id, tenant_id").eq("id", contactId).maybeSingle();
+        if (contactErr || !contact) return reply.status(404).send({ error: "Contato não encontrado" });
+        if (!canAccessTenant(auth, contact.tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
+        let query = supabase
+          .from("calendar_events").select("*").eq("contact_id", contactId).order("start_at", { ascending: true });
+        if (upcoming === "true") query = query.gte("start_at", new Date().toISOString());
+        const { data, error } = await query;
+        if (error) throw error;
+        return reply.send({ data: data ?? [] });
+      } catch (err: unknown) {
+        return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  );
+
+  fastify.post(
+    "/crm-contacts/:id/appointments",
+    async (req: FastifyRequest<{ Params: { id: string }; Body: Record<string, unknown> }>, reply: FastifyReply) => {
+      try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
+        const { id: contactId } = req.params;
+        const body = req.body as Record<string, unknown>;
+        const { data: contact, error: contactErr } = await supabase
+          .from("contacts").select("id, tenant_id").eq("id", contactId).maybeSingle();
+        if (contactErr || !contact) return reply.status(404).send({ error: "Contato não encontrado" });
+        if (!canManageTenant(auth, contact.tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
+        if (!body.title || !body.start_at || !body.calendar_id) {
+          return reply.status(400).send({ error: "title, start_at e calendar_id são obrigatórios" });
+        }
+        const record: Record<string, unknown> = {
+          calendar_id: String(body.calendar_id),
+          tenant_id: contact.tenant_id,
+          contact_id: contactId,
+          title: String(body.title).trim(),
+          description: body.description ?? null,
+          start_at: String(body.start_at),
+          end_at: body.end_at ?? null,
+          all_day: body.all_day ?? false,
+          color: body.color ?? "#3B82F6",
+          metadata: typeof body.metadata === "string" ? body.metadata : JSON.stringify(body.metadata ?? {}),
+        };
+        const { data, error } = await supabase.from("calendar_events").insert(record).select().single();
+        if (error) throw error;
+        return reply.send(data);
+      } catch (err: unknown) {
+        return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  );
+
+  fastify.delete(
+    "/crm-contacts/:contactId/appointments/:eventId",
+    async (req: FastifyRequest<{ Params: { contactId: string; eventId: string } }>, reply: FastifyReply) => {
+      try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
+        const { contactId, eventId } = req.params;
+        const { data: contact } = await supabase.from("contacts").select("tenant_id").eq("id", contactId).maybeSingle();
+        if (!contact || !canManageTenant(auth, contact.tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
+        // Apenas desvincula — não deleta o evento do calendário
+        const { error } = await supabase.from("calendar_events").update({ contact_id: null }).eq("id", eventId);
+        if (error) throw error;
+        return reply.send({ success: true });
+      } catch (err: unknown) {
+        return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  );
+
   fastify.post(
     "/crm-contacts/merge-duplicates",
     async (

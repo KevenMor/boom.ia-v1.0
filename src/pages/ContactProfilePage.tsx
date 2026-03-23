@@ -24,6 +24,8 @@ import {
   CheckCircle,
   XCircle,
   UserPlus,
+  CalendarDays,
+  Package,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,9 +62,13 @@ import {
   useContactInvoices,
   useUpdateContactInvoice,
   useDeleteContactInvoice,
+  useContactSummary,
 } from "@/hooks/useContacts";
 import { ConversationMessagesView } from "@/components/chat/ConversationMessagesView";
 import { CreateInvoiceDialog } from "@/components/contacts/CreateInvoiceDialog";
+import { ContactSummaryCards } from "@/components/contacts/ContactSummaryCards";
+import { ContactPackagesTab } from "@/components/contacts/ContactPackagesTab";
+import { ContactAgendaTab } from "@/components/contacts/ContactAgendaTab";
 import { shouldShowChatMessage, dedupeAndSortConversationMessages } from "@/lib/chatMessageDisplay";
 import { fetchAddressByCep } from "@/lib/viacep";
 import { capitalizeName } from "@/lib/capitalizeName";
@@ -128,6 +134,7 @@ export default function ContactProfilePage() {
 
   const { data: convData, isLoading: convLoading } = useContactConversationPreview(contactId ?? null);
   const { data: invoices = [], isLoading: invoicesLoading } = useContactInvoices(contactId ?? null);
+  const { data: summary } = useContactSummary(contactId ?? null);
   const updateInvoice = useUpdateContactInvoice(contactId ?? null);
   const deleteInvoice = useDeleteContactInvoice(contactId ?? null);
   const messages = convData?.messages ?? [];
@@ -372,6 +379,13 @@ export default function ContactProfilePage() {
           </motion.div>
         )}
 
+        {/* Summary cards — só para clientes */}
+        {isClient && (
+          <div className="mt-3 relative z-10">
+            <ContactSummaryCards summary={summary} />
+          </div>
+        )}
+
         {/* Profile body — só para clientes */}
         {isClient && (
         <motion.div
@@ -452,6 +466,20 @@ export default function ContactProfilePage() {
                   <span className="text-sm font-semibold">{invoices.length}</span>
                   <span className="text-[10px] text-muted-foreground">Faturas</span>
                 </div>
+                <div className="flex flex-col items-center gap-1 p-2 rounded-md border border-dashed border-border mx-1 mt-2">
+                  <div className="w-7 h-7 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500">
+                    <Package className="h-3.5 w-3.5" />
+                  </div>
+                  <span className="text-sm font-semibold">{summary?.active_packages ?? 0}</span>
+                  <span className="text-[10px] text-muted-foreground">Pacotes</span>
+                </div>
+                <div className="flex flex-col items-center gap-1 p-2 rounded-md border border-dashed border-border mx-1 mt-2">
+                  <div className="w-7 h-7 rounded-full bg-violet-500/10 flex items-center justify-center text-violet-500">
+                    <CalendarDays className="h-3.5 w-3.5" />
+                  </div>
+                  <span className="text-sm font-semibold">{summary?.upcoming_appointments ?? 0}</span>
+                  <span className="text-[10px] text-muted-foreground">Agendamentos</span>
+                </div>
               </div>
 
               {/* Basic info */}
@@ -508,6 +536,14 @@ export default function ContactProfilePage() {
                   <TabsTrigger value="invoices" className="text-sm gap-1.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm rounded-md px-4 py-2 transition-all duration-200">
                     <Receipt className="h-4 w-4" />
                     Faturas
+                  </TabsTrigger>
+                  <TabsTrigger value="packages" className="text-sm gap-1.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm rounded-md px-4 py-2 transition-all duration-200">
+                    <Package className="h-4 w-4" />
+                    Pacotes
+                  </TabsTrigger>
+                  <TabsTrigger value="agenda" className="text-sm gap-1.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm rounded-md px-4 py-2 transition-all duration-200">
+                    <CalendarDays className="h-4 w-4" />
+                    Agenda
                   </TabsTrigger>
                 </TabsList>
 
@@ -774,6 +810,23 @@ export default function ContactProfilePage() {
                           Nova fatura
                         </Button>
                       </div>
+                      {invoices.length > 0 && (
+                        <div className="flex flex-wrap gap-2 text-xs">
+                          {(() => {
+                            const paid = invoices.filter(i => i.status === "paid").reduce((s, i) => s + Number(i.amount), 0);
+                            const pending = invoices.filter(i => i.status === "pending").reduce((s, i) => s + Number(i.amount), 0);
+                            const overdue = invoices.filter(i => i.status === "overdue").reduce((s, i) => s + Number(i.amount), 0);
+                            const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+                            return (
+                              <>
+                                <span className="rounded-full bg-success/10 text-success px-2.5 py-1">Pago: {fmt(paid)}</span>
+                                {pending > 0 && <span className="rounded-full bg-primary/10 text-primary px-2.5 py-1">Pendente: {fmt(pending)}</span>}
+                                {overdue > 0 && <span className="rounded-full bg-destructive/10 text-destructive px-2.5 py-1">Vencido: {fmt(overdue)}</span>}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      )}
                       {invoicesLoading && (
                         <div className="space-y-2">
                           <Skeleton className="h-14 w-full" />
@@ -800,7 +853,7 @@ export default function ContactProfilePage() {
                           {invoices.map((inv) => (
                             <div
                               key={inv.id}
-                              className="flex items-center justify-between rounded-lg border border-border p-3"
+                              className={`flex items-center justify-between rounded-lg border p-3 ${inv.status === "overdue" ? "border-destructive/50 bg-destructive/5" : "border-border"}`}
                             >
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
@@ -830,6 +883,7 @@ export default function ContactProfilePage() {
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-0.5">
                                   Vencimento: {formatDate(inv.due_date)}
+                                  {inv.status === "paid" && inv.paid_at && ` • Pago em ${formatDate(inv.paid_at)}`}
                                   {inv.description && ` • ${inv.description}`}
                                 </p>
                               </div>
@@ -867,6 +921,25 @@ export default function ContactProfilePage() {
                           ))}
                         </div>
                       )}
+                    </motion.div>
+                  </TabsContent>
+                  <TabsContent value="packages" className="mt-4">
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                    >
+                      {contactId && <ContactPackagesTab contactId={contactId} />}
+                    </motion.div>
+                  </TabsContent>
+
+                  <TabsContent value="agenda" className="mt-4">
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                    >
+                      {contactId && <ContactAgendaTab contactId={contactId} tenantId={contact?.tenant_id} />}
                     </motion.div>
                   </TabsContent>
                 </AnimatePresence>

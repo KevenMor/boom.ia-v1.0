@@ -37,7 +37,15 @@ import TokenAnalytics from "@/pages/TokenAnalytics";
 import PublicSandbox from "@/pages/PublicSandbox";
 import NotFound from "@/pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false, // Desabilita refresh ao voltar para a janela
+      staleTime: 1000 * 60 * 5, // Dados válidos por 5 minutos
+      retry: 1, // Tenta 1 vez se falhar
+    },
+  },
+});
 
 const App = () => (
   <ThemeProvider attribute="class" defaultTheme="dark" storageKey="boomia-theme">

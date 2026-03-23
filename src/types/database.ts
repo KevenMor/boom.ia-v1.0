@@ -131,6 +131,34 @@ export interface ContactInvoice {
   updated_at: string;
 }
 
+export type ContactPackageStatus = "active" | "paused" | "completed" | "cancelled";
+
+export interface ContactPackage {
+  id: string;
+  contact_id: string;
+  tenant_id: string;
+  name: string;
+  description: string | null;
+  status: ContactPackageStatus;
+  price: number | null;
+  start_date: string | null;
+  end_date: string | null;
+  sessions_total: number | null;
+  sessions_used: number;
+  metadata?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContactSummary {
+  total_invoiced: number;
+  total_paid: number;
+  total_overdue: number;
+  invoice_count: number;
+  active_packages: number;
+  upcoming_appointments: number;
+}
+
 export interface InventoryItem {
   id: string;
   external_id: string | null;

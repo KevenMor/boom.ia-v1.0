@@ -411,6 +411,35 @@ export function buildCancelNotification(
 }
 
 /**
+ * Monta notificacao de agendamento REMARCADO.
+ * Formato:
+ *   🔄 Agendamento remarcado:
+ *   Nome
+ *   De: seg., DD/MM/AAAA, HH:MM
+ *   Para: seg., DD/MM/AAAA, HH:MM
+ *   ✅ Remarcado automaticamente pela IA
+ */
+export function buildRescheduleNotification(
+  title: string,
+  oldStartAt: string,
+  newStartAt: string
+): string {
+  const oldDataHoraBR = formatDateBR(oldStartAt);
+  const newDataHoraBR = formatDateBR(newStartAt);
+  const nomeMatch = title.match(/^Visita\s*[-–]\s*(.+?)(?:\s*[-–]|$)/i);
+  const nomeCliente = nomeMatch ? nomeMatch[1].trim() : title;
+
+  const lines: string[] = [
+    "🔄 Agendamento remarcado:",
+    nomeCliente,
+    `De: ${oldDataHoraBR || oldStartAt}`,
+    `Para: ${newDataHoraBR || newStartAt}`,
+    "✅ Remarcado automaticamente pela IA",
+  ];
+  return lines.join("\n");
+}
+
+/**
  * Formata data/hora atual em padrão brasileiro (DD/MM/AAAA, HH:MM).
  */
 function formatNowBR(): string {

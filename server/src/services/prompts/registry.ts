@@ -45,6 +45,12 @@ import {
   DISPATCHER_PROMPT as DURCE_DISPATCHER,
   FOLLOWUP_PROMPT as DURCE_FOLLOWUP,
 } from "./durce-vita.js";
+import {
+  SYSTEM_PROMPT as ODONTO_SYSTEM,
+  COMMUNICATION_RULES as ODONTO_COMM_RULES,
+  DISPATCHER_PROMPT as ODONTO_DISPATCHER,
+  FOLLOWUP_PROMPT as ODONTO_FOLLOWUP,
+} from "./clinica-odonto.js";
 
 /**
  * Configuração de prompt por tenant.
@@ -195,6 +201,15 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     version: "v8.0-flash",
     description: "Bia — SDR Autoescola Ideal (Sorocaba/SP)",
   },
+  "clinica-odonto-generica": {
+    systemPrompt: ODONTO_SYSTEM,
+    communicationRules: ODONTO_COMM_RULES,
+    dispatcherPrompt: ODONTO_DISPATCHER,
+    followupPrompt: ODONTO_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.0.0",
+    description: "Recepcionista — Clínica Odontológica Genérica (Customizável)",
+  },
 };
 
 /**
@@ -213,6 +228,10 @@ export function buildSystemPrompt(
   petContext?: string | null,
   /** Quando true, usa apenas data do dia (sem hora) para maximizar cache de prompt */
   useSimplifiedDateContext?: boolean,
+  /** Quando true, injeta regras genéricas de reagendar/cancelar */
+  hasCalendarTool?: boolean,
+  /** Serviços do tenant para injeção dinâmica no prompt */
+  calendarServices?: { name: string; duration_minutes: number }[],
 ): string {
   const config = tenantSlug ? TENANT_PROMPTS[tenantSlug] : undefined;
   const base = config?.systemPrompt || agentSystemPrompt || "You are a helpful AI assistant.";
@@ -239,15 +258,64 @@ export function buildSystemPrompt(
 
   const petContextBlock = petContext ? `\n\n${petContext}` : "";
 
-  return base + commRules + greeting + globalRules + humanization + languageRules + dateContext + petContextBlock;
+  // Bloco de calendário: regras genéricas + serviços do tenant
+  const calendarRulesBlock = hasCalendarTool ? "\n\n" + CALENDAR_TOOL_BASE_RULES : "";
+  const servicesBlock = (hasCalendarTool && calendarServices && calendarServices.length > 0)
+    ? "\n\n[SERVIÇOS DA EMPRESA]\nUse estas durações ao criar agendamentos:\n" +
+      calendarServices.map((s) => `- ${s.name}: ${s.duration_minutes} minutos`).join("\n")
+    : "";
+
+  return base + commRules + greeting + globalRules + humanization + languageRules + dateContext + petContextBlock + calendarRulesBlock + servicesBlock;
 }
+
+// ─── Regras genéricas injetadas quando o agente tem a tool de calendário ativa ───
+
+const CALENDAR_TOOL_BASE_RULES = `
+[REGRAS DE AGENDAMENTO COM CALENDÁRIO]
+
+REMARCAR (cliente quer trocar de horário):
+→ Use action="reagendar" (operação atômica — mais eficiente e seguro)
+→ Parâmetros: start_at (hora antiga, extraída do histórico) + new_start_at (nova hora) + client_name
+→ Uma única operação. Preserva histórico e não cobra sessão extra do pacote.
+
+CANCELAR SEM REMARCAR:
+→ Use action="cancelar"
+→ Parâmetros: start_at (hora exata do agendamento) + client_name
+
+REGRA DE DECISÃO:
+→ Novo horário já informado pelo cliente → action="reagendar"
+→ Só cancelar (sem novo horário) → action="cancelar"
+→ Quer remarcar mas não sabe o novo horário → use action="cancelar"; depois pergunte o novo horário; depois use action="criar"`.trim();
+
+const CALENDAR_DISPATCHER_RULES = `
+CALENDAR — BOOKING (action="criar"):
+  When confirming an appointment, ALWAYS pass procedure_type and duration_minutes if a service was mentioned.
+  → Call: consultar_agenda(action="criar", title="[Name] — [Service]", start_at="...", procedure_type="[service name]", duration_minutes=[minutes from service list])
+  → duration_minutes MUST come from [SERVIÇOS DA EMPRESA] list. If the service is "Limpeza" and the list says "Limpeza: 45 minutos", pass duration_minutes=45.
+  → If the service is not in the list, omit duration_minutes (backend will use default).
+  → NEVER use duration_minutes=60 as default if a specific service was mentioned — look it up in [SERVIÇOS DA EMPRESA].
+
+CALENDAR — RESCHEDULING (action="reagendar", PREFERRED):
+  Trigger: "remarcar", "reagendar", "trocar horário", "mudar data", "trocar de dia", "preciso mudar o horário"
+  AND the customer has already provided a new date/time in the same message or context.
+  → Call: consultar_agenda(action="reagendar", start_at="[old ISO datetime]", new_start_at="[new ISO datetime]", client_name="[name]")
+  Extract old appointment from conversation history (look for confirmed bookings in assistant messages).
+
+CALENDAR — CANCELLATION ONLY (action="cancelar"):
+  Trigger: "cancelar", "desmarcar", "não vou poder", "tive imprevisto", "não consigo ir"
+  OR rescheduling intent WITHOUT a new time provided.
+  → Call: consultar_agenda(action="cancelar", start_at="[exact ISO datetime]", client_name="[name]")
+
+RULE: "remarcar para [horário]" → reagendar | "remarcar" (no new time) → cancelar (conversational model asks for new time)`.trim();
 
 /**
  * Retorna o dispatcher prompt para um tenant.
  */
-export function getDispatcherPrompt(tenantSlug: string | null): string {
+export function getDispatcherPrompt(tenantSlug: string | null, hasCalendarTool?: boolean): string {
   const config = tenantSlug ? TENANT_PROMPTS[tenantSlug] : undefined;
-  return config?.dispatcherPrompt || DEFAULT_DISPATCHER_PROMPT;
+  const base = config?.dispatcherPrompt || DEFAULT_DISPATCHER_PROMPT;
+  const calendarDispatch = hasCalendarTool ? "\n\n" + CALENDAR_DISPATCHER_RULES : "";
+  return base + calendarDispatch;
 }
 
 /**

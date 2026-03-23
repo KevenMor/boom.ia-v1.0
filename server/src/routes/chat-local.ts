@@ -11,6 +11,7 @@ import {
   formatDateBR,
   buildFallbackAgendaNotification,
   buildCancelNotification,
+  buildRescheduleNotification,
   buildHandoffNotification,
   extractClientNameFromMessages,
   userHasProvidedNameInMessages,
@@ -528,18 +529,20 @@ async function sendAgendaNotification(
     action?: string;
     event?: { id?: string; title?: string; start_at?: string };
     deleted_event?: { title?: string; start_at?: string };
+    old_start_at?: string;
     telefone_cliente?: string;
     veiculo_interesse?: string;
   };
   const isCreated = res.action === "created" && res.event;
   const isCancelled = res.action === "cancelled" && res.deleted_event;
-  if (!isCreated && !isCancelled) return;
+  const isRescheduled = res.action === "rescheduled" && res.event;
+  if (!isCreated && !isCancelled && !isRescheduled) return;
 
-  const evt = isCreated ? res.event! : res.deleted_event!;
+  const evt = isCreated ? res.event! : isCancelled ? res.deleted_event! : res.event!;
   const title = evt.title || "Agendamento";
   const startAt = evt.start_at || "";
   // #region agent log
-  fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ad5eb6'},body:JSON.stringify({sessionId:'ad5eb6',location:'chat-local.ts:sendAgendaNotification',message:'start_at do evento antes de formatDateBR',data:{isCreated,isCancelled,startAt,startAtLength:startAt.length,hasOffset:!!startAt.match(/[+-]\d{2}:?\d{2}$/),hasZ:startAt.endsWith('Z')},timestamp:Date.now(),hypothesisId:'H_TIMEZONE'})}).catch(()=>{});
+  fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ad5eb6'},body:JSON.stringify({sessionId:'ad5eb6',location:'chat-local.ts:sendAgendaNotification',message:'start_at do evento antes de formatDateBR',data:{isCreated,isCancelled,isRescheduled,startAt,startAtLength:startAt.length,hasOffset:!!startAt.match(/[+-]\d{2}:?\d{2}$/),hasZ:startAt.endsWith('Z')},timestamp:Date.now(),hypothesisId:'H_TIMEZONE'})}).catch(()=>{});
   // #endregion
   const dataHoraBR = formatDateBR(startAt);
 
@@ -553,6 +556,9 @@ async function sendAgendaNotification(
       res.veiculo_interesse,
       messages
     );
+  } else if (isRescheduled) {
+    const oldStartAt = res.old_start_at || "";
+    message = buildRescheduleNotification(title, oldStartAt, startAt);
   } else {
     message = buildCancelNotification(title, startAt);
   }
@@ -803,6 +809,18 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       });
       let tools = (toolsData || []) as ToolDef[];
       const hasInventoryTool = tools.some((t) => t.tool_type === "inventory_query");
+      const hasCalendarTool = tools.some((t) => t.tool_type === "calendar_query");
+
+      let calendarServices: { name: string; duration_minutes: number }[] = [];
+      if (hasCalendarTool && agent.tenant_id) {
+        const { data: servicesData } = await supabase
+          .from("calendar_service_types")
+          .select("name, duration_minutes")
+          .eq("tenant_id", agent.tenant_id)
+          .eq("active", true)
+          .order("name");
+        calendarServices = servicesData ?? [];
+      }
 
       const leadLabelEnabled = !!agentConfig.lead_label_enabled;
       if (leadLabelEnabled) {
@@ -830,7 +848,9 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         tenantSlug,
         hasInventoryTool,
         petContext,
-        promptCachingEnabledEarly
+        promptCachingEnabledEarly,
+        hasCalendarTool,
+        calendarServices,
       );
       if (leadLabelEnabled) {
         systemPrompt +=
@@ -1024,7 +1044,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           const assignHint = buildAutoescolaIdealAssignHint(messagesToUse, hasAssignTool, tenantSlug);
           const leadHint = buildLeadHint(messagesToUse, leadLabelEnabled);
 
-          const staticDispatcherPrompt = getDispatcherPrompt(tenantSlug) + dispatcherDateContext;
+          const staticDispatcherPrompt = getDispatcherPrompt(tenantSlug, hasCalendarTool) + dispatcherDateContext;
           const hintsBlock = [entityHint, cepHint, assignHint, leadHint, schedulingHint].filter(Boolean).join("");
           const messagesForDispatcher = promptCachingEnabled && hintsBlock && messagesToUse.length > 0
             ? (() => {

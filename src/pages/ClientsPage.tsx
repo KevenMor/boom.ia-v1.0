@@ -90,6 +90,7 @@ export default function ClientsPage() {
   const [editContact, setEditContact] = useState<Contact | null>(null);
   const [deleteContact, setDeleteContact] = useState<Contact | null>(null);
   const [selectedContactForConversation, setSelectedContactForConversation] = useState<Contact | null>(null);
+  const [clientStatusFilter, setClientStatusFilter] = useState<string>("all");
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -108,7 +109,10 @@ export default function ClientsPage() {
     type: "client",
   });
 
-  const paginatedContacts = data?.data ?? [];
+  const allContacts = data?.data ?? [];
+  const paginatedContacts = clientStatusFilter === "all"
+    ? allContacts
+    : allContacts.filter((c) => ((c.metadata as Record<string, unknown> | null)?.client_status ?? "active") === clientStatusFilter);
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const from = total === 0 ? 0 : page * PAGE_SIZE + 1;
@@ -197,6 +201,17 @@ export default function ClientsPage() {
                 <Download className="h-4 w-4" />
                 Exportar CSV
               </Button>
+              <Select value={clientStatusFilter} onValueChange={setClientStatusFilter}>
+                <SelectTrigger className="h-8 w-[140px] bg-muted/50">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="active">Ativo</SelectItem>
+                  <SelectItem value="inactive">Inativo</SelectItem>
+                  <SelectItem value="at_risk">Em risco</SelectItem>
+                </SelectContent>
+              </Select>
               <Select value={sort} onValueChange={(v) => setSort(v as typeof sort)}>
                 <SelectTrigger className="h-8 w-[140px] bg-muted/50">
                   <SelectValue placeholder="Ordenar" />
@@ -257,6 +272,9 @@ export default function ClientsPage() {
                       Telefone
                     </th>
                     <th className="px-4 py-3.5 text-left text-sm font-medium text-muted-foreground">
+                      Status
+                    </th>
+                    <th className="px-4 py-3.5 text-left text-sm font-medium text-muted-foreground">
                       Data de criação
                     </th>
                     <th className="relative px-4 py-3.5 text-right">
@@ -268,7 +286,7 @@ export default function ClientsPage() {
                   {isLoading &&
                     Array.from({ length: 5 }).map((_, i) => (
                       <tr key={i}>
-                        <td className="px-4 py-4" colSpan={6}>
+                        <td className="px-4 py-4" colSpan={7}>
                           <Skeleton className="h-12 w-full" />
                         </td>
                       </tr>
@@ -277,7 +295,7 @@ export default function ClientsPage() {
                   {!isLoading && paginatedContacts.length === 0 && (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={7}
                         className="px-4 py-12 text-center text-sm text-muted-foreground"
                       >
                         Nenhum cliente encontrado. Use &quot;Importar CSV&quot; ou &quot;Novo Cliente&quot; para adicionar.
@@ -336,6 +354,18 @@ export default function ClientsPage() {
                         ) : (
                           <span className="text-sm text-muted-foreground">—</span>
                         )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {(() => {
+                          const s = ((contact.metadata as Record<string, unknown> | null)?.client_status ?? "active") as string;
+                          const cfg: Record<string, { label: string; className: string }> = {
+                            active:   { label: "Ativo",    className: "bg-emerald-500/15 text-emerald-600 border-emerald-200" },
+                            inactive: { label: "Inativo",  className: "bg-slate-500/15 text-slate-600 border-slate-200" },
+                            at_risk:  { label: "Em risco", className: "bg-amber-500/15 text-amber-600 border-amber-200" },
+                          };
+                          const c = cfg[s] ?? cfg.active;
+                          return <Badge className={`text-xs border ${c.className}`}>{c.label}</Badge>;
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">
                         {formatCreatedAt(contact.created_at)}

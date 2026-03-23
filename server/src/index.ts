@@ -13,6 +13,7 @@ import { inventoryRoutes } from "./routes/inventory.js";
 import { ragRoutes } from "./routes/rag.js";
 import { contactsRoutes } from "./routes/contacts.js";
 import { crmContactsRoutes } from "./routes/crm-contacts.js";
+import { calendarServicesRoutes } from "./routes/calendar-services.js";
 import { demoRoutes } from "./routes/demo.js";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
@@ -97,6 +98,7 @@ async function build() {
   fastify.register(ragRoutes, { prefix: "/api" });
   fastify.register(contactsRoutes, { prefix: "/api" });
   fastify.register(crmContactsRoutes, { prefix: "/api" });
+  fastify.register(calendarServicesRoutes, { prefix: "/api" });
   fastify.register(demoRoutes, { prefix: "/api" });
 
   fastify.get("/health", async () => ({ ok: true, timestamp: new Date().toISOString() }));
