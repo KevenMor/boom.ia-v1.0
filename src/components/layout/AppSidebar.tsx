@@ -25,10 +25,13 @@ import {
   Bell,
   Car,
   Users,
+  UserPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { ModuleKey } from "@/lib/tenant-modules";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTenantContext } from "@/contexts/TenantContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useState } from "react";
 import { useTheme } from "next-themes";
@@ -45,7 +48,7 @@ import {
 interface NavGroup {
   label: string;
   defaultOpen?: boolean;
-  items: { to: string; icon: React.ElementType; label: string }[];
+  items: { to: string; icon: React.ElementType; label: string; moduleKey?: ModuleKey }[];
 }
 
 const navGroups: NavGroup[] = [
@@ -53,34 +56,35 @@ const navGroups: NavGroup[] = [
     label: "Visão geral",
     defaultOpen: true,
     items: [
-      { to: "/dashboard", icon: LayoutDashboard, label: "Painel" },
-      { to: "/conversations", icon: MessageSquare, label: "Chat ao Vivo" },
-      { to: "/agents", icon: Bot, label: "Agentes" },
-      { to: "/calendar", icon: CalendarDays, label: "Agenda" },
-      { to: "/followups", icon: Bell, label: "Follow-ups" },
-      { to: "/inventory", icon: Car, label: "Inventário" },
-      { to: "/contacts", icon: Users, label: "Leads" },
-      { to: "/clients", icon: Building2, label: "Clientes" },
+      { to: "/dashboard", icon: LayoutDashboard, label: "Painel", moduleKey: "dashboard" },
+      { to: "/conversations", icon: MessageSquare, label: "Chat ao Vivo", moduleKey: "conversations" },
+      { to: "/agents", icon: Bot, label: "Agentes", moduleKey: "agents" },
+      { to: "/calendar", icon: CalendarDays, label: "Agenda", moduleKey: "calendar" },
+      { to: "/followups", icon: Bell, label: "Follow-ups", moduleKey: "followups" },
+      { to: "/inventory", icon: Car, label: "Inventário", moduleKey: "inventory" },
+      { to: "/contacts", icon: Users, label: "Leads", moduleKey: "contacts" },
+      { to: "/clients", icon: Building2, label: "Clientes", moduleKey: "clients" },
     ],
   },
   {
     label: "Infraestrutura",
     defaultOpen: true,
     items: [
-      { to: "/tenants", icon: Building2, label: "Tenants" },
-      { to: "/tools", icon: Wrench, label: "Ferramentas" },
-      { to: "/providers", icon: Cpu, label: "Provedores" },
+      { to: "/tenants", icon: Building2, label: "Tenants", moduleKey: "tenants" },
+      { to: "/users", icon: UserPlus, label: "Usuários", moduleKey: "tenants" },
+      { to: "/tools", icon: Wrench, label: "Ferramentas", moduleKey: "tools" },
+      { to: "/providers", icon: Cpu, label: "Provedores", moduleKey: "providers" },
     ],
   },
   {
     label: "Sistema",
     defaultOpen: false,
     items: [
-      { to: "/analytics/tokens", icon: BarChart3, label: "Analytics Tokens" },
-      { to: "/prompts", icon: FileText, label: "Prompts" },
-      { to: "/monitoring", icon: Activity, label: "Monitoramento" },
-      { to: "/audit", icon: FileText, label: "Auditoria" },
-      { to: "/settings", icon: Settings, label: "Configurações" },
+      { to: "/analytics/tokens", icon: BarChart3, label: "Analytics Tokens", moduleKey: "analytics_tokens" },
+      { to: "/prompts", icon: FileText, label: "Prompts", moduleKey: "prompts" },
+      { to: "/monitoring", icon: Activity, label: "Monitoramento", moduleKey: "monitoring" },
+      { to: "/audit", icon: FileText, label: "Auditoria", moduleKey: "audit" },
+      { to: "/settings", icon: Settings, label: "Configurações", moduleKey: "settings" },
     ],
   },
 ];
@@ -156,13 +160,23 @@ function CollapsibleGroup({
 }
 
 function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
-  const { signOut, user } = useAuth();
+  const { signOut, user, isSuperAdmin } = useAuth();
   const location = useLocation();
   const isMobile = useIsMobile();
   const { setMobileOpen, toggle } = useSidebar();
   const { theme, setTheme } = useTheme();
+  const { isModuleEnabled } = useTenantContext();
 
   const onLinkClick = isMobile ? () => setMobileOpen(false) : undefined;
+  const filteredNavGroups = navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => {
+        if (isSuperAdmin) return true;
+        return item.moduleKey ? isModuleEnabled(item.moduleKey) : true;
+      }),
+    }))
+    .filter((group) => group.items.length > 0);
 
   return (
     <div className="flex h-full flex-col">
@@ -208,7 +222,7 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
       <nav className="flex-1 space-y-3 overflow-y-auto px-2 py-4">
         {collapsed ? (
           <div className="space-y-1">
-            {navGroups.flatMap((g) => g.items).map((item) => {
+            {filteredNavGroups.flatMap((g) => g.items).map((item) => {
               const isActive = location.pathname.startsWith(item.to);
               return (
                 <NavLink
@@ -229,7 +243,7 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
             })}
           </div>
         ) : (
-          navGroups.map((group) => (
+          filteredNavGroups.map((group) => (
             <CollapsibleGroup
               key={group.label}
               group={group}

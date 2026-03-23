@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createClient } from "@supabase/supabase-js";
 import { sendViaWaha } from "../services/waha.js";
 import { getChatwootAuthHeaders } from "../services/delivery.js";
+import { requireSuperadmin } from "../services/authorization.js";
 
 async function sendViaChatwoot(
   cfg: Record<string, any>,
@@ -80,6 +81,11 @@ async function sendViaChatwoot(
 }
 
 export async function contactsRoutes(fastify: FastifyInstance) {
+  fastify.addHook("preHandler", async (req, reply) => {
+    const ctx = await requireSuperadmin(req, reply);
+    if (!ctx) return reply;
+  });
+
   fastify.post(
     "/contacts/new",
     async (

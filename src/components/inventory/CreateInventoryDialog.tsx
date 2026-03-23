@@ -45,13 +45,9 @@ interface CreateInventoryDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const PPL_MOTORS_TENANT_ID = "bc4a1dc9-a205-4b4b-9b6c-47bf677a2728";
-
 export function CreateInventoryDialog({ open, onOpenChange }: CreateInventoryDialogProps) {
   const createInventory = useCreateInventory();
   const { selectedTenantId } = useTenantContext();
-
-  const tenantId = selectedTenantId ?? PPL_MOTORS_TENANT_ID;
 
   const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -73,9 +69,13 @@ export function CreateInventoryDialog({ open, onOpenChange }: CreateInventoryDia
   });
 
   const onSubmit = async (data: FormData) => {
+    if (!selectedTenantId) {
+      toast.error("Selecione um tenant para cadastrar um veículo.");
+      return;
+    }
     try {
       await createInventory.mutateAsync({
-        tenant_id: tenantId,
+        tenant_id: selectedTenantId,
         brand: data.brand,
         model: data.model,
         version: data.version || null,
@@ -93,8 +93,9 @@ export function CreateInventoryDialog({ open, onOpenChange }: CreateInventoryDia
       toast.success("Veículo cadastrado!");
       reset();
       onOpenChange(false);
-    } catch (err: any) {
-      toast.error("Erro ao cadastrar: " + (err.message ?? "erro desconhecido"));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "erro desconhecido";
+      toast.error("Erro ao cadastrar: " + message);
     }
   };
 
@@ -188,7 +189,7 @@ export function CreateInventoryDialog({ open, onOpenChange }: CreateInventoryDia
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={createInventory.isPending}>
+            <Button type="submit" disabled={createInventory.isPending || !selectedTenantId}>
               {createInventory.isPending ? "Cadastrando..." : "Cadastrar"}
             </Button>
           </DialogFooter>

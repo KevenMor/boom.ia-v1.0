@@ -7,11 +7,13 @@ import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { TenantProvider } from "@/contexts/TenantContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { ModuleRoute } from "@/components/ModuleRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import Tenants from "@/pages/Tenants";
 import EditTenant from "@/pages/EditTenant";
+import UsersManagementPage from "@/pages/UsersManagementPage";
 import Agents from "@/pages/Agents";
 import EditAgent from "@/pages/EditAgent";
 import AgentSandbox from "@/pages/AgentSandbox";
@@ -57,29 +59,198 @@ const App = () => (
                 </ProtectedRoute>
               }
             >
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/tenants" element={<Tenants />} />
-              <Route path="/tenants/:tenantId/edit" element={<EditTenant />} />
-              <Route path="/agents" element={<Agents />} />
-              <Route path="/agents/:agentId/edit" element={<EditAgent />} />
-              <Route path="/agents/:agentId/sandbox" element={<AgentSandbox />} />
-              <Route path="/conversations" element={<Conversations />} />
-              <Route path="/calendar" element={<CalendarPage />} />
-              <Route path="/followups" element={<FollowUpsPage />} />
-              <Route path="/inventory" element={<InventoryPage />} />
-              <Route path="/contacts" element={<ContactsPage />} />
-              <Route path="/clients" element={<ClientsPage />} />
-              <Route path="/contacts/:contactId" element={<ContactProfilePage />} />
-              <Route path="/clients/:contactId" element={<ContactProfilePage />} />
-              <Route path="/tools" element={<Tools />} />
-              <Route path="/tools/:toolId/edit" element={<EditTool />} />
-              <Route path="/providers" element={<Providers />} />
-              <Route path="/providers/:providerId/edit" element={<EditProvider />} />
-              <Route path="/analytics/tokens" element={<TokenAnalytics />} />
-              <Route path="/monitoring" element={<Monitoring />} />
-              <Route path="/audit" element={<Audit />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="/prompts" element={<PromptsPage />} />
+              <Route
+                path="/dashboard"
+                element={
+                  <ModuleRoute moduleKey="dashboard">
+                    <Dashboard />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/tenants"
+                element={
+                  <ModuleRoute moduleKey="tenants" requiredRoles={["superadmin"]}>
+                    <Tenants />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/tenants/:tenantId/edit"
+                element={
+                  <ModuleRoute moduleKey="tenants" requiredRoles={["superadmin"]}>
+                    <EditTenant />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/users"
+                element={
+                  <ModuleRoute moduleKey="tenants" requiredRoles={["superadmin", "admin"]}>
+                    <UsersManagementPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/agents"
+                element={
+                  <ModuleRoute moduleKey="agents">
+                    <Agents />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/agents/:agentId/edit"
+                element={
+                  <ModuleRoute moduleKey="agents">
+                    <EditAgent />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/agents/:agentId/sandbox"
+                element={
+                  <ModuleRoute moduleKey="agents">
+                    <AgentSandbox />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/conversations"
+                element={
+                  <ModuleRoute moduleKey="conversations">
+                    <Conversations />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/calendar"
+                element={
+                  <ModuleRoute moduleKey="calendar">
+                    <CalendarPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/followups"
+                element={
+                  <ModuleRoute moduleKey="followups">
+                    <FollowUpsPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/inventory"
+                element={
+                  <ModuleRoute moduleKey="inventory">
+                    <InventoryPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/contacts"
+                element={
+                  <ModuleRoute moduleKey="contacts">
+                    <ContactsPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/clients"
+                element={
+                  <ModuleRoute moduleKey="clients">
+                    <ClientsPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/contacts/:contactId"
+                element={
+                  <ModuleRoute moduleKey="contacts">
+                    <ContactProfilePage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/clients/:contactId"
+                element={
+                  <ModuleRoute moduleKey="clients">
+                    <ContactProfilePage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/tools"
+                element={
+                  <ModuleRoute moduleKey="tools">
+                    <Tools />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/tools/:toolId/edit"
+                element={
+                  <ModuleRoute moduleKey="tools">
+                    <EditTool />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/providers"
+                element={
+                  <ModuleRoute moduleKey="providers">
+                    <Providers />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/providers/:providerId/edit"
+                element={
+                  <ModuleRoute moduleKey="providers">
+                    <EditProvider />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/analytics/tokens"
+                element={
+                  <ModuleRoute moduleKey="analytics_tokens">
+                    <TokenAnalytics />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/monitoring"
+                element={
+                  <ModuleRoute moduleKey="monitoring">
+                    <Monitoring />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/audit"
+                element={
+                  <ModuleRoute moduleKey="audit">
+                    <Audit />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/settings"
+                element={
+                  <ModuleRoute moduleKey="settings">
+                    <SettingsPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/prompts"
+                element={
+                  <ModuleRoute moduleKey="prompts">
+                    <PromptsPage />
+                  </ModuleRoute>
+                }
+              />
               <Route path="/profile" element={<ProfilePage />} />
             </Route>
             <Route path="*" element={<NotFound />} />

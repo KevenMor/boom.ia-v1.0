@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAgents } from "@/hooks/useAgents";
+import { useTenants } from "@/hooks/useTenants";
 import { useTenantContext } from "@/contexts/TenantContext";
 import { useConversations, useMultiConversationMessages } from "@/hooks/useConversations";
 import { formatDistanceToNow, format } from "date-fns";
@@ -31,6 +32,11 @@ function getAvatarColor(name: string): string {
 export default function Conversations() {
   const { selectedTenantId } = useTenantContext();
   const { data: agents, isLoading: agentsLoading } = useAgents(selectedTenantId ?? undefined);
+  const { data: tenants } = useTenants();
+  const tenantNameById = useMemo(
+    () => new Map((tenants ?? []).map((t) => [t.id, t.name])),
+    [tenants]
+  );
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [selectedContactKey, setSelectedContactKey] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -419,7 +425,11 @@ export default function Conversations() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-foreground truncate">{agent.name}</p>
-                    <p className="text-xs text-muted-foreground truncate">{(agent.tenants as any)?.name ?? "Sem tenant"}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {(agent.tenants as { name?: string } | null)?.name
+                        ?? tenantNameById.get(agent.tenant_id)
+                        ?? "Sem tenant"}
+                    </p>
                   </div>
                   <MessageSquare className="h-4 w-4 text-muted-foreground/40 group-hover:text-primary transition-colors shrink-0" />
                 </button>

@@ -70,11 +70,23 @@ export interface AuditLog {
   created_at: string;
 }
 
+// "admin" é legado e tratado como superadmin em runtime.
+export type AppRole = "superadmin" | "tenant_admin" | "tenant_user" | "admin";
+
 export interface Profile {
   id: string;
   full_name: string | null;
-  role: string;
+  role: AppRole;
   avatar_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TenantMembership {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  role: "tenant_admin" | "tenant_user";
   created_at: string;
   updated_at: string;
 }

@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
 import { upsertCrmContact } from "../services/crm-contact-sync.js";
+import { canAccessTenant, canManageTenant, requireAuthenticated } from "../services/authorization.js";
 
 type ContactType = "lead" | "client";
 
@@ -32,7 +33,12 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
         const { tenant_id, limit = "100", offset = "0", search, order_by = "updated_at", order_dir = "desc", type } = req.query;
+        if (tenant_id && !canAccessTenant(auth, tenant_id)) {
+          return reply.status(403).send({ error: "forbidden_tenant_access" });
+        }
         const orderCol = order_by === "name" ? "name" : "updated_at";
         const orderAsc = order_dir === "asc";
         let query = supabase
@@ -69,6 +75,8 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
         const body = req.body as Record<string, unknown>;
         const contactType = (body.contact_type === "client" ? "client" : "lead") as ContactType;
         const record: Record<string, unknown> = {
@@ -88,6 +96,9 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
 
         if (!record.tenant_id || !record.name) {
           return reply.status(400).send({ error: "tenant_id e name são obrigatórios" });
+        }
+        if (!canManageTenant(auth, String(record.tenant_id))) {
+          return reply.status(403).send({ error: "forbidden_tenant_access" });
         }
 
         const { data, error } = await supabase.from("contacts").insert(record).select().single();
@@ -123,9 +134,14 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
         const { tenant_id, rows } = req.body as { tenant_id: string; rows: unknown[] };
         if (!tenant_id || !Array.isArray(rows) || rows.length === 0) {
           return reply.status(400).send({ error: "tenant_id e rows (array) são obrigatórios" });
+        }
+        if (!canManageTenant(auth, tenant_id)) {
+          return reply.status(403).send({ error: "forbidden_tenant_access" });
         }
 
         const toInsert = rows
@@ -174,6 +190,8 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
         const { id } = req.params;
         const { data, error } = await supabase
           .from("contacts")
@@ -183,6 +201,9 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
 
         if (error) throw error;
         if (!data) return reply.status(404).send({ error: "Contato não encontrado" });
+        if (!canAccessTenant(auth, data.tenant_id)) {
+          return reply.status(403).send({ error: "forbidden_tenant_access" });
+        }
         return reply.send(data);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -199,7 +220,18 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
         const { id } = req.params;
+        const { data: existingContact } = await supabase
+          .from("contacts")
+          .select("tenant_id")
+          .eq("id", id)
+          .maybeSingle();
+        if (!existingContact) return reply.status(404).send({ error: "Contato não encontrado" });
+        if (!canManageTenant(auth, existingContact.tenant_id)) {
+          return reply.status(403).send({ error: "forbidden_tenant_access" });
+        }
         const body = req.body as Record<string, unknown>;
         const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
         const allowed = ["name", "email", "phone", "cpf_cnpj", "address", "city", "state", "zip_code", "notes", "metadata", "avatar_url", "contact_type"];
@@ -226,7 +258,18 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
     "/crm-contacts/:id",
     async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
         const { id } = req.params;
+        const { data: existingContact } = await supabase
+          .from("contacts")
+          .select("tenant_id")
+          .eq("id", id)
+          .maybeSingle();
+        if (!existingContact) return reply.status(404).send({ error: "Contato não encontrado" });
+        if (!canManageTenant(auth, existingContact.tenant_id)) {
+          return reply.status(403).send({ error: "forbidden_tenant_access" });
+        }
         const { error } = await supabase.from("contacts").delete().eq("id", id);
         if (error) throw error;
         return reply.send({ success: true });
@@ -259,6 +302,8 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
         const { id: contactId } = req.params;
         const { data: contact, error: contactErr } = await supabase
           .from("contacts")
@@ -267,6 +312,9 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
           .maybeSingle();
         if (contactErr || !contact) {
           return reply.status(404).send({ error: "Contato não encontrado" });
+        }
+        if (!canAccessTenant(auth, contact.tenant_id)) {
+          return reply.status(403).send({ error: "forbidden_tenant_access" });
         }
         const { data, error } = await supabase
           .from("contact_invoices")
@@ -290,6 +338,8 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
         const { id: contactId } = req.params;
         const body = req.body as Record<string, unknown>;
         const { data: contact, error: contactErr } = await supabase
@@ -299,6 +349,9 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
           .maybeSingle();
         if (contactErr || !contact) {
           return reply.status(404).send({ error: "Contato não encontrado" });
+        }
+        if (!canManageTenant(auth, contact.tenant_id)) {
+          return reply.status(403).send({ error: "forbidden_tenant_access" });
         }
         const amount = Number(body.amount);
         const dueDate = String(body.due_date || "").trim();
@@ -339,6 +392,8 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
         const { contactId, invoiceId } = req.params;
         const body = req.body as Record<string, unknown>;
         const { data: existing, error: fetchErr } = await supabase
@@ -349,6 +404,14 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
           .maybeSingle();
         if (fetchErr || !existing) {
           return reply.status(404).send({ error: "Fatura não encontrada" });
+        }
+        const { data: contact } = await supabase
+          .from("contacts")
+          .select("tenant_id")
+          .eq("id", contactId)
+          .maybeSingle();
+        if (!contact || !canManageTenant(auth, contact.tenant_id)) {
+          return reply.status(403).send({ error: "forbidden_tenant_access" });
         }
         const allowed = ["amount", "due_date", "paid_at", "status", "description", "metadata"];
         const updates: Record<string, unknown> = {};
@@ -382,7 +445,17 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
         const { contactId, invoiceId } = req.params;
+        const { data: contact } = await supabase
+          .from("contacts")
+          .select("tenant_id")
+          .eq("id", contactId)
+          .maybeSingle();
+        if (!contact || !canManageTenant(auth, contact.tenant_id)) {
+          return reply.status(403).send({ error: "forbidden_tenant_access" });
+        }
         const { error } = await supabase
           .from("contact_invoices")
           .delete()
@@ -405,6 +478,8 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
         const { id } = req.params;
         const { data: contact, error: contactErr } = await supabase
           .from("contacts")
@@ -414,6 +489,9 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
 
         if (contactErr || !contact) {
           return reply.status(404).send({ error: "Contato não encontrado" });
+        }
+        if (!canAccessTenant(auth, contact.tenant_id)) {
+          return reply.status(403).send({ error: "forbidden_tenant_access" });
         }
 
         const phoneRaw = (contact.phone || "").trim();
@@ -547,7 +625,12 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
         const tenantIdFilter = (req.body as { tenant_id?: string })?.tenant_id;
+        if (tenantIdFilter && !canManageTenant(auth, tenantIdFilter)) {
+          return reply.status(403).send({ error: "forbidden_tenant_access" });
+        }
         const { data: agents } = await supabase
           .from("agents")
           .select("id, tenant_id")
@@ -625,7 +708,12 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
         const tenantIdFilter = (req.body as { tenant_id?: string })?.tenant_id;
+        if (tenantIdFilter && !canManageTenant(auth, tenantIdFilter)) {
+          return reply.status(403).send({ error: "forbidden_tenant_access" });
+        }
         let query = supabase
           .from("contacts")
           .select("id, tenant_id, name, phone, updated_at");

@@ -1,3 +1,5 @@
+import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
+
 // Em dev (localhost) usa /api relativo (proxy do Vite); em produção usa origem atual.
 const isLocalhost =
   typeof window !== "undefined" &&
@@ -18,13 +20,21 @@ export async function callAPI<T = unknown>(
 ): Promise<T> {
   const { method = "POST", body, headers = {} } = options;
   const url = endpoint.startsWith("http") ? endpoint : `${getApiBase()}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
+  const resolvedHeaders: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...headers,
+  };
+
+  if (!resolvedHeaders["x-nexus-auth"]) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      resolvedHeaders["x-nexus-auth"] = `Bearer ${session.access_token}`;
+    }
+  }
 
   const res = await fetch(url, {
     method,
-    headers: {
-      "Content-Type": "application/json",
-      ...headers,
-    },
+    headers: resolvedHeaders,
     body: method !== "GET" && body !== undefined ? JSON.stringify(body) : undefined,
   });
 

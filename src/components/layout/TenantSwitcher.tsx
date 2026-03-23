@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Building2, Check, ChevronsUpDown } from "lucide-react";
 import { useTenants } from "@/hooks/useTenants";
 import { useTenantContext } from "@/contexts/TenantContext";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +15,7 @@ import { cn } from "@/lib/utils";
 
 export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
   const { data: tenants, isLoading } = useTenants();
+  const { isSuperAdmin } = useAuth();
   const { selectedTenantId, setSelectedTenantId, selectedTenant, setSelectedTenant } = useTenantContext();
 
   // Sync full tenant object when tenants load or selection changes
@@ -33,7 +35,9 @@ export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
     }
   }, [tenants, selectedTenantId]);
 
-  const activeTenants = tenants?.filter((t) => t.status === "active") ?? [];
+  const visibleTenants = isSuperAdmin
+    ? (tenants ?? [])
+    : (tenants?.filter((t) => t.status === "active") ?? []);
   const displayName = selectedTenant?.name ?? "Todos os tenants";
   const initials = selectedTenant?.name?.slice(0, 2).toUpperCase() ?? "ALL";
 
@@ -59,7 +63,7 @@ export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
             {!selectedTenantId && <Check className="h-4 w-4 text-primary" />}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          {activeTenants.map((t) => (
+          {visibleTenants.map((t) => (
             <DropdownMenuItem
               key={t.id}
               onClick={() => setSelectedTenantId(t.id)}
@@ -98,7 +102,7 @@ export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
         {isLoading && (
           <DropdownMenuItem disabled className="text-xs text-muted-foreground py-2">Carregando...</DropdownMenuItem>
         )}
-        {activeTenants.map((t) => (
+        {visibleTenants.map((t) => (
           <DropdownMenuItem
             key={t.id}
             onClick={() => setSelectedTenantId(t.id)}

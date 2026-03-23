@@ -1,8 +1,24 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
+import { probeVideoUrl } from "../services/video-url-probe.js";
+import { isTenantModuleEnabled } from "../services/tenant-modules.js";
+import { canAccessTenant, canManageTenant, requireAuthenticated } from "../services/authorization.js";
 
 const LISTING_URL = "https://pplmotors.com.br/Veiculos";
 const PPL_MOTORS_TENANT_ID = "bc4a1dc9-a205-4b4b-9b6c-47bf677a2728";
+const INVENTORY_MODULE_KEY = "inventory";
+
+async function denyIfInventoryDisabled(
+  supabase: ReturnType<typeof createNexusClient>,
+  tenantId: string | undefined,
+  reply: FastifyReply
+): Promise<boolean> {
+  if (!tenantId) return false;
+  const enabled = await isTenantModuleEnabled(supabase, tenantId, INVENTORY_MODULE_KEY);
+  if (enabled) return false;
+  reply.status(403).send({ error: "module_disabled", module_key: INVENTORY_MODULE_KEY });
+  return true;
+}
 
 interface InventoryRecord {
   id?: string;
@@ -259,7 +275,13 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
         const { tenant_id, status, limit = "100", offset = "0", search } = req.query;
+        if (tenant_id && !canAccessTenant(auth, tenant_id)) {
+          return reply.status(403).send({ error: "forbidden_tenant_access" });
+        }
+        if (await denyIfInventoryDisabled(supabase, tenant_id, reply)) return;
         let query = supabase
           .from("inventory")
           .select("id, external_id, tenant_id, brand, model, version, year, price, mileage, color, transmission, fuel_type, photo_url, photos, detail_url, description, status, video_details, raw_data, last_synced_at, created_at, updated_at, tenants(name)", { count: "exact" })
@@ -279,9 +301,10 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
         const { data, error, count } = await query;
         if (error) throw error;
         return reply.send({ data: data ?? [], total: count ?? 0 });
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
         console.error("inventory list error:", err);
-        return reply.status(500).send({ error: err.message });
+        return reply.status(500).send({ error: message });
       }
     }
   );
@@ -294,9 +317,19 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
         const body = req.body as Record<string, unknown>;
+        const tenantId = typeof body.tenant_id === "string" ? body.tenant_id : "";
+        if (!tenantId) {
+          return reply.status(400).send({ error: "tenant_id is required" });
+        }
+        if (!canManageTenant(auth, tenantId)) {
+          return reply.status(403).send({ error: "forbidden_tenant_access" });
+        }
+        if (await denyIfInventoryDisabled(supabase, tenantId, reply)) return;
         const record: Record<string, unknown> = {
-          tenant_id: body.tenant_id ?? PPL_MOTORS_TENANT_ID,
+          tenant_id: tenantId,
           brand: body.brand ?? "",
           model: body.model ?? "",
           version: body.version ?? null,
@@ -319,9 +352,48 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
         const { data, error } = await supabase.from("inventory").insert(record).select().single();
         if (error) throw error;
         return reply.send(data);
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
         console.error("inventory create error:", err);
-        return reply.status(500).send({ error: err.message });
+        return reply.status(500).send({ error: message });
+      }
+    }
+  );
+
+  // POST /api/inventory/video-probe — estima tamanho e modo de envio WhatsApp (HEAD/Range)
+  fastify.post(
+    "/inventory/video-probe",
+    async (req: FastifyRequest<{ Body: { url?: string; tenant_id?: string } }>, reply: FastifyReply) => {
+      try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
+        const tenantId = req.body?.tenant_id;
+        if (tenantId && !canAccessTenant(auth, tenantId)) {
+          return reply.status(403).send({ error: "forbidden_tenant_access" });
+        }
+        if (await denyIfInventoryDisabled(supabase, tenantId, reply)) return;
+        const url = typeof req.body?.url === "string" ? req.body.url : "";
+        if (!url.trim()) {
+          return reply.status(400).send({
+            ok: false,
+            sizeBytes: null,
+            deliveryMode: "unknown",
+            humanLabelPt: "Informe uma URL.",
+            error: "empty_url",
+          });
+        }
+        const result = await probeVideoUrl(url);
+        return reply.send(result);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("inventory video-probe error:", msg);
+        return reply.status(500).send({
+          ok: false,
+          sizeBytes: null,
+          deliveryMode: "unknown",
+          humanLabelPt: "Não foi possível verificar agora. Tente de novo.",
+          error: msg,
+        });
       }
     }
   );
@@ -334,8 +406,21 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
         const { id } = req.params;
         const body = req.body as Record<string, unknown>;
+        const { data: existing, error: existingErr } = await supabase
+          .from("inventory")
+          .select("tenant_id")
+          .eq("id", id)
+          .maybeSingle();
+        if (existingErr) throw existingErr;
+        if (!existing) return reply.status(404).send({ error: "Inventory item not found" });
+        if (!canManageTenant(auth, existing.tenant_id)) {
+          return reply.status(403).send({ error: "forbidden_tenant_access" });
+        }
+        if (await denyIfInventoryDisabled(supabase, existing.tenant_id, reply)) return;
         const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
         const allowed = ["brand", "model", "version", "year", "price", "mileage", "color", "transmission", "fuel_type", "photo_url", "photos", "detail_url", "description", "status", "video_details", "external_id"];
         for (const key of allowed) {
@@ -348,9 +433,10 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
         const { data, error } = await supabase.from("inventory").update(updates).eq("id", id).select().single();
         if (error) throw error;
         return reply.send(data);
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
         console.error("inventory update error:", err);
-        return reply.status(500).send({ error: err.message });
+        return reply.status(500).send({ error: message });
       }
     }
   );
@@ -360,13 +446,27 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
     "/inventory/:id",
     async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
         const { id } = req.params;
+        const { data: existing, error: existingErr } = await supabase
+          .from("inventory")
+          .select("tenant_id")
+          .eq("id", id)
+          .maybeSingle();
+        if (existingErr) throw existingErr;
+        if (!existing) return reply.status(404).send({ error: "Inventory item not found" });
+        if (!canManageTenant(auth, existing.tenant_id)) {
+          return reply.status(403).send({ error: "forbidden_tenant_access" });
+        }
+        if (await denyIfInventoryDisabled(supabase, existing.tenant_id, reply)) return;
         const { error } = await supabase.from("inventory").delete().eq("id", id);
         if (error) throw error;
         return reply.send({ success: true });
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
         console.error("inventory delete error:", err);
-        return reply.status(500).send({ error: err.message });
+        return reply.status(500).send({ error: message });
       }
     }
   );
@@ -380,12 +480,18 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
     ) => {
       const nexusAuth = (req.headers["x-nexus-auth"] as string) || "";
       const supabase = createNexusClient(nexusAuth);
+      const auth = await requireAuthenticated(req, reply);
+      if (!auth) return;
 
       const bodyTenantId = (req.body as { tenant_id?: string })?.tenant_id;
       let tenant_id: string;
       let listingUrl: string;
 
       if (bodyTenantId) {
+        if (!canManageTenant(auth, bodyTenantId)) {
+          return reply.status(403).send({ error: "forbidden_tenant_access" });
+        }
+        if (await denyIfInventoryDisabled(supabase, bodyTenantId, reply)) return;
         const { data: tenant, error: tenantErr } = await supabase
           .from("tenants")
           .select("id, settings")
@@ -407,6 +513,10 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
         }
       } else {
         tenant_id = PPL_MOTORS_TENANT_ID;
+        if (!canManageTenant(auth, tenant_id)) {
+          return reply.status(403).send({ error: "forbidden_tenant_access" });
+        }
+        if (await denyIfInventoryDisabled(supabase, tenant_id, reply)) return;
         listingUrl = LISTING_URL;
       }
 
@@ -509,9 +619,10 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
           .not("external_id", "in", `(${syncedIds.join(",")})`);
 
         return reply.send({ success: true, ...results });
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
         console.error("sync-inventory error:", err);
-        return reply.status(500).send({ error: err.message });
+        return reply.status(500).send({ error: message });
       }
     }
   );

@@ -1,4 +1,5 @@
 import { createNexusClient } from "./supabase.js";
+import { isTenantModuleEnabled } from "./tenant-modules.js";
 import { runFipeQuery } from "./fipe.js";
 import { runFindNearestUnit } from "./find-nearest-unit.js";
 import { buildHandoffNotification, containsInstitutionNameToken, isBlockedAsName } from "../utils/agendaNotification.js";
@@ -80,6 +81,10 @@ async function executeInventoryQuery(
     const tenantId = agent?.tenant_id;
     if (!tenantId) {
       return { success: false, result: null, error: "Agent tenant not found" };
+    }
+    const inventoryEnabled = await isTenantModuleEnabled(supabase, tenantId, "inventory");
+    if (!inventoryEnabled) {
+      return { success: false, result: null, error: "module_disabled: inventory" };
     }
 
     let query = supabase
@@ -271,7 +276,7 @@ async function executeInventoryQuery(
     }>;
 
     let corFallbackUsed = false;
-    let corOriginal = cor;
+    const corOriginal = cor;
     if (cor) {
       const synonyms = getColorSynonyms(cor);
       const colorFiltered = vehicles.filter((v) => {

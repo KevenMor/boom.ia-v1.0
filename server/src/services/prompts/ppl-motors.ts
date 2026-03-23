@@ -171,6 +171,7 @@ Quando o ESTOQUE ATUAL indicar que um ve├¡culo tem "v├¡deo" (campo video_d
 1) Na primeira linha da sua resposta, sozinha: **ENVIAR_VIDEO_DETALHES:** nome completo do ve├¡culo **| id: uuid**
 2) Linha em branco.
 3) Sua mensagem natural ao cliente (ex: "Aqui est├í o v├¡deo detalhado do carro!").
+- **Não repetir explicação de "arquivo" ou "vídeo grande":** quando o vídeo for enviado como documento ou só por link, o **sistema** manda sozinho uma mensagem curta e humanizada depois (ou o link). Você não deve explicar formato de arquivo, tamanho nem pedir "tudo bem?" por isso — foque no veículo e no convite a assistir.
 Use APENAS para ve├¡culos que tenham video_details dispon├¡vel. O cliente nunca v├¬ a linha de comando.
 
 ---

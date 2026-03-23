@@ -8,6 +8,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAgents } from "@/hooks/useAgents";
+import { useTenants } from "@/hooks/useTenants";
 import { useTenantContext } from "@/contexts/TenantContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CreateAgentDialog } from "@/components/agents/CreateAgentDialog";
@@ -24,6 +25,7 @@ export default function Agents() {
   const [search, setSearch] = useState("");
   const { selectedTenantId } = useTenantContext();
   const { data: agents, isLoading, error } = useAgents(selectedTenantId ?? undefined);
+  const { data: tenants } = useTenants();
   const [createOpen, setCreateOpen] = useState(false);
   const [editAgent, setEditAgent] = useState<Agent | null>(null);
   const [deleteAgent, setDeleteAgent] = useState<Agent | null>(null);
@@ -33,6 +35,7 @@ export default function Agents() {
       a.name.toLowerCase().includes(search.toLowerCase()) ||
       (a.tenants as any)?.name?.toLowerCase().includes(search.toLowerCase())
   );
+  const tenantNameById = new Map((tenants ?? []).map((t) => [t.id, t.name]));
 
   return (
     <div className="space-y-6">
@@ -83,7 +86,10 @@ export default function Agents() {
           const isActive = agent.status === "active";
           const isTest = agent.status === "test";
           const isInactive = agent.status === "inactive";
-          const tenantName = (agent.tenants as any)?.name ?? "Sem tenant";
+          const tenantName =
+            (agent.tenants as any)?.name
+            ?? tenantNameById.get(agent.tenant_id)
+            ?? "Sem tenant";
           const providerName = (agent.providers as any)?.name;
           const webhookUrl = `${WEBHOOK_BASE}?agent_id=${agent.id}`;
           const demoUrl = `${window.location.origin}/demo/${agent.id}`;

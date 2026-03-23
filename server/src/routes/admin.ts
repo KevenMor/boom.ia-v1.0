@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
+import { requireSuperadmin } from "../services/authorization.js";
 import {
   getAllPromptConfigs,
   getPromptConfig,
@@ -34,6 +35,11 @@ async function decrypt(encoded: string, secret: string): Promise<string> {
 }
 
 export async function adminRoutes(fastify: FastifyInstance) {
+  fastify.addHook("preHandler", async (req, reply) => {
+    const ctx = await requireSuperadmin(req, reply);
+    if (!ctx) return reply;
+  });
+
   fastify.post(
     "/admin/clear-conversations",
     async (
@@ -240,4 +246,257 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
     return reply.send({ tenants: summary });
   });
+
+  fastify.get("/admin/tenants", async (_req: FastifyRequest, reply: FastifyReply) => {
+    const supabase = createNexusClient();
+    const { data, error } = await supabase
+      .from("tenants")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      return reply.status(500).send({ error: error.message });
+    }
+
+    return reply.send({ data: data ?? [] });
+  });
+
+  type TenantMembershipRole = "tenant_admin" | "tenant_user";
+
+  interface AdminUserRow {
+    id: string;
+    email: string | null;
+    full_name: string | null;
+    role: string;
+    created_at: string;
+    memberships: Array<{
+      id: string;
+      tenant_id: string;
+      role: string;
+      tenants: { name: string } | null;
+    }>;
+  }
+
+  fastify.get("/admin/users", async (_req: FastifyRequest, reply: FastifyReply) => {
+    if (!process.env.NEXUS_SERVICE_ROLE_KEY) {
+      return reply.status(503).send({ error: "NEXUS_SERVICE_ROLE_KEY not configured for user management" });
+    }
+    const supabase = createNexusClient();
+    const [{ data: profiles, error: pErr }, { data: memberships, error: mErr }, listRes] = await Promise.all([
+      supabase.from("profiles").select("id, full_name, role, created_at").order("created_at", { ascending: false }),
+      supabase.from("tenant_memberships").select("id, user_id, tenant_id, role, tenants(name)"),
+      supabase.auth.admin.listUsers({ perPage: 1000 }),
+    ]);
+    if (pErr) return reply.status(500).send({ error: pErr.message });
+    if (mErr) return reply.status(500).send({ error: mErr.message });
+    if (listRes.error) {
+      fastify.log.warn({ err: listRes.error }, "admin listUsers failed; emails omitted");
+    }
+
+    const emailById = new Map<string, string>();
+    for (const u of listRes.data?.users ?? []) {
+      if (u.id && u.email) emailById.set(u.id, u.email);
+    }
+
+    const byUser = new Map<string, AdminUserRow["memberships"]>();
+    for (const row of memberships ?? []) {
+      const raw = row as Record<string, unknown>;
+      const id = String(raw.id ?? "");
+      const user_id = String(raw.user_id ?? "");
+      const tenant_id = String(raw.tenant_id ?? "");
+      const role = String(raw.role ?? "");
+      let tenantName: { name: string } | null = null;
+      const t = raw.tenants;
+      if (t && !Array.isArray(t) && typeof (t as { name?: string }).name === "string") {
+        tenantName = { name: (t as { name: string }).name };
+      } else if (Array.isArray(t) && t[0] && typeof (t[0] as { name?: string }).name === "string") {
+        tenantName = { name: (t[0] as { name: string }).name };
+      }
+      const list = byUser.get(user_id) ?? [];
+      list.push({
+        id,
+        tenant_id,
+        role,
+        tenants: tenantName,
+      });
+      byUser.set(user_id, list);
+    }
+
+    const data: AdminUserRow[] = (profiles ?? []).map((p: { id: string; full_name: string | null; role: string; created_at: string }) => ({
+      id: p.id,
+      email: emailById.get(p.id) ?? null,
+      full_name: p.full_name,
+      role: p.role,
+      created_at: p.created_at,
+      memberships: byUser.get(p.id) ?? [],
+    }));
+
+    return reply.send({ data });
+  });
+
+  fastify.post(
+    "/admin/users",
+    async (
+      req: FastifyRequest<{
+        Body: {
+          email?: string;
+          password?: string;
+          full_name?: string | null;
+          memberships?: Array<{ tenant_id: string; role: TenantMembershipRole }>;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      if (!process.env.NEXUS_SERVICE_ROLE_KEY) {
+        return reply.status(503).send({ error: "NEXUS_SERVICE_ROLE_KEY not configured for user management" });
+      }
+      const supabase = createNexusClient();
+      const email = String(req.body?.email ?? "").trim().toLowerCase();
+      const password = String(req.body?.password ?? "");
+      const full_name = req.body?.full_name != null ? String(req.body.full_name).trim() || null : null;
+      const rawMemberships = Array.isArray(req.body?.memberships) ? req.body.memberships : [];
+
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return reply.status(400).send({ error: "email inválido" });
+      }
+      if (password.length < 8) {
+        return reply.status(400).send({ error: "senha deve ter pelo menos 8 caracteres" });
+      }
+
+      const seenTenants = new Set<string>();
+      const memberships: Array<{ tenant_id: string; role: TenantMembershipRole }> = [];
+      for (const m of rawMemberships) {
+        if (!m?.tenant_id || typeof m.tenant_id !== "string") continue;
+        const role = m.role === "tenant_admin" ? "tenant_admin" : "tenant_user";
+        if (seenTenants.has(m.tenant_id)) continue;
+        seenTenants.add(m.tenant_id);
+        memberships.push({ tenant_id: m.tenant_id, role });
+      }
+
+      const { data: created, error: authErr } = await supabase.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: full_name ? { full_name } : undefined,
+      });
+
+      if (authErr || !created?.user) {
+        const msg = authErr?.message ?? "create user failed";
+        if (/already|registered|exists/i.test(msg)) {
+          return reply.status(409).send({ error: "Este e-mail já está cadastrado" });
+        }
+        return reply.status(400).send({ error: msg });
+      }
+
+      const userId = created.user.id;
+
+      const { error: profileErr } = await supabase.from("profiles").upsert(
+        {
+          id: userId,
+          full_name,
+          role: "tenant_user",
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "id" }
+      );
+      if (profileErr) {
+        await supabase.auth.admin.deleteUser(userId);
+        return reply.status(500).send({ error: profileErr.message });
+      }
+
+      if (memberships.length > 0) {
+        const { error: memErr } = await supabase.from("tenant_memberships").insert(
+          memberships.map((m) => ({
+            user_id: userId,
+            tenant_id: m.tenant_id,
+            role: m.role,
+            updated_at: new Date().toISOString(),
+          }))
+        );
+        if (memErr) {
+          await supabase.from("tenant_memberships").delete().eq("user_id", userId);
+          await supabase.from("profiles").delete().eq("id", userId);
+          await supabase.auth.admin.deleteUser(userId);
+          return reply.status(400).send({ error: memErr.message });
+        }
+      }
+
+      return reply.status(201).send({
+        id: userId,
+        email: created.user.email,
+        full_name,
+        role: "tenant_user",
+        memberships,
+      });
+    }
+  );
+
+  fastify.patch(
+    "/admin/users/:id",
+    async (
+      req: FastifyRequest<{
+        Params: { id: string };
+        Body: {
+          full_name?: string | null;
+          memberships?: Array<{ tenant_id: string; role: TenantMembershipRole }>;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      if (!process.env.NEXUS_SERVICE_ROLE_KEY) {
+        return reply.status(503).send({ error: "NEXUS_SERVICE_ROLE_KEY not configured for user management" });
+      }
+      const supabase = createNexusClient();
+      const userId = req.params.id;
+      if (!userId) return reply.status(400).send({ error: "id obrigatório" });
+
+      const { data: existing, error: fetchErr } = await supabase.from("profiles").select("id, role").eq("id", userId).maybeSingle();
+      if (fetchErr) return reply.status(500).send({ error: fetchErr.message });
+      if (!existing) return reply.status(404).send({ error: "usuário não encontrado" });
+
+      const existingRole = String((existing as { role?: string }).role ?? "").toLowerCase();
+      if (existingRole === "superadmin" || existingRole === "admin") {
+        return reply.status(403).send({ error: "não é permitido alterar membros de super admin por esta rota" });
+      }
+
+      if (req.body?.full_name !== undefined) {
+        const full_name = req.body.full_name === null ? null : String(req.body.full_name).trim() || null;
+        const { error: upErr } = await supabase
+          .from("profiles")
+          .update({ full_name, updated_at: new Date().toISOString() })
+          .eq("id", userId);
+        if (upErr) return reply.status(500).send({ error: upErr.message });
+      }
+
+      if (req.body?.memberships !== undefined) {
+        const rawMemberships = Array.isArray(req.body.memberships) ? req.body.memberships : [];
+        const seenTenants = new Set<string>();
+        const memberships: Array<{ tenant_id: string; role: TenantMembershipRole }> = [];
+        for (const m of rawMemberships) {
+          if (!m?.tenant_id || typeof m.tenant_id !== "string") continue;
+          const role = m.role === "tenant_admin" ? "tenant_admin" : "tenant_user";
+          if (seenTenants.has(m.tenant_id)) continue;
+          seenTenants.add(m.tenant_id);
+          memberships.push({ tenant_id: m.tenant_id, role });
+        }
+
+        const { error: delErr } = await supabase.from("tenant_memberships").delete().eq("user_id", userId);
+        if (delErr) return reply.status(500).send({ error: delErr.message });
+
+        if (memberships.length > 0) {
+          const { error: insErr } = await supabase.from("tenant_memberships").insert(
+            memberships.map((m) => ({
+              user_id: userId,
+              tenant_id: m.tenant_id,
+              role: m.role,
+              updated_at: new Date().toISOString(),
+            }))
+          );
+          if (insErr) return reply.status(400).send({ error: insErr.message });
+        }
+      }
+
+      return reply.send({ success: true });
+    }
+  );
 }

@@ -29,6 +29,17 @@ import { toast } from "sonner";
 import type { InventoryItem } from "@/types/database";
 import { useEffect, useState } from "react";
 import { toDirectDownloadUrl } from "@/lib/videoUrl";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Info } from "lucide-react";
+import { callAPI } from "@/lib/api-client";
+
+type VideoProbeResponse = {
+  ok: boolean;
+  sizeBytes: number | null;
+  deliveryMode: string;
+  humanLabelPt: string;
+  error?: string;
+};
 
 const schema = z.object({
   brand: z.string().min(1, "Marca é obrigatória"),
@@ -82,6 +93,49 @@ export function EditInventoryDialog({ item, open, onOpenChange }: EditInventoryD
   const [showPreview, setShowPreview] = useState(false);
   const hasVideoUrl = (videoDetails ?? "").trim().length > 0;
 
+  const [videoProbe, setVideoProbe] = useState<{
+    status: "idle" | "loading" | "ready" | "error";
+    message: string;
+  }>({ status: "idle", message: "" });
+
+  useEffect(() => {
+    const url = (videoDetails ?? "").trim();
+    if (!url) {
+      setVideoProbe({ status: "idle", message: "" });
+      return;
+    }
+    if (!/^https:\/\//i.test(url)) {
+      setVideoProbe({ status: "idle", message: "" });
+      return;
+    }
+
+    setVideoProbe({ status: "loading", message: "Verificando…" });
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const res = await callAPI<VideoProbeResponse>("/inventory/video-probe", {
+            method: "POST",
+            body: { url, tenant_id: item?.tenant_id },
+          });
+          if (cancelled) return;
+          setVideoProbe({ status: "ready", message: res.humanLabelPt });
+        } catch {
+          if (cancelled) return;
+          setVideoProbe({
+            status: "error",
+            message: "Não foi possível verificar o link.",
+          });
+        }
+      })();
+    }, 600);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [videoDetails, item?.tenant_id]);
+
   useEffect(() => {
     if (item) {
       reset({
@@ -125,8 +179,9 @@ export function EditInventoryDialog({ item, open, onOpenChange }: EditInventoryD
       });
       toast.success("Veículo atualizado!");
       onOpenChange(false);
-    } catch (err: any) {
-      toast.error("Erro ao atualizar: " + (err.message ?? "erro desconhecido"));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "erro desconhecido";
+      toast.error("Erro ao atualizar: " + message);
     }
   };
 
@@ -177,15 +232,60 @@ export function EditInventoryDialog({ item, open, onOpenChange }: EditInventoryD
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-2">
           <div>
-            <Label htmlFor="video_link">Vídeo detalhado (link)</Label>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="video_link" className="mb-0">
+                Vídeo detalhado (link)
+              </Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0 text-muted-foreground"
+                    aria-label="Ajuda sobre formato do link de vídeo"
+                  >
+                    <Info className="h-4 w-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-[min(100vw-2rem,22rem)] max-h-[min(70vh,24rem)] overflow-y-auto text-xs leading-relaxed">
+                  <p className="font-medium text-foreground mb-2">Formato recomendado</p>
+                  <p className="text-muted-foreground mb-2">
+                    <strong className="text-foreground/90">Google Drive:</strong> use o link do <em>arquivo</em>, no formato{" "}
+                    <code className="rounded bg-muted px-1 py-0.5 text-[11px] font-mono break-all">
+                      https://drive.google.com/file/d/SEU_ID_AQUI/view?usp=sharing
+                    </code>
+                    . Em &quot;Compartilhar&quot;, deixe <strong className="text-foreground/90">qualquer pessoa com o link</strong>{" "}
+                    pode ver — o servidor baixa o vídeo para enviar pelo WhatsApp.
+                  </p>
+                  <p className="text-muted-foreground mb-2">
+                    <strong className="text-foreground/90">Outros:</strong> URL <code className="rounded bg-muted px-1">https</code> que aponte direto para o arquivo (ex.{" "}
+                    <code className="rounded bg-muted px-1">.mp4</code>) também funciona.
+                  </p>
+                  <p className="text-muted-foreground">
+                    <strong className="text-foreground/90">Evite:</strong>{" "}
+                    <code className="rounded bg-muted px-1">drive.google.com/open?id=...</code>, pastas ou arquivo só com login — o envio automático pode falhar e o cliente receber só o link em texto.
+                  </p>
+                </PopoverContent>
+              </Popover>
+            </div>
             <Input
               id="video_link"
               type="url"
-              placeholder="https://drive.google.com/file/d/... ou URL direta do vídeo"
+              placeholder="https://drive.google.com/file/d/…/view?usp=sharing"
               value={videoDetails ?? ""}
               onChange={(e) => setValue("video_details", e.target.value || null)}
-              className="mt-1"
+              className="mt-2"
             />
+            {videoProbe.status !== "idle" && (
+              <p
+                className={`mt-1.5 text-xs ${
+                  videoProbe.status === "error" ? "text-destructive" : "text-muted-foreground"
+                }`}
+              >
+                {videoProbe.message}
+              </p>
+            )}
             {hasVideoUrl && (
               <div className="mt-2">
                 <Button

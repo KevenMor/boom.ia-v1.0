@@ -1,8 +1,36 @@
 import { toDirectDownloadUrl } from "../utils/videoUrl.js";
+import {
+  VIDEO_SIZE_LIMIT_BYTES,
+  MAX_VIDEO_BYTES,
+  classifyVideoDelivery,
+} from "../utils/videoDeliveryLimits.js";
 
-const VIDEO_SIZE_LIMIT_MB = 16;
-const VIDEO_SIZE_LIMIT_BYTES = VIDEO_SIZE_LIMIT_MB * 1024 * 1024;
-const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
+/** Mensagem curta após enviar vídeo como documento (>16 MB), para soar humano no WhatsApp. */
+const VIDEO_DOCUMENT_FOLLOWUP_MESSAGES = [
+  "Me encaminharam o vídeo, mas ficou um pouquinho grande, então mandei como arquivo, tudo bem?",
+  "O vídeo veio um pouco pesado; enviei como arquivo pra não perder qualidade. Qualquer coisa, me chama!",
+  "Passaram o vídeo aqui e ficou grandinho pro formato normal do Zap — mandei como arquivo. Consegue abrir aí?",
+  "Encaminharam o vídeo pra mim e, pra não comprimir demais, mandei como arquivo. Se precisar de ajuda, é só falar!",
+] as const;
+
+function pickRandomVideoFollowup(messages: readonly string[]): string {
+  return messages[Math.floor(Math.random() * messages.length)] ?? messages[0];
+}
+
+function humanizedVideoLinkMessage(publicUrl: string, reason: "fetch_or_send" | "oversized"): string {
+  if (reason === "oversized") {
+    const lines = [
+      `O vídeo ficou bem grande pro envio automático aqui. Melhor pelo link, pra você ver com qualidade boa:\n\n${publicUrl}`,
+      `Passou do tamanho que o app aceita no automático — segue o link do vídeo completo:\n\n${publicUrl}`,
+    ];
+    return pickRandomVideoFollowup(lines);
+  }
+  const lines = [
+    `Não consegui mandar o vídeo direto aqui. Segue o link pra você assistir:\n\n${publicUrl}`,
+    `Daqui não rolou enviar o arquivo do vídeo, então te mando pelo link:\n\n${publicUrl}`,
+  ];
+  return pickRandomVideoFollowup(lines);
+}
 
 /**
  * Headers de autenticação para API Chatwoot.
@@ -155,8 +183,8 @@ async function sendChatwootMediaMessage(
 /**
  * Envia vídeo ao Chatwoot com suporte a Google Drive, tamanhos até 100MB e fallback para link.
  * - Até 16MB: envia como vídeo (reprodução nativa)
- * - 16–100MB: envia como documento (application/octet-stream)
- * - Se falhar: envia link como mensagem de texto
+ * - 16–100MB: envia como documento (application/octet-stream); em seguida, mensagem humanizada curta
+ * - Se falhar: envia texto humanizado com link
  */
 async function sendChatwootVideoMessage(
   msgUrl: string,
@@ -173,7 +201,7 @@ async function sendChatwootVideoMessage(
     });
     if (!mediaResp.ok) {
       console.warn(`[Deliver] Video fetch failed ${mediaResp.status}: ${directUrl.slice(0, 80)}...`);
-      await sendTextMessage(msgUrl, authHeaders, `Vídeo do veículo: ${videoUrl}`);
+      await sendTextMessage(msgUrl, authHeaders, humanizedVideoLinkMessage(videoUrl, "fetch_or_send"));
       return false;
     }
     const mediaBlob = await mediaResp.blob();
@@ -181,11 +209,12 @@ async function sendChatwootVideoMessage(
 
     if (sizeBytes > MAX_VIDEO_BYTES) {
       console.warn(`[Deliver] Video exceeds 100MB (${(sizeBytes / 1024 / 1024).toFixed(1)}MB), sending link`);
-      await sendTextMessage(msgUrl, authHeaders, `Vídeo do veículo (arquivo grande): ${videoUrl}`);
+      await sendTextMessage(msgUrl, authHeaders, humanizedVideoLinkMessage(videoUrl, "oversized"));
       return true;
     }
 
-    const contentType = sizeBytes <= VIDEO_SIZE_LIMIT_BYTES ? "video/mp4" : "application/octet-stream";
+    const deliveryClass = classifyVideoDelivery(sizeBytes);
+    const contentType = deliveryClass === "native_video" ? "video/mp4" : "application/octet-stream";
     const parsedUrl = new URL(directUrl);
     const filename = parsedUrl.pathname.split("/").pop() || "video.mp4";
 
@@ -202,13 +231,19 @@ async function sendChatwootVideoMessage(
 
     if (!resp.ok) {
       console.warn(`[Deliver] Video send failed ${resp.status}, sending link as fallback`);
-      await sendTextMessage(msgUrl, authHeaders, `Vídeo do veículo: ${videoUrl}`);
+      await sendTextMessage(msgUrl, authHeaders, humanizedVideoLinkMessage(videoUrl, "fetch_or_send"));
       return false;
     }
+
+    if (contentType === "application/octet-stream") {
+      await new Promise((r) => setTimeout(r, applyJitter(800)));
+      await sendTextMessage(msgUrl, authHeaders, pickRandomVideoFollowup(VIDEO_DOCUMENT_FOLLOWUP_MESSAGES));
+    }
+
     return true;
   } catch (e) {
     console.warn(`[Deliver] Video send error:`, (e as Error)?.message, "— sending link as fallback");
-    await sendTextMessage(msgUrl, authHeaders, `Vídeo do veículo: ${videoUrl}`);
+    await sendTextMessage(msgUrl, authHeaders, humanizedVideoLinkMessage(videoUrl, "fetch_or_send"));
     return false;
   }
 }
