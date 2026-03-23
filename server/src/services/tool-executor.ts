@@ -462,6 +462,37 @@ function toLocalIso(startAt: string, durationMin: number): { start: string; end:
   return { start: startIso, end: endIso };
 }
 
+/**
+ * Resolve working hours for a specific day of week.
+ * Uses calendar's working_hours if configured, otherwise falls back to defaults.
+ */
+function resolveWorkingHours(
+  calendarWorkingHours: Record<string, unknown> | null | undefined,
+  dayOfWeek: number // 0=Sun, 1=Mon, ..., 6=Sat
+): { enabled: boolean; startH: number; endH: number } {
+  const DAY_INDEX_TO_KEY = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
+  const key = DAY_INDEX_TO_KEY[dayOfWeek];
+
+  if (calendarWorkingHours && typeof calendarWorkingHours === "object" && key in calendarWorkingHours) {
+    const day = (calendarWorkingHours as Record<string, any>)[key] as {
+      enabled?: boolean;
+      start?: string;
+      end?: string;
+    };
+    if (!day.enabled) {
+      return { enabled: false, startH: 0, endH: 0 };
+    }
+    const [sh, sm] = (day.start || "09:00").split(":").map(Number);
+    const [eh, em] = (day.end || "18:00").split(":").map(Number);
+    return { enabled: true, startH: sh + sm / 60, endH: eh + em / 60 };
+  }
+
+  // Fallback: hardcoded defaults (preserves current behavior)
+  if (dayOfWeek === 0) return { enabled: false, startH: 0, endH: 0 }; // Sunday closed
+  if (dayOfWeek === 6) return { enabled: true, startH: 9, endH: 13 }; // Saturday 9-13
+  return { enabled: true, startH: 9, endH: 18.5 }; // Mon-Fri 9-18:30
+}
+
 async function executeCalendarQuery(
   supabase: ReturnType<typeof createNexusClient>,
   tool: { tenant_id?: string; execution_config?: Record<string, unknown> },
@@ -524,10 +555,13 @@ async function executeCalendarQuery(
         const current = new Date(startDate);
         current.setDate(current.getDate() + d);
         const dayOfWeek = current.getDay();
-        if (dayOfWeek === 0) continue; // domingo fechado
 
-        const businessStart = 9;
-        const businessEnd = dayOfWeek === 6 ? 13 : 18.5; // sab 9-13, seg-sex 9-18:30
+        // Resolve working hours for this day (use calendar's config if available)
+        const workingHours = resolveWorkingHours(calendars[0]?.working_hours, dayOfWeek);
+        if (!workingHours.enabled) continue; // Day is closed
+
+        const businessStart = workingHours.startH;
+        const businessEnd = workingHours.endH;
 
         const dayStr = current.toISOString().slice(0, 10);
         const dayEvents = (events || []).filter(
@@ -592,7 +626,21 @@ async function executeCalendarQuery(
         return { success: false, result: null, error: `Data/hora no passado (${startDt.toISOString().slice(0, 16)}). Use uma data e horário futuros no formato YYYY-MM-DDTHH:mm:ss-03:00.` };
       }
 
-      const durationMin = (calendarArgs.duration_minutes as number) || 60;
+      let durationMin = (calendarArgs.duration_minutes as number) || 0;
+
+      // Fallback: buscar duração do banco pelo nome do serviço quando não informado pelo agente
+      if (!durationMin && calendarArgs.tenant_id) {
+        const serviceName = (calendarArgs.procedure_type as string) || title;
+        const { data: svcMatch } = await supabase
+          .from("calendar_service_types")
+          .select("duration_minutes")
+          .eq("tenant_id", calendarArgs.tenant_id)
+          .eq("active", true)
+          .ilike("name", `%${serviceName.split("—")[0].split("-")[0].trim()}%`)
+          .limit(1)
+          .maybeSingle();
+        durationMin = svcMatch?.duration_minutes || 60;
+      }
 
       const { data: cals } = await supabase
         .from("calendars")
@@ -623,6 +671,18 @@ async function executeCalendarQuery(
         };
       }
 
+      // Build metadata from optional procedure fields
+      const procedureType = calendarArgs.procedure_type as string | undefined;
+      const professionalName = calendarArgs.professional_name as string | undefined;
+      const patientNotes = calendarArgs.patient_notes as string | undefined;
+      const contactId = calendarArgs.contact_id as string | undefined;
+
+      const metadata: Record<string, unknown> = {};
+      if (procedureType) metadata.procedure_type = procedureType;
+      if (professionalName) metadata.professional_name = professionalName;
+      if (calendarArgs.duration_minutes) metadata.duration_minutes = calendarArgs.duration_minutes;
+      if (patientNotes) metadata.patient_notes = patientNotes;
+
       const { data: created, error: insErr } = await supabase
         .from("calendar_events")
         .insert({
@@ -631,6 +691,8 @@ async function executeCalendarQuery(
           title,
           start_at: startAtBR,
           end_at: endAtBR,
+          ...(Object.keys(metadata).length > 0 && { metadata }),
+          ...(contactId && { contact_id: contactId }),
         })
         .select()
         .maybeSingle();
@@ -647,6 +709,188 @@ async function executeCalendarQuery(
           event: created,
           ...(telefoneCliente && { telefone_cliente: telefoneCliente }),
           ...(veiculoInteresse && { veiculo_interesse: veiculoInteresse }),
+        },
+      };
+    }
+
+    if (action === "reagendar" || action === "reschedule") {
+      const startAtRaw = calendarArgs.start_at ?? calendarArgs.start ?? calendarArgs.date_time;
+      const clientName = String(calendarArgs.client_name || calendarArgs.titulo || calendarArgs.title || "").trim().toLowerCase();
+      const eventId = calendarArgs.event_id as string | undefined;
+      const newStartAtRaw = calendarArgs.new_start_at ?? calendarArgs.new_start;
+      const newStartAt = typeof newStartAtRaw === "string" ? newStartAtRaw.trim() : "";
+
+      if (!newStartAt) {
+        return {
+          success: false,
+          result: null,
+          error: "Falta nova data/hora (new_start_at). Use formato ISO: YYYY-MM-DDTHH:mm:ss ou YYYY-MM-DDTHH:mm:ss-03:00.",
+        };
+      }
+
+      // Find old event
+      const { data: calendarsForReschedule } = await supabase
+        .from("calendars")
+        .select("id")
+        .eq("tenant_id", tenantId)
+        .limit(10);
+      const calendarIds = (calendarsForReschedule || []).map((c: { id: string }) => c.id);
+      if (calendarIds.length === 0) {
+        return { success: false, result: null, error: "No calendars found for tenant" };
+      }
+
+      let matchedEvent: {
+        id: string;
+        title?: string;
+        start_at?: string;
+        end_at?: string;
+        calendar_id?: string;
+      } | null = null;
+
+      // Try to find by event_id first
+      if (eventId) {
+        const { data } = await supabase
+          .from("calendar_events")
+          .select("id, title, start_at, end_at, calendar_id")
+          .eq("id", eventId)
+          .in("calendar_id", calendarIds)
+          .maybeSingle();
+        matchedEvent = data;
+      }
+
+      // Try to find by start_at + client_name
+      if (!matchedEvent && startAtRaw) {
+        const startStr = typeof startAtRaw === "string" ? startAtRaw.trim() : "";
+        if (startStr) {
+          const localStart = toLocalIso(startStr, 0).start;
+          const startDate = localStart.slice(0, 10);
+          const startHour = localStart.slice(11, 16);
+          const { data: dayEvents } = await supabase
+            .from("calendar_events")
+            .select("id, title, start_at, end_at, calendar_id")
+            .in("calendar_id", calendarIds)
+            .gte("start_at", `${startDate}T00:00:00`)
+            .lte("start_at", `${startDate}T23:59:59`)
+            .order("start_at", { ascending: true });
+
+          if (dayEvents && dayEvents.length > 0) {
+            matchedEvent = dayEvents.find((e: any) => {
+              const evHour = (e.start_at || "").slice(11, 16);
+              if (evHour === startHour) return true;
+              if (clientName && (e.title || "").toLowerCase().includes(clientName)) return true;
+              return false;
+            }) || null;
+            if (!matchedEvent && clientName) {
+              matchedEvent = dayEvents.find((e: any) =>
+                (e.title || "").toLowerCase().includes(clientName)
+              ) || null;
+            }
+          }
+        }
+      }
+
+      if (!matchedEvent) {
+        return {
+          success: false,
+          result: null,
+          error: "Evento não encontrado na agenda. Informe start_at (data/hora do agendamento atual) ou event_id para remarcar.",
+        };
+      }
+
+      // Validate new datetime
+      const normalized = newStartAt.includes("T") ? newStartAt : `${newStartAt}T09:00:00`;
+      const newStartDt = new Date(normalized);
+      if (Number.isNaN(newStartDt.getTime())) {
+        return {
+          success: false,
+          result: null,
+          error: `Nova data/hora inválida: "${newStartAt.slice(0, 30)}...". Use formato: YYYY-MM-DDTHH:mm:ss ou YYYY-MM-DDTHH:mm:ss-03:00.`,
+        };
+      }
+      const now = new Date();
+      if (newStartDt.getTime() < now.getTime() - 60000) {
+        return {
+          success: false,
+          result: null,
+          error: `Nova data/hora no passado (${newStartDt.toISOString().slice(0, 16)}). Use uma data e horário futuros.`,
+        };
+      }
+
+      // Calculate duration from old event
+      const oldStart = new Date(matchedEvent.start_at || "");
+      const oldEnd = new Date(matchedEvent.end_at || "");
+      const durationMs = oldEnd.getTime() - oldStart.getTime();
+      const durationMin = Math.round(durationMs / 60000) || 60;
+
+      const localIso = toLocalIso(newStartAt, durationMin);
+      const newStartAtBR = localIso.start + "-03:00";
+      const newEndAtBR = localIso.end + "-03:00";
+
+      // Check for conflicts (excluding this event)
+      const { data: conflicting } = await supabase
+        .from("calendar_events")
+        .select("id, title, start_at")
+        .eq("calendar_id", matchedEvent.calendar_id)
+        .neq("id", matchedEvent.id)
+        .lt("start_at", newEndAtBR)
+        .gt("end_at", newStartAtBR);
+
+      if (conflicting && conflicting.length > 0) {
+        return {
+          success: false,
+          result: null,
+          error: "Novo horário já está ocupado. Use check_availability para ver slots livres.",
+        };
+      }
+
+      // Update event in place
+      const { data: updated, error: updateErr } = await supabase
+        .from("calendar_events")
+        .update({ start_at: newStartAtBR, end_at: newEndAtBR })
+        .eq("id", matchedEvent.id)
+        .select()
+        .maybeSingle();
+
+      if (updateErr) {
+        return { success: false, result: null, error: updateErr.message };
+      }
+
+      // Update appointment reminders if they exist
+      const { data: reminders } = await supabase
+        .from("appointment_reminders")
+        .select("id, remind_at")
+        .eq("calendar_event_id", matchedEvent.id);
+
+      if (reminders && reminders.length > 0) {
+        // Recalculate remind_at based on new start_at (e.g., 24h before)
+        const newStartDate = new Date(newStartAtBR);
+        const remindTime = new Date(newStartDate.getTime() - 24 * 60 * 60 * 1000); // 24h before
+
+        const { error: reminderUpdateErr } = await supabase
+          .from("appointment_reminders")
+          .update({ event_start_at: newStartAtBR, remind_at: remindTime.toISOString() })
+          .eq("calendar_event_id", matchedEvent.id);
+
+        if (reminderUpdateErr) {
+          console.warn("[Tool] Failed to update appointment reminders:", reminderUpdateErr.message);
+        }
+      }
+
+      console.log(
+        "[Tool] consultar_agenda reagendar: evento remarcado",
+        matchedEvent.id,
+        "de",
+        matchedEvent.start_at,
+        "para",
+        newStartAtBR
+      );
+
+      return {
+        success: true,
+        result: {
+          action: "rescheduled",
+          old_start_at: matchedEvent.start_at,
+          event: updated,
         },
       };
     }
