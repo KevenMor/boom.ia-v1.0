@@ -43,8 +43,6 @@ export function useConversations(agentId: string | null) {
       return convs;
     },
     enabled: !!agentId,
-    refetchInterval: 5000,
-    refetchIntervalInBackground: true,
   });
 }
 
@@ -61,8 +59,6 @@ export function useConversationMessages(agentId: string | null, conversationId: 
       return (data ?? []) as Message[];
     },
     enabled: !!agentId && !!conversationId,
-    refetchInterval: 2000,
-    refetchIntervalInBackground: true,
   });
 }
 
@@ -131,8 +127,6 @@ export function useMultiConversationMessages(agentId: string | null, conversatio
       return merged;
     },
     enabled: !!agentId && conversationIds.length > 0,
-    refetchInterval: 2000,
-    refetchIntervalInBackground: true,
   });
 }
 
