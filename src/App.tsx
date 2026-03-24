@@ -35,7 +35,6 @@ import ClientsPage from "@/pages/ClientsPage";
 import ContactProfilePage from "@/pages/ContactProfilePage";
 import TokenAnalytics from "@/pages/TokenAnalytics";
 import PublicSandbox from "@/pages/PublicSandbox";
-import ChatwootAppPage from "@/pages/ChatwootAppPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -62,7 +61,6 @@ const App = () => (
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/demo/:agentId" element={<PublicSandbox />} />
-            <Route path="/chatwoot-app" element={<ChatwootAppPage />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route
               element={

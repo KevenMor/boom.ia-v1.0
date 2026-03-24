@@ -15,7 +15,6 @@ import { contactsRoutes } from "./routes/contacts.js";
 import { crmContactsRoutes } from "./routes/crm-contacts.js";
 import { calendarServicesRoutes } from "./routes/calendar-services.js";
 import { demoRoutes } from "./routes/demo.js";
-import { chatwootAppRoutes } from "./routes/chatwoot-app.js";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 
@@ -101,7 +100,6 @@ async function build() {
   fastify.register(crmContactsRoutes, { prefix: "/api" });
   fastify.register(calendarServicesRoutes, { prefix: "/api" });
   fastify.register(demoRoutes, { prefix: "/api" });
-  fastify.register(chatwootAppRoutes, { prefix: "/api" });
 
   fastify.get("/health", async () => ({ ok: true, timestamp: new Date().toISOString() }));
 

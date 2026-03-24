@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
+    image.png
     const supabase = createClient(nexusUrl, nexusServiceKey);
     const body = await req.json().catch(() => ({}));
     const action = String(body?.action || "");
