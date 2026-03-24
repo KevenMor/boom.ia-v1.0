@@ -65,20 +65,36 @@ async function consumeBufferedMessages(
   externalUserId: string,
   channel: string
 ): Promise<string[]> {
-  const { data: pending } = await supabase
+  // Atomic UPDATE: mark processed=true and return claimed messages.
+  // Concurrent requests are serialized by PostgreSQL row-level locks.
+  // Second request finds processed=true and returns empty array (correct skip).
+  const { data: claimed } = await supabase
     .from("webhook_message_buffer")
-    .select("id, content, created_at")
+    .update({ processed: true })
     .eq("agent_id", agentId)
     .eq("external_user_id", externalUserId)
     .eq("channel", channel)
     .eq("processed", false)
+    .select("id, content, created_at")
     .order("created_at", { ascending: true });
 
-  if (!pending || pending.length === 0) return [];
+  if (!claimed || claimed.length === 0) return [];
 
-  const ids = pending.map((m: any) => m.id);
-  await supabase.from("webhook_message_buffer").delete().in("id", ids);
-  return pending.map((m: any) => m.content as string);
+  // Cleanup: delete processed rows older than 2 hours to prevent table bloat
+  try {
+    await supabase
+      .from("webhook_message_buffer")
+      .delete()
+      .eq("agent_id", agentId)
+      .eq("external_user_id", externalUserId)
+      .eq("channel", channel)
+      .eq("processed", true)
+      .lt("created_at", new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString());
+  } catch (err) {
+    console.warn("[Queue] Cleanup of processed buffer rows failed:", (err as Error)?.message);
+  }
+
+  return claimed.map((m: any) => m.content as string);
 }
 
 async function callChatAgent(

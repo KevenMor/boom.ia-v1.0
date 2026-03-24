@@ -894,6 +894,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       if (chatwoot.isChatwoot) {
         const debounceMs = Number(cfg.message_debounce_ms) || 3000;
         let bufferCreatedAt: string | null = null;
+        let effectiveDebounceMs = debounceMs;
 
         if (debounceMs > 0) {
           const buffered = await bufferMessage(
@@ -904,7 +905,13 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             userMessage,
             chatwootConversationId
           );
-          bufferCreatedAt = buffered?.created_at || null;
+          if (buffered) {
+            bufferCreatedAt = buffered.created_at;
+          } else {
+            // Buffer insert failed — fallback to immediate processing without debounce
+            console.warn(`[Webhook] bufferMessage failed for agent ${agentId}, processing without debounce`);
+            effectiveDebounceMs = 0;
+          }
         }
 
         // Mensagem do usuário é salva apenas na queue para evitar duplicata no Chat ao Vivo.
@@ -919,8 +926,8 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           chatwoot_contact_id: chatwootContactId,
           contact_name: contactName,
           contact_avatar_url: contactAvatarUrl,
-          user_message: debounceMs > 0 ? null : userMessage,
-          debounce_ms: debounceMs,
+          user_message: effectiveDebounceMs > 0 ? null : userMessage,
+          debounce_ms: effectiveDebounceMs,
           buffer_created_at: bufferCreatedAt,
           attachments: chatwoot.attachments,
           ...(chatwoot.eventMessageId && { chatwoot_message_id: chatwoot.eventMessageId }),
