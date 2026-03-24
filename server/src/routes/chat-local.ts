@@ -1440,6 +1440,12 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           // #endregion
 
           const convModel = model;
+          const convBase = providerConfig.baseUrl.replace(/\/+$/, "");
+          const convIsGemini = /generativelanguage\.googleapis\.com/i.test(convBase);
+          const convApiUrl = convIsGemini && !convBase.includes("/openai")
+            ? `${convBase}/openai/chat/completions`
+            : `${convBase}/chat/completions`;
+
           const convBody: Record<string, unknown> = {
             model: convModel,
             messages: conversationalMessagesClean,
@@ -1454,12 +1460,6 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             convBody.thinking = { type: "enabled", budget_tokens: 8192 };
             convBody.temperature = 1.0;
           }
-
-          const convBase = providerConfig.baseUrl.replace(/\/+$/, "");
-          const convIsGemini = /generativelanguage\.googleapis\.com/i.test(convBase);
-          const convApiUrl = convIsGemini && !convBase.includes("/openai")
-            ? `${convBase}/openai/chat/completions`
-            : `${convBase}/chat/completions`;
 
           let convResp: Response;
           try {
