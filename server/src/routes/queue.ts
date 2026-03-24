@@ -99,6 +99,8 @@ async function callChatAgent(
   handoffTeamId?: number | null;
   debug?: any[];
   token_usage?: Record<string, unknown>;
+  photoInventoryIds?: string[];
+  videoInventoryIds?: string[];
 }> {
   const chatUrl = `${baseUrl}/api/chat-local`;
   const MAX_RETRIES = 3;
@@ -159,6 +161,8 @@ async function callChatAgent(
       let currentPart = "";
       let capturedDebug: any[] | undefined;
       let capturedTokenUsage: Record<string, unknown> | undefined;
+      let capturedPhotoIds: string[] = [];
+      let capturedVideoIds: string[] = [];
 
       const processSseLine = (rawLine: string) => {
         const line = rawLine.trim();
@@ -179,6 +183,11 @@ async function callChatAgent(
           }
           if (ev.token_usage) {
             capturedTokenUsage = ev.token_usage as Record<string, unknown>;
+            return;
+          }
+          if (ev.media_commands) {
+            capturedPhotoIds = Array.isArray(ev.media_commands.photo_inventory_ids) ? ev.media_commands.photo_inventory_ids : [];
+            capturedVideoIds = Array.isArray(ev.media_commands.video_inventory_ids) ? ev.media_commands.video_inventory_ids : [];
             return;
           }
           const delta = ev.choices?.[0]?.delta?.content;
@@ -217,6 +226,8 @@ async function callChatAgent(
         handoffTeamId,
         debug: capturedDebug,
         token_usage: capturedTokenUsage,
+        photoInventoryIds: capturedPhotoIds,
+        videoInventoryIds: capturedVideoIds,
       };
     } catch (fetchErr: any) {
       lastError = fetchErr?.message || "fetch error";
@@ -227,6 +238,8 @@ async function callChatAgent(
           fullContent: "",
           responseParts: [],
           responseConvId: convId,
+          photoInventoryIds: [],
+          videoInventoryIds: [],
         };
       }
       await new Promise((r) => setTimeout(r, attempt * 1500));
@@ -238,6 +251,8 @@ async function callChatAgent(
     fullContent: "",
     responseParts: [],
     responseConvId: convId,
+    photoInventoryIds: [],
+    videoInventoryIds: [],
   };
 }
 
@@ -1032,18 +1047,12 @@ export async function queueRoutes(fastify: FastifyInstance) {
             ? [sanitizedContent]
             : [];
 
-      const videoInventoryIdRegex = /ENVIAR_VIDEO_DETALHES[:\s].*?\|\s*id:\s*([a-f0-9-]{36})/gi;
-      const videoInventoryIds: string[] = [];
-      for (const p of rawParts) {
-        let m: RegExpExecArray | null;
-        while ((m = videoInventoryIdRegex.exec(p)) !== null) {
-          if (m[1] && !videoInventoryIds.includes(m[1])) videoInventoryIds.push(m[1]);
-        }
-      }
-
       const responseParts = rawParts
         .map((p) => sanitizeLLMOutput(p.trim()))
         .filter(Boolean);
+
+      const photoInventoryIds = result.photoInventoryIds ?? [];
+      const videoInventoryIds = result.videoInventoryIds ?? [];
 
       const isFirstReply = conversationMessages.filter((m) => m.role === "assistant").length === 0;
       const deliverBody: Record<string, unknown> = {
@@ -1056,6 +1065,9 @@ export async function queueRoutes(fastify: FastifyInstance) {
         response_parts: responseParts,
         user_message: finalMessage ?? undefined,
       };
+      if (photoInventoryIds.length > 0) {
+        deliverBody.photo_inventory_ids = photoInventoryIds;
+      }
       if (videoInventoryIds.length > 0) {
         deliverBody.video_inventory_ids = videoInventoryIds;
       }

@@ -256,18 +256,15 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
     const withPerVehiclePhotos = vehicles.some((v) => v.photos_markdown && v.photos_markdown.trim());
     if (withPerVehiclePhotos) {
       lines.push("");
-      lines.push("FOTOS (quando o cliente pedir ou aceitar ver fotos, inclua na sua resposta APENAS o bloco do veículo escolhido — use ENVIAR_FOTOS_VEICULO: nome | id: uuid):");
+      lines.push("FOTOS DISPONÍVEIS — quando o cliente pedir ou aceitar ver fotos, use OBRIGATORIAMENTE o comando abaixo na PRIMEIRA linha da resposta:");
       for (const v of vehicles) {
         if (v.photos_markdown && v.photos_markdown.trim()) {
-          lines.push("");
-          lines.push(`--- Fotos do veículo: ${v.nome_completo ?? "?"} (id: ${v.id ?? "?"}) ---`);
-          lines.push(v.photos_markdown);
+          lines.push(`  → ENVIAR_FOTOS_VEICULO: ${v.nome_completo ?? "?"} | id: ${v.id ?? "?"}`);
         }
       }
     } else if (photosMarkdown && photosMarkdown.trim()) {
       lines.push("");
-      lines.push("FOTOS (copie o bloco abaixo literalmente na sua resposta quando o cliente pedir ou aceitar ver fotos):");
-      lines.push(photosMarkdown);
+      lines.push("FOTOS DISPONÍVEIS — quando o cliente pedir ou aceitar ver fotos, use o comando na PRIMEIRA linha: ENVIAR_FOTOS_VEICULO: nome do veículo | id: uuid (se houver id disponível no estoque)");
     }
     const withVideoDetails = vehicles.some((v) => v.video_details && v.video_details.trim());
     if (withVideoDetails) {
@@ -1430,9 +1427,10 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 return r;
               }
             }).join("\n\n");
+
             conversationalMessagesClean.push({
               role: "user",
-              content: `Resultados obtidos:\n${naturalToolResultsText}\n\nCom base nesses resultados, responda ao cliente de forma natural e objetiva. NÃO inclua JSON, nomes de ferramentas ou artefatos técnicos.`,
+              content: `Resultados obtidos:\n${naturalToolResultsText}\n\nCom base nesses resultados, responda ao cliente de forma natural e objetiva. NÃO inclua JSON ou artefatos técnicos internos.`,
             });
           }
           // #region agent log
@@ -1575,6 +1573,25 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }
           }
 
+          // Extrair IDs de fotos/vídeos dos comandos no conteúdo bruto (antes do sanitize/filter)
+          {
+            const photoIdRegex = /ENVIAR_FOTOS?_VEICULOS?[:\s]+[^|\n]+\|\s*id:\s*([a-f0-9-]{36})/gi;
+            const videoIdRegex = /ENVIAR_VIDEO_DETALHES[:\s]+[^|\n]+\|\s*id:\s*([a-f0-9-]{36})/gi;
+            const photoInventoryIds: string[] = [];
+            const videoInventoryIds: string[] = [];
+            let cmdMatch: RegExpExecArray | null;
+            while ((cmdMatch = photoIdRegex.exec(convFullContent)) !== null) {
+              if (cmdMatch[1] && !photoInventoryIds.includes(cmdMatch[1])) photoInventoryIds.push(cmdMatch[1]);
+            }
+            while ((cmdMatch = videoIdRegex.exec(convFullContent)) !== null) {
+              if (cmdMatch[1] && !videoInventoryIds.includes(cmdMatch[1])) videoInventoryIds.push(cmdMatch[1]);
+            }
+
+            if (photoInventoryIds.length > 0 || videoInventoryIds.length > 0) {
+              sendSse({ media_commands: { photo_inventory_ids: photoInventoryIds, video_inventory_ids: videoInventoryIds } });
+            }
+          }
+
           if (/HANDOFF_COMERCIAL/i.test(convFullContent)) {
             sendHandoffNotification(agent_id, agent, messagesToUse, external_user_id).catch((e) => {
               console.warn("[Chat-Local] Erro ao enviar notificação de handoff:", (e as Error)?.message);
@@ -1624,7 +1641,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 responseConvId,
               });
               if (toolResults.length > 0 && naturalToolResultsText) {
-                retryMessages.push({ role: "user", content: `Resultados obtidos:\n${naturalToolResultsText}\n\nCom base nesses resultados, responda ao cliente de forma natural e objetiva. NÃO inclua JSON, nomes de ferramentas ou artefatos técnicos.` });
+                retryMessages.push({ role: "user", content: `Resultados obtidos:\n${naturalToolResultsText}\n\nCom base nesses resultados, responda ao cliente de forma natural e objetiva. NÃO inclua JSON ou artefatos técnicos internos. EXCEÇÃO OBRIGATÓRIA: se o contexto indicar fotos ou vídeo disponíveis e o cliente tiver pedido, inclua na PRIMEIRA linha da resposta o comando de sistema correspondente (ex: ENVIAR_FOTOS_VEICULO: nome | id: uuid ou ENVIAR_VIDEO_DETALHES: nome | id: uuid), conforme instruído no seu prompt de sistema.` });
               }
               const retryBody = { model: convModel, messages: retryMessages, stream: false, temperature: agent.temperature ?? 0.7 };
               const retryResp = await fetch(convApiUrl, {

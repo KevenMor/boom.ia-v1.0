@@ -461,6 +461,7 @@ export {
   extractImagesFromMarkdown,
   sendChatwootTextMessage,
   sendChatwootImageMessage,
+  sendChatwootImagesBatch,
   sendChatwootMediaMessage,
   sendChatwootVideoMessage,
   sendChatwootPrivateNote,

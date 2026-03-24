@@ -6,6 +6,7 @@ import {
   getChatwootAuthHeaders,
   sendChatwootTextMessage,
   sendChatwootImageMessage,
+  sendChatwootImagesBatch,
   sendChatwootMediaMessage,
   sendChatwootVideoMessage,
   getHumanizationConfig,
@@ -28,6 +29,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
           response_parts?: string[];
           welcome_video_url?: string;
           video_inventory_ids?: string[];
+          photo_inventory_ids?: string[];
           assignee_id?: number;
           team_id?: number;
           user_message?: string;
@@ -53,6 +55,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
         response_parts,
         welcome_video_url,
         video_inventory_ids,
+        photo_inventory_ids,
         assignee_id: handoff_assignee_id,
         team_id: handoff_team_id,
         user_message,
@@ -212,6 +215,27 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
             ? (response_text || "").trim()
             : "Opa, tive um problema na última mensagem enviada, pode me reenviar?";
           const partsToSend = hasContent ? (response_parts || []) : [];
+
+          if (Array.isArray(photo_inventory_ids) && photo_inventory_ids.length > 0) {
+            const { data: photoRows } = await supabase
+              .from("inventory")
+              .select("id, photos, photo_url")
+              .in("id", photo_inventory_ids);
+            for (const row of photoRows ?? []) {
+              const photoUrls: string[] = [];
+              if (row.photos) {
+                try {
+                  const parsed = typeof row.photos === "string" ? JSON.parse(row.photos) : row.photos;
+                  if (Array.isArray(parsed)) photoUrls.push(...(parsed as string[]).filter(Boolean));
+                } catch { /* ignore */ }
+              }
+              if (photoUrls.length === 0 && row.photo_url) photoUrls.push(row.photo_url);
+              if (photoUrls.length > 0) {
+                await sendChatwootImagesBatch(msgUrl, cwAuth, photoUrls);
+                await new Promise((r) => setTimeout(r, applyJitter(2000)));
+              }
+            }
+          }
 
           if (Array.isArray(video_inventory_ids) && video_inventory_ids.length > 0) {
             const { data: inventoryRows } = await supabase

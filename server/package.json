@@ -13,6 +13,7 @@
     "e2e": "tsx scripts/e2e-validation.ts",
     "e2e:ideal": "tsx scripts/e2e-autoescola-ideal.ts",
     "e2e:tools": "tsx scripts/e2e-tool-calls.ts",
+    "e2e:ppl-photos": "tsx scripts/e2e-ppl-motors-photos.ts",
     "scrape:vicentim": "tsx scripts/scrape-vicentim-website.ts",
     "ingest:vicentim": "node scripts/run-ingest-vicentim.mjs"
   },

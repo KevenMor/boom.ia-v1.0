@@ -9,6 +9,7 @@ export const providerModels: Record<string, { label: string; models: { value: st
       { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash", description: "Thinking rápido e econômico" },
       { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", description: "Ultra econômico, alto volume" },
       { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash", description: "Rápido, multimodal, uso geral" },
+      { value: "gemini-2.0-flash-preview", label: "Gemini 2.0 Flash Preview", description: "Versão preview do Flash 2.0" },
       { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite", description: "Mais leve e econômico" },
       { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro", description: "Contexto longo (2M tokens)" },
       { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash", description: "Rápido, contexto longo" },

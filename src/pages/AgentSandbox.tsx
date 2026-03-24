@@ -45,6 +45,7 @@ type Msg = {
   tokenUsage?: TokenUsageData;
   userAttachments?: UserAttachmentMeta[];
   metadata?: { type?: string; video_url?: string };
+  inventoryImages?: string[];
 };
 type Conversation = {
   id: string;
@@ -483,6 +484,42 @@ export default function AgentSandbox() {
               continue;
             }
 
+            if (parsed.media_commands) {
+              const photoIds: string[] = Array.isArray(parsed.media_commands.photo_inventory_ids)
+                ? parsed.media_commands.photo_inventory_ids
+                : [];
+              if (photoIds.length > 0) {
+                nexusDb
+                  .from("inventory")
+                  .select("id, photos, photo_url")
+                  .in("id", photoIds)
+                  .then(({ data }) => {
+                    const urls: string[] = [];
+                    for (const row of data ?? []) {
+                      if (row.photos) {
+                        try {
+                          const parsed = typeof row.photos === "string" ? JSON.parse(row.photos) : row.photos;
+                          if (Array.isArray(parsed)) urls.push(...(parsed as string[]).filter(Boolean));
+                        } catch { /* ignore */ }
+                      }
+                      if (urls.length === 0 && row.photo_url) urls.push(row.photo_url);
+                    }
+                    if (urls.length > 0) {
+                      setMessages((prev) => {
+                        const lastIdx = prev.length - 1;
+                        if (lastIdx >= 0 && prev[lastIdx].role === "assistant") {
+                          return prev.map((m, idx) =>
+                            idx === lastIdx ? { ...m, inventoryImages: urls } : m
+                          );
+                        }
+                        return prev;
+                      });
+                    }
+                  });
+              }
+              continue;
+            }
+
             const content = parsed.choices?.[0]?.delta?.content as string | undefined;
             if (content) {
               hasAssistantContent = true;
@@ -569,6 +606,11 @@ export default function AgentSandbox() {
       const imgResult = extractImages(msg.content);
       text = imgResult.text;
       images = imgResult.images;
+      if (msg.inventoryImages && msg.inventoryImages.length > 0) {
+        for (const u of msg.inventoryImages) {
+          if (!images.includes(u)) images.push(u);
+        }
+      }
       const vidResult = extractVideos(text);
       text = vidResult.text;
       videoUrls = vidResult.videoUrls;
