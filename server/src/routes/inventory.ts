@@ -480,15 +480,19 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
     ) => {
       const nexusAuth = (req.headers["x-nexus-auth"] as string) || "";
       const supabase = createNexusClient(nexusAuth);
-      const auth = await requireAuthenticated(req, reply);
-      if (!auth) return;
+
+      // Cron externo envia x-nexus-auth (service role key) — dispensa auth de usuário.
+      // Chamadas do frontend passam pelo requireAuthenticated normal.
+      const isCronCall = nexusAuth.length > 0;
+      const auth = isCronCall ? null : await requireAuthenticated(req, reply);
+      if (!isCronCall && !auth) return;
 
       const bodyTenantId = (req.body as { tenant_id?: string })?.tenant_id;
       let tenant_id: string;
       let listingUrl: string;
 
       if (bodyTenantId) {
-        if (!canManageTenant(auth, bodyTenantId)) {
+        if (auth && !canManageTenant(auth, bodyTenantId)) {
           return reply.status(403).send({ error: "forbidden_tenant_access" });
         }
         if (await denyIfInventoryDisabled(supabase, bodyTenantId, reply)) return;
@@ -513,7 +517,7 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
         }
       } else {
         tenant_id = PPL_MOTORS_TENANT_ID;
-        if (!canManageTenant(auth, tenant_id)) {
+        if (auth && !canManageTenant(auth, tenant_id)) {
           return reply.status(403).send({ error: "forbidden_tenant_access" });
         }
         if (await denyIfInventoryDisabled(supabase, tenant_id, reply)) return;
