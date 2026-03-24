@@ -40,9 +40,11 @@ import NotFound from "@/pages/NotFound";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      refetchOnWindowFocus: false, // Desabilita refresh ao voltar para a janela
-      staleTime: 1000 * 60 * 5, // Dados válidos por 5 minutos
-      retry: 1, // Tenta 1 vez se falhar
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,   // Não refaz ao remontar se dados estão em cache
+      staleTime: 1000 * 60 * 10,  // Dados válidos por 10 minutos
+      gcTime: 1000 * 60 * 30,     // Mantém no cache por 30 minutos
+      retry: 1,
     },
   },
 });

@@ -403,6 +403,14 @@ function buildAutoescolaIdealAssignHint(
 }
 
 /**
+ * Retorna true se o modelo Gemini suporta thinking (budget de raciocínio).
+ * Gemini 2.5+ tem thinking nativo. Requer temperature=1.0.
+ */
+function isGeminiThinkingModel(model: string): boolean {
+  return /^gemini-2\.5-/i.test(model);
+}
+
+/**
  * Sanitiza nome de função para OpenAI e Gemini.
  * OpenAI exige: ^[a-zA-Z0-9_-]+$
  * Gemini exige: ^[a-zA-Z_][a-zA-Z0-9_.:-]{0,63}$
@@ -1440,6 +1448,13 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             temperature: agent.temperature ?? 0.7,
           };
 
+          // Gemini 2.5+: ativa thinking para garantir respostas mais precisas
+          // Quando thinking está ativo, temperature deve ser 1.0
+          if (convIsGemini && isGeminiThinkingModel(convModel)) {
+            convBody.thinking = { type: "enabled", budget_tokens: 8192 };
+            convBody.temperature = 1.0;
+          }
+
           const convBase = providerConfig.baseUrl.replace(/\/+$/, "");
           const convIsGemini = /generativelanguage\.googleapis\.com/i.test(convBase);
           const convApiUrl = convIsGemini && !convBase.includes("/openai")
@@ -1766,6 +1781,13 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           temperature: agent.temperature ?? 0.7,
           ...(promptCachingEnabledEarly && !isGeminiBaseSP && { prompt_cache_key: `agent:${agent_id}:tenant:${tenantSlug || "default"}:date:${todayISOSP}` }),
         };
+
+        // Gemini 2.5+ single-provider sem tools: ativa thinking
+        // (com tools o fallback já muda para gemini-2.0-flash antes de chegar aqui)
+        if (isGeminiBaseSP && isGeminiThinkingModel(model) && !useTools) {
+          body.thinking = { type: "enabled", budget_tokens: 8192 };
+          body.temperature = 1.0;
+        }
 
         if (useTools && iteration === 1) {
           body.tools = openaiTools;
