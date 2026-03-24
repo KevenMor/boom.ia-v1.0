@@ -52,8 +52,8 @@ export async function chatwootAppRoutes(fastify: FastifyInstance) {
    */
   fastify.get<{ Querystring: { agent_id?: string; chatwoot_conversation_id?: string; token?: string } }>(
     "/chatwoot-app/context",
-    async (req: FastifyRequest, reply: FastifyReply) => {
-      const { agent_id, chatwoot_conversation_id, token } = req.query;
+    async (req: FastifyRequest<{ Querystring: { agent_id?: string; chatwoot_conversation_id?: string; token?: string } }>, reply: FastifyReply) => {
+      const { agent_id, chatwoot_conversation_id, token } = req.query as { agent_id?: string; chatwoot_conversation_id?: string; token?: string };
 
       // Validações de parâmetros
       if (!agent_id || !chatwoot_conversation_id || !token) {
@@ -206,7 +206,7 @@ export async function chatwootAppRoutes(fastify: FastifyInstance) {
                 contact_type: contact.contact_type,
                 lead_status: (contact.metadata as any)?.lead_status || null,
               }
-            : null,
+            : undefined,
         };
 
         return reply.send(response);
