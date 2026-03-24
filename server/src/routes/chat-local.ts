@@ -207,7 +207,7 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
     if (isPastDate) {
       return `Erro ao agendar: ${err}\n\nIMPORTANTE: O agendamento NÃO foi realizado. NUNCA confirme ao cliente que o horário foi reservado. Se o cliente pediu horário para "amanhã", use a data de AMANHÃ em start_at (não a de hoje). Corrija o start_at e chame novamente a ferramenta consultar_agenda com action "criar".`;
     }
-    return `Erro: ${err}\n\nO agendamento NÃO foi feito. NÃO confirme ao cliente. Informe o problema de forma breve e corrija os dados antes de tentar novamente.`;
+    return `Erro: ${err}\n\nO agendamento NÃO foi feito. NÃO confirme ao cliente. CRÍTICO: NÃO invente horários alternativos — você não sabe quais estão disponíveis agora. Informe ao cliente que aquele horário não está disponível e que irá verificar as opções. Não sugira nenhum horário específico sem antes consultar a agenda novamente.`;
   }
   const action = obj.action as string | undefined;
   if (action === "check_availability") {
@@ -224,7 +224,7 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
       }
     }
     return parts.length > 0
-      ? `Horários disponíveis:\n${parts.join("\n")}`
+      ? `Horários disponíveis:\n${parts.join("\n")}\n\nREGRA CRÍTICA: Estes são os ÚNICOS horários livres. NÃO sugira nenhum horário fora desta lista — qualquer outro está OCUPADO. Ofereça apenas horários presentes nesta lista para a data que o cliente pediu.`
       : "Nenhum horário disponível.";
   }
   if (action === "created" || action === "create") {
@@ -1008,11 +1008,15 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             const offeredTomorrow = /amanh[aã]|dia seguinte|depois de amanhã/i.test(lastAssistantMsg.content);
             const userChoseTime = /\b\d{1,2}[h:]\d{0,2}\b/.test(lastUserMsg.content) ||
               /(pode ser|quero|prefiro|vou|marco|as\s+\d|amanh[aã]\s*(as)?\s*\d)/i.test(lastUserMsg.content);
-            if (offeredTimes && userChoseTime) {
+            // Detecta se o último turno indicou falha de agendamento (horário não disponível)
+            const lastAssistantHadBookingFailure = /não est[aá] (mais )?disponível|horário indisponível|tive um (pequeno )?problema|imprevisto|não consigo confirmar|vou verificar os horários/i.test(lastAssistantMsg.content);
+            if (offeredTimes && userChoseTime && !lastAssistantHadBookingFailure) {
               schedulingHint = `\n\n[HINT OBRIGATÓRIO] O assistente ofereceu horários e o cliente ESCOLHEU um. Você DEVE chamar consultar_agenda com action="criar". NÃO use "cancelar" nem "check_availability".`;
               if (offeredTomorrow) {
                 schedulingHint += ` Use a data de AMANHÃ em start_at: ${tomorrowISO}T[HORA]:00:00-03:00 (ex.: ${tomorrowISO}T11:00:00-03:00), NÃO use ${todayISO}.`;
               }
+            } else if (lastAssistantHadBookingFailure) {
+              schedulingHint = `\n\n[HINT OBRIGATÓRIO] O agendamento anterior falhou. NÃO chame "criar" diretamente. PRIMEIRO chame consultar_agenda com action="check_availability" para verificar os horários realmente disponíveis antes de oferecer novas opções ao cliente.`;
             }
           }
 

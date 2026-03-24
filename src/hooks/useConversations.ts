@@ -43,6 +43,8 @@ export function useConversations(agentId: string | null) {
       return convs;
     },
     enabled: !!agentId,
+    refetchInterval: 3000,
+    staleTime: 0,
   });
 }
 
@@ -59,6 +61,8 @@ export function useConversationMessages(agentId: string | null, conversationId: 
       return (data ?? []) as Message[];
     },
     enabled: !!agentId && !!conversationId,
+    refetchInterval: 2000,
+    staleTime: 0,
   });
 }
 
@@ -67,6 +71,8 @@ export function useMultiConversationMessages(agentId: string | null, conversatio
   const stableKey = conversationIds.slice().sort().join(",");
   return useQuery({
     queryKey: ["multi-conversation-messages", agentId, stableKey],
+    refetchInterval: 2000,
+    staleTime: 0,
     queryFn: async () => {
       if (!agentId || conversationIds.length === 0) return [];
       const results = await Promise.all(
