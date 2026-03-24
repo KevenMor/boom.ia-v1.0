@@ -1454,10 +1454,9 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             temperature: agent.temperature ?? 0.7,
           };
 
-          // Gemini 2.5+: ativa thinking para garantir respostas mais precisas
-          // Quando thinking está ativo, temperature deve ser 1.0
+          // Gemini 2.5+: thinking já ativo por padrão no modelo.
+          // Google recomenda temperature=1.0 para modelos 2.5 com thinking.
           if (convIsGemini && isGeminiThinkingModel(convModel)) {
-            convBody.thinking = { type: "enabled", budget_tokens: 8192 };
             convBody.temperature = 1.0;
           }
 
@@ -1782,10 +1781,9 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           ...(promptCachingEnabledEarly && !isGeminiBaseSP && { prompt_cache_key: `agent:${agent_id}:tenant:${tenantSlug || "default"}:date:${todayISOSP}` }),
         };
 
-        // Gemini 2.5+ single-provider sem tools: ativa thinking
-        // (com tools o fallback já muda para gemini-2.0-flash antes de chegar aqui)
-        if (isGeminiBaseSP && isGeminiThinkingModel(model) && !useTools) {
-          body.thinking = { type: "enabled", budget_tokens: 8192 };
+        // Gemini 2.5+: thinking já ativo por padrão no modelo.
+        // Google recomenda temperature=1.0 para modelos 2.5 com thinking.
+        if (isGeminiBaseSP && isGeminiThinkingModel(model)) {
           body.temperature = 1.0;
         }
 
