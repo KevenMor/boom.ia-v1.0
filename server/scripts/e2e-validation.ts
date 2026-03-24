@@ -217,6 +217,15 @@ async function main() {
       ok: abortOk,
       detail: abortOk ? "AbortError capturado corretamente" : "AbortError não disparou (timeout muito curto?)",
     });
+
+    // Teste: echo guard (não responder com emoji idêntico ao do cliente)
+    const echoTest = await streamChat(firstAgent.id, "👍");
+    const echoOk = !echoTest.error && echoTest.content.trim() !== "👍" && echoTest.content.length > 0;
+    results.push({
+      name: "Echo guard: não repetir emoji do cliente",
+      ok: echoOk,
+      detail: echoTest.error || (echoOk ? `Resposta: "${echoTest.content.slice(0, 60)}..."` : `Resposta inválida: "${echoTest.content}"`),
+    });
   }
 
   console.log("Resultados:");

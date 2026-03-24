@@ -38,6 +38,15 @@ function providerErrorMessage(status: number, errText: string): string {
   return preview || `Erro do provedor (${status}). Verifique a API key em Provedores.`;
 }
 
+/** Guard: detecta se o LLM está ecoando a mensagem do cliente (ex: "👍" → "👍") */
+function isEchoResponse(response: string, lastUserMessage: string | null | undefined): boolean {
+  if (!lastUserMessage || lastUserMessage.length === 0) return false;
+  if (lastUserMessage.length > 30) return false; // só checar mensagens curtas
+  const normalized = response.trim().toLowerCase();
+  const userNormalized = lastUserMessage.trim().toLowerCase();
+  return normalized === userNormalized && normalized.length > 0;
+}
+
 async function getProviderApiKey(
   providerId: string | null,
   supabase: ReturnType<typeof createNexusClient>
@@ -1012,6 +1021,10 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         sendSse({ metadata: { type: "welcome_video", video_url: welcomeVideoUrl } });
       }
 
+      // Extract last messages for use in both dual and single-provider paths (echo guard, scheduling, etc)
+      const lastAssistantMsg = [...messagesToUse].reverse().find((m) => m.role === "assistant");
+      const lastUserMsg = [...messagesToUse].reverse().find((m) => m.role === "user");
+
       // Dual-provider: OpenAI para tools (dispatcher), Gemini para conversacional
       if (useTools && dispatcherProviderId) {
         const dispatcherConfig = await getProviderApiKey(dispatcherProviderId, supabase);
@@ -1034,9 +1047,6 @@ Quando o cliente ESCOLHER um horário após você ter oferecido opções:
 Chame consultar_agenda com action="criar", title="Visita - [nome do cliente]", start_at no formato correto conforme o dia oferecido. NUNCA chame só check_availability quando o cliente já escolheu o horário.
 REGRA ABSOLUTA: Se o cliente responde a uma oferta de horários com uma escolha (ex: "pode ser as 14:00", "10h", "amanhã as 10"), a action OBRIGATÓRIA é "criar". Chamar "cancelar" ou "check_availability" nesse cenário é um ERRO CRÍTICO.
 Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado para dia 09/03 às 09:00"). Use esse horário em cancelar: start_at no formato YYYY-MM-DDTHH:mm:ss-03:00 (ano = ano de hoje). Em seguida use criar com o novo horário pedido pelo cliente, também com a data de hoje.`;
-
-          const lastAssistantMsg = [...messagesToUse].reverse().find((m) => m.role === "assistant");
-          const lastUserMsg = [...messagesToUse].reverse().find((m) => m.role === "user");
           let schedulingHint = "";
           if (lastAssistantMsg && lastUserMsg) {
             const offeredTimes = /\b\d{1,2}[h:]\d{0,2}\b/.test(lastAssistantMsg.content);
@@ -1703,15 +1713,23 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1077',message:'Retry response recebido',data:{retryContent:retryContent,retryContentLen:retryContent?.length||0},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
                 // #endregion
                 if (retryContent) {
-                  const sanitized = sanitizeLLMOutput(retryContent);
-                  // #region agent log
-                  fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1081',message:'Após sanitizeLLMOutput',data:{sanitized:sanitized,sanitizedLen:sanitized.length,wasStripped:retryContent.length>0&&sanitized.length===0},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
-                  // #endregion
-                  if (sanitized) {
-                    dualContentToSave = sanitized;
-                    console.log("[Chat-Local] Retry OK, enviando conteúdo sanitizado:", sanitized.slice(0, 80));
-                    sendSse({ choices: [{ delta: { content: sanitized } }] });
+                  const lastUserContent = lastUserMsg?.role === "user" ? (lastUserMsg.content?.trim() ?? "") : "";
+                  if (isEchoResponse(retryContent, lastUserContent)) {
+                    // Echo detectado no retry: o LLM respondeu com a mesma mensagem do cliente
+                    console.warn("[Chat-Local] Echo detectado no retry:", retryContent.slice(0, 50), "- usando fallback");
+                    const fallback = "Pode me dar mais detalhes sobre o que você precisa?";
+                    dualContentToSave = fallback;
+                    sendSse({ choices: [{ delta: { content: fallback } }] });
                   } else {
+                    const sanitized = sanitizeLLMOutput(retryContent);
+                    // #region agent log
+                    fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1081',message:'Após sanitizeLLMOutput',data:{sanitized:sanitized,sanitizedLen:sanitized.length,wasStripped:retryContent.length>0&&sanitized.length===0},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
+                    // #endregion
+                    if (sanitized) {
+                      dualContentToSave = sanitized;
+                      console.log("[Chat-Local] Retry OK, enviando conteúdo sanitizado:", sanitized.slice(0, 80));
+                      sendSse({ choices: [{ delta: { content: sanitized } }] });
+                    } else {
                     const fallback = fallbackSanitizeForRetry(retryContent);
                     // #region agent log
                     fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1089',message:'Fallback sanitize',data:{fallback:fallback,fallbackLen:fallback.length,retryContentPreview:retryContent.slice(0,300)},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
@@ -1723,6 +1741,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                     } else {
                       console.warn("[Chat-Local] sanitize retornou vazio, retryContent preview:", retryContent.slice(0, 200));
                       sendSse({ choices: [{ delta: { content: "Opa, tive um problema na última mensagem enviada, pode me reenviar?" } }] });
+                    }
                     }
                   }
                 } else {
@@ -1941,7 +1960,20 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }
           }
           if (done) {
-            if (streamFilterBuffer) sendSse({ choices: [{ delta: { content: restorePortugueseAccents(streamFilterBuffer) } }] });
+            // Echo guard para single-provider: se a resposta for um echo da mensagem do cliente, usar fallback
+            if (streamFilterBuffer) {
+              const bufferContent = restorePortugueseAccents(streamFilterBuffer);
+              const lastUserContent = lastUserMsg?.role === "user" ? (lastUserMsg.content?.trim() ?? "") : "";
+              if (isEchoResponse(bufferContent, lastUserContent)) {
+                console.warn("[Chat-Local] Echo detectado (single-provider):", bufferContent.slice(0, 50), "- usando fallback");
+                const fallback = "Pode me dar mais detalhes sobre o que você precisa?";
+                sendSse({ choices: [{ delta: { content: fallback } }] });
+                content = fallback; // substitui acumulador para que fullContent fique correto
+                streamFilterBuffer = ""; // limpa para não duplicar
+              } else {
+                sendSse({ choices: [{ delta: { content: bufferContent } }] });
+              }
+            }
             const isFirstContact = messagesToUse.filter((m) => m.role === "assistant").length === 0;
             const agentCfgSingle = (agent?.config || {}) as Record<string, unknown>;
             const hasWelcomeVideoSingle = !!(agentCfgSingle.welcome_video_url as string)?.trim();
