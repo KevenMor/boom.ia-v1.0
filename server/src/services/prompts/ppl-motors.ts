@@ -1007,8 +1007,7 @@ F) NOTIFICATION — AUTOMATIC ONLY (v2.6.0)
 
 G) ASSIGNMENT TO HUMAN (handoff — v3.5.0)
    → Call tool: atribuir_agente (tool_type: chatwoot_assign)
-   Argument format: {"assignee_id": 15} OU {"team_id": 3} OU {"reason": "unidade X"} quando o cliente pedir unidade específica.
-   IMPORTANTE: Se o cliente mencionar unidade específica (ex: "unidade aparecidinha", "vila haro", "coop"), passe reason com o nome da unidade para direcionar ao time correto: {"reason": "unidade aparecidinha"}.
+   Argument format: {} — chame sem argumentos. O backend roteia automaticamente para o atendente correto.
    Triggers:
    - Customer wants to negotiate, asks for a human, financing data complete
    - Customer insists on appraisal value, shows frustration, complex negotiation
@@ -1021,7 +1020,7 @@ COMBINED CALLS (ONE TURN WHEN APPLICABLE):
 - Appointment confirmed → consultar_agenda(action="criar") (notification is sent automatically by the system — do NOT call enviar_notificacao)
 - Cancellation only → consultar_agenda(action="cancelar") (notification is sent automatically)
 - Rescheduling → consultar_agenda(action="cancelar") + consultar_agenda(action="criar") (notifications are sent automatically)
-- Handoff/assignment → atribuir_agente({"assignee_id": 15}) (notification + follow-up cancel are automatic — do NOT call enviar_notificacao)
+- Handoff/assignment → atribuir_agente({}) (notification + follow-up cancel are automatic — do NOT call enviar_notificacao)
 
 ★ CRITICAL (v2.6.0): NUNCA chame enviar_notificacao. Todas as notificacoes sao geradas automaticamente pelo backend ao criar agendamentos ou fazer handoff. Informacoes de veiculo para troca, perguntas sobre financiamento, lead quente — NENHUM desses eventos deve gerar notificacao manual.
 

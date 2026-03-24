@@ -1160,7 +1160,8 @@ async function executeChatwootAssign(
           .toLowerCase()
           .normalize("NFD")
           .replace(/[\u0300-\u036f]/g, "");
-        const tokens = labelNorm.split(/\s+/).filter((t: string) => t.length >= 3);
+        const FUZZY_STOPWORDS = new Set(["unidade", "para", "com", "que", "uma"]);
+        const tokens = labelNorm.split(/\s+/).filter((t: string) => t.length >= 3 && !FUZZY_STOPWORDS.has(t));
         const score = tokens.reduce(
           (acc: number, tok: string) => acc + (reasonNorm.includes(tok) ? 1 : 0),
           0

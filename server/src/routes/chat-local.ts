@@ -322,6 +322,7 @@ const IDEAL_UNITS_MAP: Record<string, string> = {
   "júlio de mesquita": "Júlio de Mesquita",
   julio: "Júlio de Mesquita",
   "julio de mesquita": "Júlio de Mesquita",
+  jm: "Júlio de Mesquita",
   aparecidinha: "Aparecidinha",
   aparecida: "Aparecidinha",
   centro: "Centro",
@@ -681,6 +682,40 @@ function normalizeParametersSchema(params: unknown): Record<string, unknown> {
   };
 }
 
+export function enrichChatwootAssignDescription(tool: ToolDef, baseDescription: string): string {
+  if (tool.tool_type !== "chatwoot_assign") return baseDescription;
+
+  const execCfg = (tool.execution_config || {}) as Record<string, unknown>;
+  const rules = Array.isArray(execCfg.rules)
+    ? (execCfg.rules as Array<{ label?: string }>)
+    : [];
+
+  const labeledRules = rules.filter(
+    (r) => typeof r.label === "string" && (r.label as string).trim().length > 0
+  );
+
+  let routing: string;
+
+  if (labeledRules.length > 0) {
+    // Com rules: o LLM deve enviar reason com o nome da unidade
+    const labels = labeledRules.map((r) => `"${r.label}"`).join(", ");
+    const hasDefault = execCfg.assignee_id != null || execCfg.team_id != null;
+    routing = [
+      `NÃO envie assignee_id nem team_id diretamente — o backend roteia automaticamente via execution_config.`,
+      `Use o parâmetro reason com o nome da unidade do cliente.`,
+      `Opções disponíveis: ${labels}.`,
+      hasDefault
+        ? `Escalação geral (sem unidade específica): chame sem argumentos ou com reason="escalacao".`
+        : `Sempre envie reason com o nome da unidade.`,
+    ].join(" ");
+  } else {
+    // Sem rules: atribuição simples para o padrão configurado
+    routing = `NÃO envie assignee_id nem team_id diretamente — chame sem argumentos. O backend atribui ao atendente/time correto automaticamente via execution_config.`;
+  }
+
+  return baseDescription ? `${baseDescription}\n\n${routing}` : routing;
+}
+
 function buildOpenAITools(
   tools: ToolDef[],
   baseUrl: string
@@ -697,7 +732,7 @@ function buildOpenAITools(
         type: "function" as const,
         function: {
           name: sanitizedName,
-          description: (fd.description as string) || "",
+          description: enrichChatwootAssignDescription(t, (fd.description as string) || ""),
           parameters: normalizeParametersSchema(fd.parameters),
         },
       };
@@ -1320,12 +1355,19 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   // Injetar reason das últimas mensagens do cliente para casar regras por unidade (ex: "unidade aparecidinha")
                   const reason = String(args?.reason || "").trim();
                   if ((!reason || reason === "escalation") && messagesToUse.length > 0) {
-                    const userMsgs = messagesToUse
+                    let userMsgs = messagesToUse
                       .filter((m) => (m as { role?: string }).role === "user")
-                      .slice(-3)
                       .map((m) => (m as { content?: string }).content ?? "")
+                      .filter((content) => !content.includes("[SISTEMA INTERNO"))
+                      .slice(-3)
                       .join(" ")
                       .trim();
+                    if (isAutoescolaIdeal && userMsgs) {
+                      for (const [alias, canonical] of Object.entries(IDEAL_UNITS_MAP)) {
+                        const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+                        userMsgs = userMsgs.replace(new RegExp(`\\b${escaped}\\b`, "gi"), canonical);
+                      }
+                    }
                     if (userMsgs) args = { ...args, reason: userMsgs };
                   }
                 }
@@ -2086,12 +2128,19 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             // Injetar reason das últimas mensagens do cliente para casar regras por unidade
             const reasonSP = String(args?.reason || "").trim();
             if ((!reasonSP || reasonSP === "escalation") && messagesToUse.length > 0) {
-              const userMsgsSP = messagesToUse
+              let userMsgsSP = messagesToUse
                 .filter((m) => (m as { role?: string }).role === "user")
-                .slice(-3)
                 .map((m) => (m as { content?: string }).content ?? "")
+                .filter((content) => !content.includes("[SISTEMA INTERNO"))
+                .slice(-3)
                 .join(" ")
                 .trim();
+              if (isAutoescolaIdeal && userMsgsSP) {
+                for (const [alias, canonical] of Object.entries(IDEAL_UNITS_MAP)) {
+                  const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+                  userMsgsSP = userMsgsSP.replace(new RegExp(`\\b${escaped}\\b`, "gi"), canonical);
+                }
+              }
               if (userMsgsSP) args = { ...args, reason: userMsgsSP };
             }
           }
