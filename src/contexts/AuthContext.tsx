@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
 import { getApiBase } from "@/lib/api-client";
@@ -34,18 +34,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [adminApiAccess, setAdminApiAccess] = useState(false);
   const [loading, setLoading] = useState(true);
   const [scopeLoading, setScopeLoading] = useState(true);
+  // Controla se o carregamento inicial já foi concluído — evita flash de loading em token refreshes
+  const initialLoadDone = useRef(false);
+  // Evita dupla chamada de loadScope (getSession + onAuthStateChange disparam juntos)
+  const scopeLoadingInFlight = useRef(false);
 
   useEffect(() => {
     let mounted = true;
 
     const loadScope = async (nextSession: Session | null) => {
-      setScopeLoading(true);
+      if (scopeLoadingInFlight.current) return;
+      scopeLoadingInFlight.current = true;
+
+      // Só mostra spinner na carga inicial; refreshes silenciosos não travam a tela
+      if (!initialLoadDone.current) setScopeLoading(true);
+
       if (!nextSession?.user) {
         if (!mounted) return;
         setProfile(null);
         setMemberships([]);
         setAdminApiAccess(false);
         setScopeLoading(false);
+        initialLoadDone.current = true;
+        scopeLoadingInFlight.current = false;
         return;
       }
 
@@ -74,17 +85,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setMemberships((membershipsData as TenantMembership[]) ?? []);
       setAdminApiAccess(hasAdminAccess);
       setScopeLoading(false);
+      initialLoadDone.current = true;
+      scopeLoadingInFlight.current = false;
     };
 
     // Listen first, then get session
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
         setSession(session);
+        // TOKEN_REFRESHED: só atualiza a sessão, não recarrega perfil/memberships (evita flash de loading)
+        if (event === "TOKEN_REFRESHED") {
+          setLoading(false);
+          return;
+        }
         void loadScope(session);
         setLoading(false);
       }
     );
 
+    // getSession dispara junto com o INITIAL_SESSION do onAuthStateChange —
+    // o flag scopeLoadingInFlight garante que loadScope só roda uma vez
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       void loadScope(session);
