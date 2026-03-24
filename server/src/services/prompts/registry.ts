@@ -273,6 +273,13 @@ export function buildSystemPrompt(
 const CALENDAR_TOOL_BASE_RULES = `
 [REGRAS DE AGENDAMENTO COM CALENDÁRIO]
 
+OFERTA DE HORÁRIOS (OBRIGATÓRIO):
+→ NUNCA liste todos os slots disponíveis. Isso transmite impressão de agenda vazia.
+→ Ofereça EXATAMENTE 2 horários intercalados (não consecutivos) por vez. Ex: 09:00 e 11:00, ou 14:00 e 16:00.
+→ Se restar apenas 1 slot disponível no período: ofereça somente esse.
+→ Se o cliente recusar ambas as opções: pergunte qual horário seria melhor e verifique.
+→ JAMAIS sugira horário fora do array retornado por check_availability — significa marcar em cima de outro cliente.
+
 REMARCAR (cliente quer trocar de horário):
 → Use action="reagendar" (operação atômica — mais eficiente e seguro)
 → Parâmetros: start_at (hora antiga, extraída do histórico) + new_start_at (nova hora) + client_name

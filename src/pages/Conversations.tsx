@@ -37,8 +37,24 @@ export default function Conversations() {
     () => new Map((tenants ?? []).map((t) => [t.id, t.name])),
     [tenants]
   );
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-  const [selectedContactKey, setSelectedContactKey] = useState<string | null>(null);
+  const [selectedAgentId, setSelectedAgentIdState] = useState<string | null>(
+    () => sessionStorage.getItem("conv_selectedAgentId") ?? null
+  );
+  const [selectedContactKey, setSelectedContactKeyState] = useState<string | null>(
+    () => sessionStorage.getItem("conv_selectedContactKey") ?? null
+  );
+
+  const setSelectedAgentId = (id: string | null) => {
+    setSelectedAgentIdState(id);
+    if (id) sessionStorage.setItem("conv_selectedAgentId", id);
+    else sessionStorage.removeItem("conv_selectedAgentId");
+  };
+  const setSelectedContactKey = (key: string | null) => {
+    setSelectedContactKeyState(key);
+    if (key) sessionStorage.setItem("conv_selectedContactKey", key);
+    else sessionStorage.removeItem("conv_selectedContactKey");
+  };
+
   const [searchTerm, setSearchTerm] = useState("");
   const [labelFilter, setLabelFilter] = useState<string | null>(null);
   const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null);

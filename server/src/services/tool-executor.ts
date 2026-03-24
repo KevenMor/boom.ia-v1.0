@@ -542,13 +542,17 @@ async function executeCalendarQuery(
       endDate.setDate(endDate.getDate() + daysAhead);
 
       const calendarIds = calendars.map((c: { id: string }) => c.id);
+      // Busca eventos que INTERSECTAM o período (não apenas os que começam dentro)
       const { data: events, error: evErr } = await supabase
         .from("calendar_events")
         .select("*")
         .in("calendar_id", calendarIds)
-        .gte("start_at", startDate.toISOString())
-        .lte("start_at", endDate.toISOString())
+        .lt("start_at", endDate.toISOString())
+        .gt("end_at", startDate.toISOString())
         .order("start_at", { ascending: true });
+
+      // Offset BRT = UTC-3
+      const BRT_OFFSET_MS = 3 * 60 * 60 * 1000;
 
       const availableSlots: Record<string, string[]> = {};
       for (let d = 0; d < daysAhead; d++) {
@@ -563,17 +567,24 @@ async function executeCalendarQuery(
         const businessStart = workingHours.startH;
         const businessEnd = workingHours.endH;
 
-        const dayStr = current.toISOString().slice(0, 10);
-        const dayEvents = (events || []).filter(
-          (e: { start_at?: string }) => e.start_at?.slice(0, 10) === dayStr
-        );
+        // dayStr em BRT: subtrai 3h para obter a data local do negócio
+        const brtDate = new Date(current.getTime() - BRT_OFFSET_MS);
+        const dayStr = brtDate.toISOString().slice(0, 10);
+
+        // Filtra eventos pelo dia BRT (slice dos 10 primeiros chars do start_at em BRT)
+        const dayEvents = (events || []).filter((e: { start_at?: string }) => {
+          if (!e.start_at) return false;
+          const evBrt = new Date(new Date(e.start_at).getTime() - BRT_OFFSET_MS);
+          return evBrt.toISOString().slice(0, 10) === dayStr;
+        });
         const slots: string[] = [];
 
         for (let h = businessStart; h < businessEnd; h++) {
           for (let m = 0; m < 60; m += slotDuration) {
             if (h + m / 60 >= businessEnd) break;
+            // Cria slotStart com offset BRT explícito para comparar corretamente com eventos UTC
             const slotStart = new Date(
-              `${dayStr}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`
+              `${dayStr}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00-03:00`
             );
             const slotEnd = new Date(slotStart.getTime() + slotDuration * 60000);
 
