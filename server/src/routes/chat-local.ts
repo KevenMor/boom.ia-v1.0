@@ -957,7 +957,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         }
 
         const lastUserMsg = messagesToUse.length > 0 ? messagesToUse[messagesToUse.length - 1] : null;
-        if (responseConvId && lastUserMsg?.role === "user" && lastUserMsg.content?.trim()) {
+        if (!skipSave && responseConvId && lastUserMsg?.role === "user" && lastUserMsg.content?.trim()) {
           await supabase.rpc("save_message", {
             p_agent_id: agent_id,
             p_conversation_id: responseConvId,

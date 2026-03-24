@@ -431,7 +431,7 @@ async function isLikelyEchoOfBotMessage(
     });
     if (!history || !Array.isArray(history) || history.length === 0) return false;
     const normalizedIncoming = normalizeContent(incomingText);
-    if (!normalizedIncoming || normalizedIncoming.length < 5) return false;
+    if (!normalizedIncoming) return false;
     const now = Date.now();
     let checked = 0;
     for (let i = history.length - 1; i >= 0 && checked < 10; i--) {
