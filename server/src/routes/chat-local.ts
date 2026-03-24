@@ -2135,7 +2135,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 .slice(-3)
                 .join(" ")
                 .trim();
-              if (isAutoescolaIdeal && userMsgsSP) {
+              if (isAutoescolaIdealEarly && userMsgsSP) {
                 for (const [alias, canonical] of Object.entries(IDEAL_UNITS_MAP)) {
                   const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
                   userMsgsSP = userMsgsSP.replace(new RegExp(`\\b${escaped}\\b`, "gi"), canonical);
