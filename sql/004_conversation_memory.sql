@@ -87,15 +87,27 @@ SET search_path = public
 AS $$
 DECLARE
   v_schema TEXT;
+  v_tenant_id UUID;
+  v_db_name TEXT;
+  v_agent_exists BOOLEAN;
 BEGIN
-  SELECT t.db_name INTO v_schema
+  -- Check if agent exists
+  SELECT a.tenant_id, t.db_name INTO v_tenant_id, v_db_name
   FROM public.agents a
-  JOIN public.tenants t ON t.id = a.tenant_id
+  LEFT JOIN public.tenants t ON t.id = a.tenant_id
   WHERE a.id = p_agent_id;
 
-  IF v_schema IS NULL THEN
-    RAISE EXCEPTION 'Tenant schema not provisioned for agent %', p_agent_id;
+  v_agent_exists := v_tenant_id IS NOT NULL;
+
+  IF NOT v_agent_exists THEN
+    RAISE EXCEPTION 'Agent % not found', p_agent_id;
   END IF;
+
+  IF v_db_name IS NULL THEN
+    RAISE EXCEPTION 'Tenant schema not provisioned for agent % (tenant_id: %)', p_agent_id, v_tenant_id;
+  END IF;
+
+  v_schema := v_db_name;
 
   RETURN QUERY EXECUTE format(
     'SELECT m.id, m.role, m.content, m.model, m.tokens_input, m.tokens_output, m.latency_ms, m.created_at FROM %I.messages m WHERE m.conversation_id = $1 ORDER BY m.created_at ASC',

@@ -1,8 +1,9 @@
 -- ============================================================
 -- Nexus AI — Data Plane Provisioning
 -- Execute no seu Supabase self-hosted (SQL Editor ou psql)
--- ANTES: CREATE EXTENSION IF NOT EXISTS vector;
 -- ============================================================
+
+CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE OR REPLACE FUNCTION public.provision_tenant_schema(p_tenant_id UUID)
 RETURNS VOID
@@ -70,6 +71,7 @@ BEGIN
     )
   ', v_schema);
 
+  -- Knowledge chunks table with optional vector column
   EXECUTE format('
     CREATE TABLE IF NOT EXISTS %I.knowledge_chunks (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -81,6 +83,8 @@ BEGIN
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   ', v_schema, v_schema);
+
+  -- Index will be created later in post-processing if needed
 
   EXECUTE format('
     CREATE TABLE IF NOT EXISTS %I.usage_daily (
@@ -99,7 +103,13 @@ BEGIN
   EXECUTE format('CREATE INDEX IF NOT EXISTS idx_%s_msg_conv ON %I.messages(conversation_id)', replace(v_slug, '-', '_'), v_schema);
   EXECUTE format('CREATE INDEX IF NOT EXISTS idx_%s_msg_created ON %I.messages(created_at DESC)', replace(v_slug, '-', '_'), v_schema);
   EXECUTE format('CREATE INDEX IF NOT EXISTS idx_%s_chunks_doc ON %I.knowledge_chunks(document_id)', replace(v_slug, '-', '_'), v_schema);
-  EXECUTE format('CREATE INDEX IF NOT EXISTS idx_%s_chunks_embedding ON %I.knowledge_chunks USING hnsw (embedding vector_cosine_ops)', replace(v_slug, '-', '_'), v_schema);
+  -- Create vector embedding index if pgvector extension is available
+  BEGIN
+    EXECUTE format('CREATE INDEX IF NOT EXISTS idx_%s_chunks_embedding ON %I.knowledge_chunks USING hnsw (embedding vector_cosine_ops)', replace(v_slug, '-', '_'), v_schema);
+  EXCEPTION WHEN OTHERS THEN
+    -- pgvector extension may not be available; skip index creation
+    NULL;
+  END;
   EXECUTE format('CREATE INDEX IF NOT EXISTS idx_%s_usage_agent ON %I.usage_daily(agent_id, date)', replace(v_slug, '-', '_'), v_schema);
 
   UPDATE public.tenants
@@ -108,9 +118,10 @@ BEGIN
       updated_at = now()
   WHERE id = p_tenant_id;
 
+  -- Insert audit log safely (user_id may be NULL for service role calls)
   INSERT INTO public.audit_logs (user_id, action, entity_type, entity_id, details)
   VALUES (
-    auth.uid(),
+    NULLIF(auth.uid(), '00000000-0000-0000-0000-000000000000'),
     'tenant.provisioned',
     'tenant',
     p_tenant_id,

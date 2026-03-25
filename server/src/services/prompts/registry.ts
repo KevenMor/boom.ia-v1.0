@@ -51,6 +51,12 @@ import {
   DISPATCHER_PROMPT as ODONTO_DISPATCHER,
   FOLLOWUP_PROMPT as ODONTO_FOLLOWUP,
 } from "./clinica-odonto.js";
+import {
+  SYSTEM_PROMPT as IMPERIO_SYSTEM,
+  COMMUNICATION_RULES as IMPERIO_COMM_RULES,
+  DISPATCHER_PROMPT as IMPERIO_DISPATCHER,
+  FOLLOWUP_PROMPT as IMPERIO_FOLLOWUP,
+} from "./imperio-cfc.js";
 
 /**
  * Configuração de prompt por tenant.
@@ -209,6 +215,24 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     alwaysInjectCommRules: true,
     version: "v1.0.0",
     description: "Recepcionista — Clínica Odontológica Genérica (Customizável)",
+  },
+  "imperio": {
+    systemPrompt: IMPERIO_SYSTEM,
+    communicationRules: IMPERIO_COMM_RULES,
+    dispatcherPrompt: IMPERIO_DISPATCHER,
+    followupPrompt: IMPERIO_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.0",
+    description: "SDR — Autoescola Império CFC (Sorocaba/SP)",
+  },
+  "imperio-cfc": {
+    systemPrompt: IMPERIO_SYSTEM,
+    communicationRules: IMPERIO_COMM_RULES,
+    dispatcherPrompt: IMPERIO_DISPATCHER,
+    followupPrompt: IMPERIO_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.0",
+    description: "SDR — Autoescola Império CFC (Sorocaba/SP)",
   },
 };
 

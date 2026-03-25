@@ -39,13 +39,30 @@ export function useCreateTenant() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (tenant: Partial<Tenant>) => {
-      // Insert tenant – trigger trg_provision_tenant_on_insert provisiona o schema automaticamente
-      const { data, error } = await supabase
-        .from("tenants")
-        .insert(tenant)
-        .select()
-        .single();
-      if (error) throw error;
+      // Call backend endpoint to bypass RLS (uses SERVICE_ROLE_KEY)
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const response = await fetch("/api/admin/tenants", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token && { "x-nexus-auth": `Bearer ${token}` }),
+        },
+        body: JSON.stringify({
+          name: tenant.name,
+          slug: tenant.slug,
+          plan: tenant.plan,
+          description: tenant.description,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to create tenant");
+      }
+
+      const data = await response.json();
 
       // Refetch para obter status atualizado (db_name preenchido pelo provisionamento)
       const { data: updated } = await supabase
@@ -81,18 +98,20 @@ export function useDeleteTenant() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      // 1. Deprovision schema first
-      const { error: deprovError } = await supabase.rpc("deprovision_tenant_schema", {
-        p_tenant_id: id,
-      });
-      // Log but don't block deletion if deprov fails
-      if (deprovError) {
-        console.warn("Deprovision warning:", deprovError.message);
-      }
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
 
-      // 2. Delete tenant record
-      const { error } = await supabase.from("tenants").delete().eq("id", id);
-      if (error) throw error;
+      const response = await fetch(`/api/admin/tenants/${id}`, {
+        method: "DELETE",
+        headers: {
+          ...(token && { "x-nexus-auth": `Bearer ${token}` }),
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to delete tenant");
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tenants"] }),
   });

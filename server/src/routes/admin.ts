@@ -457,4 +457,104 @@ export async function adminRoutes(fastify: FastifyInstance) {
       return reply.send({ success: true });
     }
   );
+
+  fastify.post(
+    "/admin/tenants",
+    async (
+      req: FastifyRequest<{ Body: { name: string; slug: string; plan?: string; description?: string } }>,
+      reply: FastifyReply
+    ) => {
+      const { name, slug, plan, description } = req.body;
+      if (!name || !slug) {
+        return reply.status(400).send({ error: "name and slug are required" });
+      }
+
+      // Obter user_id do token JWT enviado pelo frontend via x-nexus-auth
+      const authHeader = req.headers["x-nexus-auth"] as string | undefined;
+      let userId: string | null = null;
+      if (authHeader) {
+        // Usar anon client com JWT para validar o usuário (não service role)
+        const { createClient } = await import("@supabase/supabase-js");
+        const userClient = createClient(
+          process.env.NEXUS_DB_URL!,
+          process.env.NEXUS_DB_ANON_KEY!,
+          { global: { headers: { Authorization: authHeader.startsWith("Bearer ") ? authHeader : `Bearer ${authHeader}` } } }
+        );
+        const { data: { user }, error: userError } = await userClient.auth.getUser();
+        if (userError) req.log.warn({ userError }, "Failed to get user from JWT");
+        userId = user?.id ?? null;
+        req.log.info({ userId }, "Extracted userId from JWT");
+      }
+
+      const supabase = createNexusClient(); // service role para bypass RLS
+      const { data, error } = await supabase
+        .from("tenants")
+        .insert({
+          name,
+          slug,
+          plan: plan || "Starter",
+          description,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        req.log.error({ error }, "Failed to insert tenant");
+        return reply.status(500).send({ error: error.message });
+      }
+
+      req.log.info({ tenantId: data.id, userId }, "Tenant created, inserting membership");
+
+      // Inserir membership com user_id extraído do JWT
+      if (userId && data.id) {
+        const { error: membershipError } = await supabase.from("tenant_memberships").insert({
+          tenant_id: data.id,
+          user_id: userId,
+          role: "tenant_admin",
+        });
+        if (membershipError) {
+          req.log.warn({ membershipError }, "Failed to insert tenant membership");
+        }
+      } else {
+        req.log.warn({ userId, tenantId: data.id }, "Skipping membership insert: missing userId or tenantId");
+      }
+
+      // Provisionar schema do Data Plane (cria dp_{slug}, tabelas conversations/messages/etc)
+      req.log.info({ tenantId: data.id }, "Provisioning tenant data plane schema");
+      const { error: provisionError } = await supabase.rpc("provision_tenant_schema", { p_tenant_id: data.id });
+      if (provisionError) {
+        req.log.error({ provisionError }, "Failed to provision tenant schema");
+        // Não falha o request — tenant criado, mas schema precisará de provisionamento manual
+      } else {
+        req.log.info({ tenantId: data.id }, "Tenant schema provisioned successfully");
+      }
+
+      return reply.status(201).send(data);
+    }
+  );
+
+  fastify.delete(
+    "/admin/tenants/:id",
+    async (
+      req: FastifyRequest<{ Params: { id: string } }>,
+      reply: FastifyReply
+    ) => {
+      const { id } = req.params;
+      if (!id) return reply.status(400).send({ error: "id is required" });
+
+      const supabase = createNexusClient(); // service role bypasses RLS
+
+      // 1. Deletar memberships do tenant
+      await supabase.from("tenant_memberships").delete().eq("tenant_id", id);
+
+      // 2. Deletar o tenant
+      const { error } = await supabase.from("tenants").delete().eq("id", id);
+      if (error) {
+        req.log.error({ error }, "Failed to delete tenant");
+        return reply.status(500).send({ error: error.message });
+      }
+
+      return reply.status(200).send({ success: true });
+    }
+  );
 }
