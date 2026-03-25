@@ -406,6 +406,17 @@ function buildAutoescolaIdealAssignHint(
     }
   }
 
+  // Path 3: Cliente mencionou uma unidade específica + contexto de aluno (aula, horário, tolerância)
+  // Detecta quando o cliente menciona uma unidade + frases de aluno sem o agente ter respondido com "encaminhar" ainda
+  const isStudentContext = /aula|horário|tolerância|tempo de toler|chegar na aula|atraso|chegar a tempo/i.test(convLower);
+  if (isStudentContext && lastUsr?.content) {
+    for (const [key, canonical] of Object.entries(IDEAL_UNITS_MAP)) {
+      if (convLower.includes(key)) {
+        return `\n\n[ALUNO EM SITUAÇÃO DE AULA — UNIDADE DETECTADA. Cliente mencionou unidade "${canonical}" em contexto de aula/horário. OBRIGATÓRIO: chame atribuir_agente/chatwoot_assign com reason="${canonical}" para transferir ao time da unidade correta. NÃO retorne NO_TOOLS_NEEDED.]`;
+      }
+    }
+  }
+
   return "";
 }
 
