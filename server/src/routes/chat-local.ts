@@ -917,6 +917,31 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           "\n\n[ETIQUETAGEM DE LEAD - OBRIGATÓRIO] Todo contato que for identificado como NOVO LEAD (potencial cliente interessado em produtos/serviços, ainda não é cliente) DEVE ser marcado chamando marcar_lead. A etiqueta será criada automaticamente no formato leadsDD-MM-AAAA (ex: leads19-03-2026). Chame marcar_lead assim que identificar interesse genuíno. NÃO chame para clientes existentes, retornos ou saudações sem interesse.";
       }
 
+      // Injetar fotos já enviadas nesta conversa para evitar reenvio
+      if (conversation_id) {
+        try {
+          const { data: histMsgs } = await supabase.rpc("load_conversation_messages", {
+            p_agent_id: agent_id,
+            p_conversation_id: conversation_id,
+          }) as { data: Array<{ role: string; metadata?: { photos_sent?: Array<{ id: string; name: string }> } }> | null };
+          if (histMsgs) {
+            const sentPhotoNames: string[] = [];
+            for (const msg of histMsgs) {
+              if (msg.role === "assistant" && msg.metadata?.photos_sent?.length) {
+                for (const p of msg.metadata.photos_sent) {
+                  if (p.name && !sentPhotoNames.includes(p.name)) sentPhotoNames.push(p.name);
+                }
+              }
+            }
+            if (sentPhotoNames.length > 0) {
+              systemPrompt += `\n\nFOTOS JÁ ENVIADAS NESTA CONVERSA: ${sentPhotoNames.join(", ")}`;
+            }
+          }
+        } catch (histErr) {
+          console.warn("[Chat-Local] Erro ao carregar histórico de fotos enviadas:", (histErr as Error)?.message);
+        }
+      }
+
       const providerConfig = await getProviderApiKey(agent.provider_id, supabase);
       if (!providerConfig) {
         msgLog.chatError(agent_id, "No LLM provider configured");
@@ -1648,14 +1673,19 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
 
           // Extrair IDs de fotos/vídeos dos comandos no conteúdo bruto (antes do sanitize/filter)
+          const dualPhotosSent: Array<{ id: string; name: string }> = [];
           {
-            const photoIdRegex = /ENVIAR_FOTOS?_VEICULOS?[:\s]+[^|\n]+\|\s*id:\s*([a-f0-9-]{36})/gi;
+            const photoIdRegex = /ENVIAR_FOTOS?_VEICULOS?[:\s]+([^|\n]+?)\s*\|\s*id:\s*([a-f0-9-]{36})/gi;
             const videoIdRegex = /ENVIAR_VIDEO_DETALHES[:\s]+[^|\n]+\|\s*id:\s*([a-f0-9-]{36})/gi;
             const photoInventoryIds: string[] = [];
             const videoInventoryIds: string[] = [];
             let cmdMatch: RegExpExecArray | null;
             while ((cmdMatch = photoIdRegex.exec(convFullContent)) !== null) {
-              if (cmdMatch[1] && !photoInventoryIds.includes(cmdMatch[1])) photoInventoryIds.push(cmdMatch[1]);
+              const [, photoName, photoId] = cmdMatch;
+              if (photoId && !photoInventoryIds.includes(photoId)) {
+                photoInventoryIds.push(photoId);
+                dualPhotosSent.push({ id: photoId, name: (photoName ?? "").trim() });
+              }
             }
             while ((cmdMatch = videoIdRegex.exec(convFullContent)) !== null) {
               if (cmdMatch[1] && !videoInventoryIds.includes(cmdMatch[1])) videoInventoryIds.push(cmdMatch[1]);
@@ -1827,6 +1857,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 ...(isFirstContact && welcomeVideoUrl ? { type: "welcome_video", video_url: welcomeVideoUrl } : {}),
                 ...(dualDebugAccum.length > 0 ? { debug: dualDebugAccum } : {}),
                 ...((dispatcherUsage || conversationalUsage) ? { token_usage: tokenUsagePayload } : {}),
+                ...(dualPhotosSent.length > 0 ? { photos_sent: dualPhotosSent } : {}),
               };
               await supabase.rpc("save_message", {
                 p_agent_id: agent_id,
@@ -2072,6 +2103,18 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
           sendSse({ debug: [{ type: "single_provider", model, ...singleProviderUsageAccum }] });
           const singleContentToSave = sanitizeLLMOutput(fullContent.trim());
+          // Extrair fotos enviadas para persistir em metadata
+          const singlePhotosSent: Array<{ id: string; name: string }> = [];
+          {
+            const spPhotoRegex = /ENVIAR_FOTOS?_VEICULOS?[:\s]+([^|\n]+?)\s*\|\s*id:\s*([a-f0-9-]{36})/gi;
+            let spMatch: RegExpExecArray | null;
+            while ((spMatch = spPhotoRegex.exec(fullContent)) !== null) {
+              const [, photoName, photoId] = spMatch;
+              if (photoId && !singlePhotosSent.some((p) => p.id === photoId)) {
+                singlePhotosSent.push({ id: photoId, name: (photoName ?? "").trim() });
+              }
+            }
+          }
           if (!skipSave && responseConvId && singleContentToSave) {
             // #region agent log
             fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'12d224'},body:JSON.stringify({sessionId:'12d224',location:'chat-local.ts:save_message_single',message:'chat-local save_message (single)',data:{convId:responseConvId,contentLen:singleContentToSave.length,contentPreview:singleContentToSave.slice(0,120)},timestamp:Date.now(),hypothesisId:'H1,H2'})}).catch(()=>{});
@@ -2083,6 +2126,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 ...(singleProviderUsageAccum.total_tokens > 0 ? {
                   token_usage: { single: { ...singleProviderUsageAccum, model } },
                 } : {}),
+                ...(singlePhotosSent.length > 0 ? { photos_sent: singlePhotosSent } : {}),
               };
               await supabase.rpc("save_message", {
                 p_agent_id: agent_id,
@@ -2291,6 +2335,18 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
       }
       sendSse({ debug: [{ type: "single_provider", model, ...singleProviderUsageAccum }] });
       const finalContentToSave = sanitizeLLMOutput(fullContent.trim());
+      // Extrair fotos enviadas para persistir em metadata
+      const finalPhotosSent: Array<{ id: string; name: string }> = [];
+      {
+        const fpPhotoRegex = /ENVIAR_FOTOS?_VEICULOS?[:\s]+([^|\n]+?)\s*\|\s*id:\s*([a-f0-9-]{36})/gi;
+        let fpMatch: RegExpExecArray | null;
+        while ((fpMatch = fpPhotoRegex.exec(fullContent)) !== null) {
+          const [, photoName, photoId] = fpMatch;
+          if (photoId && !finalPhotosSent.some((p) => p.id === photoId)) {
+            finalPhotosSent.push({ id: photoId, name: (photoName ?? "").trim() });
+          }
+        }
+      }
       if (!skipSave && responseConvId && finalContentToSave) {
         try {
           const finalSingleMeta: Record<string, unknown> = {
@@ -2299,6 +2355,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             ...(singleProviderUsageAccum.total_tokens > 0 ? {
               token_usage: { single: { ...singleProviderUsageAccum, model } },
             } : {}),
+            ...(finalPhotosSent.length > 0 ? { photos_sent: finalPhotosSent } : {}),
           };
           await supabase.rpc("save_message", {
             p_agent_id: agent_id,

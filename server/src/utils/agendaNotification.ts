@@ -466,7 +466,8 @@ export function buildHandoffNotification(
   nomeCliente: string,
   telefoneCliente?: string,
   _veiculoInteresse?: string,
-  _messages?: Array<{ role: string; content: string }>
+  _messages?: Array<{ role: string; content: string }>,
+  motivo?: string
 ): string {
   let telefone = "Não informado";
   const rawTel = telefoneCliente?.trim();
@@ -474,8 +475,9 @@ export function buildHandoffNotification(
     telefone = formatPhone(rawTel);
   }
 
+  const header = motivo?.trim() ? motivo.trim() : "Aguarda um atendimento humano";
   const lines: string[] = [
-    "Aguarda um atendimento humano",
+    header,
     "",
     `Telefone: ${telefone}`,
   ];

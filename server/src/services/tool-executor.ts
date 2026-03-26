@@ -1325,7 +1325,8 @@ async function executeSendNotification(
   const telefone = String(
     args?.telefone ?? args?.telefone_cliente ?? args?.phone ?? args?.numero ?? ""
   ).trim();
-  const message = buildHandoffNotification(nome, telefone || undefined);
+  const motivo = String(args?.motivo ?? "").trim() || undefined;
+  const message = buildHandoffNotification(nome, telefone || undefined, undefined, undefined, motivo);
   const { success, error } = await sendNotificationToGroup(agentId, message);
   if (!success) {
     return { success: false, result: null, error: error || "Falha ao enviar notificação" };
