@@ -978,6 +978,9 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
 
         const lastUserMsg = messagesToUse.length > 0 ? messagesToUse[messagesToUse.length - 1] : null;
         if (!skipSave && responseConvId && lastUserMsg?.role === "user" && lastUserMsg.content?.trim()) {
+          const userMsgMetadata = attachments.length > 0
+            ? { attachments: attachments.map((a) => ({ file_type: a.file_type, data_url: a.data_url })) }
+            : undefined;
           await supabase.rpc("save_message", {
             p_agent_id: agent_id,
             p_conversation_id: responseConvId,
@@ -987,6 +990,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
             p_tokens_input: 0,
             p_tokens_output: 0,
             p_latency_ms: null,
+            ...(userMsgMetadata && { p_metadata: userMsgMetadata }),
           });
         }
       } catch (persistErr) {

@@ -26,6 +26,7 @@ import {
   UserPlus,
   CalendarDays,
   Package,
+  Bug,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -150,6 +151,10 @@ export default function ContactProfilePage() {
   const [cepLoading, setCepLoading] = useState(false);
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
   const [deleteInvoiceId, setDeleteInvoiceId] = useState<string | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
+  const hasDebugData = messages.some(
+    (m) => !!(m.metadata?.debug as unknown[])?.length || !!m.metadata?.token_usage
+  );
   const { register, handleSubmit, reset, formState: { errors }, setValue } = useForm<EditFormData>({
     resolver: zodResolver(editSchema),
     defaultValues: {
@@ -767,6 +772,22 @@ export default function ContactProfilePage() {
                       )}
                       {!convLoading && messages.length > 0 && (
                         <>
+                          <div className="flex justify-end mb-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className={cn("h-8 w-8", showDebug ? "text-primary" : "text-muted-foreground")}
+                              onClick={() => setShowDebug(!showDebug)}
+                              title={showDebug ? "Ocultar debug" : "Mostrar debug"}
+                            >
+                              <Bug className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          {showDebug && !hasDebugData && (
+                            <p className="text-xs text-muted-foreground text-center mb-2">
+                              Debug ativado — nenhum dado de debug nas mensagens desta conversa.
+                            </p>
+                          )}
                           <div className="h-[calc(100vh-340px)] min-h-[280px] overflow-y-auto -mx-1 px-1">
                             <ConversationMessagesView
                               messages={messages}
@@ -775,7 +796,7 @@ export default function ContactProfilePage() {
                               contactInitials={contact ? getInitials(contact.name) : "?"}
                               agentName={agentName}
                               agentAvatarUrl={convData?.agent_avatar_url ?? null}
-                              showDebug={false}
+                              showDebug={showDebug}
                             />
                           </div>
                           {chatwootUrl && (
