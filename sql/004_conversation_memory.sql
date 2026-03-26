@@ -46,7 +46,8 @@ CREATE OR REPLACE FUNCTION public.save_message(
   p_model TEXT DEFAULT NULL,
   p_tokens_input INTEGER DEFAULT 0,
   p_tokens_output INTEGER DEFAULT 0,
-  p_latency_ms INTEGER DEFAULT NULL
+  p_latency_ms INTEGER DEFAULT NULL,
+  p_metadata JSONB DEFAULT NULL
 )
 RETURNS UUID
 LANGUAGE plpgsql
@@ -66,10 +67,17 @@ BEGIN
     RAISE EXCEPTION 'Tenant schema not provisioned for agent %', p_agent_id;
   END IF;
 
-  EXECUTE format(
-    'INSERT INTO %I.messages (conversation_id, role, content, model, tokens_input, tokens_output, latency_ms) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
-    v_schema
-  ) INTO v_msg_id USING p_conversation_id, p_role, p_content, p_model, p_tokens_input, p_tokens_output, p_latency_ms;
+  IF p_metadata IS NOT NULL THEN
+    EXECUTE format(
+      'INSERT INTO %I.messages (conversation_id, role, content, model, tokens_input, tokens_output, latency_ms, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id',
+      v_schema
+    ) INTO v_msg_id USING p_conversation_id, p_role, p_content, p_model, p_tokens_input, p_tokens_output, p_latency_ms, p_metadata;
+  ELSE
+    EXECUTE format(
+      'INSERT INTO %I.messages (conversation_id, role, content, model, tokens_input, tokens_output, latency_ms) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
+      v_schema
+    ) INTO v_msg_id USING p_conversation_id, p_role, p_content, p_model, p_tokens_input, p_tokens_output, p_latency_ms;
+  END IF;
 
   RETURN v_msg_id;
 END;
@@ -80,7 +88,7 @@ CREATE OR REPLACE FUNCTION public.load_conversation_messages(
   p_agent_id UUID,
   p_conversation_id UUID
 )
-RETURNS TABLE(id UUID, role TEXT, content TEXT, model TEXT, tokens_input INTEGER, tokens_output INTEGER, latency_ms INTEGER, created_at TIMESTAMPTZ)
+RETURNS TABLE(id UUID, role TEXT, content TEXT, model TEXT, tokens_input INTEGER, tokens_output INTEGER, latency_ms INTEGER, created_at TIMESTAMPTZ, metadata JSONB)
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
@@ -110,7 +118,7 @@ BEGIN
   v_schema := v_db_name;
 
   RETURN QUERY EXECUTE format(
-    'SELECT m.id, m.role, m.content, m.model, m.tokens_input, m.tokens_output, m.latency_ms, m.created_at FROM %I.messages m WHERE m.conversation_id = $1 ORDER BY m.created_at ASC',
+    'SELECT m.id, m.role, m.content, m.model, m.tokens_input, m.tokens_output, m.latency_ms, m.created_at, COALESCE(m.metadata, ''{}''::jsonb) FROM %I.messages m WHERE m.conversation_id = $1 ORDER BY m.created_at ASC',
     v_schema
   ) USING p_conversation_id;
 END;
@@ -152,6 +160,6 @@ $$;
 
 -- Permissões
 GRANT EXECUTE ON FUNCTION public.create_conversation(UUID, TEXT, TEXT) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.save_message(UUID, UUID, TEXT, TEXT, TEXT, INTEGER, INTEGER, INTEGER) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.save_message(UUID, UUID, TEXT, TEXT, TEXT, INTEGER, INTEGER, INTEGER, JSONB) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.load_conversation_messages(UUID, UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.list_agent_conversations(UUID, INTEGER) TO authenticated;
