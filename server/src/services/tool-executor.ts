@@ -938,7 +938,7 @@ async function executeCalendarQuery(
       const today = new Date().toISOString().slice(0, 10);
       const { data: events, error: evErr } = await supabase
         .from("calendar_events")
-        .select("id, title, start_at, end_at, status")
+        .select("id, title, start_at, end_at")
         .in("calendar_id", calendarIds)
         .gte("start_at", `${today}T00:00:00`)
         .ilike("title", `%${clientName}%`)
@@ -969,7 +969,6 @@ async function executeCalendarQuery(
         title: e.title,
         start_at: e.start_at,
         end_at: e.end_at,
-        status: e.status || "scheduled",
       }));
 
       return {
