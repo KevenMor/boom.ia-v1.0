@@ -2079,8 +2079,8 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             try {
               const singleMeta: Record<string, unknown> = {
                 ...(isFirstContact && welcomeVideoUrl ? { type: "welcome_video", video_url: welcomeVideoUrl } : {}),
+                debug: [{ type: "single_provider", model, ...singleProviderUsageAccum }],
                 ...(singleProviderUsageAccum.total_tokens > 0 ? {
-                  debug: [{ type: "single_provider", model, ...singleProviderUsageAccum }],
                   token_usage: { single: { ...singleProviderUsageAccum, model } },
                 } : {}),
               };
@@ -2295,8 +2295,8 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
         try {
           const finalSingleMeta: Record<string, unknown> = {
             ...(isFirstContact && welcomeVideoUrl ? { type: "welcome_video", video_url: welcomeVideoUrl } : {}),
+            debug: [{ type: "single_provider", model, ...singleProviderUsageAccum }],
             ...(singleProviderUsageAccum.total_tokens > 0 ? {
-              debug: [{ type: "single_provider", model, ...singleProviderUsageAccum }],
               token_usage: { single: { ...singleProviderUsageAccum, model } },
             } : {}),
           };
