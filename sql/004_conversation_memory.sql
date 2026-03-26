@@ -38,6 +38,8 @@ END;
 $$;
 
 -- Salvar mensagem no schema do tenant
+DROP FUNCTION IF EXISTS public.save_message(UUID, UUID, TEXT, TEXT, TEXT, INTEGER, INTEGER, INTEGER);
+
 CREATE OR REPLACE FUNCTION public.save_message(
   p_agent_id UUID,
   p_conversation_id UUID,
@@ -84,6 +86,8 @@ END;
 $$;
 
 -- Carregar mensagens de uma conversa
+DROP FUNCTION IF EXISTS public.load_conversation_messages(UUID, UUID);
+
 CREATE OR REPLACE FUNCTION public.load_conversation_messages(
   p_agent_id UUID,
   p_conversation_id UUID
@@ -125,6 +129,8 @@ END;
 $$;
 
 -- Listar conversas de um agente
+DROP FUNCTION IF EXISTS public.list_agent_conversations(UUID, INTEGER);
+
 CREATE OR REPLACE FUNCTION public.list_agent_conversations(
   p_agent_id UUID,
   p_limit INTEGER DEFAULT 50
