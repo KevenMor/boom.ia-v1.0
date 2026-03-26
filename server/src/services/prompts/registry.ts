@@ -319,7 +319,13 @@ REGRA DE DECISÃO:
 → Novo horário já informado + horário ATUAL claro no histórico → action="reagendar"
 → Horário ATUAL NÃO claro → action="listar_eventos" ANTES de tudo
 → Só cancelar (sem novo horário) → action="cancelar"
-→ Quer remarcar mas não sabe o novo horário → use action="listar_eventos"; confirme qual; depois pergunte novo horário; depois action="criar"`.trim();
+→ Quer remarcar mas não sabe o novo horário → use action="listar_eventos"; confirme qual; depois pergunte novo horário; depois action="criar"
+
+COLETA DE DADOS OBRIGATÓRIA (action="criar"):
+→ Verifique se tem o NOME COMPLETO do cliente. Se apenas o primeiro nome foi fornecido, pergunte o sobrenome antes de agendar.
+→ O título do evento DEVE conter o nome completo: "[Nome Completo] — [Motivo]".
+→ Isso garante que listar_eventos encontrará o evento futuramente quando o cliente quiser remarcar/cancelar.
+`.trim();
 
 const CALENDAR_DISPATCHER_RULES = `
 CALENDAR — BOOKING (action="criar"):

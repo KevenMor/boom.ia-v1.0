@@ -907,7 +907,7 @@ async function executeCalendarQuery(
     }
 
     if (action === "listar_eventos" || action === "list_events") {
-      const clientName = String(calendarArgs.client_name || calendarArgs.titulo || calendarArgs.title || "").trim();
+      const clientName = String(calendarArgs.client_name || calendarArgs.titulo || calendarArgs.title || "").trim().toLowerCase();
 
       if (!clientName) {
         return {
@@ -936,7 +936,7 @@ async function executeCalendarQuery(
       }
 
       const today = new Date().toISOString().slice(0, 10);
-      const { data: events, error: evErr } = await supabase
+      let { data: events, error: evErr } = await supabase
         .from("calendar_events")
         .select("id, title, start_at, end_at")
         .in("calendar_id", calendarIds)
@@ -954,14 +954,32 @@ async function executeCalendarQuery(
       }
 
       if (!events || events.length === 0) {
-        return {
-          success: true,
-          result: {
-            action: "list_events",
-            events: [],
-            note: `Nenhum agendamento futuro encontrado para "${clientName}".`,
-          },
-        };
+        // Fallback: busca todos os eventos futuros e filtra em JS
+        // (mesmo padrão usado pela action "cancelar")
+        const { data: allFuture } = await supabase
+          .from("calendar_events")
+          .select("id, title, start_at, end_at")
+          .in("calendar_id", calendarIds)
+          .gte("start_at", `${today}T00:00:00`)
+          .order("start_at", { ascending: true })
+          .limit(50);
+
+        const matched = (allFuture || []).filter((e: any) =>
+          (e.title || "").toLowerCase().includes(clientName)
+        );
+
+        if (matched.length === 0) {
+          return {
+            success: true,
+            result: {
+              action: "list_events",
+              events: [],
+              note: `Nenhum agendamento futuro encontrado para "${clientName}".`,
+            },
+          };
+        }
+
+        events = matched;
       }
 
       const formattedEvents = events.map((e: any) => ({
