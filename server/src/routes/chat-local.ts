@@ -47,6 +47,40 @@ function isEchoResponse(response: string, lastUserMessage: string | null | undef
   return normalized === userNormalized && normalized.length > 0;
 }
 
+/** Guard: detecta respostas com emojis ou caracteres especiais excessivamente repetidos (ex: "💔💔💔...") */
+function isRepeatedEmojiResponse(response: string): boolean {
+  if (!response || response.length < 3) return false;
+
+  // Remover espaços e quebras de linha para análise
+  const trimmed = response.trim().replace(/\s+/g, '');
+
+  // Se a resposta tem mais de 80% de caracteres repetidos ou emojis, é suspeita
+  const emojiRegex = /[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu;
+  const emojiMatches = trimmed.match(emojiRegex) || [];
+
+  // Se tem muitos emojis (mais de 50% do conteúdo), descartar
+  if (emojiMatches.length > trimmed.length * 0.5 && trimmed.length > 5) {
+    console.warn("[Chat-Local] Resposta rejeitada: muitos emojis (", emojiMatches.length, "de", trimmed.length, ")");
+    return true;
+  }
+
+  // Detectar caracteres muito repetidos (ex: "💔💔💔💔💔")
+  for (let i = 0; i < trimmed.length - 2; i++) {
+    const char = trimmed[i];
+    let repeatCount = 1;
+    while (i + repeatCount < trimmed.length && trimmed[i + repeatCount] === char) {
+      repeatCount++;
+    }
+    // Se um caractere se repete mais de 5 vezes consecutivas, é spam
+    if (repeatCount > 5) {
+      console.warn("[Chat-Local] Resposta rejeitada: caractere repetido", char, "x", repeatCount);
+      return true;
+    }
+  }
+
+  return false;
+}
+
 async function getProviderApiKey(
   providerId: string | null,
   supabase: ReturnType<typeof createNexusClient>
@@ -1732,9 +1766,6 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               convFullContentPreview: convFullContent.slice(0, 120),
               hint: debugDeltaTotalLen > 0 && debugSendTotalLen === 0 ? "conteúdo filtrado por filterCommandLines" : "modelo retornou vazio ou sem deltas",
             });
-            // #region agent log
-            fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1053',message:'Resposta vazia - iniciando retry',data:{debugDeltaCount,debugDeltaTotalLen,debugSendCount,streamFilterBufferFinal:streamFilterBuffer},timestamp:Date.now(),hypothesisId:'H1,H2,H4'})}).catch(()=>{});
-            // #endregion
             try {
               const retryMessages = conversationalMessagesClean.slice(0, 1).concat(
                 conversationalMessagesClean.filter((m) => m.role === "user" || m.role === "assistant").slice(-RETRY_CONTEXT_MESSAGE_LIMIT)
@@ -1757,31 +1788,22 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               if (retryResp.ok) {
                 const retryJson = await retryResp.json() as { choices?: Array<{ message?: { content?: string } }> };
                 const retryContent = retryJson.choices?.[0]?.message?.content?.trim();
-                // #region agent log
-                fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1077',message:'Retry response recebido',data:{retryContent:retryContent,retryContentLen:retryContent?.length||0},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-                // #endregion
                 if (retryContent) {
                   const lastUserContent = lastUserMsg?.role === "user" ? (lastUserMsg.content?.trim() ?? "") : "";
-                  if (isEchoResponse(retryContent, lastUserContent)) {
-                    // Echo detectado no retry: o LLM respondeu com a mesma mensagem do cliente
-                    console.warn("[Chat-Local] Echo detectado no retry:", retryContent.slice(0, 50), "- usando fallback");
+                  if (isEchoResponse(retryContent, lastUserContent) || isRepeatedEmojiResponse(retryContent)) {
+                    // Echo detectado no retry: o LLM respondeu com a mesma mensagem do cliente, ou muitos emojis repetidos
+                    console.warn("[Chat-Local] Echo ou emojis repetidos detectados no retry:", retryContent.slice(0, 50), "- usando fallback");
                     const fallback = "Pode me dar mais detalhes sobre o que você precisa?";
                     dualContentToSave = fallback;
                     sendSse({ choices: [{ delta: { content: fallback } }] });
                   } else {
                     const sanitized = sanitizeLLMOutput(retryContent);
-                    // #region agent log
-                    fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1081',message:'Após sanitizeLLMOutput',data:{sanitized:sanitized,sanitizedLen:sanitized.length,wasStripped:retryContent.length>0&&sanitized.length===0},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
-                    // #endregion
                     if (sanitized) {
                       dualContentToSave = sanitized;
                       console.log("[Chat-Local] Retry OK, enviando conteúdo sanitizado:", sanitized.slice(0, 80));
                       sendSse({ choices: [{ delta: { content: sanitized } }] });
                     } else {
                     const fallback = fallbackSanitizeForRetry(retryContent);
-                    // #region agent log
-                    fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1089',message:'Fallback sanitize',data:{fallback:fallback,fallbackLen:fallback.length,retryContentPreview:retryContent.slice(0,300)},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
-                    // #endregion
                     dualContentToSave = fallback || "Opa, tive um problema na última mensagem enviada, pode me reenviar?";
                     if (fallback) {
                       console.log("[Chat-Local] sanitize retornou vazio, usando fallback:", fallback.slice(0, 80));
@@ -1794,18 +1816,12 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   }
                 } else {
                   dualContentToSave = "Opa, tive um problema na última mensagem enviada, pode me reenviar?";
-                  // #region agent log
-                  fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1102',message:'Retry retornou vazio',data:{},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-                  // #endregion
                   console.warn("[Chat-Local] Retry também retornou vazio, enviando mensagem neutra");
                   sendSse({ choices: [{ delta: { content: "Opa, tive um problema na última mensagem enviada, pode me reenviar?" } }] });
                 }
               } else {
                 dualContentToSave = "Opa, tive um problema na última mensagem enviada, pode me reenviar?";
                 const errText = await retryResp.text();
-                // #region agent log
-                fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1111',message:'Retry HTTP falhou',data:{status:retryResp.status,errText:errText.slice(0,200)},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-                // #endregion
                 console.warn("[Chat-Local] Retry falhou:", retryResp.status, errText.slice(0, 150));
                 sendSse({ choices: [{ delta: { content: "Opa, tive um problema na última mensagem enviada, pode me reenviar?" } }] });
               }
@@ -1815,7 +1831,14 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               sendSse({ choices: [{ delta: { content: "Opa, tive um problema na última mensagem enviada, pode me reenviar?" } }] });
             }
           } else {
-            dualContentToSave = sanitizeLLMOutput((convFullContent + streamFilterBuffer).trim());
+            const fullResponse = sanitizeLLMOutput((convFullContent + streamFilterBuffer).trim());
+            // Verificar se a resposta tem emojis repetidos excessivamente
+            if (isRepeatedEmojiResponse(fullResponse)) {
+              console.warn("[Chat-Local] Resposta principal rejeitada por emojis repetidos");
+              dualContentToSave = "Pode me dar mais detalhes sobre o que você precisa?";
+            } else {
+              dualContentToSave = fullResponse;
+            }
           }
 
           const tokenUsagePayload = {
@@ -1849,9 +1872,6 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
 
           if (!skipSave && responseConvId && dualContentToSave.trim()) {
-            // #region agent log
-            fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'12d224'},body:JSON.stringify({sessionId:'12d224',location:'chat-local.ts:save_message_dual',message:'chat-local save_message (dual)',data:{convId:responseConvId,contentLen:dualContentToSave.length,contentPreview:dualContentToSave.slice(0,120)},timestamp:Date.now(),hypothesisId:'H1,H2'})}).catch(()=>{});
-            // #endregion
             try {
               const dualMeta: Record<string, unknown> = {
                 ...(isFirstContact && welcomeVideoUrl ? { type: "welcome_video", video_url: welcomeVideoUrl } : {}),
