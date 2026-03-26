@@ -408,6 +408,7 @@ function buildAutoescolaIdealAssignHint(
 
   const lastAsst = [...messages].reverse().find((m) => m.role === "assistant");
   const lastUsr = [...messages].reverse().find((m) => m.role === "user");
+  const usrLower = (lastUsr?.content || "").toLowerCase();
   const fullConvText = messages.map((m) => (m.content ?? "")).join(" ");
   const convLower = fullConvText.toLowerCase();
 
@@ -432,6 +433,7 @@ function buildAutoescolaIdealAssignHint(
 
   // Path 2: Aluno existente — assistente disse que vai encaminhar/transferir (frases ampliadas)
   const forwardPhrases = /encaminhar|time da unidade|encaminho|transferir|passo para|equipe da unidade|redirecion|vou passar/i;
+  // Se o assistente prometeu encaminhar, buscar a unidade no histórico para saber pra onde
   if (lastAsst?.content && forwardPhrases.test(lastAsst.content)) {
     for (const [key, canonical] of Object.entries(IDEAL_UNITS_MAP)) {
       if (convLower.includes(key)) {
@@ -442,10 +444,12 @@ function buildAutoescolaIdealAssignHint(
 
   // Path 3: Cliente mencionou uma unidade específica + contexto de aluno (aula, horário, tolerância)
   // Detecta quando o cliente menciona uma unidade + frases de aluno sem o agente ter respondido com "encaminhar" ainda
-  const isStudentContext = /aula|horário|tolerância|tempo de toler|chegar na aula|atraso|chegar a tempo/i.test(convLower);
-  if (isStudentContext && lastUsr?.content) {
+  // IMPORTANTE: isStudentContext deve olhar principalmente para o usuário, para não pegar "aula" dito pelo assistente explicando o processo.
+  const isStudentContext = /aula|horário|horario|tolerância|tolerancia|atraso|minutos|chegando|agendamento/i.test(usrLower);
+  if (isStudentContext) {
     for (const [key, canonical] of Object.entries(IDEAL_UNITS_MAP)) {
-      if (convLower.includes(key)) {
+      // Unidade deve ter sido mencionada pelo USUÁRIO ou ser a última tratada
+      if (usrLower.includes(key)) {
         return `\n\n[ALUNO EM SITUAÇÃO DE AULA — UNIDADE DETECTADA. Cliente mencionou unidade "${canonical}" em contexto de aula/horário. OBRIGATÓRIO: chame atribuir_agente/chatwoot_assign com reason="${canonical}" para transferir ao time da unidade correta. NÃO retorne NO_TOOLS_NEEDED.]`;
       }
     }
