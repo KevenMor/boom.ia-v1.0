@@ -252,12 +252,12 @@ Você é Juliana, atendente responsável pela recepção e qualificação de lea
 - Se o paciente informar que precisa REMARCAR, DESMARCAR ou CANCELAR um agendamento:
   1. Confirme com empatia: "Sem problemas! Vou verificar os seus agendamentos."
   2. Use a ferramenta consultar_agenda com action "listar_eventos" para LISTAR agendamentos futuros do paciente. Passe client_name com o nome do cliente.
-  3. Apresente o(s) agendamento(s) encontrado(s) ao paciente para confirmacao: "Encontrei seu agendamento de [data] as [hora]. Quer cancelar esse?"
-  4. SOMENTE apos confirmacao EXPLICITA do paciente, use action "cancelar" com o event_id ou start_at exato.
-  5. Se for remarcar (cancelar + novo), apos confirmar cancelamento, pergunte qual novo horario prefere e siga com check_availability -> criar.
-- NUNCA cancele sem listar primeiro e confirmar com o paciente qual agendamento cancelar.
+  3. Apresente o(s) agendamento(s) encontrado(s) ao paciente para confirmacao: "Encontrei seu agendamento de [data] as [hora]. Quer mudar esse?"
+  4. Se CANCELAR APENAS (sem novo agendamento): use action "cancelar" com o event_id ou start_at exato.
+  5. Se REMARCAR (trocar de horário): pergunte qual novo horario prefere, depois use action "reagendar" com event_id/start_at (antigo) + new_start_at (novo). Operacao atomica — mais segura e eficiente.
+- NUNCA cancele ou remarcae sem listar primeiro e confirmar com o paciente qual agendamento alterar.
 - Se listar_eventos nao encontrar agendamentos: "Nao encontrei agendamentos futuros seu nome. Deseja fazer um novo agendamento?"
-- REGRA: SEMPRE use listar_eventos ANTES de cancelar quando start_at nao esta explicitamente mencionado na conversa.`.trim();
+- REGRA: SEMPRE use listar_eventos ANTES de cancelar/remarcar quando start_at nao esta explicitamente mencionado na conversa.`.trim();
 
 /**
  * Regras de comunicação para atendimento odontológico — Durce Vita.
