@@ -15,6 +15,8 @@ BEGIN
 END $$;
 
 -- save_message: add optional p_metadata
+DROP FUNCTION IF EXISTS public.save_message(UUID, UUID, TEXT, TEXT, TEXT, INTEGER, INTEGER, INTEGER);
+
 CREATE OR REPLACE FUNCTION public.save_message(
   p_agent_id UUID,
   p_conversation_id UUID,
@@ -61,6 +63,8 @@ END;
 $$;
 
 -- load_conversation_messages: return metadata
+DROP FUNCTION IF EXISTS public.load_conversation_messages(UUID, UUID);
+
 CREATE OR REPLACE FUNCTION public.load_conversation_messages(
   p_agent_id UUID,
   p_conversation_id UUID
