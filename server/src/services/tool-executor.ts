@@ -906,6 +906,82 @@ async function executeCalendarQuery(
       };
     }
 
+    if (action === "listar_eventos" || action === "list_events") {
+      const clientName = String(calendarArgs.client_name || calendarArgs.titulo || calendarArgs.title || "").trim();
+
+      if (!clientName) {
+        return {
+          success: false,
+          result: null,
+          error: "Falta client_name para buscar agendamentos. Informe o nome do cliente.",
+        };
+      }
+
+      const { data: calendars } = await supabase
+        .from("calendars")
+        .select("id")
+        .eq("tenant_id", tenantId)
+        .limit(10);
+
+      const calendarIds = (calendars || []).map((c: { id: string }) => c.id);
+      if (calendarIds.length === 0) {
+        return {
+          success: true,
+          result: {
+            action: "list_events",
+            events: [],
+            note: "No calendars found for tenant",
+          },
+        };
+      }
+
+      const today = new Date().toISOString().slice(0, 10);
+      const { data: events, error: evErr } = await supabase
+        .from("calendar_events")
+        .select("id, title, start_at, end_at, status")
+        .in("calendar_id", calendarIds)
+        .gte("start_at", `${today}T00:00:00`)
+        .ilike("title", `%${clientName}%`)
+        .order("start_at", { ascending: true })
+        .limit(20);
+
+      if (evErr) {
+        return {
+          success: false,
+          result: null,
+          error: evErr.message,
+        };
+      }
+
+      if (!events || events.length === 0) {
+        return {
+          success: true,
+          result: {
+            action: "list_events",
+            events: [],
+            note: `Nenhum agendamento futuro encontrado para "${clientName}".`,
+          },
+        };
+      }
+
+      const formattedEvents = events.map((e: any) => ({
+        event_id: e.id,
+        title: e.title,
+        start_at: e.start_at,
+        end_at: e.end_at,
+        status: e.status || "scheduled",
+      }));
+
+      return {
+        success: true,
+        result: {
+          action: "list_events",
+          events: formattedEvents,
+          count: formattedEvents.length,
+        },
+      };
+    }
+
     if (action === "cancelar" || action === "cancel" || action === "delete") {
       const startAtRaw = calendarArgs.start_at ?? calendarArgs.start ?? calendarArgs.date_time;
       const clientName = String(calendarArgs.client_name || calendarArgs.titulo || calendarArgs.title || "").trim().toLowerCase();

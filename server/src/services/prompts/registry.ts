@@ -305,8 +305,10 @@ OFERTA DE HORÁRIOS (OBRIGATÓRIO):
 → JAMAIS sugira horário fora do array retornado por check_availability — significa marcar em cima de outro cliente.
 
 REMARCAR (cliente quer trocar de horário):
-→ Use action="reagendar" (operação atômica — mais eficiente e seguro)
-→ Parâmetros: start_at (hora antiga, extraída do histórico) + new_start_at (nova hora) + client_name
+→ PASSO 1: Se o horário ATUAL do agendamento NÃO está claro no histórico → use action="listar_eventos" com client_name para LISTAR agendamentos futuros.
+→ PASSO 2: Apresente os agendamentos encontrados ao cliente para confirmação.
+→ PASSO 3: Confirmado qual agendamento mudar → use action="reagendar" (operação atômica — mais eficiente e seguro)
+→ PASSO 4: Parâmetros: start_at (hora antiga, extraída do histórico OU do resultado de listar_eventos) + new_start_at (nova hora) + client_name
 → Uma única operação. Preserva histórico e não cobra sessão extra do pacote.
 
 CANCELAR SEM REMARCAR:
@@ -314,9 +316,10 @@ CANCELAR SEM REMARCAR:
 → Parâmetros: start_at (hora exata do agendamento) + client_name
 
 REGRA DE DECISÃO:
-→ Novo horário já informado pelo cliente → action="reagendar"
+→ Novo horário já informado + horário ATUAL claro no histórico → action="reagendar"
+→ Horário ATUAL NÃO claro → action="listar_eventos" ANTES de tudo
 → Só cancelar (sem novo horário) → action="cancelar"
-→ Quer remarcar mas não sabe o novo horário → use action="cancelar"; depois pergunte o novo horário; depois use action="criar"`.trim();
+→ Quer remarcar mas não sabe o novo horário → use action="listar_eventos"; confirme qual; depois pergunte novo horário; depois action="criar"`.trim();
 
 const CALENDAR_DISPATCHER_RULES = `
 CALENDAR — BOOKING (action="criar"):
@@ -326,18 +329,31 @@ CALENDAR — BOOKING (action="criar"):
   → If the service is not in the list, omit duration_minutes (backend will use default).
   → NEVER use duration_minutes=60 as default if a specific service was mentioned — look it up in [SERVIÇOS DA EMPRESA].
 
+CALENDAR — LISTING EVENTS (action="listar_eventos", FIRST STEP):
+  Trigger: "remarcar", "reagendar", "trocar horário", "mudar data", "trocar de dia", "preciso mudar o horário" OR "cancelar", "desmarcar"
+  WHEN: The exact date+time (start_at) of the existing appointment is NOT found in the conversation history.
+  → Call: consultar_agenda(action="listar_eventos", client_name="[patient name]")
+  → The conversational model will present found events and ask for confirmation.
+  → DO NOT use this if start_at is explicitly mentioned (e.g., "cancelar a consulta de terça as 09:00").
+
 CALENDAR — RESCHEDULING (action="reagendar", PREFERRED):
   Trigger: "remarcar", "reagendar", "trocar horário", "mudar data", "trocar de dia", "preciso mudar o horário"
   AND the customer has already provided a new date/time in the same message or context.
+  AND the old appointment's exact date/time (start_at) is found in the conversation history.
   → Call: consultar_agenda(action="reagendar", start_at="[old ISO datetime]", new_start_at="[new ISO datetime]", client_name="[name]")
   Extract old appointment from conversation history (look for confirmed bookings in assistant messages).
 
 CALENDAR — CANCELLATION ONLY (action="cancelar"):
   Trigger: "cancelar", "desmarcar", "não vou poder", "tive imprevisto", "não consigo ir"
   OR rescheduling intent WITHOUT a new time provided.
+  AND the exact date+time of the appointment IS found in conversation history.
   → Call: consultar_agenda(action="cancelar", start_at="[exact ISO datetime]", client_name="[name]")
+  If start_at is unknown → use listar_eventos first.
 
-RULE: "remarcar para [horário]" → reagendar | "remarcar" (no new time) → cancelar (conversational model asks for new time)`.trim();
+RULE:
+- "remarcar para [horário]" + start_at known → reagendar
+- "remarcar" + start_at unknown → listar_eventos
+- "cancelar" + start_at unknown → listar_eventos`.trim();
 
 /**
  * Retorna o dispatcher prompt para um tenant.
