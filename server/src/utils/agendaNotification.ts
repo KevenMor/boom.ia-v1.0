@@ -456,10 +456,11 @@ function formatNowBR(): string {
 
 /**
  * Monta notificacao de HANDOFF para time (cliente aguardando atendimento humano).
- * Formato padrao:
+ * Formato padrao (v2.1.0):
  *   Aguarda um atendimento humano
- *   Nome: ...
  *   Telefone: ...
+ *
+ * Removido: Nome do cliente (capturado incorretamente muitas vezes pelo agente)
  */
 export function buildHandoffNotification(
   nomeCliente: string,
@@ -467,10 +468,6 @@ export function buildHandoffNotification(
   _veiculoInteresse?: string,
   _messages?: Array<{ role: string; content: string }>
 ): string {
-  const trimmedNome = (nomeCliente || "").trim();
-  const nome =
-    !trimmedNome || /^cliente$/i.test(trimmedNome) ? HANDOFF_NAME_NOT_IDENTIFIED : trimmedNome;
-
   let telefone = "Não informado";
   const rawTel = telefoneCliente?.trim();
   if (rawTel && isPhoneLikeDigits(rawTel)) {
@@ -480,7 +477,6 @@ export function buildHandoffNotification(
   const lines: string[] = [
     "Aguarda um atendimento humano",
     "",
-    `Nome: ${nome}`,
     `Telefone: ${telefone}`,
   ];
   return lines.join("\n");
