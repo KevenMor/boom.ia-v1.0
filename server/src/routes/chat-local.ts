@@ -1249,6 +1249,8 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             .filter((tc) => tc.name)
             .map((tc) => ({ id: tc.id, function: { name: tc.name, arguments: tc.args } }));
 
+          const dualDebugAccum: unknown[] = [];
+
           if (phase1ToolCalls.length > 0) {
             console.log("[Chat-Local] Dispatcher decidiu chamar tools:", phase1ToolCalls.map((tc) => ({
               tool: tc.function.name,
@@ -1467,6 +1469,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 }
               }
             }
+            dualDebugAccum.push(...debugEntries);
             sendSse({ debug: debugEntries });
           } else {
             conversationalMessages = toOpenAIMessages(systemPrompt, messagesToUse);
@@ -1810,7 +1813,9 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }
           }
           if (phase1ToolCalls.length === 0) {
-            sendSse({ debug: [{ type: "dispatcher_no_tools", model: convModel, dispatcher: dispatcherUsage, conversational: conversationalUsage }] });
+            const noToolsEntry = { type: "dispatcher_no_tools", model: convModel, dispatcher: dispatcherUsage, conversational: conversationalUsage };
+            dualDebugAccum.push(noToolsEntry);
+            sendSse({ debug: [noToolsEntry] });
           }
 
           if (!skipSave && responseConvId && dualContentToSave.trim()) {
@@ -1818,6 +1823,11 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'12d224'},body:JSON.stringify({sessionId:'12d224',location:'chat-local.ts:save_message_dual',message:'chat-local save_message (dual)',data:{convId:responseConvId,contentLen:dualContentToSave.length,contentPreview:dualContentToSave.slice(0,120)},timestamp:Date.now(),hypothesisId:'H1,H2'})}).catch(()=>{});
             // #endregion
             try {
+              const dualMeta: Record<string, unknown> = {
+                ...(isFirstContact && welcomeVideoUrl ? { type: "welcome_video", video_url: welcomeVideoUrl } : {}),
+                ...(dualDebugAccum.length > 0 ? { debug: dualDebugAccum } : {}),
+                ...((dispatcherUsage || conversationalUsage) ? { token_usage: tokenUsagePayload } : {}),
+              };
               await supabase.rpc("save_message", {
                 p_agent_id: agent_id,
                 p_conversation_id: responseConvId,
@@ -1827,7 +1837,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 p_tokens_input: 0,
                 p_tokens_output: 0,
                 p_latency_ms: null,
-                p_metadata: isFirstContact && welcomeVideoUrl ? { type: "welcome_video", video_url: welcomeVideoUrl } : undefined,
+                p_metadata: Object.keys(dualMeta).length > 0 ? dualMeta : undefined,
               });
             } catch (saveErr) {
               console.warn("[Chat-Local] save_message (dual) failed:", (saveErr as Error)?.message);
@@ -2067,6 +2077,13 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'12d224'},body:JSON.stringify({sessionId:'12d224',location:'chat-local.ts:save_message_single',message:'chat-local save_message (single)',data:{convId:responseConvId,contentLen:singleContentToSave.length,contentPreview:singleContentToSave.slice(0,120)},timestamp:Date.now(),hypothesisId:'H1,H2'})}).catch(()=>{});
             // #endregion
             try {
+              const singleMeta: Record<string, unknown> = {
+                ...(isFirstContact && welcomeVideoUrl ? { type: "welcome_video", video_url: welcomeVideoUrl } : {}),
+                ...(singleProviderUsageAccum.total_tokens > 0 ? {
+                  debug: [{ type: "single_provider", model, ...singleProviderUsageAccum }],
+                  token_usage: { single: { ...singleProviderUsageAccum, model } },
+                } : {}),
+              };
               await supabase.rpc("save_message", {
                 p_agent_id: agent_id,
                 p_conversation_id: responseConvId,
@@ -2076,7 +2093,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 p_tokens_input: 0,
                 p_tokens_output: 0,
                 p_latency_ms: null,
-                p_metadata: isFirstContact && welcomeVideoUrl ? { type: "welcome_video", video_url: welcomeVideoUrl } : undefined,
+                p_metadata: Object.keys(singleMeta).length > 0 ? singleMeta : undefined,
               });
             } catch (saveErr) {
               console.warn("[Chat-Local] save_message (single, no tools) failed:", (saveErr as Error)?.message);
@@ -2276,6 +2293,13 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
       const finalContentToSave = sanitizeLLMOutput(fullContent.trim());
       if (!skipSave && responseConvId && finalContentToSave) {
         try {
+          const finalSingleMeta: Record<string, unknown> = {
+            ...(isFirstContact && welcomeVideoUrl ? { type: "welcome_video", video_url: welcomeVideoUrl } : {}),
+            ...(singleProviderUsageAccum.total_tokens > 0 ? {
+              debug: [{ type: "single_provider", model, ...singleProviderUsageAccum }],
+              token_usage: { single: { ...singleProviderUsageAccum, model } },
+            } : {}),
+          };
           await supabase.rpc("save_message", {
             p_agent_id: agent_id,
             p_conversation_id: responseConvId,
@@ -2285,7 +2309,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             p_tokens_input: 0,
             p_tokens_output: 0,
             p_latency_ms: null,
-            p_metadata: isFirstContact && welcomeVideoUrl ? { type: "welcome_video", video_url: welcomeVideoUrl } : undefined,
+            p_metadata: Object.keys(finalSingleMeta).length > 0 ? finalSingleMeta : undefined,
           });
         } catch (saveErr) {
           console.warn("[Chat-Local] save_message (single, with tools) failed:", (saveErr as Error)?.message);
