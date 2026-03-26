@@ -216,6 +216,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
             : "Opa, tive um problema na última mensagem enviada, pode me reenviar?";
           const partsToSend = hasContent ? (response_parts || []) : [];
 
+          const sentPhotoUrls: string[] = [];
           if (Array.isArray(photo_inventory_ids) && photo_inventory_ids.length > 0) {
             const { data: photoRows } = await supabase
               .from("inventory")
@@ -232,11 +233,13 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
               if (photoUrls.length === 0 && row.photo_url) photoUrls.push(row.photo_url);
               if (photoUrls.length > 0) {
                 await sendChatwootImagesBatch(msgUrl, cwAuth, photoUrls);
+                sentPhotoUrls.push(...photoUrls);
                 await new Promise((r) => setTimeout(r, applyJitter(2000)));
               }
             }
           }
 
+          const sentVideoUrls: string[] = [];
           if (Array.isArray(video_inventory_ids) && video_inventory_ids.length > 0) {
             const { data: inventoryRows } = await supabase
               .from("inventory")
@@ -247,7 +250,34 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
               .map((r: { video_details: string }) => r.video_details);
             for (const videoUrl of videoUrls) {
               await sendChatwootVideoMessage(msgUrl, cwAuth, videoUrl, sendChatwootTextMessage);
+              sentVideoUrls.push(videoUrl);
               await new Promise((r) => setTimeout(r, applyJitter(3000)));
+            }
+          }
+
+          // Salvar fotos/vídeos no banco para que apareçam no frontend
+          if ((sentPhotoUrls.length > 0 || sentVideoUrls.length > 0) && conversation_id) {
+            try {
+              const attachments = [];
+              for (const url of sentPhotoUrls) {
+                attachments.push({ file_type: "image", data_url: url });
+              }
+              for (const url of sentVideoUrls) {
+                attachments.push({ file_type: "video", data_url: url });
+              }
+              if (attachments.length > 0) {
+                await supabase.rpc("save_message", {
+                  p_agent_id: agent_id,
+                  p_conversation_id: conversation_id,
+                  p_role: "assistant",
+                  p_content: "[Mídia enviada pelo atendente]",
+                  p_model: null,
+                  p_latency_ms: null,
+                  p_metadata: { attachments },
+                });
+              }
+            } catch (e: any) {
+              console.warn("[Deliver] Failed to save media messages:", e.message);
             }
           }
 
