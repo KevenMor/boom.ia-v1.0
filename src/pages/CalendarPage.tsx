@@ -219,6 +219,7 @@ export default function CalendarPage() {
   const [endDate, setEndDate] = useState("");
   const [endTime, setEndTime] = useState("09:00");
   const [allDay, setAllDay] = useState(false);
+  const [clientPhone, setClientPhone] = useState("");
   const [sendReminder, setSendReminder] = useState(false);
   const [reminderChatwootConvId, setReminderChatwootConvId] = useState("");
   const [reminderPhone, setReminderPhone] = useState("");
@@ -267,6 +268,7 @@ export default function CalendarPage() {
     setStartTime(info.allDay ? "08:00" : extractTime(info.startStr));
     setEndDate(extractDate(info.endStr));
     setEndTime(info.allDay ? "09:00" : extractTime(info.endStr));
+    setClientPhone("");
     setSendReminder(false);
     setReminderChatwootConvId("");
     setReminderPhone("");
@@ -292,6 +294,7 @@ export default function CalendarPage() {
     setStartTime(`${pad(now.getHours())}:${pad(now.getMinutes())}`);
     setEndDate(extractDate(end.toISOString()));
     setEndTime(`${pad(end.getHours())}:${pad(end.getMinutes())}`);
+    setClientPhone("");
     setSendReminder(false);
     setReminderChatwootConvId("");
     setReminderPhone("");
@@ -311,6 +314,9 @@ export default function CalendarPage() {
     setStartTime(info.event.allDay ? "08:00" : extractTime(info.event.startStr));
     setEndDate(extractDate(info.event.endStr || info.event.startStr));
     setEndTime(info.event.allDay ? "09:00" : extractTime(info.event.endStr || info.event.startStr));
+
+    const dbEvent = ep.dbEvent as any;
+    setClientPhone((dbEvent?.metadata as Record<string, any>)?.client_phone || "");
 
     if (selectedTenantId) {
       // Busca lembrete criado manualmente OU pela IA (qualquer conversation_id)
@@ -380,6 +386,7 @@ export default function CalendarPage() {
           color: newColor,
           calendar_id: eventCalendarId,
           tenant_id: selectedTenantId,
+          metadata: clientPhone.trim() ? { client_phone: clientPhone.trim() } : null,
         });
         toast.success("Evento atualizado!");
       } else {
@@ -391,6 +398,7 @@ export default function CalendarPage() {
           color: newColor,
           calendar_id: eventCalendarId,
           tenant_id: selectedTenantId,
+          metadata: clientPhone.trim() ? { client_phone: clientPhone.trim() } : null,
         });
         eventId = created.id;
         toast.success("Evento criado!");
@@ -493,6 +501,7 @@ export default function CalendarPage() {
     } catch (e: any) {
       toast.error(e.message || "Erro ao salvar evento.");
     }
+    setClientPhone("");
     setDialogOpen(false);
   };
 
@@ -938,6 +947,19 @@ export default function CalendarPage() {
               </Select>
             </div>
 
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Telefone do cliente</Label>
+              <div className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
+                <Input
+                  value={clientPhone}
+                  onChange={(e) => setClientPhone(e.target.value)}
+                  placeholder="11999999999"
+                  className="h-9 font-mono text-sm"
+                />
+              </div>
+            </div>
+
             {/* Reminder section — sempre visível; desabilitada quando não há agente com reminder_enabled */}
             <div className="space-y-3 rounded-lg border border-border p-3">
               <div className="flex items-center justify-between">
@@ -959,7 +981,7 @@ export default function CalendarPage() {
               ) : sendReminder ? (
                 <div className="space-y-3 pt-1">
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">WhatsApp do cliente</Label>
+                    <Label className="text-xs text-muted-foreground">Telefone do cliente</Label>
                     <div className="flex items-center gap-2">
                       <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
                       <Input
