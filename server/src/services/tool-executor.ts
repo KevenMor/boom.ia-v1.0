@@ -517,7 +517,10 @@ async function executeCalendarQuery(
     const action = (calendarArgs.action || "check_availability") as string;
 
     if (action === "check_availability") {
-      const date = (calendarArgs.date as string) || new Date().toISOString().slice(0, 10);
+      // Compute today's date in BRT (UTC-3), not UTC
+      const BRT_OFFSET_MS = 3 * 60 * 60 * 1000;
+      const todayBRT = new Date(Date.now() - BRT_OFFSET_MS).toISOString().slice(0, 10);
+      const date = (calendarArgs.date as string) || todayBRT;
       const daysAhead = (calendarArgs.days_ahead as number) || 3;
       const slotDuration = (calendarArgs.slot_duration_minutes as number) || 60;
 
@@ -537,7 +540,8 @@ async function executeCalendarQuery(
         };
       }
 
-      const startDate = new Date(date);
+      // Parse date as BRT midnight (not UTC)
+      const startDate = new Date(`${date}T00:00:00-03:00`);
       const endDate = new Date(startDate);
       endDate.setDate(endDate.getDate() + daysAhead);
 
@@ -551,10 +555,9 @@ async function executeCalendarQuery(
         .gt("end_at", startDate.toISOString())
         .order("start_at", { ascending: true });
 
-      // Offset BRT = UTC-3
-      const BRT_OFFSET_MS = 3 * 60 * 60 * 1000;
-
       const availableSlots: Record<string, string[]> = {};
+      const nowMs = Date.now();
+
       for (let d = 0; d < daysAhead; d++) {
         const current = new Date(startDate);
         current.setDate(current.getDate() + d);
@@ -588,6 +591,9 @@ async function executeCalendarQuery(
             );
             const slotEnd = new Date(slotStart.getTime() + slotDuration * 60000);
 
+            // Skip past slots (only relevant for today)
+            if (dayStr === todayBRT && slotStart.getTime() <= nowMs) continue;
+
             const conflict = dayEvents.some((ev: { start_at?: string; end_at?: string }) => {
               const evStart = new Date(ev.start_at || 0).getTime();
               const evEnd = new Date(ev.end_at || 0).getTime();
@@ -607,7 +613,7 @@ async function executeCalendarQuery(
         result: {
           action: "check_availability",
           available_slots: availableSlots,
-          date_range: { from: startDate.toISOString().slice(0, 10), to: endDate.toISOString().slice(0, 10) },
+          date_range: { from: date, to: new Date(endDate.getTime() - BRT_OFFSET_MS).toISOString().slice(0, 10) },
           note: evErr ? `Warning: ${evErr.message}` : undefined,
         },
       };

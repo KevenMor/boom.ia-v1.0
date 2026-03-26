@@ -322,7 +322,7 @@ REGRA DE DECISÃO:
 → Quer remarcar mas não sabe o novo horário → use action="listar_eventos"; confirme qual; depois pergunte novo horário; depois action="criar"
 
 COLETA DE DADOS OBRIGATÓRIA (action="criar"):
-→ Verifique se tem o NOME COMPLETO do cliente. Se apenas o primeiro nome foi fornecido, pergunte o sobrenome antes de agendar.
+→ Verifique se tem o NOME COMPLETO do cliente. Se apenas o primeiro nome foi fornecido, pergunte o sobrenome antes de agendar. **POREM**, se o cliente já forneceu o nome completo em qualquer mensagem anterior, use esse nome — NÃO solicite novamente.
 → O título do evento DEVE conter o nome completo: "[Nome Completo] — [Motivo]".
 → Isso garante que listar_eventos encontrará o evento futuramente quando o cliente quiser remarcar/cancelar.
 `.trim();
