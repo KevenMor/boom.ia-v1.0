@@ -73,6 +73,7 @@ import { ContactAgendaTab } from "@/components/contacts/ContactAgendaTab";
 import { shouldShowChatMessage, dedupeAndSortConversationMessages } from "@/lib/chatMessageDisplay";
 import { fetchAddressByCep } from "@/lib/viacep";
 import { capitalizeName } from "@/lib/capitalizeName";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useMemo, useState } from "react";
 import type { Contact } from "@/types/database";
