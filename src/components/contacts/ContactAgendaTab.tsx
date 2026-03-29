@@ -346,7 +346,6 @@ export function ContactAgendaTab({ contactId, tenantId }: Props) {
                 <SelectValue placeholder="Mostrar todas as agendas" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Mostrar todas as agendas</SelectItem>
                 {(calendars ?? []).map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {c.name}

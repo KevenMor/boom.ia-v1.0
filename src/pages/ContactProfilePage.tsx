@@ -558,8 +558,8 @@ export default function ContactProfilePage() {
                   </TabsTrigger>
                 </TabsList>
 
-                <AnimatePresence mode="wait">
-                  <TabsContent value="about" className="mt-4">
+                <AnimatePresence mode="popLayout">
+                  <TabsContent key="about" value="about" className="mt-4">
                     <motion.div
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -646,7 +646,7 @@ export default function ContactProfilePage() {
                     </motion.div>
                   </TabsContent>
 
-                  <TabsContent value="edit" className="mt-4">
+                  <TabsContent key="edit" value="edit" className="mt-4">
                     <motion.form
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -748,7 +748,7 @@ export default function ContactProfilePage() {
                     </motion.form>
                   </TabsContent>
 
-                  <TabsContent value="history" className="mt-4">
+                  <TabsContent key="history" value="history" className="mt-4">
                     <motion.div
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -823,7 +823,7 @@ export default function ContactProfilePage() {
                     </motion.div>
                   </TabsContent>
 
-                  <TabsContent value="consultations" className="mt-4">
+                  <TabsContent key="consultations" value="consultations" className="mt-4">
                     <motion.div
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -838,7 +838,7 @@ export default function ContactProfilePage() {
                     </motion.div>
                   </TabsContent>
 
-                  <TabsContent value="invoices" className="mt-4">
+                  <TabsContent key="invoices" value="invoices" className="mt-4">
                     <motion.div
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -965,7 +965,7 @@ export default function ContactProfilePage() {
                       )}
                     </motion.div>
                   </TabsContent>
-                  <TabsContent value="packages" className="mt-4">
+                  <TabsContent key="packages" value="packages" className="mt-4">
                     <motion.div
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -975,7 +975,7 @@ export default function ContactProfilePage() {
                     </motion.div>
                   </TabsContent>
 
-                  <TabsContent value="agenda" className="mt-4">
+                  <TabsContent key="agenda" value="agenda" className="mt-4">
                     <motion.div
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
