@@ -70,6 +70,7 @@ import { CreateInvoiceDialog } from "@/components/contacts/CreateInvoiceDialog";
 import { ContactSummaryCards } from "@/components/contacts/ContactSummaryCards";
 import { ContactPackagesTab } from "@/components/contacts/ContactPackagesTab";
 import { ContactAgendaTab } from "@/components/contacts/ContactAgendaTab";
+import { ContactConsultationsTab } from "@/components/contacts/ContactConsultationsTab";
 import { shouldShowChatMessage, dedupeAndSortConversationMessages } from "@/lib/chatMessageDisplay";
 import { fetchAddressByCep } from "@/lib/viacep";
 import { capitalizeName } from "@/lib/capitalizeName";
@@ -539,6 +540,10 @@ export default function ContactProfilePage() {
                     <History className="h-4 w-4" />
                     Histórico
                   </TabsTrigger>
+                  <TabsTrigger value="consultations" className="text-sm gap-1.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm rounded-md px-4 py-2 transition-all duration-200">
+                    <FileText className="h-4 w-4" />
+                    Consultas
+                  </TabsTrigger>
                   <TabsTrigger value="invoices" className="text-sm gap-1.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm rounded-md px-4 py-2 transition-all duration-200">
                     <Receipt className="h-4 w-4" />
                     Faturas
@@ -814,6 +819,21 @@ export default function ContactProfilePage() {
                             </div>
                           )}
                         </>
+                      )}
+                    </motion.div>
+                  </TabsContent>
+
+                  <TabsContent value="consultations" className="mt-4">
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                    >
+                      {contact && (
+                        <ContactConsultationsTab
+                          contactId={contact.id}
+                          tenantId={contact.tenant_id}
+                        />
                       )}
                     </motion.div>
                   </TabsContent>
