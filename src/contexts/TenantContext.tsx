@@ -88,6 +88,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   }, [authLoading, isSuperAdmin, membershipTenantIds, selectedTenantId]);
 
   useEffect(() => {
+    if (authLoading) return;
     if (selectedTenantId && !isSuperAdmin && !canAccessTenant(selectedTenantId)) {
       const fallback = membershipTenantIds[0] ?? null;
       setSelectedTenantIdRaw(fallback);
@@ -99,7 +100,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         /* ignore */
       }
     }
-  }, [selectedTenantId, isSuperAdmin, canAccessTenant, membershipTenantIds]);
+  }, [authLoading, selectedTenantId, isSuperAdmin, canAccessTenant, membershipTenantIds]);
 
   useEffect(() => {
     let cancelled = false;

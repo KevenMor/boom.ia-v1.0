@@ -20,11 +20,13 @@ export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
 
   // Sync full tenant object when tenants load or selection changes
   useEffect(() => {
-    if (!tenants) return;
+    if (!tenants || isLoading) return;
     if (selectedTenantId) {
       const found = tenants.find((t) => t.id === selectedTenantId);
       if (found) {
         setSelectedTenant(found);
+      } else if (tenants.length === 0) {
+        return; // lista ainda não chegou — não resetar
       } else if (isSuperAdmin) {
         setSelectedTenantId(null);
         setSelectedTenant(null);
@@ -37,7 +39,7 @@ export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
     } else {
       setSelectedTenant(null);
     }
-  }, [tenants, selectedTenantId, isSuperAdmin, setSelectedTenantId, setSelectedTenant]);
+  }, [tenants, selectedTenantId, isSuperAdmin, setSelectedTenantId, setSelectedTenant, isLoading]);
 
   const visibleTenants = isSuperAdmin
     ? (tenants ?? [])

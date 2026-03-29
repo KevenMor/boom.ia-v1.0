@@ -63,6 +63,7 @@ export function ContactAgendaTab({ contactId, tenantId }: Props) {
   const [upcoming, setUpcoming] = useState(true);
   const [showNew, setShowNew] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string>("");
+  const [selectedCalendarId, setSelectedCalendarId] = useState<string>("");
   const [unlinkTarget, setUnlinkTarget] = useState<CalendarEvent | null>(null);
 
   const { data: appointments, isLoading } = useContactAppointments(contactId, false);
@@ -175,14 +176,16 @@ export function ContactAgendaTab({ contactId, tenantId }: Props) {
     setShowNew(true);
   };
 
-  const calendarEvents = (appointments ?? []).map((e) => ({
-    id: e.id,
-    title: e.title,
-    start: e.start_at,
-    end: e.end_at || undefined,
-    backgroundColor: e.color,
-    borderColor: e.color,
-  }));
+  const calendarEvents = (appointments ?? [])
+    .filter((e) => !selectedCalendarId || e.calendar_id === selectedCalendarId)
+    .map((e) => ({
+      id: e.id,
+      title: e.title,
+      start: e.start_at,
+      end: e.end_at || undefined,
+      backgroundColor: e.color,
+      borderColor: e.color,
+    }));
 
   return (
     <div className="space-y-4">
@@ -335,16 +338,33 @@ export function ContactAgendaTab({ contactId, tenantId }: Props) {
           )}
         </>
       ) : (
-        <div className="rounded-lg border border-border bg-card p-4 overflow-hidden">
-          <style>{`
-            .fc { font-family: inherit; }
-            .fc .fc-button-primary { background-color: hsl(var(--primary)); border-color: hsl(var(--primary)); }
-            .fc .fc-button-primary:not(:disabled).fc-button-active { background-color: hsl(var(--primary)); }
-            .fc .fc-daygrid-day.fc-day-today { background-color: hsl(var(--primary) / 0.05); }
-            .fc-theme-standard .fc-col-header-cell { background-color: hsl(var(--muted) / 0.5); }
-            .fc .fc-event-main { padding: 2px 4px; font-size: 0.75rem; }
-          `}</style>
-          <FullCalendar
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>Filtrar por Profissional / Agenda</Label>
+            <Select value={selectedCalendarId} onValueChange={setSelectedCalendarId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Mostrar todas as agendas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Mostrar todas as agendas</SelectItem>
+                {(calendars ?? []).map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="rounded-lg border border-border bg-card p-4 overflow-hidden">
+            <style>{`
+              .fc { font-family: inherit; }
+              .fc .fc-button-primary { background-color: hsl(var(--primary)); border-color: hsl(var(--primary)); }
+              .fc .fc-button-primary:not(:disabled).fc-button-active { background-color: hsl(var(--primary)); }
+              .fc .fc-daygrid-day.fc-day-today { background-color: hsl(var(--primary) / 0.05); }
+              .fc-theme-standard .fc-col-header-cell { background-color: hsl(var(--muted) / 0.5); }
+              .fc .fc-event-main { padding: 2px 4px; font-size: 0.75rem; }
+            `}</style>
+            <FullCalendar
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
             initialView="dayGridMonth"
             locale={ptBrLocale}
@@ -359,6 +379,7 @@ export function ContactAgendaTab({ contactId, tenantId }: Props) {
             height="auto"
             contentHeight="auto"
           />
+          </div>
         </div>
       )}
 
