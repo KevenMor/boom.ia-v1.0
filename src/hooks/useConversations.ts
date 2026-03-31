@@ -29,14 +29,14 @@ export interface Message {
   metadata: { debug?: any[]; token_usage?: Record<string, unknown>; chatwoot_message_id?: string; attachments?: unknown[] } | null;
 }
 
-export function useConversations(agentId: string | null) {
+export function useConversations(agentId: string | null, limit: number = 500) {
   return useQuery({
-    queryKey: ["conversations", agentId],
+    queryKey: ["conversations", agentId, limit],
     queryFn: async () => {
       if (!agentId) return [];
       const { data, error } = await nexusDb.rpc("list_agent_conversations", {
         p_agent_id: agentId,
-        p_limit: 100,
+        p_limit: limit,
       });
       if (error) throw error;
       const convs = (data ?? []) as Conversation[];

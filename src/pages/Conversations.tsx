@@ -68,6 +68,7 @@ export default function Conversations() {
   const [newLabelInput, setNewLabelInput] = useState("");
   const [addingLabel, setAddingLabel] = useState(false);
   const [labelPopoverOpen, setLabelPopoverOpen] = useState(false);
+  const [convLimit, setConvLimit] = useState(500);
   const queryClient = useQueryClient();
 
   // Ao trocar de tenant, limpar seleção para refletir a nova empresa
@@ -76,9 +77,10 @@ export default function Conversations() {
     setSelectedContactKey(null);
     setAssigneeFilter(null);
     setLabelFilter(null);
+    setConvLimit(500);
   }, [selectedTenantId]);
 
-  const { data: conversations, isLoading: convsLoading } = useConversations(selectedAgentId);
+  const { data: conversations, isLoading: convsLoading } = useConversations(selectedAgentId, convLimit);
 
   const agentName = agents?.find((a) => a.id === selectedAgentId)?.name ?? null;
 
@@ -709,6 +711,18 @@ export default function Conversations() {
                   );
                 })}
               </div>
+
+              {!convsLoading && conversations && conversations.length >= convLimit && (
+                <div className="px-4 py-3 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => setConvLimit((prev) => prev + 500)}
+                    className="w-full rounded-lg border border-border py-2 text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
+                  >
+                    Carregar mais contatos
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
