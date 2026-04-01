@@ -186,6 +186,14 @@ export function sanitizeLLMOutput(content: string): string {
   text = text.replace(/\[\s*SISTEMA\s+INTERNO[^\]]*\][\s\S]*?\[\s*FIM\s+DO\s+SISTEMA\s+INTERNO\s*\]/gim, "");
   // 2) Remove qualquer resto que comece com [SISTEMA INTERNO ...] até o fim da mensagem
   text = text.replace(/\n?\s*\[\s*SISTEMA\s+INTERNO[^\]]*\][\s\S]*$/gim, "");
+  // 3) Remove [FIM DO SISTEMA INTERNO] standalone (sem par de abertura na mesma string)
+  text = text.replace(/\n?\s*\[\s*FIM\s+DO\s+SISTEMA\s+INTERNO\s*\]/gim, "");
+  // 4) Catch-all: linhas inteiras entre colchetes com palavras-chave de sistema interno
+  //    Ex: [O sistema enviará automaticamente...], [NOTA INTERNA: ...], [AVISO DO SISTEMA...]
+  text = text.replace(
+    /^\[(?:[^\]]*?(?:sistema|autom[aá]tico|automaticamente|follow[\s-]?up|interno|caso\s+o\s+cliente|n[aã]o\s+responda|aviso\s+do\s+sistema|nota\s+interna)[^\]]*?)\]\s*$/gim,
+    ""
+  );
   // Sentinel interno do dispatcher não deve aparecer para o cliente
   text = text.replace(/\bNO_TOOLS_NEEDED\b/gim, "");
   // Guard interno de follow-up jamais deve vazar para o cliente
@@ -342,7 +350,9 @@ export function isCommandLine(line: string): boolean {
     // JSON de memória vazando
     /^\s*["']?memory["']?\s*:\s*\{/im.test(t) ||
     /^\s*["']?nome_cliente["']?\s*:\s*["']/im.test(t) ||
-    /^\s*["']?ts["']?\s*:\s*["']\d{4}-\d{2}-\d{2}T/im.test(t)
+    /^\s*["']?ts["']?\s*:\s*["']\d{4}-\d{2}-\d{2}T/im.test(t) ||
+    // Catch-all: linha inteira entre colchetes com palavras-chave de sistema interno
+    /^\[(?:[^\]]*?(?:sistema|autom[aá]tico|automaticamente|follow[\s-]?up|interno|caso\s+o\s+cliente|n[aã]o\s+responda|aviso\s+do\s+sistema|nota\s+interna)[^\]]*?)\]$/im.test(t)
   );
 }
 

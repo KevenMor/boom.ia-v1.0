@@ -578,6 +578,11 @@ export async function processFollowUpItem(
   const followupText = sanitizeLLMOutput(chatResult.fullContent.trim());
   if (!followupText) {
     followupLog.error(item.id as string, item.conversation_id as string, attempt, maxAttempts, "empty_response");
+    // Cancelar explicitamente para não deixar o item preso em pending
+    await supabase
+      .from("follow_up_queue")
+      .update({ status: "cancelled", cancel_reason: "empty_llm_response", updated_at: new Date().toISOString() })
+      .eq("id", item.id);
     return { processed: false, skipped: true };
   }
 
@@ -1101,9 +1106,19 @@ export async function queueRoutes(fastify: FastifyInstance) {
         }
       }
 
-      fireDeliverMessage(baseUrl, authKey, deliverBody).catch((e) =>
-        console.error("[ProcessQueue] deliver-message failed:", e)
-      );
+      fireDeliverMessage(baseUrl, authKey, deliverBody).catch(async (e) => {
+        console.error(
+          "[ProcessQueue] deliver-message falhou (tentativa 1) | agent=%s conv=%s | err=%s",
+          agent_id, responseConvId, (e as Error)?.message
+        );
+        await new Promise((r) => setTimeout(r, 2000));
+        fireDeliverMessage(baseUrl, authKey, deliverBody).catch((e2) => {
+          console.error(
+            "[ProcessQueue] deliver-message falhou (tentativa 2, definitivo) | agent=%s conv=%s | err=%s",
+            agent_id, responseConvId, (e2 as Error)?.message
+          );
+        });
+      });
 
       return reply.send({
         status: "processed",
