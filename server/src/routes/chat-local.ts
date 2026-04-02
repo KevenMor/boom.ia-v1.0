@@ -1695,7 +1695,10 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               const nameQuestion = (agentCfg.welcome_name_question as string) || "Como posso te chamar?";
               const alreadyHasNameQuestion =
                 convFullContent.toLowerCase().includes(nameQuestion.toLowerCase()) ||
-                convFullContent.toLowerCase().includes("com quem eu falo?");
+                convFullContent.toLowerCase().includes("com quem eu falo?") ||
+                convFullContent.toLowerCase().includes("como posso estar lhe chamando") ||
+                convFullContent.toLowerCase().includes("como posso te chamar") ||
+                convFullContent.toLowerCase().includes("como prefere ser chamad");
               const clientAlreadyGaveName = userHasProvidedNameInMessages(messagesToUse);
               const isSandbox = !chatwoot_conversation_id;
               const shouldAddNameQuestion = isFirstContact && nameQuestion && !alreadyHasNameQuestion && !clientAlreadyGaveName;
@@ -2060,7 +2063,10 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             const nameQuestionSingle = (agentCfgSingle.welcome_name_question as string) || "Como posso te chamar?";
             const alreadyHasNameQuestionSingle =
               content.toLowerCase().includes(nameQuestionSingle.toLowerCase()) ||
-              content.toLowerCase().includes("com quem eu falo?");
+              content.toLowerCase().includes("com quem eu falo?") ||
+              content.toLowerCase().includes("como posso estar lhe chamando") ||
+              content.toLowerCase().includes("como posso te chamar") ||
+              content.toLowerCase().includes("como prefere ser chamad");
             const clientAlreadyGaveNameSingle = userHasProvidedNameInMessages(messagesToUse);
             const isSandboxSingle = !chatwoot_conversation_id;
             const shouldAddNameQuestionSingle = isFirstContact && nameQuestionSingle && !alreadyHasNameQuestionSingle && !clientAlreadyGaveNameSingle;

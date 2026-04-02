@@ -57,6 +57,12 @@ import {
   DISPATCHER_PROMPT as IMPERIO_DISPATCHER,
   FOLLOWUP_PROMPT as IMPERIO_FOLLOWUP,
 } from "./imperio-cfc.js";
+import {
+  SYSTEM_PROMPT as CONTABILIDADE_IDEAL_SYSTEM,
+  COMMUNICATION_RULES as CONTABILIDADE_IDEAL_COMM_RULES,
+  DISPATCHER_PROMPT as CONTABILIDADE_IDEAL_DISPATCHER,
+  FOLLOWUP_PROMPT as CONTABILIDADE_IDEAL_FOLLOWUP,
+} from "./contabilidade-ideal.js";
 
 /**
  * Configuração de prompt por tenant.
@@ -233,6 +239,24 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     alwaysInjectCommRules: true,
     version: "v1.0",
     description: "SDR — Autoescola Império CFC (Sorocaba/SP)",
+  },
+  "contabilidade-ideal": {
+    systemPrompt: CONTABILIDADE_IDEAL_SYSTEM,
+    communicationRules: CONTABILIDADE_IDEAL_COMM_RULES,
+    dispatcherPrompt: CONTABILIDADE_IDEAL_DISPATCHER,
+    followupPrompt: CONTABILIDADE_IDEAL_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.0",
+    description: "Vitória — Lead Converter Contabilidade Ideal (IRPF 2026)",
+  },
+  "dp_contabilidade_ideal": {
+    systemPrompt: CONTABILIDADE_IDEAL_SYSTEM,
+    communicationRules: CONTABILIDADE_IDEAL_COMM_RULES,
+    dispatcherPrompt: CONTABILIDADE_IDEAL_DISPATCHER,
+    followupPrompt: CONTABILIDADE_IDEAL_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.0",
+    description: "Vitória — Lead Converter Contabilidade Ideal (IRPF 2026)",
   },
 };
 
