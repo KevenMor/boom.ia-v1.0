@@ -5,6 +5,10 @@
 .env.*.local
 server/.env
 
+# Deploy env files (may contain real secrets)
+.env.portainer*
+server/.env.easypanel
+
 # Logs
 logs
 *.log

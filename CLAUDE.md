@@ -221,7 +221,7 @@ ghcr.io/kevenmor/boom-ia-proxy:latest      # Nginx reverse proxy
 ### Fluxo de Deploy
 1. `docker build` local ou CI
 2. `docker push ghcr.io/kevenmor/boom-ia-*:tag`
-3. Deploy via Portainer (usar `docker-compose.portainer-images.yml`)
+3. Deploy via EasyPanel (configurar variáveis de ambiente no painel)
 
 ### Migrações
 - Arquivos SQL em `sql/` (manuais)
