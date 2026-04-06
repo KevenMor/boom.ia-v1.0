@@ -8,7 +8,6 @@ import {
   extractClientNameFromMessages,
   extractPhoneFromMessages,
   resolveHandoffPhone,
-  HANDOFF_NAME_NOT_IDENTIFIED,
   isBlockedAsName,
 } from "./agendaNotification.js";
 
@@ -113,27 +112,29 @@ describe("buildFallbackAgendaNotification", () => {
 });
 
 describe("buildHandoffNotification", () => {
-  it("formata notificacao com titulo padrao, nome e telefone", () => {
+  it("formata notificacao com titulo padrao e telefone", () => {
     const result = buildHandoffNotification(
       "Henrique Carvalho",
       "159998023871"
     );
     expect(result).toContain("Aguarda um atendimento humano");
-    expect(result).toContain("Nome: Henrique Carvalho");
     expect(result).toContain("Telefone:");
+    expect(result).toMatch(/Telefone:\s*\+/);
     expect(result).not.toContain("Data e hora:");
+    expect(result).not.toContain("Nome:");
   });
 
-  it("usa texto explícito quando nome vazio ou genérico Cliente", () => {
-    expect(buildHandoffNotification("", "159998023871")).toContain(`Nome: ${HANDOFF_NAME_NOT_IDENTIFIED}`);
-    expect(buildHandoffNotification("Cliente", "159998023871")).toContain(`Nome: ${HANDOFF_NAME_NOT_IDENTIFIED}`);
-    expect(buildHandoffNotification("  ", undefined)).toContain(`Nome: ${HANDOFF_NAME_NOT_IDENTIFIED}`);
+  it("mantém telefone quando nome vazio", () => {
+    const r = buildHandoffNotification("", "159998023871");
+    expect(r).toContain("Aguarda um atendimento humano");
+    expect(r).toContain("Telefone:");
+    expect(r).not.toContain("Nome:");
   });
 
   it("Telefone Não informado quando valor sem dígitos suficientes", () => {
     const result = buildHandoffNotification("Maria", "abc");
-    expect(result).toContain("Nome: Maria");
     expect(result).toContain("Telefone: Não informado");
+    expect(result).not.toContain("Nome:");
   });
 });
 

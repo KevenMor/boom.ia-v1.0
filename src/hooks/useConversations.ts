@@ -6,6 +6,8 @@ export interface Conversation {
   channel: string;
   external_user_id: string | null;
   contact_name: string | null;
+  /** Nome vindo do CRM (public.contacts), quando o telefone bate com a conversa */
+  crm_display_name?: string | null;
   contact_avatar_url: string | null;
   chatwoot_conversation_id?: number | null;
   chatwoot_contact_id?: number | null;

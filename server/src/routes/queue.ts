@@ -1,6 +1,9 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
 import { stripChatwootNamePrefix, sanitizeLLMOutput } from "../utils/sanitize.js";
+import { isPlatformSoftFallback, pickSoftReply } from "../constants/assistant-soft-replies.js";
+import { resolveAssistantFallbackMessage } from "../services/ack-recovery.js";
+import { getProviderApiKey } from "../services/provider-api.js";
 import { msgLog, followupLog } from "../utils/flow-logger.js";
 import { getFollowupPrompt } from "../services/prompts/registry.js";
 import {
@@ -977,10 +980,10 @@ export async function queueRoutes(fastify: FastifyInstance) {
         }
       }
 
-      const FALLBACK_PHRASE = "tive um problema na última";
       const isEmptyOrFallback = (r: { fullContent: string }) => {
         const t = (r.fullContent || "").trim();
-        return !t || t.includes(FALLBACK_PHRASE);
+        if (!t) return true;
+        return isPlatformSoftFallback(t);
       };
 
       let result = await callChatAgent(
@@ -1027,11 +1030,36 @@ export async function queueRoutes(fastify: FastifyInstance) {
 
       const responseConvId = result.responseConvId ?? convId ?? null;
       const rawContent = result.fullContent?.trim() || "";
-      const sanitizedContent = rawContent
-        ? sanitizeLLMOutput(rawContent)
-        : "Opa, tive um problema na última mensagem enviada, pode me reenviar?";
-      if (!rawContent) {
+      let sanitizedContent = rawContent ? sanitizeLLMOutput(rawContent) : "";
+      if (!sanitizedContent) {
         msgLog.queueContentEmpty(agent_id);
+        const { data: agRow } = await supabase
+          .from("agents")
+          .select("provider_id, model, temperature")
+          .eq("id", agent_id)
+          .maybeSingle();
+        const cfg = await getProviderApiKey((agRow as { provider_id?: string | null } | null)?.provider_id ?? null, supabase);
+        if (agRow && cfg) {
+          const convBase = cfg.baseUrl.replace(/\/+$/, "");
+          const convIsGemini = /generativelanguage\.googleapis\.com/i.test(convBase);
+          const convApiUrl =
+            convIsGemini && !convBase.includes("/openai")
+              ? `${convBase}/openai/chat/completions`
+              : `${convBase}/chat/completions`;
+          const model = (agRow as { model?: string | null }).model || "gpt-4o-mini";
+          const temperature = (agRow as { temperature?: number | null }).temperature ?? 0.7;
+          sanitizedContent = await resolveAssistantFallbackMessage({
+            seed: `${responseConvId ?? convId ?? agent_id}:${finalMessage ?? ""}`,
+            lastUserText: finalMessage,
+            historyMessages: messages,
+            convApiUrl,
+            apiKey: cfg.apiKey,
+            model,
+            temperature,
+          });
+        } else {
+          sanitizedContent = pickSoftReply(responseConvId ?? convId ?? agent_id);
+        }
       }
       const hasMetadata = result.debug?.length || result.token_usage;
       const messageMetadata =

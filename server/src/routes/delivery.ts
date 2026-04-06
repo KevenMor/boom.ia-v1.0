@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
+import { pickSoftReply } from "../constants/assistant-soft-replies.js";
 import { msgLog } from "../utils/flow-logger.js";
 import { isThinkingAboutIt, getThinkingDelayMinutes } from "../utils/followup-utils.js";
 import {
@@ -213,7 +214,7 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
           const hasContent = (response_text || "").trim() || (response_parts || []).some((p: string) => (p || "").trim());
           const contentToSend = hasContent
             ? (response_text || "").trim()
-            : "Opa, tive um problema na última mensagem enviada, pode me reenviar?";
+            : pickSoftReply(conversation_id || agent_id);
           const partsToSend = hasContent ? (response_parts || []) : [];
 
           const sentPhotoUrls: string[] = [];

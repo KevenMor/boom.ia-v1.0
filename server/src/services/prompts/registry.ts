@@ -8,7 +8,7 @@
 // - Follow-ups e Lembretes funcionam para QUALQUER tenant (filtro por tenant_id).
 // ============================================================
 
-import { BASE_GREETING, DEFAULT_DISPATCHER_PROMPT, GLOBAL_CONDUCT_RULES, GLOBAL_HUMANIZATION, GLOBAL_LANGUAGE_RULES } from "./base.js";
+import { BASE_GREETING, DEFAULT_DISPATCHER_PROMPT, GLOBAL_CONDUCT_RULES, GLOBAL_HUMANIZATION, GLOBAL_LANGUAGE_RULES, GLOBAL_SHORT_ACK_RULES } from "./base.js";
 import {
   SYSTEM_PROMPT as PPL_SYSTEM,
   COMMUNICATION_RULES as PPL_COMM_RULES,
@@ -288,6 +288,7 @@ export function buildSystemPrompt(
   const greeting = "\n\n" + BASE_GREETING;
   const globalRules = "\n\n" + GLOBAL_CONDUCT_RULES;
   const humanization = "\n\n" + GLOBAL_HUMANIZATION;
+  const shortAckRules = "\n\n" + GLOBAL_SHORT_ACK_RULES;
   const languageRules = "\n\n" + GLOBAL_LANGUAGE_RULES;
 
   const now = new Date();
@@ -313,7 +314,7 @@ export function buildSystemPrompt(
       calendarServices.map((s) => `- ${s.name}: ${s.duration_minutes} minutos`).join("\n")
     : "";
 
-  return base + commRules + greeting + globalRules + humanization + languageRules + dateContext + petContextBlock + calendarRulesBlock + servicesBlock;
+  return base + commRules + greeting + globalRules + humanization + shortAckRules + languageRules + dateContext + petContextBlock + calendarRulesBlock + servicesBlock;
 }
 
 // ─── Regras genéricas injetadas quando o agente tem a tool de calendário ativa ───

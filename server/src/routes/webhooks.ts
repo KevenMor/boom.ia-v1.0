@@ -234,7 +234,11 @@ function parseChatwootPayload(body: Record<string, unknown>) {
       message: content,
       eventMessageId: eventMessageId ? String(eventMessageId) : null,
       externalUserId,
-      contactName: (contactMeta.name as string) || (sender.name as string) || null,
+      contactName:
+        (contactMeta.name as string) ||
+        (sender.name as string) ||
+        (metaSender.name as string) ||
+        null,
       contactAvatarUrl: (contactMeta.thumbnail as string) || (contactMeta.avatar_url as string) || (sender.thumbnail as string) || (sender.avatar_url as string) || null,
       chatwootConversationId: convId,
       chatwootConversationDisplayId: convDisplayId,
@@ -334,7 +338,8 @@ function parseChatwootPayloadOutgoing(body: Record<string, unknown>) {
       message: content,
       eventMessageId: eventMessageId ? String(eventMessageId) : null,
       externalUserId,
-      contactName: (contactMeta.name as string) || null,
+      contactName:
+        (contactMeta.name as string) || (metaSender.name as string) || null,
       contactAvatarUrl: (contactMeta.thumbnail as string) || (contactMeta.avatar_url as string) || null,
       chatwootConversationId: convId,
       chatwootContactId: Number(contactMeta.id ?? 0) || null,

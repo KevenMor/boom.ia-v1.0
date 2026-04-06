@@ -29,6 +29,78 @@ function getAvatarColor(name: string): string {
   return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
 }
 
+function normalizeDigits(value: unknown): string {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+function conversationPhoneKeyDigits(externalUserId: string | null | undefined): string | null {
+  const d = normalizeDigits(externalUserId);
+  if (d.length < 10) return null;
+  if (d.startsWith("55") && d.length >= 12) return d.slice(-11);
+  return d;
+}
+
+function isNameRedundantWithPhone(
+  name: string | null | undefined,
+  externalUserId: string | null | undefined
+): boolean {
+  const n = (name || "").trim();
+  if (!n) return true;
+  const nameDigits = normalizeDigits(n);
+  const extDigits = normalizeDigits(externalUserId);
+  if (nameDigits && extDigits && nameDigits === extDigits) return true;
+  const key = conversationPhoneKeyDigits(externalUserId);
+  if (nameDigits.length >= 10) {
+    if (key && (nameDigits === key || nameDigits.slice(-11) === key)) return true;
+    if (key && extDigits.length >= 12 && nameDigits.length >= 11 && nameDigits === extDigits.slice(-11)) return true;
+  }
+  return false;
+}
+
+function pickBetterMergedDisplayName(
+  a: string | null | undefined,
+  b: string | null | undefined,
+  externalUserId: string | null | undefined
+): string | null {
+  const prefer = (x: string | null | undefined) => {
+    const t = x?.trim();
+    if (!t) return null;
+    if (!isNameRedundantWithPhone(t, externalUserId)) return t;
+    return null;
+  };
+  return prefer(a) ?? prefer(b) ?? (a?.trim() || b?.trim() || null);
+}
+
+function displayNameFromConversation(conv: {
+  contact_name?: string | null;
+  crm_display_name?: string | null;
+  external_user_id?: string | null;
+}): string {
+  const ext = conv.external_user_id;
+  const crm = conv.crm_display_name?.trim();
+  if (crm && !isNameRedundantWithPhone(crm, ext)) return crm;
+  const cn = conv.contact_name?.trim();
+  if (cn && !isNameRedundantWithPhone(cn, ext)) return cn;
+  if (ext && (ext.startsWith("{") || ext.startsWith("["))) {
+    try {
+      const parsed = JSON.parse(ext) as {
+        name?: string;
+        phone?: string;
+        phone_number?: string;
+        email?: string;
+        identifier?: string;
+      };
+      const parsedName = parsed?.name?.trim();
+      const parsedPhone = parsed?.phone || parsed?.phone_number || parsed?.identifier;
+      if (parsedName && !isNameRedundantWithPhone(parsedName, String(parsedPhone || ext))) return parsedName;
+      return (parsed?.phone || parsed?.phone_number || parsed?.email || "Anônimo") as string;
+    } catch {
+      /* ignore */
+    }
+  }
+  return ext || "Anônimo";
+}
+
 export default function Conversations() {
   const { selectedTenantId, scopedTenantDisplayName } = useTenantContext();
   const { data: agents, isLoading: agentsLoading } = useAgents(selectedTenantId ?? undefined);
@@ -169,10 +241,18 @@ export default function Conversations() {
         contactMap.set(contactKey, conv);
       } else {
         const existing = contactMap.get(contactKey)!;
+        const extId = conv.external_user_id || existing.external_user_id;
         contactMap.set(contactKey, {
           ...existing,
           message_count: existing.message_count + conv.message_count,
           chatwoot_assignee_name: conv.chatwoot_assignee_name || existing.chatwoot_assignee_name,
+          contact_name: pickBetterMergedDisplayName(existing.contact_name, conv.contact_name, extId),
+          crm_display_name: pickBetterMergedDisplayName(
+            existing.crm_display_name,
+            conv.crm_display_name,
+            extId
+          ),
+          contact_avatar_url: conv.contact_avatar_url || existing.contact_avatar_url,
         });
       }
     }
@@ -232,7 +312,10 @@ export default function Conversations() {
     }
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
+    const title = displayNameFromConversation(c).toLowerCase();
     return (
+      title.includes(term) ||
+      c.crm_display_name?.toLowerCase().includes(term) ||
       c.contact_name?.toLowerCase().includes(term) ||
       c.external_user_id?.toLowerCase().includes(term) ||
       c.channel?.toLowerCase().includes(term)
@@ -309,17 +392,7 @@ export default function Conversations() {
     }
   };
 
-  const displayName = (conv: any) => {
-    if (conv?.contact_name) return conv.contact_name;
-    const ext = conv?.external_user_id;
-    if (ext && (ext.startsWith("{") || ext.startsWith("["))) {
-      try {
-        const parsed = JSON.parse(ext);
-        return parsed?.name || parsed?.phone || parsed?.email || "Anônimo";
-      } catch { /* ignore */ }
-    }
-    return ext || "Anônimo";
-  };
+  const displayName = (conv: any) => displayNameFromConversation(conv);
   const initials = (conv: any) => (displayName(conv)).slice(0, 2).toUpperCase();
   const getContactKey = (conv: any) => {
     const cwId = conv?.chatwoot_conversation_id;

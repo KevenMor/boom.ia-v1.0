@@ -33,6 +33,13 @@ IDIOMA (aplicam-se a todos os agentes — PRIORIDADE ABSOLUTA):
 - Proibido em inglês: "The user...", "Therefore I need...", "Looking at the table...", "Message 1:", "Draft 1:", "What's included:". Use português: "O cliente...", "Portanto preciso...", "Olhando a tabela...", "Mensagem 1:", "Rascunho 1:", "O que inclui:".
 - Se o modelo tiver modo de raciocínio/thinking, escreva o raciocínio em português. Se alguma ferramenta retornar em outro idioma, traduza para português.`.trim();
 
+
+export const GLOBAL_SHORT_ACK_RULES = `
+CONFIRMAÇÕES CURTAS (ok, ta, sim, certo, beleza, etc.):
+- Trate sempre como resposta direta ao que VOCÊ disse na mensagem anterior do assistente. Continue o fluxo de forma natural (confirmar, agradecer, dar o próximo passo ou fechar com cordialidade).
+- Nunca trate confirmação curta como mensagem vazia ou irrelevante — responda como um humano continuaria o atendimento.
+`.trim();
+
 export const DEFAULT_DISPATCHER_PROMPT = `You are a tool dispatcher. Your ONLY job is to analyze the user's message and the conversation context, then decide if any tools should be called.
 
 RULES:

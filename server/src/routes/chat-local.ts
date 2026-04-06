@@ -6,6 +6,8 @@ import { extractDocument, formatExtractedForMessage, isImageOrPdfAttachment } fr
 import { buildSystemPrompt, getDispatcherPrompt } from "../services/prompts/registry.js";
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
 import { filterCommandLinesFromStream, sanitizeLLMOutput, fallbackSanitizeForRetry, restorePortugueseAccents } from "../utils/sanitize.js";
+import { getProviderApiKey } from "../services/provider-api.js";
+import { resolveAssistantFallbackMessage } from "../services/ack-recovery.js";
 import { buildPetGenderContext } from "../utils/petGenderByName.js";
 import {
   formatDateBR,
@@ -79,54 +81,6 @@ function isRepeatedEmojiResponse(response: string): boolean {
   }
 
   return false;
-}
-
-async function getProviderApiKey(
-  providerId: string | null,
-  supabase: ReturnType<typeof createNexusClient>
-): Promise<{ apiKey: string; baseUrl: string } | null> {
-  const openaiKey = process.env.OPENAI_API_KEY;
-  const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-
-  if (providerId) {
-    const { data: provider } = await supabase
-      .from("providers")
-      .select("base_url, api_key_encrypted")
-      .eq("id", providerId)
-      .single();
-
-    if (provider) {
-      let apiKey = "";
-      const encryptionKey = process.env.ENCRYPTION_KEY || process.env.ENCRYPTION_SECRET;
-      if (provider.api_key_encrypted && encryptionKey) {
-        try {
-          const { decrypt } = await import("../services/crypto.js");
-          apiKey = await decrypt(provider.api_key_encrypted, encryptionKey);
-        } catch (err) {
-          const isGemini = /generativelanguage|googleapis/i.test(provider.base_url || "");
-          apiKey = isGemini ? (geminiKey || openaiKey || "") : (openaiKey || geminiKey || "");
-          if (apiKey) {
-            msgLog.decryptFallback(providerId);
-          } else {
-            console.error("[Chat-Local] Falha ao descriptografar chave do provider:", providerId, err);
-          }
-        }
-      } else {
-        const isGemini = /generativelanguage|googleapis/i.test(provider.base_url || "");
-        apiKey = isGemini ? (geminiKey || openaiKey || "") : (openaiKey || geminiKey || "");
-      }
-      const baseUrl = (provider.base_url || "https://api.openai.com/v1").replace(/\/+$/, "");
-      if (apiKey) return { apiKey, baseUrl };
-    }
-  }
-
-  if (openaiKey) {
-    return { apiKey: openaiKey, baseUrl: "https://api.openai.com/v1" };
-  }
-  if (geminiKey) {
-    return { apiKey: geminiKey, baseUrl: "https://generativelanguage.googleapis.com/v1beta" };
-  }
-  return null;
 }
 
 function toOpenAIMessages(
@@ -1581,6 +1535,20 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             ? `${convBase}/openai/chat/completions`
             : `${convBase}/chat/completions`;
 
+          const applyDualSoftFallback = async () => {
+            const text = await resolveAssistantFallbackMessage({
+              seed: `${responseConvId ?? agent_id}:${String(lastUserMsg?.content ?? "")}`,
+              lastUserText: lastUserMsg?.content,
+              historyMessages: conversationalMessagesClean,
+              convApiUrl,
+              apiKey: providerConfig.apiKey,
+              model: convModel,
+              temperature: agent.temperature ?? 0.7,
+            });
+            dualContentToSave = text;
+            sendSse({ choices: [{ delta: { content: text } }] });
+          };
+
           const convBody: Record<string, unknown> = {
             model: convModel,
             messages: conversationalMessagesClean,
@@ -1810,32 +1778,29 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                       console.log("[Chat-Local] Retry OK, enviando conteúdo sanitizado:", sanitized.slice(0, 80));
                       sendSse({ choices: [{ delta: { content: sanitized } }] });
                     } else {
-                    const fallback = fallbackSanitizeForRetry(retryContent);
-                    dualContentToSave = fallback || "Opa, tive um problema na última mensagem enviada, pode me reenviar?";
-                    if (fallback) {
-                      console.log("[Chat-Local] sanitize retornou vazio, usando fallback:", fallback.slice(0, 80));
-                      sendSse({ choices: [{ delta: { content: fallback } }] });
-                    } else {
-                      console.warn("[Chat-Local] sanitize retornou vazio, retryContent preview:", retryContent.slice(0, 200));
-                      sendSse({ choices: [{ delta: { content: "Opa, tive um problema na última mensagem enviada, pode me reenviar?" } }] });
-                    }
+                      const fallback = fallbackSanitizeForRetry(retryContent);
+                      if (fallback) {
+                        dualContentToSave = fallback;
+                        console.log("[Chat-Local] sanitize retornou vazio, usando fallback:", fallback.slice(0, 80));
+                        sendSse({ choices: [{ delta: { content: fallback } }] });
+                      } else {
+                        console.warn("[Chat-Local] sanitize retornou vazio, retryContent preview:", retryContent.slice(0, 200));
+                        await applyDualSoftFallback();
+                      }
                     }
                   }
                 } else {
-                  dualContentToSave = "Opa, tive um problema na última mensagem enviada, pode me reenviar?";
                   console.warn("[Chat-Local] Retry também retornou vazio, enviando mensagem neutra");
-                  sendSse({ choices: [{ delta: { content: "Opa, tive um problema na última mensagem enviada, pode me reenviar?" } }] });
+                  await applyDualSoftFallback();
                 }
               } else {
-                dualContentToSave = "Opa, tive um problema na última mensagem enviada, pode me reenviar?";
                 const errText = await retryResp.text();
                 console.warn("[Chat-Local] Retry falhou:", retryResp.status, errText.slice(0, 150));
-                sendSse({ choices: [{ delta: { content: "Opa, tive um problema na última mensagem enviada, pode me reenviar?" } }] });
+                await applyDualSoftFallback();
               }
             } catch (retryErr) {
-              dualContentToSave = "Opa, tive um problema na última mensagem enviada, pode me reenviar?";
               console.error("[Chat-Local] Retry error:", retryErr);
-              sendSse({ choices: [{ delta: { content: "Opa, tive um problema na última mensagem enviada, pode me reenviar?" } }] });
+              await applyDualSoftFallback();
             }
           } else {
             const fullResponse = sanitizeLLMOutput((convFullContent + streamFilterBuffer).trim());
