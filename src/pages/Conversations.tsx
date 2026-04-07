@@ -71,11 +71,14 @@ function pickBetterMergedDisplayName(
   return prefer(a) ?? prefer(b) ?? (a?.trim() || b?.trim() || null);
 }
 
-function displayNameFromConversation(conv: {
-  contact_name?: string | null;
-  crm_display_name?: string | null;
-  external_user_id?: string | null;
-}): string {
+function displayNameFromConversation(
+  conv: {
+    contact_name?: string | null;
+    crm_display_name?: string | null;
+    external_user_id?: string | null;
+  } | null | undefined
+): string {
+  if (!conv) return "Anônimo";
   const ext = conv.external_user_id;
   const crm = conv.crm_display_name?.trim();
   if (crm && !isNameRedundantWithPhone(crm, ext)) return crm;
@@ -281,6 +284,12 @@ export default function Conversations() {
     return k === selectedContactKey;
   }) : undefined);
 
+  // sessionStorage / troca de tenant pode deixar selectedContactKey sem conversa correspondente → evita crash e ecrã branco
+  useEffect(() => {
+    if (!selectedContactKey || !selectedAgentId || convsLoading) return;
+    if (selectedConv === undefined) setSelectedContactKey(null);
+  }, [selectedContactKey, selectedAgentId, convsLoading, selectedConv]);
+
   const { data: messages, isLoading: msgsLoading } = useMultiConversationMessages(selectedAgentId, selectedConvIds);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -393,7 +402,7 @@ export default function Conversations() {
   };
 
   const displayName = (conv: any) => displayNameFromConversation(conv);
-  const initials = (conv: any) => (displayName(conv)).slice(0, 2).toUpperCase();
+  const initials = (conv: any) => (displayName(conv) || "?").slice(0, 2).toUpperCase();
   const getContactKey = (conv: any) => {
     const cwId = conv?.chatwoot_conversation_id;
     if (cwId) {

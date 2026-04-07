@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
-  const { data: tenants, isLoading } = useTenants();
+  const { data: tenants, isLoading, isError, error } = useTenants();
   const { isSuperAdmin } = useAuth();
   const { selectedTenantId, setSelectedTenantId, selectedTenant, setSelectedTenant, scopedTenantDisplayName } =
     useTenantContext();
@@ -85,6 +85,11 @@ export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
               <DropdownMenuSeparator />
             </>
           )}
+          {isError && isSuperAdmin && (
+            <DropdownMenuItem disabled className="whitespace-normal text-xs text-destructive py-2">
+              /admin/tenants: {error?.message ?? "erro"}. Confere server/.env → NEXUS_SERVICE_ROLE_KEY.
+            </DropdownMenuItem>
+          )}
           {visibleTenants.map((t) => (
             <DropdownMenuItem
               key={t.id}
@@ -127,6 +132,13 @@ export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
         )}
         {isLoading && (
           <DropdownMenuItem disabled className="text-xs text-muted-foreground py-2">Carregando...</DropdownMenuItem>
+        )}
+        {isError && isSuperAdmin && (
+          <DropdownMenuItem disabled className="whitespace-normal text-xs text-destructive py-2">
+            API /admin/tenants falhou ({error?.message ?? "erro"}). Em local, confere{" "}
+            <span className="font-mono">server/.env</span>: <span className="font-mono">NEXUS_SERVICE_ROLE_KEY</span>{" "}
+            (service_role do mesmo projeto que a URL Supabase).
+          </DropdownMenuItem>
         )}
         {visibleTenants.map((t) => (
           <DropdownMenuItem

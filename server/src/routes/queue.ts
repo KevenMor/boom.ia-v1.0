@@ -23,6 +23,7 @@ import {
 } from "../utils/brasiliaTime.js";
 import { isThinkingAboutIt, getThinkingDelayMinutes } from "../utils/followup-utils.js";
 import { shouldSkipFollowUpByContext } from "../services/followup-guard.js";
+import { buildPhotosSentMeta } from "../utils/photos-sent-metadata.js";
 
 const API_BASE = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
 
@@ -1061,28 +1062,39 @@ export async function queueRoutes(fastify: FastifyInstance) {
           sanitizedContent = pickSoftReply(responseConvId ?? convId ?? agent_id);
         }
       }
-      const hasMetadata = result.debug?.length || result.token_usage;
-      const messageMetadata =
-        hasMetadata
-          ? {
-              ...(result.debug?.length ? { debug: result.debug } : {}),
-              ...(result.token_usage ? { token_usage: result.token_usage } : {}),
-            }
-          : null;
+      const photoInventoryIds = result.photoInventoryIds ?? [];
+      let photosSentMeta: Array<{ id: string; name: string }> = [];
+      if (photoInventoryIds.length > 0) {
+        const { data: invRows, error: invErr } = await supabase
+          .from("inventory")
+          .select("id, brand, model, version")
+          .in("id", photoInventoryIds);
+        if (invErr) {
+          console.warn("[ProcessQueue] inventory lookup for photos_sent:", invErr.message);
+        }
+        photosSentMeta = buildPhotosSentMeta(photoInventoryIds, invRows ?? undefined);
+      }
 
-      if (responseConvId && sanitizedContent) {
+      const messageMetadata: Record<string, unknown> = {};
+      if (result.debug?.length) messageMetadata.debug = result.debug;
+      if (result.token_usage) messageMetadata.token_usage = result.token_usage;
+      if (photosSentMeta.length > 0) messageMetadata.photos_sent = photosSentMeta;
+      const hasMessageMetadata = Object.keys(messageMetadata).length > 0;
+
+      const assistantContentToSave = sanitizedContent.trim();
+      if (responseConvId && (assistantContentToSave || photosSentMeta.length > 0)) {
         try {
           const savePayload: Record<string, unknown> = {
             p_agent_id: agent_id,
             p_conversation_id: responseConvId,
             p_role: "assistant",
-            p_content: sanitizedContent,
+            p_content: assistantContentToSave || " ",
             p_model: null,
             p_tokens_input: 0,
             p_tokens_output: 0,
             p_latency_ms: null,
           };
-          if (messageMetadata) savePayload.p_metadata = messageMetadata;
+          if (hasMessageMetadata) savePayload.p_metadata = messageMetadata;
           await supabase.rpc("save_message", savePayload);
         } catch (e: any) {
           console.warn("[ProcessQueue] save assistant message failed:", e?.message);
@@ -1099,8 +1111,6 @@ export async function queueRoutes(fastify: FastifyInstance) {
       const responseParts = rawParts
         .map((p) => sanitizeLLMOutput(p.trim()))
         .filter(Boolean);
-
-      const photoInventoryIds = result.photoInventoryIds ?? [];
       const videoInventoryIds = result.videoInventoryIds ?? [];
 
       const isFirstReply = conversationMessages.filter((m) => m.role === "assistant").length === 0;

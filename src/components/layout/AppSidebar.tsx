@@ -24,6 +24,7 @@ import {
   BarChart3,
   Bell,
   Car,
+  LayoutGrid,
   Users,
   UserPlus,
 } from "lucide-react";
@@ -62,6 +63,7 @@ const navGroups: NavGroup[] = [
       { to: "/calendar", icon: CalendarDays, label: "Agenda", moduleKey: "calendar" },
       { to: "/followups", icon: Bell, label: "Follow-ups", moduleKey: "followups" },
       { to: "/inventory", icon: Car, label: "Inventário", moduleKey: "inventory" },
+      { to: "/catalog", icon: LayoutGrid, label: "Catálogo", moduleKey: "service_catalog" },
       { to: "/contacts", icon: Users, label: "Leads", moduleKey: "contacts" },
       { to: "/clients", icon: Building2, label: "Clientes", moduleKey: "clients" },
     ],

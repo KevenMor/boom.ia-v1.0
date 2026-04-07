@@ -34,8 +34,13 @@ export async function resolveAccessContext(req: FastifyRequest): Promise<AccessC
   const bearer = getBearerToken(req);
   if (!bearer) return null;
 
-  const supabase = createNexusClient(bearer);
-  const { data: userData, error: userErr } = await supabase.auth.getUser();
+  const accessToken = bearer.replace(/^Bearer\s+/i, "").trim();
+  if (!accessToken) return null;
+
+  // No Node, getUser() sem JWT usa storage/sessão — falha em pedidos stateless com só x-nexus-auth.
+  // getUser(accessToken) + cliente service role é o fluxo suportado pelo GoTrue para validar o JWT.
+  const supabase = createNexusClient();
+  const { data: userData, error: userErr } = await supabase.auth.getUser(accessToken);
   if (userErr || !userData.user) return null;
 
   const userId = userData.user.id;

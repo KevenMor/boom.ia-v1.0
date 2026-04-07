@@ -7,6 +7,7 @@ export type ModuleKey =
   | "calendar"
   | "followups"
   | "inventory"
+  | "service_catalog"
   | "contacts"
   | "clients"
   | "tenants"
@@ -32,6 +33,12 @@ export const TENANT_MODULES: TenantModuleDef[] = [
   { key: "calendar", label: "Agenda", description: "Calendário e horários.", group: "overview" },
   { key: "followups", label: "Follow-ups", description: "Fila de retornos automáticos.", group: "overview" },
   { key: "inventory", label: "Inventário", description: "Estoque de veículos/produtos.", group: "overview" },
+  {
+    key: "service_catalog",
+    label: "Catálogo",
+    description: "Serviços e produtos (atendimento, agenda, RAG).",
+    group: "overview",
+  },
   { key: "contacts", label: "Leads", description: "Gestão de contatos/leads.", group: "overview" },
   { key: "clients", label: "Clientes", description: "Base de clientes.", group: "overview" },
   { key: "tenants", label: "Tenants", description: "Administração de empresas.", group: "infrastructure" },

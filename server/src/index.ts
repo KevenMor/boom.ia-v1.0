@@ -22,6 +22,17 @@ console.log("[Server] Starting... PORT=%s NODE_ENV=%s", PORT, process.env.NODE_E
 if (!process.env.GOOGLE_MAPS_API_KEY) {
   console.warn("[Server] GOOGLE_MAPS_API_KEY não configurada — consultar_unidade usará distância em linha reta (Haversine). Veja docs/GOOGLE-MAPS-CONFIG.md");
 }
+{
+  const srk = process.env.NEXUS_SERVICE_ROLE_KEY?.trim() ?? "";
+  const looksPlaceholder = /COLE_|PLACEHOLDER|your-project/i.test(srk);
+  if (!srk || srk.length < 80 || looksPlaceholder) {
+    console.error(
+      "[Server] NEXUS_SERVICE_ROLE_KEY em server/.env está em falta ou parece inválida. " +
+        "Rotas /api/admin/* validam o teu login com o Supabase usando essa chave — sem ela correta, superadmin recebe 401 e a lista de tenants no painel fica vazia. " +
+        "Copia a service_role do mesmo projeto que NEXUS_DB_URL (Easypanel → Supabase → Settings → API)."
+    );
+  }
+}
 
 async function build() {
   const isProduction = process.env.NODE_ENV === "production";

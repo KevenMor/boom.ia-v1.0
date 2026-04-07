@@ -125,6 +125,8 @@ export function sanitizeLLMOutput(content: string): string {
   text = text.replace(/^.*ENVIAR_FOTOS?_VEICULOS?[:\s].*$/gim, "");
   text = text.replace(/^.*ENVIAR_VIDEO_DETALHES[:\s].*$/gim, "");
   text = text.replace(/^.*HANDOFF_COMERCIAL.*$/gim, "");
+  // Placeholders de persistência de mídia no histórico — não exibir ao cliente
+  text = text.replace(/\[(Mídia enviada pelo atendente|Mídia enviada pelo cliente)\]/gi, "");
   text = text.replace(/^.*\b(TOOL_CALL|FUNCTION_CALL|ACTION_OUTPUT)[:\s].*$/gim, "");
   text = text.replace(
     /^\s*\{[\s\S]*?"(action|action_input|modelo|marca|tool|function|query|search|consultar_estoque)"[\s\S]*?\}\s*$/gim,

@@ -24,6 +24,7 @@ import {
   isBlockedAsName,
 } from "../utils/agendaNotification.js";
 import { sendNotificationToGroup } from "../utils/sendNotification.js";
+import { buildFotosJaEnviadasSystemSuffix } from "../utils/photos-sent-metadata.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 const MAX_TOOL_ITERATIONS = 5;
@@ -909,7 +910,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           "\n\n[ETIQUETAGEM DE LEAD - OBRIGATÓRIO] Todo contato que for identificado como NOVO LEAD (potencial cliente interessado em produtos/serviços, ainda não é cliente) DEVE ser marcado chamando marcar_lead. A etiqueta será criada automaticamente no formato leadsDD-MM-AAAA (ex: leads19-03-2026). Chame marcar_lead assim que identificar interesse genuíno. NÃO chame para clientes existentes, retornos ou saudações sem interesse.";
       }
 
-      // Injetar fotos já enviadas nesta conversa para evitar reenvio
+      // Injetar fotos já enviadas nesta conversa para evitar reenvio (inclui fluxo fila/produção com metadata.photos_sent)
       if (conversation_id) {
         try {
           const { data: histMsgs } = await supabase.rpc("load_conversation_messages", {
@@ -917,17 +918,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
             p_conversation_id: conversation_id,
           }) as { data: Array<{ role: string; metadata?: { photos_sent?: Array<{ id: string; name: string }> } }> | null };
           if (histMsgs) {
-            const sentPhotoNames: string[] = [];
-            for (const msg of histMsgs) {
-              if (msg.role === "assistant" && msg.metadata?.photos_sent?.length) {
-                for (const p of msg.metadata.photos_sent) {
-                  if (p.name && !sentPhotoNames.includes(p.name)) sentPhotoNames.push(p.name);
-                }
-              }
-            }
-            if (sentPhotoNames.length > 0) {
-              systemPrompt += `\n\nFOTOS JÁ ENVIADAS NESTA CONVERSA: ${sentPhotoNames.join(", ")}`;
-            }
+            systemPrompt += buildFotosJaEnviadasSystemSuffix(histMsgs);
           }
         } catch (histErr) {
           console.warn("[Chat-Local] Erro ao carregar histórico de fotos enviadas:", (histErr as Error)?.message);

@@ -30,6 +30,9 @@ import ProfilePage from "@/pages/ProfilePage";
 import CalendarPage from "@/pages/CalendarPage";
 import FollowUpsPage from "@/pages/FollowUpsPage";
 import InventoryPage from "@/pages/InventoryPage";
+import ServiceCatalogPage from "@/pages/ServiceCatalogPage";
+import CatalogProfessionalsPage from "@/pages/CatalogProfessionalsPage";
+import EditCatalogItemPage from "@/pages/EditCatalogItemPage";
 import ContactsPage from "@/pages/ContactsPage";
 import ClientsPage from "@/pages/ClientsPage";
 import ContactProfilePage from "@/pages/ContactProfilePage";
@@ -154,6 +157,30 @@ const App = () => (
                 element={
                   <ModuleRoute moduleKey="inventory">
                     <InventoryPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/catalog"
+                element={
+                  <ModuleRoute moduleKey="service_catalog">
+                    <ServiceCatalogPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/catalog/professionals"
+                element={
+                  <ModuleRoute moduleKey="service_catalog">
+                    <CatalogProfessionalsPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/catalog/items/:itemId"
+                element={
+                  <ModuleRoute moduleKey="service_catalog">
+                    <EditCatalogItemPage />
                   </ModuleRoute>
                 }
               />

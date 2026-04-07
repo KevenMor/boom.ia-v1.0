@@ -159,6 +159,65 @@ export interface ContactSummary {
   upcoming_appointments: number;
 }
 
+export type CatalogItemType = "service" | "product";
+export type CatalogItemStatus = "active" | "inactive" | "coming_soon";
+export type CatalogAttendanceType = "individual" | "group";
+export type CatalogRagSyncStatus = "pending" | "synced" | "error";
+
+export interface CatalogCategory {
+  id: string;
+  tenant_id: string;
+  name: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Professional {
+  id: string;
+  tenant_id: string;
+  full_name: string;
+  photo_url: string | null;
+  bio_short: string | null;
+  working_hours: Record<string, unknown> | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CatalogItem {
+  id: string;
+  tenant_id: string;
+  category_id: string | null;
+  name: string;
+  item_type: CatalogItemType;
+  status: CatalogItemStatus;
+  image_url: string | null;
+  description: string | null;
+  faq_text: string | null;
+  price_standard: number | null;
+  price_promo: number | null;
+  promo_valid_until: string | null;
+  payment_methods: string[] | null;
+  max_installments: number | null;
+  installment_note: string | null;
+  cancellation_policy: string | null;
+  duration_minutes: number | null;
+  buffer_after_minutes: number | null;
+  attendance_type: CatalogAttendanceType | null;
+  max_capacity: number | null;
+  resource_required: string | null;
+  available_weekdays: number[] | null;
+  prerequisites: string | null;
+  target_audience: string | null;
+  rag_synced_at: string | null;
+  rag_sync_status: CatalogRagSyncStatus;
+  rag_last_error: string | null;
+  created_at: string;
+  updated_at: string;
+  catalog_categories?: Pick<CatalogCategory, "id" | "name"> | null;
+}
+
 export interface InventoryItem {
   id: string;
   external_id: string | null;
