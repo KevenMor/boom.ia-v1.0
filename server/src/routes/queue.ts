@@ -24,6 +24,7 @@ import {
 import { isThinkingAboutIt, getThinkingDelayMinutes } from "../utils/followup-utils.js";
 import { shouldSkipFollowUpByContext } from "../services/followup-guard.js";
 import { buildPhotosSentMeta } from "../utils/photos-sent-metadata.js";
+import { isWithinAgentBusinessHours, getNextBusinessHoursOpenIso } from "../utils/agent-business-hours.js";
 
 const API_BASE = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
 
@@ -361,6 +362,19 @@ export async function processFollowUpItem(
   if (inQuietHours) {
     const nextSlot = getNextSlotOutsideQuietHours(quietStart, quietEnd, item.scheduled_at as string, now);
     followupLog.rescheduled(item.id as string, `quiet_hours ${currentHour}h`);
+    await supabase
+      .from("follow_up_queue")
+      .update({ scheduled_at: nextSlot, updated_at: now.toISOString() })
+      .eq("id", item.id);
+    return { processed: false, skipped: true };
+  }
+
+  if (!isWithinAgentBusinessHours(cfg, now)) {
+    let nextSlot = getNextBusinessHoursOpenIso(cfg, now);
+    if (!nextSlot) {
+      nextSlot = new Date(now.getTime() + 60 * 60 * 1000).toISOString();
+    }
+    followupLog.rescheduled(item.id as string, "business_hours");
     await supabase
       .from("follow_up_queue")
       .update({ scheduled_at: nextSlot, updated_at: now.toISOString() })

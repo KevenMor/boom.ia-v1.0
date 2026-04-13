@@ -54,7 +54,8 @@ export function BusinessHoursSection({
         <div>
           <h3 className="text-base font-semibold text-foreground">🕐 Horário de Trabalho</h3>
           <p className="text-sm text-muted-foreground">
-            Defina quando o agente IA pode responder automaticamente
+            Defina quando o agente IA pode responder automaticamente. Se o horário de fim for anterior ao de
+            início no relógio (ex.: 19:00 a 08:00), conta como turno que cruza a meia-noite.
           </p>
         </div>
         <Switch checked={enabled} onCheckedChange={setEnabled} />

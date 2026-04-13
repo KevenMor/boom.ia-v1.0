@@ -25,6 +25,7 @@ import {
 } from "../utils/agendaNotification.js";
 import { sendNotificationToGroup } from "../utils/sendNotification.js";
 import { buildFotosJaEnviadasSystemSuffix } from "../utils/photos-sent-metadata.js";
+import { isWithinAgentBusinessHours } from "../utils/agent-business-hours.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 const MAX_TOOL_ITERATIONS = 5;
@@ -1042,6 +1043,35 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       const welcomeVideoUrl = (agentConfig.welcome_video_url as string)?.trim();
       if (isFirstContact && welcomeVideoUrl) {
         sendSse({ metadata: { type: "welcome_video", video_url: welcomeVideoUrl } });
+      }
+
+      // Fora do horário de trabalho: não chama LLM (mensagem do usuário já foi persistida acima).
+      if (!isWithinAgentBusinessHours(agentConfig)) {
+        const offline = String(agentConfig.business_hours_offline_message ?? "").trim();
+        if (offline) {
+          sendSse({ choices: [{ delta: { content: offline } }] });
+          if (!skipSave && responseConvId) {
+            try {
+              await supabase.rpc("save_message", {
+                p_agent_id: agent_id,
+                p_conversation_id: responseConvId,
+                p_role: "assistant",
+                p_content: offline,
+                p_model: null,
+                p_tokens_input: 0,
+                p_tokens_output: 0,
+                p_latency_ms: null,
+                p_metadata: { business_hours_offline: true },
+              });
+            } catch (saveErr) {
+              console.warn("[Chat-Local] save_message (business_hours offline) failed:", (saveErr as Error)?.message);
+            }
+          }
+        }
+        sendSse({ conversation_id: responseConvId });
+        sendSse("[DONE]");
+        reply.raw.end();
+        return;
       }
 
       // Extract last messages for use in both dual and single-provider paths (echo guard, scheduling, etc)
