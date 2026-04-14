@@ -1,9 +1,11 @@
 /**
  * Teste E2E — Agente Bia (Autoescola Ideal)
- * Fluxos: abertura, nome, já é aluno, categoria, experiência, já começou, orçamento.
+ * Fluxos: abertura, orçamento, exame de moto (Alameda do Horto), agenda (sem inventar horário), dois orçamentos.
  *
  * Uso: npx tsx scripts/e2e-autoescola-ideal.ts [agent_id]
- * Requer servidor rodando (npm run dev) e NEXUS_DB_URL/NEXUS_SERVICE_ROLE_KEY.
+ * Requer servidor rodando (npm run dev na API) e NEXUS_DB_URL + NEXUS_SERVICE_ROLE_KEY (ou agent_id na linha de comando).
+ *
+ * Testes estáticos do prompt (sem LLM): na raiz do repo, `npm test -- --run server/src/services/prompts/autoescola-ideal.prompt.test.ts`
  */
 
 import "dotenv/config";
@@ -215,15 +217,23 @@ async function main() {
   totalPassed += r1.passed;
   totalFailed += r1.failed;
 
-  // Fluxo 2: Lead novo + orçamento B + primeira vez
+  // Fluxo 2: Lead novo + orçamento B + primeira vez (qualificação: experiência → exames → consultoria 2×8 → orçamento)
   const r2 = await runFlow(agentId, "Orçamento B + primeira vez", [
     { user: "oi", name: "Abertura" },
     { user: "Me chamo Lucas", name: "Nome" },
     { user: "Não, não sou aluno", name: "Não é aluno" },
     { user: "Quero orçamento para categoria B", name: "Pedido orçamento" },
-    { user: "Vai ser minha primeira vez", name: "Primeira vez", expect: /duas aulas|mais quantidades|pacote.*2|recomenda/i },
-    { user: "Quero 8 aulas", name: "Escolha 8", expect: /médico|psicotécnico|teórico/i },
-    { user: "Não, ainda não fiz", name: "Não fez exames", expect: /agendamento|marcação|consultoria|acompanhamento/i },
+    {
+      user: "Vai ser minha primeira vez",
+      name: "Primeira vez",
+      expect: /médico|psicotécnico|teórico|já (fez|dirige)|dirige carro/i,
+    },
+    {
+      user: "Não, ainda não fiz médico, psicotécnico nem teórico",
+      name: "Não fez exames",
+      expect: /duas aulas|mais aulas|pacote|recomenda|8|orçamento|R\$/i,
+    },
+    { user: "Quero 8 aulas", name: "Escolha 8", expect: /R\$\s*940|940,00|156,67|aulas|teórico|médico|Detran/i },
   ]);
   totalPassed += r2.passed;
   totalFailed += r2.failed;
@@ -240,18 +250,64 @@ async function main() {
   totalPassed += r3.passed;
   totalFailed += r3.failed;
 
+  // Fluxo 5: Local do exame de moto (Alameda do Horto — não confundir com pista)
+  const r5 = await runFlow(agentId, "Exame prático de moto — endereço correto", [
+    { user: "oi", name: "Abertura" },
+    { user: "Me chamo Fernanda", name: "Nome" },
+    { user: "Não sou aluna", name: "Não é aluno" },
+    { user: "Quero tirar CNH só de moto, categoria A", name: "Categoria A" },
+    { user: "Vai ser minha primeira vez pilotando", name: "Primeira vez" },
+    { user: "Ainda não fiz médico, psicotécnico nem teórico", name: "Exames pendentes" },
+    {
+      user: "Só uma dúvida: o exame prático da moto é na mesma pista das aulas?",
+      name: "Pergunta exame x pista",
+      expect: /Alameda do Horto|Horto,?\s*144/i,
+    },
+  ]);
+  totalPassed += r5.passed;
+  totalFailed += r5.failed;
+
+  // Fluxo 6: Agenda de aulas — não inventar horário; encaminhar unidade
+  const r6 = await runFlow(agentId, "Agenda de aulas — sem disponibilidade inventada", [
+    { user: "oi", name: "Abertura" },
+    { user: "Me chamo Roberto", name: "Nome" },
+    { user: "Não sou aluno", name: "Não é aluno" },
+    { user: "Quero orçamento categoria B", name: "Pedido B" },
+    { user: "Primeira vez dirigindo", name: "Experiência" },
+    { user: "Já fiz médico, psicotécnico e teórico", name: "Exames ok" },
+    {
+      user: "Beleza. Consigo marcar minha primeira aula para quinta-feira às 16h?",
+      name: "Pedido de slot específico",
+      expect: /unidade|equipe|matrícula|não consigo|por aqui|agenda|não tenho|alinha(m|mos)|encaixa(m|mos)/i,
+    },
+  ]);
+  totalPassed += r6.passed;
+  totalFailed += r6.failed;
+
   // Fluxo 4: Dois orçamentos (B e AB) + dúvidas sobre pacotes + indicação
   const r4 = await runFlow(agentId, "Dois orçamentos + dúvidas + indicação", [
     { user: "oi", name: "Abertura" },
     { user: "Me chamo Pedro", name: "Nome" },
     { user: "Não sou aluno", name: "Não é aluno" },
     { user: "Quero orçamento de carro e também de carro e moto", name: "Dois orçamentos B e AB", expect: /experiência|primeira vez|dirige|pilota/i },
-    { user: "Vai ser minha primeira vez", name: "Primeira vez", expect: /duas aulas|mais quantidades|recomenda|pacote|orçamento/i },
-    { user: "Quero 8 aulas", name: "Escolha 8", expect: /médico|psicotécnico|teórico/i },
-    { user: "Não, ainda não fiz", name: "Não fez exames", expect: /R\$\s*\d|940|1\.740|carro|moto/i },
+    {
+      user: "Vai ser minha primeira vez nas duas",
+      name: "Primeira vez",
+      expect: /médico|psicotécnico|teórico|já fez|exame/i,
+    },
+    {
+      user: "Não, ainda não fiz médico, psicotécnico nem teórico",
+      name: "Não fez exames",
+      expect: /duas aulas|mais aulas|recomenda|pacote|orçamento|8|aulas/i,
+    },
+    { user: "Quero 8 aulas de cada", name: "Escolha 8", expect: /R\$\s*\d|940|1\.740|1,740|carro|moto/i },
     { user: "E qual pacote com mais aulas?", name: "Pergunta mais aulas", expect: /R\$\s*\d|aula|10|12|14|16|18|20/i },
     { user: "E com menos aulas?", name: "Pergunta menos aulas", expect: /R\$\s*\d|aula|2|4|6/i },
-    { user: "Qual pacote você indica?", name: "Pergunta indicação", expect: /recomendo|indico|8|10|R\$\s*\d/i },
+    {
+      user: "Qual pacote você indica?",
+      name: "Pergunta indicação",
+      expect: /recomendo|indico|8|10|R\$\s*\d|op(ç|c)[aã]o|sentido|duas categorias|resolve|economiza/i,
+    },
   ]);
   totalPassed += r4.passed;
   totalFailed += r4.failed;
