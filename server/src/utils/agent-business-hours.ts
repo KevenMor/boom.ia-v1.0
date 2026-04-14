@@ -69,12 +69,21 @@ function getSchedule(config: Record<string, unknown>, day: DayKey): DaySchedule 
   };
 }
 
+/** `agents.config.business_hours_enabled` vindo do JSON/PostgREST às vezes não é boolean estrito. */
+export function isAgentBusinessHoursFeatureEnabled(config: Record<string, unknown>): boolean {
+  const v = config.business_hours_enabled;
+  if (v === true) return true;
+  if (v === 1) return true;
+  if (typeof v === "string" && v.trim().toLowerCase() === "true") return true;
+  return false;
+}
+
 /**
  * Quando `business_hours_enabled` é falso, retorna true (nenhuma restrição).
  * Com habilitado, avalia a grade `business_hours` em Brasília.
  */
 export function isWithinAgentBusinessHours(config: Record<string, unknown>, now: Date = new Date()): boolean {
-  if (config.business_hours_enabled !== true) return true;
+  if (!isAgentBusinessHoursFeatureEnabled(config)) return true;
   return isWithinScheduledBusinessHours(config, now);
 }
 
@@ -106,14 +115,14 @@ export function isWithinScheduledBusinessHours(config: Record<string, unknown>, 
 
 /**
  * Próximo instante (ISO UTC) em que o agente entra em horário permitido.
- * Só faz sentido com `business_hours_enabled`; se desabilitado, retorna null.
+ * Só faz sentido com horário de trabalho ativado (`isAgentBusinessHoursFeatureEnabled`); se desabilitado, retorna null.
  * Se não achar janela em 8 dias, retorna null.
  */
 export function getNextBusinessHoursOpenIso(
   config: Record<string, unknown>,
   from: Date = new Date()
 ): string | null {
-  if (config.business_hours_enabled !== true) return null;
+  if (!isAgentBusinessHoursFeatureEnabled(config)) return null;
 
   const startMs = from.getTime() + 60_000;
   const limitMs = from.getTime() + 8 * 24 * 60 * 60 * 1000;

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   parseTimeToMinutes,
+  isAgentBusinessHoursFeatureEnabled,
   isWithinAgentBusinessHours,
   isWithinScheduledBusinessHours,
   getNextBusinessHoursOpenIso,
@@ -30,6 +31,18 @@ const weekdayNineToSix: BusinessHours = {
   sat: { enabled: false, start: "09:00", end: "12:00" },
   sun: { enabled: false, start: "09:00", end: "12:00" },
 };
+
+describe("isAgentBusinessHoursFeatureEnabled", () => {
+  it("aceita boolean true, string true e número 1", () => {
+    expect(isAgentBusinessHoursFeatureEnabled({ business_hours_enabled: true })).toBe(true);
+    expect(isAgentBusinessHoursFeatureEnabled({ business_hours_enabled: "true" })).toBe(true);
+    expect(isAgentBusinessHoursFeatureEnabled({ business_hours_enabled: "TRUE" })).toBe(true);
+    expect(isAgentBusinessHoursFeatureEnabled({ business_hours_enabled: 1 })).toBe(true);
+    expect(isAgentBusinessHoursFeatureEnabled({ business_hours_enabled: false })).toBe(false);
+    expect(isAgentBusinessHoursFeatureEnabled({ business_hours_enabled: "false" })).toBe(false);
+    expect(isAgentBusinessHoursFeatureEnabled({})).toBe(false);
+  });
+});
 
 describe("parseTimeToMinutes", () => {
   it("parse válido", () => {
@@ -65,6 +78,17 @@ describe("isWithinAgentBusinessHours", () => {
     // Ter 14/04/2026 05:00 UTC = 02:00 BRT — cauda de seg → dentro
     expect(isWithinAgentBusinessHours(c, new Date("2026-04-14T05:00:00.000Z"))).toBe(true);
     // Ter 14/04/2026 14:00 UTC = 11:00 BRT — entre turnos
+    expect(isWithinAgentBusinessHours(c, new Date("2026-04-14T14:00:00.000Z"))).toBe(false);
+  });
+
+  it("noturno 19–08: exatamente 08:00 BRT no dia seguinte está fora (fim exclusivo)", () => {
+    const c = cfg(true, overnightWeek);
+    // Ter 14/04/2026 11:00:00 UTC = 08:00:00 BRT — fim da cauda de seg
+    expect(isWithinAgentBusinessHours(c, new Date("2026-04-14T11:00:00.000Z"))).toBe(false);
+  });
+
+  it("business_hours_enabled como string ainda restringe", () => {
+    const c: Record<string, unknown> = { business_hours_enabled: "true", business_hours: overnightWeek };
     expect(isWithinAgentBusinessHours(c, new Date("2026-04-14T14:00:00.000Z"))).toBe(false);
   });
 

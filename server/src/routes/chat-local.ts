@@ -26,6 +26,7 @@ import {
 import { sendNotificationToGroup } from "../utils/sendNotification.js";
 import { buildFotosJaEnviadasSystemSuffix } from "../utils/photos-sent-metadata.js";
 import { isWithinAgentBusinessHours } from "../utils/agent-business-hours.js";
+import { getBrasiliaDateStr, getBrasiliaHour, getBrasiliaMinute } from "../utils/brasiliaTime.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 const MAX_TOOL_ITERATIONS = 5;
@@ -858,6 +859,127 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       const rawDispatcherId = agentConfig.dispatcher_provider_id ?? tenantSettings.dispatcher_provider_id;
       const dispatcherProviderId = typeof rawDispatcherId === "string" && rawDispatcherId.length > 0 ? rawDispatcherId : null;
 
+      let responseConvId = conversation_id ?? null;
+
+      try {
+        if (!responseConvId) {
+          const { data: newConvId, error: createErr } = await supabase.rpc("create_conversation", {
+            p_agent_id: agent_id,
+            p_channel: "sandbox",
+            p_external_user_id: external_user_id ?? null,
+            p_contact_name: null,
+            p_contact_avatar_url: null,
+          });
+          if (createErr) {
+            console.error("[Chat-Local] create_conversation failed:", createErr.message);
+            if (/Tenant schema not provisioned|db_name/i.test(createErr.message)) {
+              return reply.status(503).send({
+                error: "Schema do tenant não provisionado. Crie o tenant pelo painel (Tenants) para provisionar automaticamente o schema de conversas.",
+                code: "TENANT_NOT_PROVISIONED",
+              });
+            }
+            throw createErr;
+          }
+          responseConvId = newConvId;
+        }
+
+        const lastUserMsgPersist = messagesToUse.length > 0 ? messagesToUse[messagesToUse.length - 1] : null;
+        if (!skipSave && responseConvId && lastUserMsgPersist?.role === "user" && lastUserMsgPersist.content?.trim()) {
+          const userMsgMetadata = attachments.length > 0
+            ? { attachments: attachments.map((a) => ({ file_type: a.file_type, data_url: a.data_url })) }
+            : undefined;
+          await supabase.rpc("save_message", {
+            p_agent_id: agent_id,
+            p_conversation_id: responseConvId,
+            p_role: "user",
+            p_content: lastUserMsgPersist.content.trim(),
+            p_model: null,
+            p_tokens_input: 0,
+            p_tokens_output: 0,
+            p_latency_ms: null,
+            ...(userMsgMetadata && { p_metadata: userMsgMetadata }),
+          });
+        }
+      } catch (persistErr) {
+        console.error("[Chat-Local] Persistência inicial falhou:", (persistErr as Error)?.message);
+        return reply.status(503).send({
+          error: "Falha ao salvar conversa. Verifique se o tenant foi provisionado corretamente.",
+          detail: (persistErr as Error)?.message,
+        });
+      }
+
+      const sendSse = (data: unknown) => {
+        try {
+          reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
+        } catch {
+          /* stream closed */
+        }
+      };
+
+      if (!isWithinAgentBusinessHours(agentConfig)) {
+        const originBh = (req.headers.origin as string) || "";
+        const extraOriginsBh = (process.env.CORS_ORIGINS || "").split(",").map((o) => o.trim()).filter(Boolean);
+        const allowedOriginsBh = [
+          "http://localhost:5173",
+          "http://localhost:8080",
+          "http://127.0.0.1:5173",
+          "http://127.0.0.1:8080",
+          ...extraOriginsBh,
+        ];
+        const isAllowedBh = allowedOriginsBh.includes(originBh) || /\.lovable\.dev$/.test(originBh);
+        const allowOriginBh = isAllowedBh ? originBh : "http://localhost:8080";
+
+        reply.raw.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+          "Access-Control-Allow-Origin": allowOriginBh,
+          "Access-Control-Allow-Credentials": "true",
+        });
+
+        const isFirstContactBh = messagesToUse.filter((m) => m.role === "assistant").length === 0;
+        const welcomeVideoUrlBh = (agentConfig.welcome_video_url as string)?.trim();
+        if (isFirstContactBh && welcomeVideoUrlBh) {
+          sendSse({ metadata: { type: "welcome_video", video_url: welcomeVideoUrlBh } });
+        }
+        const hBr = getBrasiliaHour();
+        const minBr = getBrasiliaMinute();
+        console.log(
+          JSON.stringify({
+            tag: "Chat-Local/business_hours",
+            agent_id,
+            within_schedule: false,
+            date_br: getBrasiliaDateStr(),
+            time_br: `${String(hBr).padStart(2, "0")}:${String(minBr).padStart(2, "0")}`,
+          })
+        );
+        const offline = String(agentConfig.business_hours_offline_message ?? "").trim();
+        if (offline) {
+          sendSse({ choices: [{ delta: { content: offline } }] });
+          if (!skipSave && responseConvId) {
+            try {
+              await supabase.rpc("save_message", {
+                p_agent_id: agent_id,
+                p_conversation_id: responseConvId,
+                p_role: "assistant",
+                p_content: offline,
+                p_model: null,
+                p_tokens_input: 0,
+                p_tokens_output: 0,
+                p_latency_ms: null,
+                p_metadata: { business_hours_offline: true },
+              });
+            } catch (saveErr) {
+              console.warn("[Chat-Local] save_message (business_hours offline) failed:", (saveErr as Error)?.message);
+            }
+          }
+        }
+        sendSse({ conversation_id: responseConvId });
+        sendSse("[DONE]");
+        reply.raw.end();
+        return;
+      }
+
       const { data: toolsData } = await supabase.rpc("load_agent_tools", {
         p_agent_id: agent_id,
       });
@@ -959,65 +1081,6 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         }
       }
 
-      let responseConvId = conversation_id ?? null;
-      msgLog.chatStart(agent_id, model, useTools && dispatcherProviderId ? "dual" : "single");
-
-      // Persistência: criar conversa e salvar mensagens (sandbox e chamadas diretas)
-      try {
-        if (!responseConvId) {
-          const { data: newConvId, error: createErr } = await supabase.rpc("create_conversation", {
-            p_agent_id: agent_id,
-            p_channel: "sandbox",
-            p_external_user_id: external_user_id ?? null,
-            p_contact_name: null,
-            p_contact_avatar_url: null,
-          });
-          if (createErr) {
-            console.error("[Chat-Local] create_conversation failed:", createErr.message);
-            if (/Tenant schema not provisioned|db_name/i.test(createErr.message)) {
-              return reply.status(503).send({
-                error: "Schema do tenant não provisionado. Crie o tenant pelo painel (Tenants) para provisionar automaticamente o schema de conversas.",
-                code: "TENANT_NOT_PROVISIONED",
-              });
-            }
-            throw createErr;
-          }
-          responseConvId = newConvId;
-        }
-
-        const lastUserMsg = messagesToUse.length > 0 ? messagesToUse[messagesToUse.length - 1] : null;
-        if (!skipSave && responseConvId && lastUserMsg?.role === "user" && lastUserMsg.content?.trim()) {
-          const userMsgMetadata = attachments.length > 0
-            ? { attachments: attachments.map((a) => ({ file_type: a.file_type, data_url: a.data_url })) }
-            : undefined;
-          await supabase.rpc("save_message", {
-            p_agent_id: agent_id,
-            p_conversation_id: responseConvId,
-            p_role: "user",
-            p_content: lastUserMsg.content.trim(),
-            p_model: null,
-            p_tokens_input: 0,
-            p_tokens_output: 0,
-            p_latency_ms: null,
-            ...(userMsgMetadata && { p_metadata: userMsgMetadata }),
-          });
-        }
-      } catch (persistErr) {
-        console.error("[Chat-Local] Persistência inicial falhou:", (persistErr as Error)?.message);
-        return reply.status(503).send({
-          error: "Falha ao salvar conversa. Verifique se o tenant foi provisionado corretamente.",
-          detail: (persistErr as Error)?.message,
-        });
-      }
-
-      const sendSse = (data: unknown) => {
-        try {
-          reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
-        } catch {
-          /* stream closed */
-        }
-      };
-
       const origin = (req.headers.origin as string) || "";
       const extraOrigins = (process.env.CORS_ORIGINS || "").split(",").map((o) => o.trim()).filter(Boolean);
       const allowedOrigins = [
@@ -1038,41 +1101,13 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         "Access-Control-Allow-Credentials": "true",
       });
 
-      // Sandbox: enviar welcome_video no primeiro contato (paridade com Chat ao Vivo)
       const isFirstContact = messagesToUse.filter((m) => m.role === "assistant").length === 0;
       const welcomeVideoUrl = (agentConfig.welcome_video_url as string)?.trim();
       if (isFirstContact && welcomeVideoUrl) {
         sendSse({ metadata: { type: "welcome_video", video_url: welcomeVideoUrl } });
       }
 
-      // Fora do horário de trabalho: não chama LLM (mensagem do usuário já foi persistida acima).
-      if (!isWithinAgentBusinessHours(agentConfig)) {
-        const offline = String(agentConfig.business_hours_offline_message ?? "").trim();
-        if (offline) {
-          sendSse({ choices: [{ delta: { content: offline } }] });
-          if (!skipSave && responseConvId) {
-            try {
-              await supabase.rpc("save_message", {
-                p_agent_id: agent_id,
-                p_conversation_id: responseConvId,
-                p_role: "assistant",
-                p_content: offline,
-                p_model: null,
-                p_tokens_input: 0,
-                p_tokens_output: 0,
-                p_latency_ms: null,
-                p_metadata: { business_hours_offline: true },
-              });
-            } catch (saveErr) {
-              console.warn("[Chat-Local] save_message (business_hours offline) failed:", (saveErr as Error)?.message);
-            }
-          }
-        }
-        sendSse({ conversation_id: responseConvId });
-        sendSse("[DONE]");
-        reply.raw.end();
-        return;
-      }
+      msgLog.chatStart(agent_id, model, useTools && dispatcherProviderId ? "dual" : "single");
 
       // Extract last messages for use in both dual and single-provider paths (echo guard, scheduling, etc)
       const lastAssistantMsg = [...messagesToUse].reverse().find((m) => m.role === "assistant");
