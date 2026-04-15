@@ -80,6 +80,8 @@ export function stripThoughtAndReasoningBlocks(text: string): string {
 export function stripToolNameLeakage(text: string): string {
   let t = text;
   t = t.replace(/\bmarcar_lead\s*\([^)]*\)/gim, "");
+  // Modelo às vezes cola o nome da tool sem parênteses (ex.: "...chamar?marcar_lead")
+  t = t.replace(/\bmarcar_lead\b/gi, "");
   t = t.replace(/\bMARCAR\s+LEAD\b[^\n\r]*/gim, "");
   t = t.replace(/\[ETIQUETAGEM\s+DE\s+LEAD[^\]]*\]/gim, "");
   t = t.replace(/\[CHAMAR\s+FERRAMENTA[^\]]*marcar_lead[^\]]*\]/gim, "");
@@ -366,7 +368,11 @@ export function filterCommandLinesFromStream(buffer: string, chunk: string): { t
   while ((idx = acc.indexOf("\n")) !== -1) {
     const line = acc.slice(0, idx + 1);
     acc = acc.slice(idx + 1);
-    if (!isCommandLine(line)) toSend += line;
+    if (isCommandLine(line)) continue;
+    const body = line.replace(/\r?\n$/, "");
+    const cleaned = sanitizeLLMOutput(body);
+    if (cleaned) toSend += cleaned + "\n";
+    else if (!body.trim()) toSend += "\n";
   }
   return { toSend, newBuffer: acc };
 }

@@ -75,6 +75,7 @@ export function stripThoughtAndReasoningBlocks(content: string): string {
 export function stripToolNameLeakageForDisplay(content: string): string {
   let t = content;
   t = t.replace(/\bmarcar_lead\s*\([^)]*\)/gim, "");
+  t = t.replace(/\bmarcar_lead\b/gi, "");
   t = t.replace(/\bMARCAR\s+LEAD\b[^\n\r]*/gim, "");
   t = t.replace(/\[ETIQUETAGEM\s+DE\s+LEAD[^\]]*\]/gim, "");
   t = t.replace(/\[CHAMAR\s+FERRAMENTA[^\]]*marcar_lead[^\]]*\]/gim, "");

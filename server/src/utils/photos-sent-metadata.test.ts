@@ -3,7 +3,7 @@ import {
   buildPhotosSentMeta,
   buildFotosJaEnviadasSystemSuffix,
 } from "./photos-sent-metadata.js";
-import { sanitizeLLMOutput } from "./sanitize.js";
+import { sanitizeLLMOutput, filterCommandLinesFromStream } from "./sanitize.js";
 
 describe("buildPhotosSentMeta", () => {
   it("monta nome a partir de brand/model/version na ordem dos ids", () => {
@@ -57,5 +57,27 @@ describe("sanitizeLLMOutput — placeholders de mídia", () => {
     const out = sanitizeLLMOutput("Confirma a placa? [Mídia enviada pelo atendente]");
     expect(out).not.toMatch(/Mídia enviada/);
     expect(out.toLowerCase()).toContain("placa");
+  });
+});
+
+describe("sanitizeLLMOutput — vazamento de comandos internos", () => {
+  it("remove marcar_lead colado após pontuação", () => {
+    const out = sanitizeLLMOutput("Oi! Sou a Bia. Como posso te chamar?marcar_lead");
+    expect(out).not.toMatch(/marcar_lead/i);
+    expect(out).toMatch(/chamar\?/);
+  });
+
+  it("remove linha só com ENVIAR_FOTOS_VEICULO e id", () => {
+    const raw = "ENVIAR_FOTOS_VEICULO: CHERY TIGGO | id: 5784c76d-c494-4318-9f43-05be937f3d40";
+    expect(sanitizeLLMOutput(raw).trim()).toBe("");
+  });
+
+  it("no stream, linha de comando não segue texto legítimo", () => {
+    const { toSend } = filterCommandLinesFromStream(
+      "",
+      "Olá!\nENVIAR_FOTOS_VEICULO: x | id: 5784c76d-c494-4318-9f43-05be937f3d40\n"
+    );
+    expect(toSend).not.toMatch(/ENVIAR_FOTOS/i);
+    expect(toSend).toMatch(/Olá/);
   });
 });

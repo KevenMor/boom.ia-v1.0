@@ -207,8 +207,10 @@ async function callChatAgent(
             return;
           }
           if (ev.media_commands) {
-            capturedPhotoIds = Array.isArray(ev.media_commands.photo_inventory_ids) ? ev.media_commands.photo_inventory_ids : [];
-            capturedVideoIds = Array.isArray(ev.media_commands.video_inventory_ids) ? ev.media_commands.video_inventory_ids : [];
+            const p = Array.isArray(ev.media_commands.photo_inventory_ids) ? ev.media_commands.photo_inventory_ids : [];
+            const v = Array.isArray(ev.media_commands.video_inventory_ids) ? ev.media_commands.video_inventory_ids : [];
+            for (const id of p) if (typeof id === "string" && id && !capturedPhotoIds.includes(id)) capturedPhotoIds.push(id);
+            for (const id of v) if (typeof id === "string" && id && !capturedVideoIds.includes(id)) capturedVideoIds.push(id);
             return;
           }
           const delta = ev.choices?.[0]?.delta?.content;

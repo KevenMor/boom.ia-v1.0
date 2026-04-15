@@ -86,6 +86,39 @@ function isRepeatedEmojiResponse(response: string): boolean {
   return false;
 }
 
+/** Lê comandos ENVIAR_* no texto bruto do assistente e devolve ids para o cliente (WhatsApp/Chatwoot) via SSE `media_commands`. */
+function extractMediaCommandsFromAssistantRaw(raw: string): {
+  photoInventoryIds: string[];
+  videoInventoryIds: string[];
+  photosSent: Array<{ id: string; name: string }>;
+} {
+  const photoIdRegex = /ENVIAR_FOTOS?_VEICULOS?[:\s]+([^|\n]+?)\s*\|\s*id:\s*([a-f0-9-]{36})/gi;
+  const videoIdRegex = /ENVIAR_VIDEO_DETALHES[:\s]+[^|\n]+\|\s*id:\s*([a-f0-9-]{36})/gi;
+  const photoInventoryIds: string[] = [];
+  const videoInventoryIds: string[] = [];
+  const photosSent: Array<{ id: string; name: string }> = [];
+  let cmdMatch: RegExpExecArray | null;
+  while ((cmdMatch = photoIdRegex.exec(raw)) !== null) {
+    const [, photoName, photoId] = cmdMatch;
+    if (photoId && !photoInventoryIds.includes(photoId)) {
+      photoInventoryIds.push(photoId);
+      photosSent.push({ id: photoId, name: (photoName ?? "").trim() });
+    }
+  }
+  while ((cmdMatch = videoIdRegex.exec(raw)) !== null) {
+    if (cmdMatch[1] && !videoInventoryIds.includes(cmdMatch[1])) videoInventoryIds.push(cmdMatch[1]);
+  }
+  return { photoInventoryIds, videoInventoryIds, photosSent };
+}
+
+function emitMediaCommandsSseIfNeeded(sendSse: (payload: unknown) => void, raw: string): Array<{ id: string; name: string }> {
+  const { photoInventoryIds, videoInventoryIds, photosSent } = extractMediaCommandsFromAssistantRaw(raw);
+  if (photoInventoryIds.length > 0 || videoInventoryIds.length > 0) {
+    sendSse({ media_commands: { photo_inventory_ids: photoInventoryIds, video_inventory_ids: videoInventoryIds } });
+  }
+  return photosSent;
+}
+
 function toOpenAIMessages(
   systemPrompt: string,
   messages: Array<{ role: string; content: string }>
@@ -1705,12 +1738,15 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               }
             }
             if (done) {
-              convFullContent += streamFilterBuffer;
+              // Buffer pode terminar sem newline; sanear antes do SSE evita vazar comandos internos.
               if (streamFilterBuffer) {
-                const accented = restorePortugueseAccents(streamFilterBuffer);
-                debugSendCount++;
-                debugSendTotalLen += accented.length;
-                sendSse({ choices: [{ delta: { content: accented } }] });
+                const tailSafe = sanitizeLLMOutput(streamFilterBuffer);
+                if (tailSafe) {
+                  const accented = restorePortugueseAccents(tailSafe);
+                  debugSendCount++;
+                  debugSendTotalLen += accented.length;
+                  sendSse({ choices: [{ delta: { content: accented } }] });
+                }
               }
               // Primeiro contato: pergunta do nome. Em produção (com Chatwoot) o delivery envia; no sandbox precisamos enviar aqui.
               const isFirstContact = messagesToUse.filter((m) => m.role === "assistant").length === 0;
@@ -1738,28 +1774,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
 
           // Extrair IDs de fotos/vídeos dos comandos no conteúdo bruto (antes do sanitize/filter)
-          const dualPhotosSent: Array<{ id: string; name: string }> = [];
-          {
-            const photoIdRegex = /ENVIAR_FOTOS?_VEICULOS?[:\s]+([^|\n]+?)\s*\|\s*id:\s*([a-f0-9-]{36})/gi;
-            const videoIdRegex = /ENVIAR_VIDEO_DETALHES[:\s]+[^|\n]+\|\s*id:\s*([a-f0-9-]{36})/gi;
-            const photoInventoryIds: string[] = [];
-            const videoInventoryIds: string[] = [];
-            let cmdMatch: RegExpExecArray | null;
-            while ((cmdMatch = photoIdRegex.exec(convFullContent)) !== null) {
-              const [, photoName, photoId] = cmdMatch;
-              if (photoId && !photoInventoryIds.includes(photoId)) {
-                photoInventoryIds.push(photoId);
-                dualPhotosSent.push({ id: photoId, name: (photoName ?? "").trim() });
-              }
-            }
-            while ((cmdMatch = videoIdRegex.exec(convFullContent)) !== null) {
-              if (cmdMatch[1] && !videoInventoryIds.includes(cmdMatch[1])) videoInventoryIds.push(cmdMatch[1]);
-            }
-
-            if (photoInventoryIds.length > 0 || videoInventoryIds.length > 0) {
-              sendSse({ media_commands: { photo_inventory_ids: photoInventoryIds, video_inventory_ids: videoInventoryIds } });
-            }
-          }
+          const dualPhotosSent = emitMediaCommandsSseIfNeeded(sendSse, convFullContent);
 
           if (/HANDOFF_COMERCIAL/i.test(convFullContent)) {
             sendHandoffNotification(agent_id, agent, messagesToUse, external_user_id).catch((e) => {
@@ -1859,7 +1874,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               await applyDualSoftFallback();
             }
           } else {
-            const fullResponse = sanitizeLLMOutput((convFullContent + streamFilterBuffer).trim());
+            const fullResponse = sanitizeLLMOutput(convFullContent.trim());
             // Verificar se a resposta tem emojis repetidos excessivamente
             if (isRepeatedEmojiResponse(fullResponse)) {
               console.warn("[Chat-Local] Resposta principal rejeitada por emojis repetidos");
@@ -2066,15 +2081,16 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           if (done) {
             // Echo guard para single-provider: se a resposta for um echo da mensagem do cliente, usar fallback
             if (streamFilterBuffer) {
-              const bufferContent = restorePortugueseAccents(streamFilterBuffer);
+              const bufferRaw = streamFilterBuffer;
+              const bufferContent = restorePortugueseAccents(sanitizeLLMOutput(bufferRaw));
               const lastUserContent = lastUserMsg?.role === "user" ? (lastUserMsg.content?.trim() ?? "") : "";
-              if (isEchoResponse(bufferContent, lastUserContent)) {
-                console.warn("[Chat-Local] Echo detectado (single-provider):", bufferContent.slice(0, 50), "- usando fallback");
+              if (isEchoResponse(restorePortugueseAccents(bufferRaw), lastUserContent)) {
+                console.warn("[Chat-Local] Echo detectado (single-provider):", bufferRaw.slice(0, 50), "- usando fallback");
                 const fallback = "Pode me dar mais detalhes sobre o que você precisa?";
                 sendSse({ choices: [{ delta: { content: fallback } }] });
                 content = fallback; // substitui acumulador para que fullContent fique correto
                 streamFilterBuffer = ""; // limpa para não duplicar
-              } else {
+              } else if (bufferContent) {
                 sendSse({ choices: [{ delta: { content: bufferContent } }] });
               }
             }
@@ -2154,18 +2170,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
           sendSse({ debug: [{ type: "single_provider", model, ...singleProviderUsageAccum }] });
           const singleContentToSave = sanitizeLLMOutput(fullContent.trim());
-          // Extrair fotos enviadas para persistir em metadata
-          const singlePhotosSent: Array<{ id: string; name: string }> = [];
-          {
-            const spPhotoRegex = /ENVIAR_FOTOS?_VEICULOS?[:\s]+([^|\n]+?)\s*\|\s*id:\s*([a-f0-9-]{36})/gi;
-            let spMatch: RegExpExecArray | null;
-            while ((spMatch = spPhotoRegex.exec(fullContent)) !== null) {
-              const [, photoName, photoId] = spMatch;
-              if (photoId && !singlePhotosSent.some((p) => p.id === photoId)) {
-                singlePhotosSent.push({ id: photoId, name: (photoName ?? "").trim() });
-              }
-            }
-          }
+          const singlePhotosSent = emitMediaCommandsSseIfNeeded(sendSse, fullContent);
           if (!skipSave && responseConvId && singleContentToSave) {
             // #region agent log
             fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'12d224'},body:JSON.stringify({sessionId:'12d224',location:'chat-local.ts:save_message_single',message:'chat-local save_message (single)',data:{convId:responseConvId,contentLen:singleContentToSave.length,contentPreview:singleContentToSave.slice(0,120)},timestamp:Date.now(),hypothesisId:'H1,H2'})}).catch(()=>{});
@@ -2386,18 +2391,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
       }
       sendSse({ debug: [{ type: "single_provider", model, ...singleProviderUsageAccum }] });
       const finalContentToSave = sanitizeLLMOutput(fullContent.trim());
-      // Extrair fotos enviadas para persistir em metadata
-      const finalPhotosSent: Array<{ id: string; name: string }> = [];
-      {
-        const fpPhotoRegex = /ENVIAR_FOTOS?_VEICULOS?[:\s]+([^|\n]+?)\s*\|\s*id:\s*([a-f0-9-]{36})/gi;
-        let fpMatch: RegExpExecArray | null;
-        while ((fpMatch = fpPhotoRegex.exec(fullContent)) !== null) {
-          const [, photoName, photoId] = fpMatch;
-          if (photoId && !finalPhotosSent.some((p) => p.id === photoId)) {
-            finalPhotosSent.push({ id: photoId, name: (photoName ?? "").trim() });
-          }
-        }
-      }
+      const finalPhotosSent = emitMediaCommandsSseIfNeeded(sendSse, fullContent);
       if (!skipSave && responseConvId && finalContentToSave) {
         try {
           const finalSingleMeta: Record<string, unknown> = {
