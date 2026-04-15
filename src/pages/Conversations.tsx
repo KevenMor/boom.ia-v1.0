@@ -146,16 +146,29 @@ export default function Conversations() {
   const [convLimit, setConvLimit] = useState(500);
   const queryClient = useQueryClient();
 
-  // Ao trocar de tenant, limpar seleção para refletir a nova empresa
+  // Ao trocar de tenant, limpar seleção e busca (termo de outra empresa deixava a lista vazia)
   useEffect(() => {
     setSelectedAgentId(null);
     setSelectedContactKey(null);
     setAssigneeFilter(null);
     setLabelFilter(null);
+    setSearchTerm("");
     setConvLimit(500);
-  }, [selectedTenantId]);
+    void queryClient.invalidateQueries({ queryKey: ["conversations"] });
+  }, [selectedTenantId, queryClient]);
 
-  const { data: conversations, isLoading: convsLoading } = useConversations(selectedAgentId, convLimit);
+  // Ao trocar de agente, limpar busca/filtros para não esconder todos os contatos do agente atual
+  useEffect(() => {
+    setSearchTerm("");
+    setLabelFilter(null);
+    setAssigneeFilter(null);
+  }, [selectedAgentId]);
+
+  const { data: conversations, isLoading: convsLoading, error: convsError, isError: convsIsError } = useConversations(
+    selectedAgentId,
+    convLimit,
+    selectedTenantId
+  );
 
   const agentName = agents?.find((a) => a.id === selectedAgentId)?.name ?? null;
 
@@ -725,7 +738,37 @@ export default function Conversations() {
                 </div>
               )}
 
-              {!convsLoading && filteredConversations?.length === 0 && (
+              {!convsLoading && convsIsError && (
+                <div className="flex flex-col items-center justify-center py-16 text-center px-4 gap-2">
+                  <MessageSquare className="h-8 w-8 text-destructive/40 mb-1" />
+                  <p className="text-xs font-medium text-destructive">Erro ao carregar conversas</p>
+                  <p className="text-[11px] text-muted-foreground max-w-[240px]">
+                    {(convsError as Error)?.message || "Falha na API (ex.: RPC list_agent_conversations). Verifique migrações do Supabase."}
+                  </p>
+                </div>
+              )}
+
+              {!convsLoading && !convsIsError && filteredConversations?.length === 0 && deduplicatedConversations.length > 0 && (
+                <div className="flex flex-col items-center justify-center py-12 text-center px-4 gap-2">
+                  <Search className="h-7 w-7 text-muted-foreground/30" />
+                  <p className="text-xs text-muted-foreground">Nenhum contato com os filtros ou busca atuais</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs h-8"
+                    onClick={() => {
+                      setSearchTerm("");
+                      setLabelFilter(null);
+                      setAssigneeFilter(null);
+                    }}
+                  >
+                    Limpar busca e filtros
+                  </Button>
+                </div>
+              )}
+
+              {!convsLoading && !convsIsError && filteredConversations?.length === 0 && deduplicatedConversations.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-16 text-center px-4">
                   <MessageSquare className="h-8 w-8 text-muted-foreground/30 mb-3" />
                   <p className="text-xs text-muted-foreground">Nenhuma conversa encontrada</p>

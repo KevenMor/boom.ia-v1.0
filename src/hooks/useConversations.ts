@@ -31,9 +31,12 @@ export interface Message {
   metadata: { debug?: any[]; token_usage?: Record<string, unknown>; chatwoot_message_id?: string; attachments?: unknown[] } | null;
 }
 
-export function useConversations(agentId: string | null, limit: number = 500) {
+/**
+ * @param tenantId Incluído na queryKey para invalidar cache ao trocar empresa (evita lista vazia fantasma).
+ */
+export function useConversations(agentId: string | null, limit: number = 500, tenantId?: string | null) {
   return useQuery({
-    queryKey: ["conversations", agentId, limit],
+    queryKey: ["conversations", tenantId ?? "—", agentId, limit],
     queryFn: async () => {
       if (!agentId) return [];
       const { data, error } = await nexusDb.rpc("list_agent_conversations", {
@@ -47,6 +50,9 @@ export function useConversations(agentId: string | null, limit: number = 500) {
     enabled: !!agentId,
     refetchInterval: 3000,
     staleTime: 0,
+    // App.tsx define refetchOnMount: false global — aqui forçamos refetch ao abrir Chat ao Vivo
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 }
 
