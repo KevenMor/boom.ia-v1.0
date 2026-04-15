@@ -24,6 +24,7 @@ import {
 import { isThinkingAboutIt, getThinkingDelayMinutes } from "../utils/followup-utils.js";
 import { shouldSkipFollowUpByContext } from "../services/followup-guard.js";
 import { buildPhotosSentMeta } from "../utils/photos-sent-metadata.js";
+import { appendMediaIdsFromSseEvent } from "../utils/merge-sse-media-ids.js";
 import { isWithinAgentBusinessHours, getNextBusinessHoursOpenIso } from "../utils/agent-business-hours.js";
 
 const API_BASE = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
@@ -207,10 +208,7 @@ async function callChatAgent(
             return;
           }
           if (ev.media_commands) {
-            const p = Array.isArray(ev.media_commands.photo_inventory_ids) ? ev.media_commands.photo_inventory_ids : [];
-            const v = Array.isArray(ev.media_commands.video_inventory_ids) ? ev.media_commands.video_inventory_ids : [];
-            for (const id of p) if (typeof id === "string" && id && !capturedPhotoIds.includes(id)) capturedPhotoIds.push(id);
-            for (const id of v) if (typeof id === "string" && id && !capturedVideoIds.includes(id)) capturedVideoIds.push(id);
+            appendMediaIdsFromSseEvent(capturedPhotoIds, capturedVideoIds, ev.media_commands);
             return;
           }
           const delta = ev.choices?.[0]?.delta?.content;

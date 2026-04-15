@@ -6,6 +6,7 @@ import { extractDocument, formatExtractedForMessage, isImageOrPdfAttachment } fr
 import { buildSystemPrompt, getDispatcherPrompt } from "../services/prompts/registry.js";
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
 import { filterCommandLinesFromStream, sanitizeLLMOutput, fallbackSanitizeForRetry, restorePortugueseAccents } from "../utils/sanitize.js";
+import { emitMediaCommandsSseIfNeeded } from "../utils/extract-media-commands.js";
 import { getProviderApiKey } from "../services/provider-api.js";
 import { resolveAssistantFallbackMessage } from "../services/ack-recovery.js";
 import { buildPetGenderContext } from "../utils/petGenderByName.js";
@@ -84,39 +85,6 @@ function isRepeatedEmojiResponse(response: string): boolean {
   }
 
   return false;
-}
-
-/** Lê comandos ENVIAR_* no texto bruto do assistente e devolve ids para o cliente (WhatsApp/Chatwoot) via SSE `media_commands`. */
-function extractMediaCommandsFromAssistantRaw(raw: string): {
-  photoInventoryIds: string[];
-  videoInventoryIds: string[];
-  photosSent: Array<{ id: string; name: string }>;
-} {
-  const photoIdRegex = /ENVIAR_FOTOS?_VEICULOS?[:\s]+([^|\n]+?)\s*\|\s*id:\s*([a-f0-9-]{36})/gi;
-  const videoIdRegex = /ENVIAR_VIDEO_DETALHES[:\s]+[^|\n]+\|\s*id:\s*([a-f0-9-]{36})/gi;
-  const photoInventoryIds: string[] = [];
-  const videoInventoryIds: string[] = [];
-  const photosSent: Array<{ id: string; name: string }> = [];
-  let cmdMatch: RegExpExecArray | null;
-  while ((cmdMatch = photoIdRegex.exec(raw)) !== null) {
-    const [, photoName, photoId] = cmdMatch;
-    if (photoId && !photoInventoryIds.includes(photoId)) {
-      photoInventoryIds.push(photoId);
-      photosSent.push({ id: photoId, name: (photoName ?? "").trim() });
-    }
-  }
-  while ((cmdMatch = videoIdRegex.exec(raw)) !== null) {
-    if (cmdMatch[1] && !videoInventoryIds.includes(cmdMatch[1])) videoInventoryIds.push(cmdMatch[1]);
-  }
-  return { photoInventoryIds, videoInventoryIds, photosSent };
-}
-
-function emitMediaCommandsSseIfNeeded(sendSse: (payload: unknown) => void, raw: string): Array<{ id: string; name: string }> {
-  const { photoInventoryIds, videoInventoryIds, photosSent } = extractMediaCommandsFromAssistantRaw(raw);
-  if (photoInventoryIds.length > 0 || videoInventoryIds.length > 0) {
-    sendSse({ media_commands: { photo_inventory_ids: photoInventoryIds, video_inventory_ids: videoInventoryIds } });
-  }
-  return photosSent;
 }
 
 function toOpenAIMessages(
