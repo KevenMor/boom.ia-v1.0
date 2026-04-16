@@ -27,7 +27,8 @@ export async function shouldSkipFollowUpByContext(
     convId: string | null,
     attachments?: any[],
     externalUserId?: string | null,
-    chatwootConvId?: number | null
+    chatwootConvId?: number | null,
+    chatOpts?: { followup_generation?: boolean }
   ) => Promise<{ error: string | null; fullContent: string }>,
   baseUrl: string,
   nexusKey: string,

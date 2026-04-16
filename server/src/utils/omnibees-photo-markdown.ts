@@ -1,6 +1,6 @@
 /**
- * Garante Markdown com URLs de capa Omnibees quando o modelo promete fotos mas não inclui `![...](https...)`.
- * O delivery (WhatsApp/Chatwoot) só anexa imagens a partir desse Markdown.
+ * Garante Markdown com URLs de capa Omnibees quando o **cliente pediu fotos** e o modelo esqueceu o `![...](https...)`.
+ * Não injeta por promessa espontânea do assistente — evita fotos não solicitadas.
  */
 
 const MARKDOWN_HTTPS_IMG = /!\[[^\]]*\]\(https?:\/\//i;
@@ -30,15 +30,6 @@ function userWantsAccommodationPhotos(lastUserText: string): boolean {
   const t = stripDiacritics((lastUserText || "").toLowerCase());
   if (/\b(fotos?|imagens?)\b/.test(t)) return true;
   if (/\b(enviar|mandar|mostrar|manda|envia)\b/.test(t) && /\b(loft|vip|suite|quarto|acomod|acomoda|hosped)\b/.test(t)) return true;
-  return false;
-}
-
-function assistantPromisesPhotosWithoutMarkdown(assistantText: string): boolean {
-  if (MARKDOWN_HTTPS_IMG.test(assistantText)) return false;
-  const a = assistantText.toLowerCase();
-  if (/seguem\s+(as\s+)?(imagens|fotos)/i.test(assistantText)) return true;
-  if (/\b(aqui\s+)?(estão|esta)\s+(as\s+)?(fotos|imagens)\b/i.test(a)) return true;
-  if (/\b(imagens|fotos)\s+do\b/i.test(a)) return true;
   return false;
 }
 
@@ -79,8 +70,7 @@ function pickRoomsForAppend(
 }
 
 /**
- * Se o assistente (ou o contexto do usuário) indica envio de fotos de quarto mas não há Markdown de imagem,
- * acrescenta linhas `![rótulo](url)` com as capas Omnibees já conhecidas neste turno.
+ * Só quando o **último texto do cliente** pede fotos de acomodação: completa Markdown se o modelo não colou URLs.
  */
 export function appendOmnibeesPhotoMarkdownIfMissing(
   assistantText: string,
@@ -91,12 +81,10 @@ export function appendOmnibeesPhotoMarkdownIfMissing(
   if (!base || rooms.length === 0) return { text: assistantText ?? "", appended: "" };
   if (MARKDOWN_HTTPS_IMG.test(base)) return { text: base, appended: "" };
 
-  const userIntent = userWantsAccommodationPhotos(lastUserText);
-  const asstPromises = assistantPromisesPhotosWithoutMarkdown(base);
-  if (!userIntent && !asstPromises) return { text: base, appended: "" };
+  if (!userWantsAccommodationPhotos(lastUserText)) return { text: base, appended: "" };
 
   let picked = pickRoomsForAppend(rooms, lastUserText, base);
-  if (picked.length === 0 && asstPromises) {
+  if (picked.length === 0) {
     picked = rooms.filter((r) => /^https?:\/\//i.test(r.imageUrl)).slice(0, 5);
   }
   if (picked.length === 0) return { text: base, appended: "" };

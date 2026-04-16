@@ -111,7 +111,8 @@ async function callChatAgent(
   convId: string | null,
   attachments?: any[],
   externalUserId?: string | null,
-  chatwootConvId?: number | null
+  chatwootConvId?: number | null,
+  chatOpts?: { followup_generation?: boolean }
 ): Promise<{
   error: string | null;
   fullContent: string;
@@ -139,6 +140,7 @@ async function callChatAgent(
         skip_save: true,
       };
       if (chatwootConvId != null) body.chatwoot_conversation_id = chatwootConvId;
+      if (chatOpts?.followup_generation === true) body.followup_generation = true;
 
       const chatResp = await fetch(chatUrl, {
         method: "POST",
@@ -585,7 +587,8 @@ export async function processFollowUpItem(
     item.conversation_id as string | null,
     undefined,
     item.external_user_id as string | null,
-    (item.chatwoot_conversation_id as number) ?? null
+    (item.chatwoot_conversation_id as number) ?? null,
+    { followup_generation: true }
   );
 
   if (chatResult.error) {

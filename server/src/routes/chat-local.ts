@@ -313,7 +313,7 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
       }
       if (photoLines.length > 0) {
         parts.push(
-          "FOTOS DAS ACOMODAÇÕES (prévia Omnibees). Se o cliente pedir fotos, inclua na mensagem Markdown uma linha por imagem: ![nome curto do quarto](URL exata abaixo). O canal (ex.: WhatsApp) envia como imagem. Não invente URLs além destas:",
+          "FOTOS DAS ACOMODAÇÕES (prévia Omnibees). Só use se o cliente pediu fotos: Markdown uma linha por imagem: ![nome curto do quarto](URL exata abaixo). Não invente URLs além destas:",
           photoLines.join("\n")
         );
       }
@@ -324,6 +324,12 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
         bookingUrl
       );
     }
+    parts.push(
+      "INSTRUÇÕES OBRIGATÓRIAS PARA A RESPOSTA AO CLIENTE NESTE TURNO:",
+      "(1) PARCELADO: em cada linha de quarto acima, se existir o trecho \"Opção parcelada no cartão:\" (ou equivalente), reproduza-o na mesma menção àquele quarto. É proibido omitir o parcelado quando ele aparece na linha.",
+      "(2) FOTOS: não envie Markdown de imagem nem fale em \"seguem as fotos\" a menos que o cliente tenha pedido fotos explicitamente na última mensagem dele.",
+      "(3) QUANTIDADE DE BOLHAS: prefira no máximo 2–3 blocos de texto curtos neste turno (agrupar pensão + tarifas quando couber); evite disparar muitas mensagens seguidas no WhatsApp."
+    );
     return parts.join("\n\n");
   }
   return JSON.stringify(obj).slice(0, 300);
@@ -807,6 +813,8 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           chatwoot_conversation_id?: number | null;
           attachments?: unknown[];
           external_user_id?: string | null;
+          /** Quando true (ex.: fila de follow-up): não injeta marcar_lead nem bloco de etiquetagem no system — evita o LLM devolver instruções internas ao cliente. */
+          followup_generation?: boolean;
         };
       }>,
       reply: FastifyReply
@@ -1053,7 +1061,16 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       }
 
       const leadLabelEnabled = !!agentConfig.lead_label_enabled;
-      if (leadLabelEnabled) {
+      const lastTurn = messagesToUse.length > 0 ? messagesToUse[messagesToUse.length - 1] : null;
+      const lastTurnContent = String((lastTurn as { content?: string })?.content ?? "").trim();
+      const lastTurnRole = (lastTurn as { role?: string })?.role ?? "";
+      const followupGenerationRequest =
+        body?.followup_generation === true ||
+        (skipSave &&
+          lastTurnRole === "user" &&
+          /^\[SISTEMA INTERNO[\s\u2014\u2013\-]+FOLLOW[\s\-_]?UP/i.test(lastTurnContent));
+      const leadLabelActiveForTools = leadLabelEnabled && !followupGenerationRequest;
+      if (leadLabelActiveForTools) {
         tools = [
           ...tools,
           {
@@ -1082,7 +1099,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         hasCalendarTool,
         calendarServices,
       );
-      if (leadLabelEnabled) {
+      if (leadLabelActiveForTools) {
         systemPrompt +=
           "\n\n[ETIQUETAGEM DE LEAD - OBRIGATÓRIO] Todo contato que for identificado como NOVO LEAD (potencial cliente interessado em produtos/serviços, ainda não é cliente) DEVE ser marcado chamando marcar_lead. A etiqueta será criada automaticamente no formato leadsDD-MM-AAAA (ex: leads19-03-2026). Chame marcar_lead assim que identificar interesse genuíno. NÃO chame para clientes existentes, retornos ou saudações sem interesse.";
       }
@@ -1244,7 +1261,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           const isAutoescolaIdeal = tenantSlug === "ideal" || tenantSlug === "autoescola-ideal" || tenantSlug === "auto-escola-ideal";
           const promptCachingEnabled = isAutoescolaIdeal || !!(tenantSettings.prompt_caching_enabled as boolean);
           const assignHint = buildAutoescolaIdealAssignHint(messagesToUse, hasAssignTool, tenantSlug);
-          const leadHint = buildLeadHint(messagesToUse, leadLabelEnabled);
+          const leadHint = buildLeadHint(messagesToUse, leadLabelActiveForTools);
 
           const staticDispatcherPrompt = getDispatcherPrompt(tenantSlug, hasCalendarTool) + dispatcherDateContext;
           const hintsBlock = [entityHint, cepHint, assignHint, leadHint, schedulingHint].filter(Boolean).join("");
@@ -1991,7 +2008,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
       let llmMessages = toOpenAIMessages(systemPrompt, messagesToUse);
       const hasAssignToolSP = tools.some((t) => t.tool_type === "chatwoot_assign");
       const assignHintSP = buildAutoescolaIdealAssignHint(messagesToUse, hasAssignToolSP, tenantSlug);
-      const leadHintSP = buildLeadHint(messagesToUse, leadLabelEnabled);
+      const leadHintSP = buildLeadHint(messagesToUse, leadLabelActiveForTools);
       const hintsSP = [assignHintSP, leadHintSP].filter(Boolean).join("\n");
       if (hintsSP && useTools) {
         for (let i = llmMessages.length - 1; i >= 0; i--) {

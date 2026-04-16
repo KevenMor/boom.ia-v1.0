@@ -20,6 +20,15 @@ describe("sanitizeLLMOutput — regressão vazamento para cliente", () => {
     expect(sanitizeLLMOutput("MARCAR LEAD: foo")).not.toMatch(/MARCAR\s+LEAD/i);
   });
 
+  it("remove bloco [INSTRUÇÃO]…[/INSTRUÇÃO] (follow-up / lead)", () => {
+    const raw =
+      "[INSTRUÇÃO]\nVocê deve marcar todos os leads chamando a função.\n[/INSTRUÇÃO]\n\nOlá! Passando para lembrar do orçamento.";
+    const out = sanitizeLLMOutput(raw);
+    expect(out).not.toMatch(/INSTRU/i);
+    expect(out).not.toMatch(/marcar.*lead/i);
+    expect(out.toLowerCase()).toContain("orçamento");
+  });
+
   it("remove NO_TOOLS_NEEDED", () => {
     const out = sanitizeLLMOutput("Oi!\n\nNO_TOOLS_NEEDED\n\nTudo bem?");
     expect(out).not.toMatch(/NO_TOOLS_NEEDED/);

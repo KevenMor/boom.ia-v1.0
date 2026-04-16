@@ -90,6 +90,9 @@ export function stripToolNameLeakage(text: string): string {
   // Blocos de hint/contexto interno que não devem ir ao cliente
   t = t.replace(/\[CONTEXTO\s+ADICIONAL\][\s\S]*?(?=\n\n[^\[]|\n\n\[|$)/gim, "");
   t = t.replace(/\[NOVO\s+LEAD\s+DETECTADO[^\]]*\]/gim, "");
+  // Modelo às vezes ecoa instruções internas de lead em formato [INSTRUÇÃO]…[/INSTRUÇÃO]
+  t = t.replace(/\[INSTRU[CÇ][AÃ]O\]\s*[\s\S]*?\[\/INSTRU[CÇ][AÃ]O\]/gi, "");
+  t = t.replace(/\[INSTRUCAO\]\s*[\s\S]*?\[\/INSTRUCAO\]/gi, "");
   t = t.replace(/\[HINT\s+OBRIGAT[ÓO]RIO\][^\n]*/gim, "");
   t = t.replace(/\[RESUMO\s+CONFIRMADO\][\s\S]*?(?=\n\n|$)/gim, "");
   t = t.replace(/\[ALUNO\s+EXISTENTE\][^\n]*/gim, "");
