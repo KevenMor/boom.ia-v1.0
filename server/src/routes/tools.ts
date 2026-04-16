@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
 import { executeTool } from "../services/tool-executor.js";
 import { runFipeQuery } from "../services/fipe.js";
+import { runOmnibeesAvailabilityQuery } from "../services/omnibees-availability.js";
 import { runFindNearestUnit } from "../services/find-nearest-unit.js";
 import { formatDateBR } from "../utils/agendaNotification.js";
 import { getChatwootAuthHeaders } from "../services/delivery.js";
@@ -215,6 +216,27 @@ export async function toolsRoutes(fastify: FastifyInstance) {
               status: e.status || 500,
               data: { error: e.message, ...e },
             };
+          }
+          break;
+        }
+
+        case "omnibees_availability": {
+          const execCfg = (tool.execution_config || {}) as Record<string, unknown>;
+          try {
+            const data = await runOmnibeesAvailabilityQuery(
+              {
+                checkIn: String(args?.checkIn ?? args?.check_in ?? ""),
+                checkOut: String(args?.checkOut ?? args?.check_out ?? ""),
+                adults: args?.adults != null ? Number(args.adults) : undefined,
+                children: args?.children != null ? Number(args.children) : undefined,
+                childAges: args?.childAges != null ? String(args.childAges) : undefined,
+                rooms: args?.rooms != null ? Number(args.rooms) : undefined,
+              },
+              execCfg
+            );
+            result = { status: 200, data };
+          } catch (e: any) {
+            result = { status: 500, data: { error: e?.message || "Omnibees failed" } };
           }
           break;
         }

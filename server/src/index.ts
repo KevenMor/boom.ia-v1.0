@@ -15,6 +15,7 @@ import { contactsRoutes } from "./routes/contacts.js";
 import { crmContactsRoutes } from "./routes/crm-contacts.js";
 import { calendarServicesRoutes } from "./routes/calendar-services.js";
 import { demoRoutes } from "./routes/demo.js";
+import { occurrencesRoutes } from "./routes/occurrences.js";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 
@@ -110,6 +111,7 @@ async function build() {
   fastify.register(contactsRoutes, { prefix: "/api" });
   fastify.register(crmContactsRoutes, { prefix: "/api" });
   fastify.register(calendarServicesRoutes, { prefix: "/api" });
+  fastify.register(occurrencesRoutes, { prefix: "/api" });
   fastify.register(demoRoutes, { prefix: "/api" });
 
   fastify.get("/health", async () => ({ ok: true, timestamp: new Date().toISOString() }));

@@ -63,6 +63,12 @@ import {
   DISPATCHER_PROMPT as CONTABILIDADE_IDEAL_DISPATCHER,
   FOLLOWUP_PROMPT as CONTABILIDADE_IDEAL_FOLLOWUP,
 } from "./contabilidade-ideal.js";
+import {
+  SYSTEM_PROMPT as VALE_SUICO_SYSTEM,
+  COMMUNICATION_RULES as VALE_SUICO_COMM_RULES,
+  DISPATCHER_PROMPT as VALE_SUICO_DISPATCHER,
+  FOLLOWUP_PROMPT as VALE_SUICO_FOLLOWUP,
+} from "./vale-suico.js";
 
 /**
  * Configuração de prompt por tenant.
@@ -257,6 +263,24 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     alwaysInjectCommRules: true,
     version: "v1.0",
     description: "Vitória — Lead Converter Contabilidade Ideal (IRPF 2026)",
+  },
+  "vale-suico": {
+    systemPrompt: VALE_SUICO_SYSTEM,
+    communicationRules: VALE_SUICO_COMM_RULES,
+    dispatcherPrompt: VALE_SUICO_DISPATCHER,
+    followupPrompt: VALE_SUICO_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.2.1",
+    description: "Vitória — Vale Suíço Resort (qualificação de leads / orçamento WhatsApp)",
+  },
+  "vale-suico-resort": {
+    systemPrompt: VALE_SUICO_SYSTEM,
+    communicationRules: VALE_SUICO_COMM_RULES,
+    dispatcherPrompt: VALE_SUICO_DISPATCHER,
+    followupPrompt: VALE_SUICO_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.2.1",
+    description: "Vitória — Vale Suíço Resort (qualificação de leads / orçamento WhatsApp)",
   },
 };
 

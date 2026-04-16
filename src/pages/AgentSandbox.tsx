@@ -58,6 +58,26 @@ type Conversation = {
 const CHAT_URL = `${getApiBase()}/chat`;
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 
+/** Mensagem legível para toast (PostgREST / Supabase devolvem objeto, não sempre Error). */
+function formatCaughtError(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (e && typeof e === "object") {
+    const o = e as Record<string, unknown>;
+    const parts: string[] = [];
+    if (typeof o.message === "string" && o.message.trim()) parts.push(o.message.trim());
+    if (typeof o.details === "string" && o.details.trim()) parts.push(o.details.trim());
+    if (typeof o.hint === "string" && o.hint.trim()) parts.push(o.hint.trim());
+    if (typeof o.code === "string" && o.code.trim()) parts.unshift(`[${o.code}]`);
+    if (parts.length > 0) return parts.join(" — ");
+    try {
+      return JSON.stringify(e);
+    } catch {
+      return "erro desconhecido";
+    }
+  }
+  return String(e);
+}
+
 // Extract image URLs from message content
 function extractImages(content: string): { text: string; images: string[] } {
   const images: string[] = [];
@@ -130,10 +150,21 @@ export default function AgentSandbox() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  /** ID da conversa atual no servidor — atualizado assim que o SSE envia conversation_id (antes do [DONE]). */
+  const conversationIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
+
+  useEffect(() => {
+    conversationIdRef.current = null;
+    setConversationId(null);
+  }, [agentId]);
 
   const loadConversations = useCallback(async () => {
     if (!agentId) return;
@@ -142,10 +173,15 @@ export default function AgentSandbox() {
         p_agent_id: agentId,
         p_limit: 50,
       });
-      if (error) throw error;
+      if (error) {
+        console.error("[Sandbox] list_agent_conversations:", error);
+        toast.error(`Não foi possível carregar o histórico de conversas: ${formatCaughtError(error)}`);
+        return;
+      }
       setConversations((data ?? []) as Conversation[]);
     } catch (e) {
       console.error("[Sandbox] erro ao carregar conversas:", e);
+      toast.error(`Não foi possível carregar o histórico de conversas: ${formatCaughtError(e)}`);
     }
   }, [agentId]);
 
@@ -213,6 +249,7 @@ export default function AgentSandbox() {
 
   const startNewConversation = () => {
     setMessages([]);
+    conversationIdRef.current = null;
     setConversationId(null);
     setShowHistory(false);
   };
@@ -328,7 +365,7 @@ export default function AgentSandbox() {
       const body: any = {
         agent_id: agentId,
         messages: allMessages.map((m) => ({ role: m.role, content: m.content })),
-        conversation_id: conversationId,
+        conversation_id: conversationIdRef.current ?? conversationId,
       };
       if (apiAttachments.length > 0) {
         body.attachments = apiAttachments;
@@ -419,8 +456,9 @@ export default function AgentSandbox() {
           try {
             const parsed = JSON.parse(jsonStr);
 
-            if (parsed.conversation_id && !conversationId) {
-              setConversationId(parsed.conversation_id);
+            if (parsed.conversation_id) {
+              conversationIdRef.current = parsed.conversation_id as string;
+              setConversationId(parsed.conversation_id as string);
               continue;
             }
 

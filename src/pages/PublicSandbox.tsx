@@ -94,10 +94,20 @@ export default function PublicSandbox() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const conversationIdRef = useRef<string | null>(null);
   const [attachments, setAttachments] = useState<AttachmentFile[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
+
+  useEffect(() => {
+    conversationIdRef.current = null;
+    setConversationId(null);
+  }, [agentId]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -215,7 +225,7 @@ export default function PublicSandbox() {
       const body: any = {
         agent_id: agentId,
         messages: allMessages.map((m) => ({ role: m.role, content: m.content })),
-        conversation_id: conversationId,
+        conversation_id: conversationIdRef.current ?? conversationId,
       };
       if (apiAttachments.length > 0) body.attachments = apiAttachments;
 
@@ -264,8 +274,9 @@ export default function PublicSandbox() {
 
           try {
             const parsed = JSON.parse(jsonStr);
-            if (parsed.conversation_id && !conversationId) {
-              setConversationId(parsed.conversation_id);
+            if (parsed.conversation_id) {
+              conversationIdRef.current = parsed.conversation_id as string;
+              setConversationId(parsed.conversation_id as string);
               continue;
             }
             if (parsed.debug || parsed.edge_logs) continue; // skip debug in public

@@ -28,6 +28,7 @@ import { sendNotificationToGroup } from "../utils/sendNotification.js";
 import { buildFotosJaEnviadasSystemSuffix } from "../utils/photos-sent-metadata.js";
 import { isWithinAgentBusinessHours } from "../utils/agent-business-hours.js";
 import { getBrasiliaDateStr, getBrasiliaHour, getBrasiliaMinute } from "../utils/brasiliaTime.js";
+import { appendOmnibeesPhotoMarkdownIfMissing, extractOmnibeesRoomPhotosFromToolResult } from "../utils/omnibees-photo-markdown.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 const MAX_TOOL_ITERATIONS = 5;
@@ -286,6 +287,44 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
       return parts.join(" ");
     });
     return `Encontrados ${items.length} veículo(s): ${preview.join("; ")}${items.length > 5 ? "..." : ""}`;
+  }
+  // Omnibees: NUNCA truncar — o fallback genérico cortava summaryText e removia bookingUrl (URL longa).
+  const bookingUrl = typeof obj.bookingUrl === "string" ? obj.bookingUrl.trim() : "";
+  const summaryText = typeof obj.summaryText === "string" ? obj.summaryText.trim() : "";
+  if (bookingUrl || summaryText) {
+    const parts: string[] = [];
+    const checkInTime = typeof obj.checkInTime === "string" ? obj.checkInTime.trim() : "";
+    const checkOutTime = typeof obj.checkOutTime === "string" ? obj.checkOutTime.trim() : "";
+    if (checkInTime && checkOutTime && summaryText && !/Horários nesta página da reserva \(Omnibees\)/i.test(summaryText)) {
+      parts.push(
+        `HORÁRIOS OMNIBEES (use estes ao falar de check-in/check-out nesta consulta; não substitua por 15h/12h genéricos): check-in a partir das ${checkInTime}, check-out até ${checkOutTime}.`
+      );
+    }
+    if (summaryText) parts.push(summaryText);
+    const roomsRaw = obj.rooms as unknown;
+    if (Array.isArray(roomsRaw) && roomsRaw.length > 0) {
+      const photoLines: string[] = [];
+      for (const row of roomsRaw) {
+        if (!row || typeof row !== "object") continue;
+        const r = row as Record<string, unknown>;
+        const name = typeof r.roomName === "string" ? r.roomName.trim() : "";
+        const img = typeof r.imageUrl === "string" ? r.imageUrl.trim() : "";
+        if (name && img) photoLines.push(`- ${name}: ${img}`);
+      }
+      if (photoLines.length > 0) {
+        parts.push(
+          "FOTOS DAS ACOMODAÇÕES (prévia Omnibees). Se o cliente pedir fotos, inclua na mensagem Markdown uma linha por imagem: ![nome curto do quarto](URL exata abaixo). O canal (ex.: WhatsApp) envia como imagem. Não invente URLs além destas:",
+          photoLines.join("\n")
+        );
+      }
+    }
+    if (bookingUrl) {
+      parts.push(
+        "LINK DE RESERVA (obrigatório: quando o cliente pedir o link, envie exatamente este endereço https completo, em uma linha; não use texto entre colchetes nem placeholder):",
+        bookingUrl
+      );
+    }
+    return parts.join("\n\n");
   }
   return JSON.stringify(obj).slice(0, 300);
 }
@@ -782,6 +821,8 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
 
       const attachments = (body.attachments as Array<{ file_type?: string; data_url?: string }>) ?? [];
       let messagesToUse = [...messages];
+      /** Capas Omnibees do último consultar_disponibilidade neste request (para injetar Markdown se o LLM esquecer). */
+      let lastOmnibeesRoomPhotos: Array<{ roomName: string; imageUrl: string }> = [];
 
       // Transcrição de áudio no sandbox (igual ao fluxo WhatsApp)
       const audioAttachments = attachments.filter(isAudioAttachment);
@@ -885,15 +926,27 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         }
 
         const lastUserMsgPersist = messagesToUse.length > 0 ? messagesToUse[messagesToUse.length - 1] : null;
-        if (!skipSave && responseConvId && lastUserMsgPersist?.role === "user" && lastUserMsgPersist.content?.trim()) {
+        const userTextPersist = (lastUserMsgPersist?.content ?? "").trim();
+        const shouldPersistUserTurn =
+          !skipSave &&
+          responseConvId &&
+          lastUserMsgPersist?.role === "user" &&
+          (userTextPersist.length > 0 || attachments.length > 0);
+        if (shouldPersistUserTurn) {
           const userMsgMetadata = attachments.length > 0
             ? { attachments: attachments.map((a) => ({ file_type: a.file_type, data_url: a.data_url })) }
             : undefined;
+          const contentToStore =
+            userTextPersist.length > 0
+              ? userTextPersist
+              : attachments.length > 0
+                ? "[Mídia enviada pelo usuário]"
+                : "";
           await supabase.rpc("save_message", {
             p_agent_id: agent_id,
             p_conversation_id: responseConvId,
             p_role: "user",
-            p_content: lastUserMsgPersist.content.trim(),
+            p_content: contentToStore,
             p_model: null,
             p_tokens_input: 0,
             p_tokens_output: 0,
@@ -1101,6 +1154,12 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         "Access-Control-Allow-Origin": allowOrigin,
         "Access-Control-Allow-Credentials": "true",
       });
+
+      // Envia o ID da conversa logo no início do stream para o sandbox não abrir uma conversa nova
+      // a cada mensagem quando o cliente envia antes do [DONE] (ex.: respostas rápidas / dual-provider longo).
+      if (responseConvId) {
+        sendSse({ conversation_id: responseConvId });
+      }
 
       const isFirstContact = messagesToUse.filter((m) => m.role === "assistant").length === 0;
       const welcomeVideoUrl = (agentConfig.welcome_video_url as string)?.trim();
@@ -1541,6 +1600,10 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                     p_cancel_reason: "human_assigned",
                   }).then(() => {}, () => {});
                 }
+                if (tool.tool_type === "omnibees_availability" && result.success && result.result) {
+                  const rows = extractOmnibeesRoomPhotosFromToolResult(result.result);
+                  if (rows.length > 0) lastOmnibeesRoomPhotos = rows;
+                }
               }
             }
             dualDebugAccum.push(...debugEntries);
@@ -1852,6 +1915,17 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }
           }
 
+          const lastUserTextForPhotos = lastUserMsg?.role === "user" ? String(lastUserMsg.content ?? "").trim() : "";
+          const omnibeesInjected = appendOmnibeesPhotoMarkdownIfMissing(
+            dualContentToSave,
+            lastUserTextForPhotos,
+            lastOmnibeesRoomPhotos
+          );
+          if (omnibeesInjected.appended) {
+            dualContentToSave = omnibeesInjected.text;
+            sendSse({ choices: [{ delta: { content: omnibeesInjected.appended } }] });
+          }
+
           const tokenUsagePayload = {
             dispatcher: dispatcherUsage ? { ...dispatcherUsage, model: dispatcherModel } : null,
             conversational: conversationalUsage ? { ...conversationalUsage, model: convModel } : null,
@@ -2137,7 +2211,16 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }
           }
           sendSse({ debug: [{ type: "single_provider", model, ...singleProviderUsageAccum }] });
-          const singleContentToSave = sanitizeLLMOutput(fullContent.trim());
+          let singleContentToSave = sanitizeLLMOutput(fullContent.trim());
+          const singlePhotoInject = appendOmnibeesPhotoMarkdownIfMissing(
+            singleContentToSave,
+            lastUserMsg?.role === "user" ? String(lastUserMsg.content ?? "").trim() : "",
+            lastOmnibeesRoomPhotos
+          );
+          if (singlePhotoInject.appended) {
+            singleContentToSave = singlePhotoInject.text;
+            sendSse({ choices: [{ delta: { content: singlePhotoInject.appended } }] });
+          }
           const singlePhotosSent = emitMediaCommandsSseIfNeeded(sendSse, fullContent);
           if (!skipSave && responseConvId && singleContentToSave) {
             // #region agent log
@@ -2336,6 +2419,10 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               p_cancel_reason: "human_assigned",
             }).then(() => {}, () => {});
           }
+          if (tool.tool_type === "omnibees_availability" && result.success && result.result) {
+            const rowsSp = extractOmnibeesRoomPhotosFromToolResult(result.result);
+            if (rowsSp.length > 0) lastOmnibeesRoomPhotos = rowsSp;
+          }
         }
       }
 
@@ -2358,7 +2445,16 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
         }
       }
       sendSse({ debug: [{ type: "single_provider", model, ...singleProviderUsageAccum }] });
-      const finalContentToSave = sanitizeLLMOutput(fullContent.trim());
+      let finalContentToSave = sanitizeLLMOutput(fullContent.trim());
+      const finalPhotoInject = appendOmnibeesPhotoMarkdownIfMissing(
+        finalContentToSave,
+        lastUserMsg?.role === "user" ? String(lastUserMsg.content ?? "").trim() : "",
+        lastOmnibeesRoomPhotos
+      );
+      if (finalPhotoInject.appended) {
+        finalContentToSave = finalPhotoInject.text;
+        sendSse({ choices: [{ delta: { content: finalPhotoInject.appended } }] });
+      }
       const finalPhotosSent = emitMediaCommandsSseIfNeeded(sendSse, fullContent);
       if (!skipSave && responseConvId && finalContentToSave) {
         try {

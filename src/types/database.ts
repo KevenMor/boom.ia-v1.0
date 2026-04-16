@@ -42,7 +42,7 @@ export interface Agent {
   providers?: Provider;
 }
 
-export type ToolType = 'sql_query' | 'web_scraper' | 'api_rest' | 'rag_search' | 'inventory_query' | 'nearest_unit' | 'fipe_query' | 'calendar_query' | 'chatwoot_assign' | 'send_notification';
+export type ToolType = 'sql_query' | 'web_scraper' | 'api_rest' | 'rag_search' | 'inventory_query' | 'nearest_unit' | 'fipe_query' | 'calendar_query' | 'chatwoot_assign' | 'send_notification' | 'omnibees_availability';
 
 export interface Tool {
   id: string;
@@ -242,4 +242,59 @@ export interface InventoryItem {
   created_at: string;
   updated_at: string;
   tenants?: { name: string } | null;
+}
+
+export type OccurrenceStatus = "aberta" | "em_andamento" | "resolvida" | "cancelada";
+export type OccurrenceSeverity = "baixa" | "media" | "alta" | "critica";
+
+export type OccurrenceLocationType =
+  | "loja"
+  | "patio"
+  | "test_drive"
+  | "transporte"
+  | "oficina"
+  | "externo"
+  | "outro";
+
+/** Resumo do veículo retornado pela API (join com inventário). */
+export interface OccurrenceInventorySummary {
+  id: string;
+  brand: string;
+  model: string;
+  version: string | null;
+  year?: number | null;
+  price?: number | null;
+  photo_url: string | null;
+  external_id: string | null;
+  detail_url: string | null;
+  status: string;
+}
+
+/** Cliente (CRM) associado à ocorrência. */
+export interface OccurrenceContactSummary {
+  id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+}
+
+export interface Occurrence {
+  id: string;
+  tenant_id: string;
+  inventory_id: string;
+  contact_id?: string | null;
+  title: string;
+  description: string | null;
+  status: OccurrenceStatus;
+  severity: OccurrenceSeverity;
+  occurred_at: string;
+  location_type: OccurrenceLocationType;
+  location_detail: string | null;
+  odometer_km: number | null;
+  photo_urls: string[];
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  inventory?: OccurrenceInventorySummary | OccurrenceInventorySummary[] | null;
+  contacts?: OccurrenceContactSummary | OccurrenceContactSummary[] | null;
 }

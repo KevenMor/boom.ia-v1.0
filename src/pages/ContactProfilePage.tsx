@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Link, useParams, useNavigate, useLocation } from "react-router-dom";
+import { Link, useParams, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -93,6 +93,13 @@ const editSchema = z.object({
 
 type EditFormData = z.infer<typeof editSchema>;
 
+const PROFILE_TABS = ["about", "edit", "history", "consultations", "invoices", "packages", "agenda"] as const;
+type ProfileTab = (typeof PROFILE_TABS)[number];
+
+function isProfileTab(v: string | null): v is ProfileTab {
+  return !!v && (PROFILE_TABS as readonly string[]).includes(v);
+}
+
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/);
   if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
@@ -132,6 +139,22 @@ export default function ContactProfilePage() {
   const { contactId } = useParams<{ contactId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get("tab");
+  const activeTab: ProfileTab = isProfileTab(tabFromUrl) ? tabFromUrl : "about";
+
+  const handleProfileTabChange = (value: string) => {
+    const next: ProfileTab = isProfileTab(value) ? value : "about";
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        if (next === "about") p.delete("tab");
+        else p.set("tab", next);
+        return p;
+      },
+      { replace: true }
+    );
+  };
   const { data: contact, isLoading, error } = useContact(contactId ?? null);
   const updateContact = useUpdateContact();
 
@@ -526,7 +549,7 @@ export default function ContactProfilePage() {
           {/* Main content */}
           <Card className="border border-border rounded-lg overflow-hidden shadow-sm">
             <CardContent className="p-4 sm:p-5">
-              <Tabs defaultValue="about" className="w-full">
+              <Tabs value={activeTab} onValueChange={handleProfileTabChange} className="w-full">
                 <TabsList className="w-full justify-start flex-wrap h-auto gap-1 p-1.5 bg-muted/50 rounded-lg">
                   <TabsTrigger value="about" className="text-sm gap-1.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm rounded-md px-4 py-2 transition-all duration-200">
                     <User className="h-4 w-4" />

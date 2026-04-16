@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Wrench, Save, Loader2, Database, Globe, Server, Search, Car, MapPin, DollarSign, CalendarDays, UserCheck, Bell } from "lucide-react";
+import { ArrowLeft, Wrench, Save, Loader2, Database, Globe, Server, Search, Car, MapPin, DollarSign, CalendarDays, UserCheck, Bell, Building2 } from "lucide-react";
 import { ChatwootAssignRules, type AssignRule } from "@/components/tools/ChatwootAssignRules";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,12 +28,13 @@ const TOOL_TYPE_META: Record<ToolType, { label: string; icon: any }> = {
   calendar_query: { label: "Agenda", icon: CalendarDays },
   chatwoot_assign: { label: "Atribuir Agente", icon: UserCheck },
   send_notification: { label: "Notificação", icon: Bell },
+  omnibees_availability: { label: "Omnibees (hotel)", icon: Building2 },
 };
 
 const schema = z.object({
   name: z.string().min(2),
   description: z.string().min(3),
-  tool_type: z.enum(["sql_query", "web_scraper", "api_rest", "rag_search", "inventory_query", "nearest_unit", "fipe_query", "calendar_query", "chatwoot_assign", "send_notification"]),
+  tool_type: z.enum(["sql_query", "web_scraper", "api_rest", "rag_search", "inventory_query", "nearest_unit", "fipe_query", "calendar_query", "chatwoot_assign", "send_notification", "omnibees_availability"]),
   tenant_id: z.string().optional(),
   endpoint: z.string().optional(),
   parameters_json: z.string().optional(),

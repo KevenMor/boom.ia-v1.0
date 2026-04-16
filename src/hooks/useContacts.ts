@@ -11,10 +11,12 @@ interface ContactsListParams {
   order_by?: "name" | "updated_at";
   order_dir?: "asc" | "desc";
   type?: ContactType;
+  /** Se false, não executa o pedido (ex.: sem tenant seleccionado). */
+  queryEnabled?: boolean;
 }
 
 export function useContacts(params: ContactsListParams = {}) {
-  const { tenant_id, limit = 100, offset = 0, search, order_by, order_dir, type } = params;
+  const { tenant_id, limit = 100, offset = 0, search, order_by, order_dir, type, queryEnabled = true } = params;
   const queryParams = new URLSearchParams();
   if (tenant_id) queryParams.set("tenant_id", tenant_id);
   queryParams.set("limit", String(limit));
@@ -33,6 +35,7 @@ export function useContacts(params: ContactsListParams = {}) {
       );
       return res;
     },
+    enabled: queryEnabled && Boolean(tenant_id),
   });
 }
 
@@ -198,7 +201,14 @@ export function useContactInvoices(contactId: string | null) {
 export function useCreateContactInvoice(contactId: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (item: { amount: number; due_date: string; description?: string; status?: string }) => {
+    mutationFn: async (item: {
+      amount: number;
+      due_date: string;
+      description?: string;
+      status?: string;
+      paid_at?: string;
+      metadata?: Record<string, unknown>;
+    }) => {
       const data = await callAPI<ContactInvoice>(`/crm-contacts/${contactId}/invoices`, {
         method: "POST",
         body: item,

@@ -347,6 +347,11 @@ function consolidateImageParts(parts: string[]): ConsolidatedPart[] {
       result.push({ type: "text", content: textOnly.trim() });
       pendingImages.push(...imageUrls);
     } else if (imageUrls.length > 0) {
+      const caption = textOnly.trim();
+      if (caption.length > 0) {
+        flushImages();
+        result.push({ type: "text", content: caption });
+      }
       pendingImages.push(...imageUrls);
     } else if (textOnly.trim()) {
       flushImages();

@@ -30,6 +30,7 @@ import ProfilePage from "@/pages/ProfilePage";
 import CalendarPage from "@/pages/CalendarPage";
 import FollowUpsPage from "@/pages/FollowUpsPage";
 import InventoryPage from "@/pages/InventoryPage";
+import OccurrencesPage from "@/pages/OccurrencesPage";
 import ServiceCatalogPage from "@/pages/ServiceCatalogPage";
 import CatalogProfessionalsPage from "@/pages/CatalogProfessionalsPage";
 import EditCatalogItemPage from "@/pages/EditCatalogItemPage";
@@ -157,6 +158,14 @@ const App = () => (
                 element={
                   <ModuleRoute moduleKey="inventory">
                     <InventoryPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/occurrences"
+                element={
+                  <ModuleRoute moduleKey="occurrences">
+                    <OccurrencesPage />
                   </ModuleRoute>
                 }
               />
