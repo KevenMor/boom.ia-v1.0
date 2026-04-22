@@ -438,7 +438,6 @@ export async function toolsRoutes(fastify: FastifyInstance) {
         }
 
         case "chatwoot_assign": {
-          const conversationId = args?.conversation_id;
           const reason = String(args?.reason || "escalation");
 
           const execCfg = (tool.execution_config || {}) as Record<string, any>;
@@ -521,8 +520,29 @@ export async function toolsRoutes(fastify: FastifyInstance) {
             break;
           }
 
-          let cwConvId = conversationId;
-          if (!cwConvId) {
+          // Mesma resolução que tool-executor: chatwoot_conversation_id, UUID interno, ID numérico do CW, ou última conversa do agente
+          let cwConvId: number | null = null;
+          if (args?.chatwoot_conversation_id != null) {
+            cwConvId = Number(args.chatwoot_conversation_id);
+            if (Number.isNaN(cwConvId)) cwConvId = null;
+          }
+          if (cwConvId == null && args?.conversation_id != null) {
+            const cid = String(args.conversation_id).trim();
+            const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cid);
+            if (looksLikeUuid) {
+              const { data: convRow } = await supabase
+                .from("conversations")
+                .select("chatwoot_conversation_id")
+                .eq("agent_id", agentId)
+                .eq("id", cid)
+                .maybeSingle();
+              cwConvId =
+                convRow?.chatwoot_conversation_id != null ? Number(convRow.chatwoot_conversation_id) : null;
+            } else if (/^\d+$/.test(cid)) {
+              cwConvId = Number(cid);
+            }
+          }
+          if (cwConvId == null) {
             const { data: cwConvRows } = await supabase
               .from("conversations")
               .select("chatwoot_conversation_id")
@@ -530,11 +550,17 @@ export async function toolsRoutes(fastify: FastifyInstance) {
               .not("chatwoot_conversation_id", "is", null)
               .order("started_at", { ascending: false })
               .limit(1);
-            cwConvId = cwConvRows?.[0]?.chatwoot_conversation_id;
+            cwConvId =
+              cwConvRows?.[0]?.chatwoot_conversation_id != null
+                ? Number(cwConvRows[0].chatwoot_conversation_id)
+                : null;
           }
 
-          if (!cwConvId) {
-            result = { error: "conversation_id é obrigatório" };
+          if (cwConvId == null) {
+            result = {
+              error:
+                "conversation_id ou chatwoot_conversation_id é obrigatório quando não há conversa recente vinculada ao Chatwoot. No teste do painel, envie ex.: {\"reason\":\"Vila Helena\",\"chatwoot_conversation_id\":12345} (ID numérico da conversa no Chatwoot) ou conversation_id com o UUID da conversa no Boom.",
+            };
             break;
           }
 
