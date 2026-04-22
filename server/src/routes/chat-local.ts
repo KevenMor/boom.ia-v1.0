@@ -54,6 +54,28 @@ function isEchoResponse(response: string, lastUserMessage: string | null | undef
   return normalized === userNormalized && normalized.length > 0;
 }
 
+function extractNameFromExternalUserId(raw: string | null | undefined): string | undefined {
+  const t = String(raw || "").trim();
+  if (!t || !(t.startsWith("{") || t.startsWith("["))) return undefined;
+  try {
+    const parsed = JSON.parse(t) as { name?: unknown };
+    const name = typeof parsed?.name === "string" ? parsed.name.trim() : "";
+    return name || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeTrustedContactName(candidate: string | null | undefined): string | undefined {
+  const name = String(candidate || "").trim();
+  if (!name) return undefined;
+  if (name.length < 2 || name.length > 80) return undefined;
+  if (isPhoneLikeDigits(name)) return undefined;
+  if (isBlockedAsName(name)) return undefined;
+  if (containsInstitutionNameToken(name)) return undefined;
+  return name;
+}
+
 /** Guard: detecta respostas com emojis ou caracteres especiais excessivamente repetidos (ex: "💔💔💔...") */
 function isRepeatedEmojiResponse(response: string): boolean {
   if (!response || response.length < 3) return false;
@@ -138,6 +160,7 @@ const KNOWN_MODELS_TO_BRAND: Array<{ key: string; modelo: string; marca: string 
   { key: "hb20", modelo: "HB20", marca: "Hyundai" },
   { key: "creta", modelo: "Creta", marca: "Hyundai" },
   { key: "virtus", modelo: "Virtus", marca: "Volkswagen" },
+  { key: "fox", modelo: "Fox", marca: "Volkswagen" },
   { key: "gol", modelo: "Gol", marca: "Volkswagen" },
   { key: "t-cross", modelo: "T-Cross", marca: "Volkswagen" },
   { key: "taos", modelo: "Taos", marca: "Volkswagen" },
@@ -201,8 +224,126 @@ function formatCurrencyBR(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+/** Cliente pediu link/site de reserva/fechamento — aí incluímos bookingUrl no resumo para o conversacional. */
+function userRequestedOmnibeesBookingLink(
+  text: string | null | undefined,
+  lastAssistantText?: string | null
+): boolean {
+  const t = String(text || "").trim();
+  if (!t) return false;
+  if (/\bhttps?:\/\/|book\.omnibees\.com/i.test(t)) return true;
+  if (/\b(manda|me envia|envia|passa|me manda)\b[\s\S]{0,40}\b(link|url)\b/i.test(t)) return true;
+  if (/\b(link|url)\b[\s\S]{0,40}\b(reserva|reservar|booking|omnibees)\b/i.test(t)) return true;
+  if (/\b(quero|preciso|gostaria)\b[\s\S]{0,40}\b(reservar|fechar|finalizar)\b/i.test(t)) return true;
+  if (/\b(site|página|pagina)\b[\s\S]{0,40}\b(reserva|booking|omnibees)\b/i.test(t)) return true;
+  const assistant = String(lastAssistantText || "").trim();
+  if (assistant) {
+    const assistantOfferedLink =
+      /(link|enviar|mandar|te envie|finalizar).{0,120}(reserva|site|nosso\s+site)/i.test(assistant) ||
+      /(prefere|quer|gostaria).{0,80}(link|finalizar).{0,80}(site|reserva)/i.test(assistant);
+    const userAffirmsShort =
+      /^(sim|s|ok|okay|pode|pode ser|por favor|pfv|pf|manda|envia|isso|quero|blz|beleza|t[aá] bom|certo|combinado|claro)\b/i.test(t) ||
+      /^(sim|ok|pode|por favor)\s*[!.]*$/i.test(t);
+    if (assistantOfferedLink && userAffirmsShort) return true;
+  }
+  return false;
+}
+
+/** Preferir hotelresults; nunca devolver /extras sem sid ao cliente. */
+function resolveOmnibeesClientBookingUrl(bookingUrlRaw: string, hotelListingRaw: string): string {
+  const candidates = [hotelListingRaw, bookingUrlRaw].filter((u) => u.length > 0);
+  for (const c of candidates) {
+    if (/hotelresults/i.test(c)) return c;
+  }
+  for (const c of candidates) {
+    if (!/\/extras/i.test(c) || /([?&])sid=/i.test(c)) return c;
+  }
+  return "";
+}
+
+/** URL oficial retornada pela tool omnibees neste turno (se houver). */
+function extractOmnibeesBookingUrlFromToolResultsJson(toolResults: string[]): string | null {
+  for (const tr of toolResults) {
+    try {
+      const obj = JSON.parse(tr) as Record<string, unknown>;
+      const listing = typeof obj.hotelListingUrl === "string" ? obj.hotelListingUrl.trim() : "";
+      const booking = typeof obj.bookingUrl === "string" ? obj.bookingUrl.trim() : "";
+      const u = resolveOmnibeesClientBookingUrl(booking, listing);
+      if (u && /^https:\/\//i.test(u) && /omnibees\.com/i.test(u)) return u;
+    } catch {
+      /* skip */
+    }
+  }
+  return null;
+}
+
+/** `/extras` sem `sid` costuma abrir em branco no WhatsApp; trocar pela listagem oficial. */
+function textContainsOmnibeesExtrasWithoutSid(t: string): boolean {
+  const patterns = [
+    /https:\/\/book\.omnibees\.com\/extras\?[^\s)\]'"<>]+/gi,
+    /http:\/\/book\.omnibees\.com\/extras\?[^\s)\]'"<>]+/gi,
+    /\bbook\.omnibees\.com\/extras\?[^\s)\]'"<>]+/gi,
+  ];
+  for (const re of patterns) {
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(t)) !== null) {
+      const full = m[0].startsWith("http") ? m[0] : `https://${m[0]}`;
+      if (!/([?&])sid=/i.test(full)) return true;
+    }
+  }
+  return false;
+}
+
+function replaceOmnibeesExtrasUrlsMissingSid(text: string, listingUrl: string | null): string {
+  if (!listingUrl || !text) return text;
+  const patterns = [
+    /https:\/\/book\.omnibees\.com\/extras\?[^\s)\]'"<>]+/gi,
+    /http:\/\/book\.omnibees\.com\/extras\?[^\s)\]'"<>]+/gi,
+    /\bbook\.omnibees\.com\/extras\?[^\s)\]'"<>]+/gi,
+  ];
+  let out = text;
+  for (const re of patterns) {
+    out = out.replace(re, (match) => {
+      const full = match.startsWith("http") ? match : `https://${match}`;
+      if (/([?&])sid=/i.test(full)) return match;
+      return listingUrl;
+    });
+  }
+  return out;
+}
+
+function applyOmnibeesListingUrlSanitize(
+  savedContent: string,
+  streamedRaw: string,
+  listingUrl: string | null
+): { text: string; sseAppend: string } {
+  if (!listingUrl) return { text: savedContent, sseAppend: "" };
+  let text = replaceOmnibeesExtrasUrlsMissingSid(savedContent, listingUrl);
+  let sseAppend = "";
+  if (textContainsOmnibeesExtrasWithoutSid(streamedRaw) && !text.includes(listingUrl)) {
+    sseAppend = `\n\nLink do motor de reserva (busca oficial — abre corretamente no WhatsApp):\n${listingUrl}`;
+    text = `${text.trimEnd()}${sseAppend}`;
+  }
+  return { text, sseAppend };
+}
+
+/**
+ * O modelo às vezes inventa domínios tipo reservas.omnibe.com.br. Se temos a URL do motor, repetimos a oficial.
+ */
+function appendCanonicalOmnibeesBookingIfHallucinated(text: string, canonical: string | null): { text: string; appended: string } {
+  if (!canonical || !text.trim()) return { text, appended: "" };
+  if (text.includes(canonical)) return { text, appended: "" };
+  const hasFakeBookingUrl =
+    /reservas\.omnib/i.test(text) || /omnibe\.com\.br\/booking/i.test(text) || /\/booking\/\d{8}\//i.test(text);
+  if (!hasFakeBookingUrl) return { text, appended: "" };
+  const appendix = `\n\nLink oficial de reserva (copie exatamente):\n${canonical}`;
+  return { text: `${text.trimEnd()}${appendix}`, appended: appendix };
+}
+
+type SummarizeToolOptions = { includeOmnibeesBookingUrl?: boolean };
+
 /** Converte resultado bruto de tool (JSON) em texto natural para o LLM conversacional. */
-function summarizeToolResult(obj: Record<string, unknown>): string {
+function summarizeToolResult(obj: Record<string, unknown>, opts?: SummarizeToolOptions): string {
   if (obj.error && typeof obj.error === "string") {
     const err = obj.error;
     const isPastDate = /passado|no passado|past/i.test(err);
@@ -289,7 +430,9 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
     return `Encontrados ${items.length} veículo(s): ${preview.join("; ")}${items.length > 5 ? "..." : ""}`;
   }
   // Omnibees: NUNCA truncar — o fallback genérico cortava summaryText e removia bookingUrl (URL longa).
-  const bookingUrl = typeof obj.bookingUrl === "string" ? obj.bookingUrl.trim() : "";
+  const bookingUrlRaw = typeof obj.bookingUrl === "string" ? obj.bookingUrl.trim() : "";
+  const hotelListingRaw = typeof obj.hotelListingUrl === "string" ? obj.hotelListingUrl.trim() : "";
+  const bookingUrl = resolveOmnibeesClientBookingUrl(bookingUrlRaw, hotelListingRaw);
   const summaryText = typeof obj.summaryText === "string" ? obj.summaryText.trim() : "";
   if (bookingUrl || summaryText) {
     const parts: string[] = [];
@@ -318,19 +461,63 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
         );
       }
     }
-    if (bookingUrl) {
+    const includeBooking = opts?.includeOmnibeesBookingUrl === true;
+    if (includeBooking && bookingUrl) {
       parts.push(
-        "LINK DE RESERVA (obrigatório: quando o cliente pedir o link, envie exatamente este endereço https completo, em uma linha; não use texto entre colchetes nem placeholder):",
-        bookingUrl
+        "LINK DE RESERVA (o cliente pediu link/reserva explícita: envie exatamente este endereço https completo, em uma linha; não use texto entre colchetes nem placeholder). Use **somente** a URL abaixo (listagem hotelresults no motor Omnibees). **Proibido** enviar book.omnibees.com/extras sem o parâmetro sid da sessão do navegador — esse formato abre em branco no WhatsApp. É proibido inventar outros domínios (ex.: reservas.omnibe, omnibe.com.br).",
+        bookingUrl,
+        "ORIENTAÇÃO AO CLIENTE NO FECHAMENTO (obrigatório integrar na mesma resposta, em prosa breve e natural — evite lista 1) 2) no WhatsApp): o link abre a busca no motor já com as datas e a composição de hóspedes deste orçamento; na página, o cliente deve localizar a categoria de quarto alinhada ao que foi combinado, abrir essa opção, escolher à vista ou parcelado conforme o site oferecer para aquela categoria e seguir as etapas até concluir. Impostos e opcionais podem aparecer nas fases seguintes — é o fluxo normal do site."
+      );
+    } else if (bookingUrl) {
+      parts.push(
+        "LINK DE RESERVA: existe URL interna de reserva Omnibees, mas **neste turno não envie link ao cliente**. Passe orçamento, regime, cancelamento, horários e valores (à vista + parcelado quando houver). Encerre com **uma** pergunta objetiva: de preferência convide a ver **fotos das categorias citadas** nos valores (nomes exatos). Evite fechos genéricos tipo \"o que mais te anima na viagem\". Só envie o https quando o cliente pedir link/reserva/fechar — aí uma nova consulta pode trazer a URL no resumo."
       );
     }
     parts.push(
       "INSTRUÇÕES OBRIGATÓRIAS PARA A RESPOSTA AO CLIENTE NESTE TURNO:",
       "(1) PARCELADO: em cada linha de quarto acima, se existir o trecho \"Opção parcelada no cartão:\" (ou equivalente), reproduza-o na mesma menção àquele quarto. É proibido omitir o parcelado quando ele aparece na linha.",
-      "(2) FOTOS: não envie Markdown de imagem nem fale em \"seguem as fotos\" a menos que o cliente tenha pedido fotos explicitamente na última mensagem dele.",
-      "(3) QUANTIDADE DE BOLHAS: prefira no máximo 2–3 blocos de texto curtos neste turno (agrupar pensão + tarifas quando couber); evite disparar muitas mensagens seguidas no WhatsApp."
+      "(2) FOTOS: neste turno, se a última mensagem do cliente pedir/confirmar fotos (sim, pode, manda, tem foto, quero ver, etc.), inclua **obrigatoriamente** na mesma resposta uma linha Markdown por URL em **FOTOS DAS ACOMODAÇÕES** — sem `![...](url)` o WhatsApp não exibe imagem. **Proibido** só \"aqui estão as fotos\" sem Markdown. Se o cliente **ainda não** pediu fotos neste turno, pode terminar com **uma pergunta** convidando a ver fotos das categorias citadas, sem anexar imagens ainda.",
+      "(3) QUANTIDADE DE BOLHAS: prefira no máximo 2–3 blocos de texto curtos neste turno (agrupar pensão + tarifas quando couber); evite disparar muitas mensagens seguidas no WhatsApp.",
+      includeBooking && bookingUrl
+        ? "(4) LINK: o cliente pediu — inclua o link completo em linha própria."
+        : "(4) LINK: **não** inclua URL de reserva neste turno; uma pergunta conversacional no fecho."
     );
     return parts.join("\n\n");
+  }
+  // Galeria (suite_gallery_query): não truncar — o fallback genérico removia photos_markdown e _hint.
+  const galleriesRaw = obj.galleries;
+  if (Array.isArray(galleriesRaw)) {
+    const hintSg = typeof obj._hint === "string" ? obj._hint.trim() : "";
+    const lines: string[] = [];
+    if (hintSg) lines.push(hintSg);
+    for (const row of galleriesRaw) {
+      if (!row || typeof row !== "object") continue;
+      const g = row as Record<string, unknown>;
+      const nome = typeof g.nome === "string" ? g.nome : "?";
+      const desc = typeof g.descricao === "string" && g.descricao.trim() ? g.descricao.trim() : "";
+      const ori =
+        typeof g.orientacao_envio_midias === "string" && g.orientacao_envio_midias.trim()
+          ? g.orientacao_envio_midias.trim()
+          : "";
+      const nf = typeof g.total_fotos === "number" ? g.total_fotos : 0;
+      const nv = typeof g.total_videos === "number" ? g.total_videos : 0;
+      lines.push(`— ${nome}${desc ? `: ${desc}` : ""} (${nf} foto(s), ${nv} vídeo(s))`);
+      if (ori) {
+        lines.push(`orientacao_envio_midias (${nome}):\n${ori}`);
+      }
+      const pm = typeof g.photos_markdown === "string" ? g.photos_markdown.trim() : "";
+      if (pm) lines.push("photos_markdown:\n" + pm);
+      const vids = g.videos;
+      if (Array.isArray(vids) && vids.length > 0) {
+        lines.push("vídeos (URL ao pedido do cliente):");
+        for (const v of vids) {
+          if (v && typeof v === "object" && typeof (v as { url?: string }).url === "string") {
+            lines.push(`  - ${(v as { url: string }).url}`);
+          }
+        }
+      }
+    }
+    if (lines.length > 0) return lines.join("\n\n");
   }
   return JSON.stringify(obj).slice(0, 300);
 }
@@ -831,6 +1018,8 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       let messagesToUse = [...messages];
       /** Capas Omnibees do último consultar_disponibilidade neste request (para injetar Markdown se o LLM esquecer). */
       let lastOmnibeesRoomPhotos: Array<{ roomName: string; imageUrl: string }> = [];
+      /** URL de listagem hotelresults do último resultado Omnibees (para trocar /extras sem sid). */
+      let lastOmnibeesListingUrl: string | null = null;
 
       // Transcrição de áudio no sandbox (igual ao fluxo WhatsApp)
       const audioAttachments = attachments.filter(isAudioAttachment);
@@ -910,6 +1099,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       const dispatcherProviderId = typeof rawDispatcherId === "string" && rawDispatcherId.length > 0 ? rawDispatcherId : null;
 
       let responseConvId = conversation_id ?? null;
+      let trustedContactName: string | undefined;
 
       try {
         if (!responseConvId) {
@@ -968,6 +1158,29 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           error: "Falha ao salvar conversa. Verifique se o tenant foi provisionado corretamente.",
           detail: (persistErr as Error)?.message,
         });
+      }
+
+      if (responseConvId || external_user_id) {
+        try {
+          let convContactName: string | undefined;
+          let convExternalUserId: string | undefined;
+          if (responseConvId) {
+            const { data: convRow } = await supabase
+              .from("conversations")
+              .select("contact_name, external_user_id")
+              .eq("agent_id", agent_id)
+              .eq("id", responseConvId)
+              .maybeSingle();
+            convContactName = (convRow as { contact_name?: string | null } | null)?.contact_name ?? undefined;
+            convExternalUserId = (convRow as { external_user_id?: string | null } | null)?.external_user_id ?? undefined;
+          }
+          trustedContactName =
+            normalizeTrustedContactName(convContactName) ||
+            normalizeTrustedContactName(extractNameFromExternalUserId(convExternalUserId)) ||
+            normalizeTrustedContactName(extractNameFromExternalUserId(external_user_id ?? undefined));
+        } catch {
+          // best effort only
+        }
       }
 
       const sendSse = (data: unknown) => {
@@ -1258,13 +1471,30 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
 
           const hasAssignTool = tools.some((t) => t.tool_type === "chatwoot_assign");
+          const hasOmnibeesTool = tools.some((t) => t.tool_type === "omnibees_availability");
+          let omnibeesLinkHint = "";
+          if (hasOmnibeesTool && lastAssistantMsg && lastUserMsg) {
+            const assistantOfferedLink =
+              /(link|enviar|mandar|te envie|finalizar).{0,120}(reserva|site|nosso\s+site)/i.test(lastAssistantMsg.content) ||
+              /(prefere|quer|gostaria).{0,80}(link|finalizar).{0,80}(site|reserva)/i.test(lastAssistantMsg.content);
+            const userAffirms =
+              /^(sim|s|ok|okay|pode|pode ser|por favor|pfv|pf|manda|envia|isso|quero|blz|beleza|t[aá] bom|certo|combinado|claro)\b/i.test(
+                String(lastUserMsg.content || "").trim()
+              ) || /^(sim|ok|pode|por favor)\s*[!.]*$/i.test(String(lastUserMsg.content || "").trim());
+            if (assistantOfferedLink && userAffirms) {
+              omnibeesLinkHint = `\n\n[HINT OBRIGATÓRIO — LINK DE RESERVA OMNIBEES] O assistente ofereceu enviar o link e o cliente aceitou (ex.: "por favor", "sim"). Você DEVE chamar consultar_disponibilidade_vale_suico com checkIn, checkOut, adults, children e childAges extraídos do histórico da consulta de orçamento (a mesma estadia e ocupação). NÃO retorne NO_TOOLS_NEEDED. O link https válido vem do retorno da ferramenta (listagem book.omnibees.com/hotelresults); nunca invente URL em outros domínios nem monte /extras manualmente.`;
+            }
+          }
           const isAutoescolaIdeal = tenantSlug === "ideal" || tenantSlug === "autoescola-ideal" || tenantSlug === "auto-escola-ideal";
           const promptCachingEnabled = isAutoescolaIdeal || !!(tenantSettings.prompt_caching_enabled as boolean);
           const assignHint = buildAutoescolaIdealAssignHint(messagesToUse, hasAssignTool, tenantSlug);
           const leadHint = buildLeadHint(messagesToUse, leadLabelActiveForTools);
 
           const staticDispatcherPrompt = getDispatcherPrompt(tenantSlug, hasCalendarTool) + dispatcherDateContext;
-          const hintsBlock = [entityHint, cepHint, assignHint, leadHint, schedulingHint].filter(Boolean).join("");
+          const contactNameHint = trustedContactName
+            ? `\n\n[NOME DO CLIENTE VALIDADO NO CHATWOOT/CRM]\nUse o nome "${trustedContactName}" de forma natural. NÃO pergunte "Como posso te chamar?" a menos que o cliente sinalize que esse não é o nome dele.`
+            : "";
+          const hintsBlock = [entityHint, cepHint, assignHint, leadHint, schedulingHint, omnibeesLinkHint, contactNameHint].filter(Boolean).join("");
           const messagesForDispatcher = promptCachingEnabled && hintsBlock && messagesToUse.length > 0
             ? (() => {
                 const last = messagesToUse[messagesToUse.length - 1];
@@ -1620,6 +1850,12 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 if (tool.tool_type === "omnibees_availability" && result.success && result.result) {
                   const rows = extractOmnibeesRoomPhotosFromToolResult(result.result);
                   if (rows.length > 0) lastOmnibeesRoomPhotos = rows;
+                  const rOm = result.result as { bookingUrl?: string; hotelListingUrl?: string };
+                  const uList = resolveOmnibeesClientBookingUrl(
+                    String(rOm.bookingUrl ?? "").trim(),
+                    String(rOm.hotelListingUrl ?? "").trim()
+                  );
+                  if (uList) lastOmnibeesListingUrl = uList;
                 }
               }
             }
@@ -1650,7 +1886,9 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             naturalToolResultsText = toolResults.map((r) => {
               try {
                 const obj = JSON.parse(r) as Record<string, unknown>;
-                return summarizeToolResult(obj);
+                return summarizeToolResult(obj, {
+                  includeOmnibeesBookingUrl: userRequestedOmnibeesBookingLink(lastUserMsg?.content, lastAssistantMsg?.content),
+                });
               } catch {
                 return r;
               }
@@ -1671,6 +1909,8 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           const convApiUrl = convIsGemini && !convBase.includes("/openai")
             ? `${convBase}/openai/chat/completions`
             : `${convBase}/chat/completions`;
+
+          let dualContentToSave = "";
 
           const applyDualSoftFallback = async () => {
             const text = await resolveAssistantFallbackMessage({
@@ -1734,7 +1974,6 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           let debugDeltaTotalLen = 0;
           let debugSendCount = 0;
           let debugSendTotalLen = 0;
-          let dualContentToSave = "";
 
           const convReader = convResp.body!.getReader();
           const convDecoder = new TextDecoder();
@@ -1807,7 +2046,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 convFullContent.toLowerCase().includes("como posso estar lhe chamando") ||
                 convFullContent.toLowerCase().includes("como posso te chamar") ||
                 convFullContent.toLowerCase().includes("como prefere ser chamad");
-              const clientAlreadyGaveName = userHasProvidedNameInMessages(messagesToUse);
+              const clientAlreadyGaveName = userHasProvidedNameInMessages(messagesToUse) || !!trustedContactName;
               const isSandbox = !chatwoot_conversation_id;
               const shouldAddNameQuestion = isFirstContact && nameQuestion && !alreadyHasNameQuestion && !clientAlreadyGaveName;
               if (shouldAddNameQuestion && (isSandbox || !hasWelcomeVideo)) {
@@ -1942,6 +2181,20 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             dualContentToSave = omnibeesInjected.text;
             sendSse({ choices: [{ delta: { content: omnibeesInjected.appended } }] });
           }
+
+          const canonicalOmnibeesUrl = extractOmnibeesBookingUrlFromToolResultsJson(toolResults);
+          const omnibeesLinkCorrection = appendCanonicalOmnibeesBookingIfHallucinated(dualContentToSave, canonicalOmnibeesUrl);
+          if (omnibeesLinkCorrection.appended) {
+            dualContentToSave = omnibeesLinkCorrection.text;
+            sendSse({ choices: [{ delta: { content: omnibeesLinkCorrection.appended } }] });
+          }
+
+          const listingUrlForOmni = lastOmnibeesListingUrl || canonicalOmnibeesUrl;
+          const omniSanDual = applyOmnibeesListingUrlSanitize(dualContentToSave, convFullContent, listingUrlForOmni);
+          if (omniSanDual.sseAppend) {
+            sendSse({ choices: [{ delta: { content: omniSanDual.sseAppend } }] });
+          }
+          dualContentToSave = omniSanDual.text;
 
           const tokenUsagePayload = {
             dispatcher: dispatcherUsage ? { ...dispatcherUsage, model: dispatcherModel } : null,
@@ -2163,7 +2416,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               content.toLowerCase().includes("como posso estar lhe chamando") ||
               content.toLowerCase().includes("como posso te chamar") ||
               content.toLowerCase().includes("como prefere ser chamad");
-            const clientAlreadyGaveNameSingle = userHasProvidedNameInMessages(messagesToUse);
+            const clientAlreadyGaveNameSingle = userHasProvidedNameInMessages(messagesToUse) || !!trustedContactName;
             const isSandboxSingle = !chatwoot_conversation_id;
             const shouldAddNameQuestionSingle = isFirstContact && nameQuestionSingle && !alreadyHasNameQuestionSingle && !clientAlreadyGaveNameSingle;
             if (shouldAddNameQuestionSingle && (isSandboxSingle || !hasWelcomeVideoSingle)) {
@@ -2237,6 +2490,17 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           if (singlePhotoInject.appended) {
             singleContentToSave = singlePhotoInject.text;
             sendSse({ choices: [{ delta: { content: singlePhotoInject.appended } }] });
+          }
+          const canonicalOmniSingle = lastOmnibeesListingUrl;
+          const omniHallSingle = appendCanonicalOmnibeesBookingIfHallucinated(singleContentToSave, canonicalOmniSingle);
+          if (omniHallSingle.appended) {
+            singleContentToSave = omniHallSingle.text;
+            sendSse({ choices: [{ delta: { content: omniHallSingle.appended } }] });
+          }
+          const omniSanSingle = applyOmnibeesListingUrlSanitize(singleContentToSave, fullContent, canonicalOmniSingle);
+          singleContentToSave = omniSanSingle.text;
+          if (omniSanSingle.sseAppend) {
+            sendSse({ choices: [{ delta: { content: omniSanSingle.sseAppend } }] });
           }
           const singlePhotosSent = emitMediaCommandsSseIfNeeded(sendSse, fullContent);
           if (!skipSave && responseConvId && singleContentToSave) {
@@ -2439,6 +2703,12 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           if (tool.tool_type === "omnibees_availability" && result.success && result.result) {
             const rowsSp = extractOmnibeesRoomPhotosFromToolResult(result.result);
             if (rowsSp.length > 0) lastOmnibeesRoomPhotos = rowsSp;
+            const rSp = result.result as { bookingUrl?: string; hotelListingUrl?: string };
+            const uListSp = resolveOmnibeesClientBookingUrl(
+              String(rSp.bookingUrl ?? "").trim(),
+              String(rSp.hotelListingUrl ?? "").trim()
+            );
+            if (uListSp) lastOmnibeesListingUrl = uListSp;
           }
         }
       }
@@ -2471,6 +2741,17 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
       if (finalPhotoInject.appended) {
         finalContentToSave = finalPhotoInject.text;
         sendSse({ choices: [{ delta: { content: finalPhotoInject.appended } }] });
+      }
+      const canonicalOmniFinal = lastOmnibeesListingUrl;
+      const omniHallFinal = appendCanonicalOmnibeesBookingIfHallucinated(finalContentToSave, canonicalOmniFinal);
+      if (omniHallFinal.appended) {
+        finalContentToSave = omniHallFinal.text;
+        sendSse({ choices: [{ delta: { content: omniHallFinal.appended } }] });
+      }
+      const omniSanFinal = applyOmnibeesListingUrlSanitize(finalContentToSave, fullContent, canonicalOmniFinal);
+      finalContentToSave = omniSanFinal.text;
+      if (omniSanFinal.sseAppend) {
+        sendSse({ choices: [{ delta: { content: omniSanFinal.sseAppend } }] });
       }
       const finalPhotosSent = emitMediaCommandsSseIfNeeded(sendSse, fullContent);
       if (!skipSave && responseConvId && finalContentToSave) {

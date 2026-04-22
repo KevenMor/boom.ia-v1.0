@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Mic, CheckCheck, Bot } from "lucide-react";
@@ -13,11 +13,13 @@ import {
   sanitizeAssistantContent,
   deduplicateRepeatedContent,
   extractImages,
+  imageUrlsEquivalent,
   parseAudioTranscription,
   shouldShowChatMessage,
   dedupeAndSortConversationMessages,
 } from "@/lib/chatMessageDisplay";
 import { VideoPlayer, AudioPlayer } from "@/components/sandbox/MediaBubble";
+import { nexusDb } from "@/integrations/supabase/nexus-client";
 
 export type ConversationMessageRow = {
   id: string;
@@ -32,6 +34,7 @@ export type ConversationMessageRow = {
     video_url?: string;
     sender_name?: string;
     attachments?: Array<{ file_type?: string; data_url?: string }>;
+    photos_sent?: Array<{ id?: string; name?: string }>;
   } | null;
 };
 
@@ -70,6 +73,7 @@ export function ConversationMessagesView({
   variant = "default",
 }: ConversationMessagesViewProps) {
   const isChatApp = variant === "chat-app";
+  const [photoUrlsByInventoryId, setPhotoUrlsByInventoryId] = useState<Record<string, string[]>>({});
   const normalizedMessages = useMemo(
     () => dedupeAndSortConversationMessages(messages ?? []),
     [messages]
@@ -88,6 +92,54 @@ export function ConversationMessagesView({
       return groups;
     }, {} as Record<string, ConversationMessageRow[]>);
   }, [visibleMessages]);
+
+  useEffect(() => {
+    const ids = new Set<string>();
+    for (const msg of visibleMessages) {
+      const photosSent = msg.metadata?.photos_sent ?? [];
+      for (const item of photosSent) {
+        const id = (item?.id || "").trim();
+        if (id) ids.add(id);
+      }
+    }
+    const missingIds = Array.from(ids).filter((id) => !photoUrlsByInventoryId[id]);
+    if (missingIds.length === 0) return;
+
+    let cancelled = false;
+    nexusDb
+      .from("inventory")
+      .select("id, photos, photo_url")
+      .in("id", missingIds)
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        const next: Record<string, string[]> = {};
+        for (const row of data as Array<{ id: string; photos?: unknown; photo_url?: string | null }>) {
+          const urls: string[] = [];
+          if (row.photos) {
+            try {
+              const parsed = typeof row.photos === "string" ? JSON.parse(row.photos) : row.photos;
+              if (Array.isArray(parsed)) {
+                urls.push(...parsed.map((u) => String(u || "").trim()).filter(Boolean));
+              }
+            } catch {
+              // ignore malformed photos payload
+            }
+          }
+          if (urls.length === 0 && row.photo_url) urls.push(String(row.photo_url).trim());
+          if (urls.length > 0) next[row.id] = urls;
+        }
+        if (Object.keys(next).length > 0) {
+          setPhotoUrlsByInventoryId((prev) => ({ ...prev, ...next }));
+        }
+      })
+      .catch(() => {
+        // silently ignore media lookup errors
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [visibleMessages, photoUrlsByInventoryId]);
 
   if (isLoading) {
     return (
@@ -144,7 +196,16 @@ export function ConversationMessagesView({
                 mediaAttachments?: Array<{ file_type?: string; data_url?: string }>;
               }[] = [];
 
-              const metaAttachments = (msg.metadata?.attachments as Array<{ file_type?: string; data_url?: string }>) ?? [];
+              const photosSent = msg.metadata?.photos_sent ?? [];
+              const idBasedAttachments = photosSent.flatMap((p) =>
+                (photoUrlsByInventoryId[(p?.id || "").trim()] ?? []).map((url) => ({ file_type: "image", data_url: url }))
+              );
+              const baseMetaAttachments = (msg.metadata?.attachments as Array<{ file_type?: string; data_url?: string }>) ?? [];
+              const metaAttachments = [...baseMetaAttachments, ...idBasedAttachments].filter(
+                (att, idx, arr) =>
+                  !!att?.data_url &&
+                  arr.findIndex((x) => imageUrlsEquivalent(x?.data_url || "", att.data_url || "")) === idx
+              );
               const isMediaPlaceholder =
                 ((msg.content || "").trim() === "[Mídia enviada pelo atendente]" ||
                   (msg.content || "").trim() === "[Mídia enviada pelo cliente]") &&
@@ -375,6 +436,21 @@ export function ConversationMessagesView({
                                     </a>
                                   ),
                                   strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                                  img: ({ src, alt }) => {
+                                    if (!src) return null;
+                                    if (bubble.images.some((u) => imageUrlsEquivalent(u, src))) return null;
+                                    return (
+                                      <img
+                                        src={src}
+                                        alt={typeof alt === "string" ? alt : ""}
+                                        loading="lazy"
+                                        className="max-h-48 rounded-md object-cover"
+                                        onError={(e) => {
+                                          (e.target as HTMLImageElement).style.display = "none";
+                                        }}
+                                      />
+                                    );
+                                  },
                                 }}
                               >
                                 {bubble.text}

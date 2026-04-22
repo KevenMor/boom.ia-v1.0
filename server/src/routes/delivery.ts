@@ -14,6 +14,29 @@ import {
   replyToChatwoot,
   applyJitter,
 } from "../services/delivery.js";
+import { containsInstitutionNameToken, isBlockedAsName, isPhoneLikeDigits } from "../utils/agendaNotification.js";
+
+function extractNameFromExternalUserId(raw: string | null | undefined): string | undefined {
+  const t = String(raw || "").trim();
+  if (!t || !(t.startsWith("{") || t.startsWith("["))) return undefined;
+  try {
+    const parsed = JSON.parse(t) as { name?: unknown };
+    const name = typeof parsed?.name === "string" ? parsed.name.trim() : "";
+    return name || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeTrustedContactName(candidate: string | null | undefined): string | undefined {
+  const name = String(candidate || "").trim();
+  if (!name) return undefined;
+  if (name.length < 2 || name.length > 80) return undefined;
+  if (isPhoneLikeDigits(name)) return undefined;
+  if (isBlockedAsName(name)) return undefined;
+  if (containsInstitutionNameToken(name)) return undefined;
+  return name;
+}
 
 export async function deliveryRoutes(fastify: FastifyInstance) {
   fastify.post(
@@ -183,8 +206,34 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
           );
           await new Promise((r) => setTimeout(r, 8000));
 
+          let trustedContactName: string | undefined;
+          if (conversation_id || external_user_id) {
+            try {
+              let convContactName: string | undefined;
+              let convExternalUserId: string | undefined;
+              if (conversation_id) {
+                const { data: convRow } = await supabase
+                  .from("conversations")
+                  .select("contact_name, external_user_id")
+                  .eq("agent_id", agent_id)
+                  .eq("id", conversation_id)
+                  .maybeSingle();
+                convContactName = (convRow as { contact_name?: string | null } | null)?.contact_name ?? undefined;
+                convExternalUserId = (convRow as { external_user_id?: string | null } | null)?.external_user_id ?? undefined;
+              }
+              trustedContactName =
+                normalizeTrustedContactName(convContactName) ||
+                normalizeTrustedContactName(extractNameFromExternalUserId(convExternalUserId)) ||
+                normalizeTrustedContactName(extractNameFromExternalUserId(external_user_id || undefined));
+            } catch {
+              // best effort only
+            }
+          }
+
           const nameQuestion = cfg.welcome_name_question || "Como posso te chamar?";
-          await sendChatwootTextMessage(msgUrl, cwAuth, nameQuestion);
+          if (!trustedContactName) {
+            await sendChatwootTextMessage(msgUrl, cwAuth, nameQuestion);
+          }
 
           if (conversation_id) {
             try {
@@ -197,15 +246,17 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
                 p_latency_ms: null,
                 p_metadata: { type: "welcome_video", video_url: welcome_video_url },
               });
-              await supabase.rpc("save_message", {
-                p_agent_id: agent_id,
-                p_conversation_id: conversation_id,
-                p_role: "assistant",
-                p_content: nameQuestion,
-                p_model: "system",
-                p_latency_ms: null,
-                p_metadata: { type: "welcome_name_question" },
-              });
+              if (!trustedContactName) {
+                await supabase.rpc("save_message", {
+                  p_agent_id: agent_id,
+                  p_conversation_id: conversation_id,
+                  p_role: "assistant",
+                  p_content: nameQuestion,
+                  p_model: "system",
+                  p_latency_ms: null,
+                  p_metadata: { type: "welcome_name_question" },
+                });
+              }
             } catch (e: any) {
               console.warn(`[Deliver] Failed to save welcome messages:`, e.message);
             }

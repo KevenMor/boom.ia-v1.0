@@ -199,19 +199,19 @@ async function main() {
   // FLUXO 1: Consulta + aceitar fotos (fluxo normal do prompt)
   // O prompt exige: lista primeiro, oferece fotos, aguarda aceite.
   // ─────────────────────────────────────────────────────────────────────────────
-  console.log(`\n${BOLD}--- Fluxo 1: Consulta S10 → agente oferece → cliente aceita → fotos enviadas ---${RESET}`);
+  console.log(`\n${BOLD}--- Fluxo 1: Consulta Virtus 1.0 TSI AUT → agente oferece → cliente aceita → fotos enviadas ---${RESET}`);
   {
     const messages: Array<{ role: string; content: string }> = [];
     let convId: string | null = null;
 
-    // Turno 1: Perguntar sobre S10
-    messages.push({ role: "user", content: "Tem S10 disponível?" });
+    // Turno 1: Perguntar sobre um veículo disponível atualmente
+    messages.push({ role: "user", content: "Tem VOLKSWAGEN VIRTUS 1.0 TSI FLEX 12V AUT disponível?" });
     const r1 = await streamChat(agentId, messages, convId);
     if (r1.error) { fail(`Turno 1 falhou: ${r1.error}`); totalFailed++; }
     else {
       if (r1.conversationId) convId = r1.conversationId;
       messages.push({ role: "assistant", content: r1.content });
-      ok(`Turno 1 — Consulta S10: ${r1.content.slice(0, 80)}...`);
+      ok(`Turno 1 — Consulta Virtus: ${r1.content.slice(0, 80)}...`);
       totalPassed++;
     }
 
@@ -262,7 +262,7 @@ async function main() {
     let convId: string | null = null;
 
     // Simular histórico: agente ofereceu fotos, cliente aceita
-    messages.push({ role: "user", content: "Tem S10 2022?" });
+    messages.push({ role: "user", content: "Tem VOLKSWAGEN VIRTUS 1.0 TSI FLEX 12V AUT?" });
     const r1 = await streamChat(agentId, messages, convId);
     if (r1.error) { fail(`Turno 1 falhou: ${r1.error}`); totalFailed++; }
     else {
