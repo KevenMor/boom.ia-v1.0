@@ -9,7 +9,8 @@ async function main() {
   });
   console.log("rooms:", data.rooms.length);
   console.log("summary:\n", data.summaryText);
-  console.log("bookingUrl:\n", data.bookingUrl);
+  console.log("bookingUrl (listagem hotelresults):\n", data.bookingUrl);
+  console.log("hotelListingUrl:\n", data.hotelListingUrl);
 }
 
 main().catch((e) => {

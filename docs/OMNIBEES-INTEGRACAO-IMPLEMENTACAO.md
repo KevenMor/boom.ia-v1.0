@@ -2,7 +2,7 @@
 
 ## Estado (implementado no repositório)
 
-- **Serviço:** [`server/src/services/omnibees-availability.ts`](server/src/services/omnibees-availability.ts) — `fetch` + Cheerio, cache 10 min, datas `DDMMYYYY` ou `YYYY-MM-DD`, `execution_config` opcional (`chain_id`, `hotel_id`, etc.).
+- **Serviço:** [`server/src/services/omnibees-availability.ts`](server/src/services/omnibees-availability.ts) — `fetch` + Cheerio, cache 10 min, datas `DDMMYYYY` ou `YYYY-MM-DD`, `execution_config` opcional (`chain_id`, `hotel_id`, etc.). O `bookingUrl` (e `hotelListingUrl`) é a listagem `https://book.omnibees.com/hotelresults?...` — abre de link externo (ex.: WhatsApp). URLs `/extras?...&roomuids=` sem `sid` de sessão costumam renderizar página em branco; não enviar ao cliente.
 - **Execução:** [`server/src/services/tool-executor.ts`](server/src/services/tool-executor.ts) — `tool_type` `omnibees_availability`, função `consultar_disponibilidade_vale_suico`, validação `tenant_id` da tool vs agente.
 - **Teste HTTP:** [`server/src/routes/tools.ts`](server/src/routes/tools.ts) — `POST /tools/test` com branch `omnibees_availability`.
 - **Migration:** [`supabase/migrations/20260417120000_omnibees_availability_tool.sql`](supabase/migrations/20260417120000_omnibees_availability_tool.sql) — estende `CHECK` em `tools.tool_type` e faz seed da tool + `agent_tools` para tenant `vale-suico` ou `vale-suico-resort`.

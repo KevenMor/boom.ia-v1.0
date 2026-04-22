@@ -8,6 +8,8 @@ const CACHE_TTL_MS = 10 * 60 * 1000;
 
 export interface OmnibeesRateRow {
   rateName: string;
+  /** `data-rate-id` ou `data-rateplanid` no HTML — necessário para deep link `/extras?...&rateuids=`. */
+  ratePlanId: string | null;
   board: string;
   cancellationPolicy: string;
   payment: string;
@@ -44,7 +46,13 @@ export interface OmnibeesAvailabilityResult {
   currency: string;
   rooms: OmnibeesRoomRow[];
   summaryText: string;
+  /**
+   * URL da listagem de resultados (`/hotelresults`) — abre corretamente a partir do WhatsApp.
+   * Não usar `/extras?...&roomuids=...` sem `sid` de sessão: a Omnibees responde página em branco em abertura direta.
+   */
   bookingUrl: string;
+  /** Mesma URL da listagem (alias explícito para integrações). */
+  hotelListingUrl: string;
 }
 
 interface CacheEntry {
@@ -205,7 +213,7 @@ function findInstallmentCompanionRate(rates: OmnibeesRateRow[], cheapest: Omnibe
   return differentName ?? null;
 }
 
-function buildSummaryText(data: Omit<OmnibeesAvailabilityResult, "summaryText" | "bookingUrl">): string {
+function buildSummaryText(data: Omit<OmnibeesAvailabilityResult, "summaryText" | "bookingUrl" | "hotelListingUrl">): string {
   if (data.rooms.length === 0) {
     return `Nenhuma acomodação com tarifa encontrada para ${data.checkIn} a ${data.checkOut} (${data.nights} noites, ${data.adults} adultos${data.children ? `, ${data.children} crianças` : ""}).`;
   }
@@ -233,7 +241,7 @@ function buildSummaryText(data: Omit<OmnibeesAvailabilityResult, "summaryText" |
 function parseAvailability(
   html: string,
   params: { checkIn: string; checkOut: string; adults: number; children: number }
-): Omit<OmnibeesAvailabilityResult, "summaryText" | "bookingUrl"> {
+): Omit<OmnibeesAvailabilityResult, "summaryText" | "bookingUrl" | "hotelListingUrl"> {
   const $ = load(html);
   const { checkInTime, checkOutTime } = extractHotelCheckTimes($);
   const rooms: OmnibeesRoomRow[] = [];
@@ -259,6 +267,9 @@ function parseAvailability(
       const board = re.attr("data-board") || "";
       const policy = re.attr("data-policy") || "";
 
+      const rawPlanId = (re.attr("data-rate-id") ?? re.attr("data-rateplanid"))?.trim() ?? "";
+      const ratePlanId = /^\d+$/.test(rawPlanId) ? rawPlanId : null;
+
       const priceSymbol = re.find(".currency_symbol_price").first().text().trim() || "R$";
       const priceNumber = parseTotalBrlFromRatePlan(re);
 
@@ -280,6 +291,7 @@ function parseAvailability(
       if (rateName && !Number.isNaN(priceNumber) && priceNumber > 0) {
         rates.push({
           rateName,
+          ratePlanId,
           board,
           cancellationPolicy: policy,
           payment: paymentText,
@@ -406,11 +418,12 @@ export async function runOmnibeesAvailabilityQuery(
 
   const html = await response.text();
   const parsed = parseAvailability(html, { checkIn, checkOut, adults, children });
-  const bookingUrl = buildBookingUrl(cfg, checkIn, checkOut, adults, children, childAges, rooms).toString();
+  const listingUrl = buildBookingUrl(cfg, checkIn, checkOut, adults, children, childAges, rooms).toString();
   const data: OmnibeesAvailabilityResult = {
     ...parsed,
     summaryText: buildSummaryText(parsed),
-    bookingUrl,
+    bookingUrl: listingUrl,
+    hotelListingUrl: listingUrl,
   };
 
   cache.set(cacheKey, { at: now, data });
