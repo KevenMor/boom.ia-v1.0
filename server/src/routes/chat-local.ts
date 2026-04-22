@@ -617,7 +617,7 @@ function buildAutoescolaIdealAssignHint(
     const unitMatch = lastAsst.content.match(/Unidade de preferência:\s*(.+?)(?:\n|$)/i);
     const unitName = unitMatch?.[1]?.trim();
     if (unitName) {
-      return `\n\n[RESUMO CONFIRMADO. OBRIGATÓRIO: chame atribuir_agente/chatwoot_assign com reason="${unitName}" para transferir ao time da unidade mais próxima da residência do cliente. NÃO retorne NO_TOOLS_NEEDED.]`;
+      return `\n\n[RESUMO CONFIRMADO. OBRIGATÓRIO: chame a ferramenta de atribuição ao time no Chatwoot (nome exato na lista de funções, ex.: atribuir_time, atribuir_agente) com argumentos: ${JSON.stringify({ reason: unitName })}. NÃO retorne NO_TOOLS_NEEDED.]`;
     }
   }
 
@@ -627,7 +627,7 @@ function buildAutoescolaIdealAssignHint(
   if (lastAsst?.content && forwardPhrases.test(lastAsst.content)) {
     for (const [key, canonical] of Object.entries(IDEAL_UNITS_MAP)) {
       if (convLower.includes(key)) {
-        return `\n\n[ALUNO EXISTENTE — ENCAMINHAMENTO. O assistente disse que vai encaminhar para o time da unidade. OBRIGATÓRIO: chame atribuir_agente/chatwoot_assign com reason="${canonical}" para transferir ao time da unidade. NÃO retorne NO_TOOLS_NEEDED. NÃO chame consultar_cep nem nearest_unit.]`;
+        return `\n\n[ALUNO EXISTENTE — ENCAMINHAMENTO. O assistente disse que vai encaminhar para o time da unidade. OBRIGATÓRIO: chame a ferramenta de atribuição ao time no Chatwoot (nome exato na lista, ex.: atribuir_time) com ${JSON.stringify({ reason: canonical })}. NÃO retorne NO_TOOLS_NEEDED. NÃO chame consultar_cep nem nearest_unit.]`;
       }
     }
   }
@@ -640,7 +640,7 @@ function buildAutoescolaIdealAssignHint(
     for (const [key, canonical] of Object.entries(IDEAL_UNITS_MAP)) {
       // Unidade deve ter sido mencionada pelo USUÁRIO ou ser a última tratada
       if (usrLower.includes(key)) {
-        return `\n\n[ALUNO EM SITUAÇÃO DE AULA — UNIDADE DETECTADA. Cliente mencionou unidade "${canonical}" em contexto de aula/horário. OBRIGATÓRIO: chame atribuir_agente/chatwoot_assign com reason="${canonical}" para transferir ao time da unidade correta. NÃO retorne NO_TOOLS_NEEDED.]`;
+        return `\n\n[ALUNO EM SITUAÇÃO DE AULA — UNIDADE DETECTADA. Cliente mencionou unidade "${canonical}" em contexto de aula/horário. OBRIGATÓRIO: chame a ferramenta de atribuição ao time no Chatwoot (nome exato na lista, ex.: atribuir_time) com ${JSON.stringify({ reason: canonical })}. NÃO retorne NO_TOOLS_NEEDED.]`;
       }
     }
   }
@@ -950,11 +950,12 @@ export function enrichChatwootAssignDescription(tool: ToolDef, baseDescription: 
     const hasDefault = execCfg.assignee_id != null || execCfg.team_id != null;
     routing = [
       `NÃO envie assignee_id nem team_id diretamente — o backend roteia automaticamente via execution_config.`,
-      `Use o parâmetro reason com o nome da unidade do cliente.`,
-      `Opções disponíveis: ${labels}.`,
+      `OBRIGATÓRIO: passe sempre o argumento JSON "reason" (string). Sem "reason", o sistema usa um valor genérico e o time pode ficar errado.`,
+      `O "reason" deve conter palavras que aparecem no rótulo da regra desejada (o backend compara trechos do texto).`,
+      `Rótulos das regras: ${labels}.`,
       hasDefault
-        ? `Escalação geral (sem unidade específica): chame sem argumentos ou com reason="escalacao".`
-        : `Sempre envie reason com o nome da unidade.`,
+        ? `Escalação geral (sem unidade específica): use reason="escalacao" ou texto que não case com nenhuma regra acima.`
+        : `Sempre envie reason descrevendo a unidade (não chame com objeto vazio {}).`,
     ].join(" ");
   } else {
     // Sem rules: atribuição simples para o padrão configurado

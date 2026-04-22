@@ -330,10 +330,21 @@ export function CreateToolDialog({ open, onOpenChange }: Props) {
             <TabsContent value="params">
               <Textarea
                 {...register("parameters_json")}
-                placeholder='{ "type": "object", "properties": { "email": { "type": "string" } } }'
+                placeholder={
+                  toolType === "chatwoot_assign"
+                    ? '{ "type": "object", "required": ["reason"], "properties": { "reason": { "type": "string", "description": "Unidade ou escalacao" } } }'
+                    : '{ "type": "object", "properties": { "email": { "type": "string" } } }'
+                }
                 className="min-h-[120px] font-mono text-xs bg-background"
               />
-              <p className="mt-1 text-[10px] text-muted-foreground">JSON Schema dos parâmetros que o LLM pode enviar</p>
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                JSON Schema dos parâmetros que o LLM pode enviar
+                {toolType === "chatwoot_assign" ? (
+                  <span className="block mt-0.5">
+                    Chatwoot com regras por unidade: inclua <code className="text-[9px]">reason</code> obrigatório — o backend casa com os rótulos da aba Config de Execução.
+                  </span>
+                ) : null}
+              </p>
             </TabsContent>
             <TabsContent value="exec">
               <Textarea
