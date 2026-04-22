@@ -13,6 +13,7 @@ import { SuiteGalleryMediaUpload } from "./SuiteGalleryMediaUpload";
 import { SuiteGalleryFormDialog } from "./SuiteGalleryFormDialog";
 import { useUpdateSuiteGallery } from "@/hooks/useSuiteGalleries";
 import { useTenantContext } from "@/contexts/TenantContext";
+import { normalizeSuiteGalleryMediaUrl } from "@/lib/suite-gallery-display";
 import type { SuiteGallery, SuiteGalleryMedia } from "@/types/database";
 
 type Props = {
@@ -120,7 +121,7 @@ export function SuiteGalleryManageDialog({ gallery, open, onOpenChange }: Props)
                 >
                   {item.type === "photo" ? (
                     <img
-                      src={item.url}
+                      src={normalizeSuiteGalleryMediaUrl(item.url)}
                       alt=""
                       className="h-full w-full object-cover cursor-zoom-in transition-transform duration-200 group-hover:scale-105"
                       onClick={() => setLightbox(item)}
@@ -130,7 +131,7 @@ export function SuiteGalleryManageDialog({ gallery, open, onOpenChange }: Props)
                       className="relative h-full w-full cursor-pointer"
                       onClick={() => setLightbox(item)}
                     >
-                      <video src={item.url} className="h-full w-full object-cover" muted playsInline />
+                      <video src={normalizeSuiteGalleryMediaUrl(item.url)} className="h-full w-full object-cover" muted playsInline />
                       <div className="absolute inset-0 flex items-center justify-center bg-black/30 transition-opacity group-hover:bg-black/50">
                         <Video className="h-10 w-10 text-white/90" />
                       </div>
@@ -199,13 +200,13 @@ export function SuiteGalleryManageDialog({ gallery, open, onOpenChange }: Props)
           </DialogHeader>
           {lightbox?.type === "photo" ? (
             <img
-              src={lightbox.url}
+              src={normalizeSuiteGalleryMediaUrl(lightbox.url)}
               alt=""
               className="max-h-[85vh] w-full object-contain rounded-lg"
             />
           ) : lightbox?.type === "video" ? (
             <video
-              src={lightbox.url}
+              src={normalizeSuiteGalleryMediaUrl(lightbox.url)}
               controls
               autoPlay
               className="max-h-[85vh] w-full rounded-lg"

@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Camera, Video, Loader2, X } from "lucide-react";
 import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
+import { normalizeSuiteGalleryMediaUrl } from "@/lib/suite-gallery-display";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { SuiteGalleryMedia } from "@/types/database";
@@ -30,7 +31,8 @@ async function uploadFile(
   const { error } = await supabase.storage.from("suite-galleries").upload(path, file, { upsert: true });
   if (error) throw error;
   const { data } = supabase.storage.from("suite-galleries").getPublicUrl(path);
-  return `${data.publicUrl}?t=${Date.now()}`;
+  const base = normalizeSuiteGalleryMediaUrl(data.publicUrl);
+  return `${base}?t=${Date.now()}`;
 }
 
 export function SuiteGalleryMediaUpload({
@@ -117,10 +119,10 @@ export function SuiteGalleryMediaUpload({
             className="group relative aspect-square overflow-hidden rounded-xl border border-border bg-muted/20"
           >
             {item.type === "photo" ? (
-              <img src={item.url} alt="" className="h-full w-full object-cover" />
+              <img src={normalizeSuiteGalleryMediaUrl(item.url)} alt="" className="h-full w-full object-cover" />
             ) : (
               <div className="relative h-full w-full">
-                <video src={item.url} className="h-full w-full object-cover" muted playsInline />
+                <video src={normalizeSuiteGalleryMediaUrl(item.url)} className="h-full w-full object-cover" muted playsInline />
                 <div className="absolute inset-0 flex items-center justify-center bg-black/30">
                   <Video className="h-8 w-8 text-white/80" />
                 </div>
