@@ -168,6 +168,16 @@ async function build() {
     for (const [k, v] of Object.entries(request.headers)) {
       if (v && !["host", "connection", "content-length"].includes(k.toLowerCase())) headers[k] = Array.isArray(v) ? v[0] : v;
     }
+
+    // Storage: <img src="…/supabase-proxy/storage/…"> não envia apikey nem Authorization.
+    // Vários gateways Supabase exigem apikey (e por vezes Bearer anon) mesmo em buckets públicos.
+    const nexusAnon = process.env.NEXUS_DB_ANON_KEY?.trim();
+    if (nexusAnon && /\/storage\/v1\//.test(suffix)) {
+      const lower = new Set(Object.keys(headers).map((k) => k.toLowerCase()));
+      if (!lower.has("apikey")) headers.apikey = nexusAnon;
+      if (!lower.has("authorization")) headers.Authorization = `Bearer ${nexusAnon}`;
+    }
+
     try {
       const body =
         ["POST", "PUT", "PATCH"].includes(request.method) && request.body !== undefined
@@ -211,6 +221,12 @@ async function build() {
       }
 
       let text = await res.text();
+      if (!res.ok && storageObjectPath && (request.method === "GET" || request.method === "HEAD")) {
+        request.log.warn(
+          { status: res.status, suffix: suffix.slice(0, 220), contentType },
+          "supabase-proxy: Storage GET/HEAD falhou — confira bucket suite-galleries, path e se NEXUS_DB_URL é o mesmo projeto onde rodou o SQL"
+        );
+      }
       // Supabase auth client espera JSON; corpo vazio ou HTML causa "Unexpected end of JSON input"
       const isAuthPath = /\/auth\/v1\//.test(suffix);
       const isEmpty = !text || !text.trim();
