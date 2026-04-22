@@ -189,6 +189,9 @@ async function build() {
               typeof request.headers["content-type"] === "string" ? request.headers["content-type"] : undefined
             )
           : undefined;
+
+      // Uploads de Storage exigem content-length correto — o fetch do Node não o calcula automaticamente para Uint8Array.
+      if (body instanceof Uint8Array) headers["content-length"] = String(body.byteLength);
       const res = await fetch(targetUrl, { method: request.method, headers, body: body as RequestInit["body"] });
       const contentType = (res.headers.get("content-type") || "").toLowerCase();
       const storageObjectPath = /\/storage\/v1\/object\//.test(suffix);
