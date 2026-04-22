@@ -1491,9 +1491,12 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           const leadHint = buildLeadHint(messagesToUse, leadLabelActiveForTools);
 
           const staticDispatcherPrompt = getDispatcherPrompt(tenantSlug, hasCalendarTool) + dispatcherDateContext;
-          const contactNameHint = trustedContactName
-            ? `\n\n[NOME DO CLIENTE VALIDADO NO CHATWOOT/CRM]\nUse o nome "${trustedContactName}" de forma natural. NÃO pergunte "Como posso te chamar?" a menos que o cliente sinalize que esse não é o nome dele.`
-            : "";
+          // Autoescola Ideal (Bia): o prompt exige usar nome **somente** o que o cliente escreveu na conversa.
+          // O CRM/Chatwoot pode estar errado, desatualizado ou repetido entre contatos — não injetar nome “validado”.
+          const contactNameHint =
+            !isAutoescolaIdeal && trustedContactName
+              ? `\n\n[NOME DO CLIENTE VALIDADO NO CHATWOOT/CRM]\nUse o nome "${trustedContactName}" de forma natural. NÃO pergunte "Como posso te chamar?" a menos que o cliente sinalize que esse não é o nome dele.`
+              : "";
           const hintsBlock = [entityHint, cepHint, assignHint, leadHint, schedulingHint, omnibeesLinkHint, contactNameHint].filter(Boolean).join("");
           const messagesForDispatcher = promptCachingEnabled && hintsBlock && messagesToUse.length > 0
             ? (() => {
@@ -2046,7 +2049,9 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 convFullContent.toLowerCase().includes("como posso estar lhe chamando") ||
                 convFullContent.toLowerCase().includes("como posso te chamar") ||
                 convFullContent.toLowerCase().includes("como prefere ser chamad");
-              const clientAlreadyGaveName = userHasProvidedNameInMessages(messagesToUse) || !!trustedContactName;
+              const clientAlreadyGaveName =
+                userHasProvidedNameInMessages(messagesToUse) ||
+                (!isAutoescolaIdeal && !!trustedContactName);
               const isSandbox = !chatwoot_conversation_id;
               const shouldAddNameQuestion = isFirstContact && nameQuestion && !alreadyHasNameQuestion && !clientAlreadyGaveName;
               if (shouldAddNameQuestion && (isSandbox || !hasWelcomeVideo)) {
@@ -2416,7 +2421,11 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               content.toLowerCase().includes("como posso estar lhe chamando") ||
               content.toLowerCase().includes("como posso te chamar") ||
               content.toLowerCase().includes("como prefere ser chamad");
-            const clientAlreadyGaveNameSingle = userHasProvidedNameInMessages(messagesToUse) || !!trustedContactName;
+            const isAutoescolaIdealSingle =
+              tenantSlug === "ideal" || tenantSlug === "autoescola-ideal" || tenantSlug === "auto-escola-ideal";
+            const clientAlreadyGaveNameSingle =
+              userHasProvidedNameInMessages(messagesToUse) ||
+              (!isAutoescolaIdealSingle && !!trustedContactName);
             const isSandboxSingle = !chatwoot_conversation_id;
             const shouldAddNameQuestionSingle = isFirstContact && nameQuestionSingle && !alreadyHasNameQuestionSingle && !clientAlreadyGaveNameSingle;
             if (shouldAddNameQuestionSingle && (isSandboxSingle || !hasWelcomeVideoSingle)) {
