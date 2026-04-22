@@ -6,6 +6,7 @@ import { runOmnibeesAvailabilityQuery } from "../services/omnibees-availability.
 import { runFindNearestUnit } from "../services/find-nearest-unit.js";
 import { formatDateBR } from "../utils/agendaNotification.js";
 import { getChatwootAuthHeaders } from "../services/delivery.js";
+import { requireAuthenticated } from "../services/authorization.js";
 
 export async function toolsRoutes(fastify: FastifyInstance) {
   fastify.post("/tools/fipe", async (req: FastifyRequest, reply: FastifyReply) => {
@@ -63,6 +64,9 @@ export async function toolsRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
+      const auth = await requireAuthenticated(req, reply);
+      if (!auth) return;
+
       const nexusAuth = (req.headers["x-nexus-auth"] as string) || "";
       const supabase = createNexusClient(nexusAuth);
 
@@ -114,7 +118,23 @@ export async function toolsRoutes(fastify: FastifyInstance) {
             result = { error: 'No URL provided. Pass {"url": "https://..."}' };
             break;
           }
-          const response = await fetch(targetUrl, {
+          try {
+            const parsedUrl = new URL(targetUrl as string);
+            if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+              result = { error: "Protocolo não permitido. Use http:// ou https://" };
+              break;
+            }
+            const host = parsedUrl.hostname.toLowerCase();
+            const blocked = /^(localhost|127\.|0\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|::1|fc00:|fe80:)/.test(host);
+            if (blocked) {
+              result = { error: "URL aponta para rede interna — não permitido" };
+              break;
+            }
+          } catch {
+            result = { error: "URL inválida" };
+            break;
+          }
+          const response = await fetch(targetUrl as string, {
             headers: { "User-Agent": "NexusAI-Bot/1.0" },
           });
           if (!response.ok) {
