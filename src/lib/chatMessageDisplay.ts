@@ -145,13 +145,82 @@ export function deduplicateRepeatedContent(text: string): string {
   return t;
 }
 
+/** Trecho `![alt](url)` com índices no string original (url sem o parêntese de fecho). */
+export type MarkdownImageSpan = { start: number; end: number; url: string };
+
+/** Compara URLs de imagem (incl. variação só de encoding) para deduplicar grelha vs. Markdown. */
+export function imageUrlsEquivalent(a: string, b: string): boolean {
+  if (a === b) return true;
+  try {
+    return decodeURIComponent(a) === decodeURIComponent(b);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Fim do URL em `![...](URL)` usando parênteses balanceados dentro do destino
+ * (evita truncar em `)` válido no path, ex.: `arquivo(1).jpg`).
+ */
+function consumeMdImageUrl(s: string, urlStart: number): { url: string; endExclusive: number } | null {
+  if (urlStart >= s.length) return null;
+  let depth = 0;
+  for (let p = urlStart; p < s.length; p++) {
+    const c = s[p];
+    if (c === "(") depth++;
+    else if (c === ")") {
+      if (depth > 0) depth--;
+      else return { url: s.slice(urlStart, p).trim(), endExclusive: p + 1 };
+    }
+  }
+  return null;
+}
+
+export function collectMarkdownImageSpans(content: string): MarkdownImageSpan[] {
+  const spans: MarkdownImageSpan[] = [];
+  let pos = 0;
+  while (pos < content.length) {
+    const i = content.indexOf("![", pos);
+    if (i === -1) break;
+    const j = content.indexOf("](", i + 2);
+    if (j === -1) {
+      pos = i + 2;
+      continue;
+    }
+    let urlStart = j + 2;
+    while (urlStart < content.length && /\s/.test(content[urlStart])) urlStart++;
+    if (urlStart >= content.length) break;
+    if (!content.startsWith("http://", urlStart) && !content.startsWith("https://", urlStart)) {
+      pos = j + 2;
+      continue;
+    }
+    const consumed = consumeMdImageUrl(content, urlStart);
+    if (!consumed) break;
+    spans.push({ start: i, end: consumed.endExclusive, url: consumed.url });
+    pos = consumed.endExclusive;
+  }
+  return spans;
+}
+
+export function stripMarkdownImageSpans(content: string, spans: MarkdownImageSpan[]): string {
+  if (!spans.length) return content;
+  const sorted = [...spans].sort((a, b) => b.start - a.start);
+  let text = content;
+  for (const sp of sorted) {
+    if (sp.start < 0 || sp.end > text.length || sp.end < sp.start) continue;
+    text = text.slice(0, sp.start) + text.slice(sp.end);
+  }
+  return text;
+}
+
 export function extractImages(content: string): { text: string; images: string[] } {
-  const imgRegex = /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g;
+  const headerStripped = stripChatwootHeader(content);
+  const spans = collectMarkdownImageSpans(headerStripped);
   const images: string[] = [];
-  const text = stripChatwootHeader(content).replace(imgRegex, (_, _alt, url) => {
-    images.push(url);
-    return "";
-  }).trim();
+  for (const sp of spans) {
+    if (!images.includes(sp.url)) images.push(sp.url);
+  }
+  const text = stripMarkdownImageSpans(headerStripped, spans).trim();
   return { text, images };
 }
 
