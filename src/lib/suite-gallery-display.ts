@@ -3,11 +3,24 @@ import type { SuiteGallery, SuiteGalleryMedia } from "@/types/database";
 const SUPABASE_PROXY_MARKER = "/api/supabase-proxy/";
 
 /**
+ * Buckets públicos do Supabase respondem em …/storage/v1/object/public/{bucket}/…
+ * URLs sem o segmento `public` (ex.: …/object/suite-galleries/…) falham no gateway.
+ * Não altera rotas da API (sign, upload, move, etc.).
+ */
+export function ensureSupabaseStoragePublicObjectPath(url: string): string {
+  if (!url.includes("/storage/v1/object/")) return url;
+  return url.replace(
+    /\/storage\/v1\/object\/(?!public\/|sign\/|authenticated\/|upload\/|info\/|list-v2\/|list\/|move|copy)/g,
+    "/storage/v1/object/public/"
+  );
+}
+
+/**
  * URLs de Storage via proxy são gravadas com a origem do momento (ex.: http://localhost:8080 em dev).
  * Em produção isso vira 404 / mixed content. Reaplica sempre a origem atual do browser para o mesmo path.
  */
 export function normalizeSuiteGalleryMediaUrl(url: string): string {
-  const t = url.trim();
+  const t = ensureSupabaseStoragePublicObjectPath(url.trim());
   if (!t || typeof window === "undefined") return t;
   const ix = t.toLowerCase().indexOf(SUPABASE_PROXY_MARKER);
   if (ix === -1) return t;

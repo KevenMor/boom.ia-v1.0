@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { fixSuiteGalleryStorageUrls } from "../lib/supabase-storage-public-url.js";
 import { createNexusClient } from "../services/supabase.js";
 import {
   canAccessTenant,
@@ -63,7 +64,8 @@ export async function suiteGalleriesRoutes(fastify: FastifyInstance) {
     const { data, error, count } = await query;
     if (error) throw error;
 
-    return reply.send({ data: data ?? [], total: count ?? 0 });
+    const rows = (data ?? []).map((row) => fixSuiteGalleryStorageUrls(row as Record<string, unknown>));
+    return reply.send({ data: rows, total: count ?? 0 });
   });
 
   // GET /api/suite-galleries/:id
@@ -86,7 +88,7 @@ export async function suiteGalleriesRoutes(fastify: FastifyInstance) {
       return reply.status(403).send({ error: "forbidden_tenant_access" });
     }
 
-    return reply.send(data);
+    return reply.send(fixSuiteGalleryStorageUrls(data as Record<string, unknown>));
   });
 
   // POST /api/suite-galleries
@@ -124,7 +126,7 @@ export async function suiteGalleriesRoutes(fastify: FastifyInstance) {
       .single();
 
     if (error) throw error;
-    return reply.send(data);
+    return reply.send(fixSuiteGalleryStorageUrls(data as Record<string, unknown>));
   });
 
   // PATCH /api/suite-galleries/:id
@@ -174,7 +176,7 @@ export async function suiteGalleriesRoutes(fastify: FastifyInstance) {
       .single();
 
     if (error) throw error;
-    return reply.send(data);
+    return reply.send(fixSuiteGalleryStorageUrls(data as Record<string, unknown>));
   });
 
   // DELETE /api/suite-galleries/:id

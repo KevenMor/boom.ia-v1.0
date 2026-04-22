@@ -6,6 +6,7 @@ import { runFindNearestUnit } from "./find-nearest-unit.js";
 import { buildHandoffNotification, containsInstitutionNameToken, isBlockedAsName } from "../utils/agendaNotification.js";
 import { sendNotificationToGroup } from "../utils/sendNotification.js";
 import { addLeadLabelToConversation } from "./chatwoot-labels.js";
+import { ensureSupabaseStoragePublicObjectPath } from "../lib/supabase-storage-public-url.js";
 
 export interface ToolExecutionResult {
   success: boolean;
@@ -1684,13 +1685,17 @@ async function executeSuiteGalleryQuery(
     const formatted = (galleries ?? []).map((g) => {
       const row = g as typeof g & { llm_media_guidance?: string | null };
       const mediaArr: MediaItem[] = Array.isArray(g.media_urls) ? (g.media_urls as MediaItem[]) : [];
-      const photos = mediaArr.filter((m) => m.type === "photo");
-      const videos = mediaArr.filter((m) => m.type === "video");
+      const mediaArrFixed = mediaArr.map((m) => ({
+        ...m,
+        url: typeof m.url === "string" ? ensureSupabaseStoragePublicObjectPath(m.url) : m.url,
+      }));
+      const photos = mediaArrFixed.filter((m) => m.type === "photo");
+      const videos = mediaArrFixed.filter((m) => m.type === "video");
 
-      const allPhotoUrls = [
-        ...(g.cover_image_url ? [g.cover_image_url] : []),
-        ...photos.map((m) => m.url),
-      ];
+      const coverRaw = typeof g.cover_image_url === "string" ? g.cover_image_url.trim() : "";
+      const coverFixed = coverRaw ? ensureSupabaseStoragePublicObjectPath(coverRaw) : null;
+
+      const allPhotoUrls = [...(coverFixed ? [coverFixed] : []), ...photos.map((m) => m.url)];
       const uniqueUrls = [...new Set(allPhotoUrls)];
       const photos_markdown = uniqueUrls.map((url) => `![${g.name}](${url})`).join("\n");
 
@@ -1706,7 +1711,7 @@ async function executeSuiteGalleryQuery(
         orientacao_envio_midias: orientacao,
         total_fotos: uniqueUrls.length,
         total_videos: videos.length,
-        cover_image_url: g.cover_image_url,
+        cover_image_url: coverFixed ?? g.cover_image_url,
         photos_markdown,
         videos: videos.map((v) => ({ url: v.url, caption: v.caption })),
       };
