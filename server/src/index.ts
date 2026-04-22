@@ -120,6 +120,33 @@ async function build() {
 
   fastify.get("/health", async () => ({ ok: true, timestamp: new Date().toISOString() }));
 
+  type ReqLog = { warn: (obj: Record<string, unknown>, msg: string) => void };
+
+  /** Corpo a repassar ao Supabase: uploads de Storage têm de ir como bytes, nunca JSON.stringify(Buffer). */
+  function buildSupabaseProxyForwardBody(
+    log: ReqLog,
+    method: string,
+    suffix: string,
+    raw: unknown,
+    contentType: string | undefined
+  ): string | Uint8Array | undefined {
+    if (!["POST", "PUT", "PATCH"].includes(method) || raw === undefined) return undefined;
+    if (Buffer.isBuffer(raw)) return new Uint8Array(raw);
+    if (raw instanceof Uint8Array) return raw;
+    if (raw instanceof ArrayBuffer) return new Uint8Array(raw);
+    if (typeof raw === "string") return raw;
+    const storageObjectWrite = /\/storage\/v1\/object\//.test(suffix);
+    if (storageObjectWrite) {
+      // Se não é Buffer, o parser pode ter errado — JSON quebra upload e o Storage costuma responder 4xx
+      log.warn(
+        { method, contentType, bodyType: typeof raw },
+        "supabase-proxy: storage write com body não-binário; verifique Content-Type no cliente"
+      );
+      return undefined;
+    }
+    return JSON.stringify(raw);
+  }
+
   // Proxy Supabase (auth, rest) para evitar CORS: frontend chama /api/supabase-proxy/* -> NEXUS_DB_URL/*
   // Sempre registra a rota: sem NEXUS_DB_URL devolve JSON (evita corpo vazio → "Unexpected end of JSON input" no cliente).
   fastify.all("/api/supabase-proxy/*", async (request, reply) => {
@@ -142,10 +169,16 @@ async function build() {
       if (v && !["host", "connection", "content-length"].includes(k.toLowerCase())) headers[k] = Array.isArray(v) ? v[0] : v;
     }
     try {
-      let body: string | Uint8Array | undefined;
-      if (["POST", "PUT", "PATCH"].includes(request.method) && request.body !== undefined) {
-        body = Buffer.isBuffer(request.body) ? new Uint8Array(request.body) : JSON.stringify(request.body);
-      }
+      const body =
+        ["POST", "PUT", "PATCH"].includes(request.method) && request.body !== undefined
+          ? buildSupabaseProxyForwardBody(
+              request.log,
+              request.method,
+              suffix,
+              request.body,
+              typeof request.headers["content-type"] === "string" ? request.headers["content-type"] : undefined
+            )
+          : undefined;
       const res = await fetch(targetUrl, { method: request.method, headers, body: body as RequestInit["body"] });
       const contentType = (res.headers.get("content-type") || "").toLowerCase();
       const storageObjectPath = /\/storage\/v1\/object\//.test(suffix);
