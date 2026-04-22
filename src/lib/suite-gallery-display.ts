@@ -1,6 +1,7 @@
 import type { SuiteGallery, SuiteGalleryMedia } from "@/types/database";
 
 const SUPABASE_PROXY_MARKER = "/api/supabase-proxy/";
+const STORAGE_V1_MARKER = "/storage/v1/";
 
 /**
  * Buckets públicos do Supabase respondem em …/storage/v1/object/public/{bucket}/…
@@ -16,16 +17,43 @@ export function ensureSupabaseStoragePublicObjectPath(url: string): string {
 }
 
 /**
+ * Reescreve URLs de Storage para o proxy no domínio atual.
+ * Em produção o banco pode misturar: proxy antigo, host direto do Supabase, localhost de dev —
+ * tudo com `/storage/v1/` passa pelo mesmo-origin proxy (exceto signed/authenticated).
+ */
+export function normalizeSuiteGalleryMediaUrlForOrigin(url: string, pageOrigin: string): string {
+  const t = ensureSupabaseStoragePublicObjectPath(url.trim());
+  if (!t) return t;
+  const lower = t.toLowerCase();
+  if (lower.includes("/storage/v1/object/sign/") || lower.includes("/storage/v1/object/authenticated/")) {
+    return t;
+  }
+  try {
+    const u = new URL(t);
+    const idx = u.pathname.indexOf(STORAGE_V1_MARKER);
+    if (idx !== -1) {
+      const pathFromStorage = u.pathname.slice(idx) + u.search + u.hash;
+      const origin = pageOrigin.replace(/\/$/, "");
+      return `${origin}/api/supabase-proxy${pathFromStorage}`;
+    }
+  } catch {
+    /* URL relativa ou inválida */
+  }
+  const ix = lower.indexOf(SUPABASE_PROXY_MARKER);
+  if (ix === -1) return t;
+  const origin = pageOrigin.replace(/\/$/, "");
+  return `${origin}${t.slice(ix)}`;
+}
+
+/**
  * URLs de Storage via proxy são gravadas com a origem do momento (ex.: http://localhost:8080 em dev).
  * Em produção isso vira 404 / mixed content. Reaplica sempre a origem atual do browser para o mesmo path.
  */
 export function normalizeSuiteGalleryMediaUrl(url: string): string {
-  const t = ensureSupabaseStoragePublicObjectPath(url.trim());
-  if (!t || typeof window === "undefined") return t;
-  const ix = t.toLowerCase().indexOf(SUPABASE_PROXY_MARKER);
-  if (ix === -1) return t;
-  const pathAndQuery = t.slice(ix);
-  return `${window.location.origin}${pathAndQuery}`;
+  if (typeof window === "undefined") {
+    return ensureSupabaseStoragePublicObjectPath(url.trim());
+  }
+  return normalizeSuiteGalleryMediaUrlForOrigin(url, window.location.origin);
 }
 
 /** URL para miniatura do cartão: capa explícita ou primeira foto em media_urls. */
