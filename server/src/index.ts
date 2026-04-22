@@ -16,6 +16,7 @@ import { crmContactsRoutes } from "./routes/crm-contacts.js";
 import { calendarServicesRoutes } from "./routes/calendar-services.js";
 import { demoRoutes } from "./routes/demo.js";
 import { occurrencesRoutes } from "./routes/occurrences.js";
+import { suiteGalleriesRoutes } from "./routes/suite-galleries.js";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 
@@ -38,6 +39,8 @@ if (!process.env.GOOGLE_MAPS_API_KEY) {
 async function build() {
   const isProduction = process.env.NODE_ENV === "production";
   const fastify = Fastify({
+    // Storage bucket suite-galleries (Galeria): até 20 MB fotos / 200 MB vídeos no proxy Supabase
+    bodyLimit: 220 * 1024 * 1024,
     logger: isProduction
       ? { level: "warn", serializers: { req: (req) => ({ method: req.method, url: req.url }), res: (res) => ({ statusCode: res.statusCode }) } }
       : true,
@@ -112,51 +115,102 @@ async function build() {
   fastify.register(crmContactsRoutes, { prefix: "/api" });
   fastify.register(calendarServicesRoutes, { prefix: "/api" });
   fastify.register(occurrencesRoutes, { prefix: "/api" });
+  fastify.register(suiteGalleriesRoutes, { prefix: "/api" });
   fastify.register(demoRoutes, { prefix: "/api" });
 
   fastify.get("/health", async () => ({ ok: true, timestamp: new Date().toISOString() }));
 
   // Proxy Supabase (auth, rest) para evitar CORS: frontend chama /api/supabase-proxy/* -> NEXUS_DB_URL/*
-  const nexusUrl = process.env.NEXUS_DB_URL;
-  if (nexusUrl) {
+  // Sempre registra a rota: sem NEXUS_DB_URL devolve JSON (evita corpo vazio → "Unexpected end of JSON input" no cliente).
+  fastify.all("/api/supabase-proxy/*", async (request, reply) => {
+    const nexusUrl = process.env.NEXUS_DB_URL?.trim();
+    if (!nexusUrl) {
+      return reply.code(503).send({
+        error: "configuration_error",
+        error_description:
+          "NEXUS_DB_URL não está definido no servidor (ex.: server/.env). O login do painel depende deste proxy — veja docker/LOGIN-CORS-SUPABASE.md",
+      });
+    }
+
     const base = nexusUrl.replace(/\/$/, "");
-    fastify.all("/api/supabase-proxy/*", async (request, reply) => {
-      const suffix = (request.url.split("?")[0].replace(/^\/api\/supabase-proxy\/?/, "") || "") + (request.url.includes("?") ? "?" + request.url.split("?")[1] : "");
-      const targetUrl = `${base}/${suffix}`.replace(/([^:]\/)\/+/g, "$1");
-      const headers: Record<string, string> = {};
-      for (const [k, v] of Object.entries(request.headers)) {
-        if (v && !["host", "connection", "content-length"].includes(k.toLowerCase())) headers[k] = Array.isArray(v) ? v[0] : v;
+    const suffix =
+      (request.url.split("?")[0].replace(/^\/api\/supabase-proxy\/?/, "") || "") +
+      (request.url.includes("?") ? "?" + request.url.split("?")[1] : "");
+    const targetUrl = `${base}/${suffix}`.replace(/([^:]\/)\/+/g, "$1");
+    const headers: Record<string, string> = {};
+    for (const [k, v] of Object.entries(request.headers)) {
+      if (v && !["host", "connection", "content-length"].includes(k.toLowerCase())) headers[k] = Array.isArray(v) ? v[0] : v;
+    }
+    try {
+      let body: string | Uint8Array | undefined;
+      if (["POST", "PUT", "PATCH"].includes(request.method) && request.body !== undefined) {
+        body = Buffer.isBuffer(request.body) ? new Uint8Array(request.body) : JSON.stringify(request.body);
       }
-      try {
-        let body: string | Uint8Array | undefined;
-        if (["POST", "PUT", "PATCH"].includes(request.method) && request.body !== undefined) {
-          body = Buffer.isBuffer(request.body) ? new Uint8Array(request.body) : JSON.stringify(request.body);
-        }
-        const res = await fetch(targetUrl, { method: request.method, headers, body: body as RequestInit["body"] });
-        let text = await res.text();
-        reply.code(res.status);
-        res.headers.forEach((v, k) => { if (!["transfer-encoding"].includes(k.toLowerCase())) reply.header(k, v); });
-        // Supabase auth client espera JSON; corpo vazio ou HTML causa "Unexpected end of JSON input"
-        const isAuthPath = /\/auth\/v1\//.test(suffix);
-        const isEmpty = !text || !text.trim();
-        const looksLikeHtml = text.trim().toLowerCase().startsWith("<!");
-        if (isAuthPath && (isEmpty || looksLikeHtml)) {
+      const res = await fetch(targetUrl, { method: request.method, headers, body: body as RequestInit["body"] });
+      const contentType = (res.headers.get("content-type") || "").toLowerCase();
+      const storageObjectPath = /\/storage\/v1\/object\//.test(suffix);
+      const binaryByMime =
+        contentType.startsWith("image/") ||
+        contentType.startsWith("video/") ||
+        contentType.startsWith("audio/") ||
+        contentType.startsWith("font/") ||
+        contentType === "application/octet-stream" ||
+        contentType.startsWith("application/pdf");
+      // Só GET/HEAD em object público devolvem ficheiro binário. POST/PUT de upload respondem JSON — não usar arrayBuffer aí.
+      const storageObjectRead =
+        storageObjectPath &&
+        res.ok &&
+        (request.method === "GET" || request.method === "HEAD");
+      // Imagens/vídeos públicos do Storage: NUNCA usar res.text() no binário — UTF-8 corrompe bytes e o <img> fica partido.
+      const passThroughBinary = binaryByMime || storageObjectRead;
+
+      reply.code(res.status);
+      res.headers.forEach((v, k) => {
+        const low = k.toLowerCase();
+        if (low === "transfer-encoding") return;
+        if (passThroughBinary && (low === "content-length" || low === "content-encoding")) return;
+        reply.header(k, v);
+      });
+
+      if (passThroughBinary) {
+        const buf = Buffer.from(await res.arrayBuffer());
+        return reply.send(buf);
+      }
+
+      let text = await res.text();
+      // Supabase auth client espera JSON; corpo vazio ou HTML causa "Unexpected end of JSON input"
+      const isAuthPath = /\/auth\/v1\//.test(suffix);
+      const isEmpty = !text || !text.trim();
+      const looksLikeHtml = text.trim().toLowerCase().startsWith("<!");
+      if (isAuthPath && (isEmpty || looksLikeHtml)) {
+        reply.header("content-type", "application/json");
+        text = JSON.stringify({
+          error: isEmpty ? "empty_response" : "invalid_response",
+          error_description: isEmpty
+            ? (res.ok ? "Resposta vazia do Supabase" : `Supabase retornou ${res.status} sem corpo`)
+            : `Supabase retornou HTML em vez de JSON (status ${res.status}). Verifique se o Supabase está acessível.`,
+        });
+      } else if (isAuthPath && !isEmpty && !looksLikeHtml) {
+        try {
+          JSON.parse(text);
+        } catch {
           reply.header("content-type", "application/json");
           text = JSON.stringify({
-            error: isEmpty ? "empty_response" : "invalid_response",
-            error_description: isEmpty
-              ? (res.ok ? "Resposta vazia do Supabase" : `Supabase retornou ${res.status} sem corpo`)
-              : `Supabase retornou HTML em vez de JSON (status ${res.status}). Verifique se o Supabase está acessível.`,
+            error: "invalid_json",
+            error_description: `Resposta do Supabase não é JSON válido (status ${res.status}).`,
           });
         }
-        return reply.send(text);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        request.log.error({ err, targetUrl }, "Supabase proxy fetch failed");
-        return reply.code(502).send({ error: "Supabase proxy error", message: msg });
       }
-    });
-  }
+      return reply.send(text);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      request.log.error({ err, targetUrl }, "Supabase proxy fetch failed");
+      return reply.code(502).send({
+        error: "proxy_fetch_failed",
+        error_description: `Falha ao contactar o Supabase: ${msg}`,
+      });
+    }
+  });
 
   fastify.get("/api/health/nexus", async (_req, reply) => {
     const url = process.env.NEXUS_DB_URL;

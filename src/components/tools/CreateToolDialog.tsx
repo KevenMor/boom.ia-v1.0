@@ -18,7 +18,7 @@ import { useTenants } from "@/hooks/useTenants";
 import { useAgents } from "@/hooks/useAgents";
 import { nexusDb } from "@/integrations/supabase/nexus-client";
 import { toast } from "sonner";
-import { Database, Globe, Server, Search, Car, MapPin, DollarSign, CalendarDays, Link, UserCheck, Bell, Building2 } from "lucide-react";
+import { Database, Globe, Server, Search, Car, MapPin, DollarSign, CalendarDays, Link, UserCheck, Bell, Building2, Images } from "lucide-react";
 import type { ToolType } from "@/types/database";
 
 const TOOL_TYPE_META: Record<ToolType, { label: string; icon: any; description: string }> = {
@@ -33,12 +33,13 @@ const TOOL_TYPE_META: Record<ToolType, { label: string; icon: any; description: 
   chatwoot_assign: { label: "Atribuir Agente", icon: UserCheck, description: "Atribui atendente humano e/ou equipe no Chatwoot" },
   send_notification: { label: "Notificação", icon: Bell, description: "Envia notificação (mensagem, webhook) em eventos" },
   omnibees_availability: { label: "Omnibees (hotel)", icon: Building2, description: "Disponibilidade e tarifas via motor Omnibees (HTML)" },
+  suite_gallery_query: { label: "Galeria", icon: Images, description: "Fotos e vídeos do painel Galeria do tenant (qualquer vertical)" },
 };
 
 const schema = z.object({
   name: z.string().min(2, "Nome obrigatório (snake_case)"),
   description: z.string().min(3, "Descrição obrigatória para o LLM"),
-  tool_type: z.enum(["sql_query", "web_scraper", "api_rest", "rag_search", "inventory_query", "nearest_unit", "fipe_query", "calendar_query", "chatwoot_assign", "send_notification", "omnibees_availability"]),
+  tool_type: z.enum(["sql_query", "web_scraper", "api_rest", "rag_search", "inventory_query", "nearest_unit", "fipe_query", "calendar_query", "chatwoot_assign", "send_notification", "omnibees_availability", "suite_gallery_query"]),
   tenant_id: z.string().optional(),
   endpoint: z.string().optional(),
   parameters_json: z.string().optional(),
@@ -156,6 +157,7 @@ export function CreateToolDialog({ open, onOpenChange }: Props) {
       case "chatwoot_assign": return '{\n  "assignee_id": 15,\n  "team_id": null\n}';
       case "send_notification": return '{\n  "channel": "chatwoot_message",\n  "conversation_id": 123\n}';
       case "omnibees_availability": return '{\n  "chain_id": "4486",\n  "hotel_id": "8164",\n  "currency_id": "16",\n  "lang": "pt-BR"\n}';
+      case "suite_gallery_query": return "{}";
     }
   };
 

@@ -474,6 +474,7 @@ async function executeOmnibeesAvailability(
       result: {
         summaryText: data.summaryText,
         bookingUrl: data.bookingUrl,
+        hotelListingUrl: data.hotelListingUrl,
         hotel: data.hotel,
         checkIn: data.checkIn,
         checkOut: data.checkOut,
@@ -1459,6 +1460,9 @@ export async function executeTool(
     case "rag_search":
       return executeRagSearch(supabase, tool, args, agentId);
 
+    case "suite_gallery_query":
+      return executeSuiteGalleryQuery(supabase, agentId, args);
+
     case "web_scraper":
     case "api_rest":
     case "sql_query":
@@ -1577,5 +1581,181 @@ async function executeRagSearch(
       result: null,
       error: err?.message || "RAG search failed",
     };
+  }
+}
+
+/** Palavras só de intenção genérica ("fotos das suítes", "manda quartos") → sem filtro ILIKE; listar catálogo. */
+const BROAD_GALLERY_TOKENS = new Set(
+  [
+    "me", "envie", "enviar", "manda", "mandar", "mande", "quero", "queremos", "quer", "ver", "veja", "mostra", "mostrar",
+    "foto", "fotos", "imagem", "imagens", "das", "dos", "de", "do", "da", "d", "por", "favor", "pfv", "pf", "pfvr",
+    "alguma", "umas", "uma", "uns", "um", "pra", "pro", "para", "aqui", "tem", "tenho", "temos", "gostaria",
+    "suite", "suites", "quarto", "quartos", "acomodacao", "acomodacoes", "hospedagem", "alojamento", "hotel", "resort",
+    "galeria", "album", "categorias", "categoria", "tipo", "tipos", "nos", "nós", "vc", "voce", "voces", "vocês", "o", "os",
+    "as", "boa", "bom", "boas", "noite", "tarde", "dia", "cliente", "algum", "alguns", "todas", "todos", "sobre",
+  ].map((w) => normalizeForSearch(w))
+);
+
+function isBroadGallerySearchTerm(raw: string): boolean {
+  const t = normalizeForSearch(raw);
+  if (!t) return true;
+  const tokens = t.split(/[^a-z0-9]+/).filter((x) => x.length > 0);
+  if (tokens.length === 0) return true;
+  return tokens.every((tok) => BROAD_GALLERY_TOKENS.has(tok));
+}
+
+/** Evita que `%` / `_` no texto virem curingas do ILIKE. */
+function sanitizeIlikeFragment(raw: string): string {
+  return raw.replace(/%/g, "").replace(/_/g, "").trim();
+}
+
+async function executeSuiteGalleryQuery(
+  supabase: ReturnType<typeof createNexusClient>,
+  agentId: string,
+  args: Record<string, unknown>
+): Promise<ToolExecutionResult> {
+  try {
+    const { data: agent } = await supabase
+      .from("agents")
+      .select("tenant_id")
+      .eq("id", agentId)
+      .single();
+
+    const tenantId = agent?.tenant_id;
+    if (!tenantId) {
+      return { success: false, result: null, error: "Agent tenant not found" };
+    }
+
+    const nomeSuiteRaw = String(
+      args.nome ??
+        args.nome_galeria ??
+        args.filtro ??
+        args.q ??
+        args.nome_suite ??
+        args.suite_name ??
+        ""
+    ).trim();
+
+    const listAllCatalog = isBroadGallerySearchTerm(nomeSuiteRaw);
+    const nomeSuiteForFilter = listAllCatalog ? "" : sanitizeIlikeFragment(nomeSuiteRaw);
+
+    const baseSelect =
+      "id, name, description, cover_image_url, media_urls, display_order, llm_media_guidance" as const;
+
+    let query = supabase
+      .from("suite_galleries")
+      .select(baseSelect)
+      .eq("tenant_id", tenantId)
+      .order("display_order", { ascending: true });
+
+    if (nomeSuiteForFilter) {
+      query = query.ilike("name", `%${nomeSuiteForFilter}%`);
+    }
+
+    let { data: galleries, error } = await query.limit(10);
+    if (error) return { success: false, result: null, error: error.message };
+
+    let searchMissMessage: string | null = null;
+    if (!listAllCatalog && nomeSuiteForFilter && (galleries ?? []).length === 0) {
+      const { data: allGalleries, error: errAll } = await supabase
+        .from("suite_galleries")
+        .select(baseSelect)
+        .eq("tenant_id", tenantId)
+        .order("display_order", { ascending: true })
+        .limit(10);
+      if (errAll) return { success: false, result: null, error: errAll.message };
+      galleries = allGalleries ?? [];
+      const names = (galleries ?? []).map((g) => g.name).filter(Boolean);
+      searchMissMessage =
+        `A busca "${nomeSuiteRaw}" não encontrou nome cadastrado na galeria (acentos ou termo genérico vs. nome exato do painel). ` +
+        (names.length > 0
+          ? `Galerias disponíveis: ${names.join(", ")}. Liste essas opções ao cliente; quando ele escolher uma, chame a ferramenta de novo passando nome/nome_galeria com trecho do nome da galeria.`
+          : "Não há galerias cadastradas no painel.");
+    }
+
+    let broadCatalogMessage: string | null = null;
+    if (listAllCatalog && (galleries ?? []).length > 0) {
+      broadCatalogMessage =
+        "Pedido genérico (fotos de suítes, quartos, acomodação, álbum, etc.): use `galleries[].nome` abaixo como catálogo do painel. Não diga que não há fotos no resort — apresente os nomes das galerias e pergunte qual o cliente quer ver; em seguida chame a ferramenta de novo com o nome escolhido para obter o photos_markdown completo dessa galeria.";
+    }
+
+    type MediaItem = { url: string; type: string; caption?: string };
+
+    const formatted = (galleries ?? []).map((g) => {
+      const row = g as typeof g & { llm_media_guidance?: string | null };
+      const mediaArr: MediaItem[] = Array.isArray(g.media_urls) ? (g.media_urls as MediaItem[]) : [];
+      const photos = mediaArr.filter((m) => m.type === "photo");
+      const videos = mediaArr.filter((m) => m.type === "video");
+
+      const allPhotoUrls = [
+        ...(g.cover_image_url ? [g.cover_image_url] : []),
+        ...photos.map((m) => m.url),
+      ];
+      const uniqueUrls = [...new Set(allPhotoUrls)];
+      const photos_markdown = uniqueUrls.map((url) => `![${g.name}](${url})`).join("\n");
+
+      const orientacao =
+        typeof row.llm_media_guidance === "string" && row.llm_media_guidance.trim()
+          ? row.llm_media_guidance.trim()
+          : null;
+
+      return {
+        id: g.id,
+        nome: g.name,
+        descricao: g.description,
+        orientacao_envio_midias: orientacao,
+        total_fotos: uniqueUrls.length,
+        total_videos: videos.length,
+        cover_image_url: g.cover_image_url,
+        photos_markdown,
+        videos: videos.map((v) => ({ url: v.url, caption: v.caption })),
+      };
+    });
+
+    const ctxLead = [searchMissMessage, broadCatalogMessage].filter(Boolean).join("\n\n");
+    const hintPrefix = ctxLead ? `${ctxLead}\n\n` : "";
+
+    let hint: string;
+    if (formatted.length === 0) {
+      hint =
+        searchMissMessage ??
+        (listAllCatalog || !nomeSuiteRaw
+          ? "Nenhuma galeria cadastrada ainda no painel."
+          : `Nenhuma galeria encontrada com o nome "${nomeSuiteRaw}".`);
+    } else if (formatted.length === 1) {
+      const g0 = formatted[0] as (typeof formatted)[0] & { orientacao_envio_midias?: string | null };
+      hint =
+        hintPrefix +
+        `GALERIA ENCONTRADA: "${g0.nome}". Fotos disponíveis em photos_markdown. ` +
+        `NÃO inclua as fotos agora — primeiro descreva o conteúdo em texto. ` +
+        `Quando o cliente PEDIR ou CONFIRMAR que quer ver as fotos, inclua na resposta o bloco photos_markdown INTEGRAL (todas as linhas ![rótulo](url)), sem omitir fotos.` +
+        (g0.total_videos > 0
+          ? ` Esta galeria tem ${g0.total_videos} vídeo(s) — informe e forneça o link ao ser solicitado.`
+          : "") +
+        (g0.orientacao_envio_midias
+          ? `\n\nORIENTAÇÃO DO PAINEL (quando enviar mídias — prioridade): ${g0.orientacao_envio_midias}`
+          : "");
+    } else {
+      hint =
+        hintPrefix +
+        `${formatted.length} GALERIAS ENCONTRADAS. Liste os nomes das galerias em texto primeiro. ` +
+        `Quando o cliente ESCOLHER uma galeria específica ou PEDIR as fotos, inclua apenas o photos_markdown DESSA galeria (bloco integral, todas as linhas). ` +
+        `Nunca inclua fotos de todas as galerias de uma vez.` +
+        (formatted.some((x) => (x as { orientacao_envio_midias?: string | null }).orientacao_envio_midias)
+          ? " Cada item inclui orientacao_envio_midias quando o painel definiu regras — respeite por galeria."
+          : "");
+    }
+
+    return {
+      success: true,
+      result: {
+        galleries: formatted,
+        total: formatted.length,
+        _hint: hint,
+      },
+    };
+  } catch (e: unknown) {
+    const err = e as Error;
+    return { success: false, result: null, error: err?.message || "Suite gallery query failed" };
   }
 }

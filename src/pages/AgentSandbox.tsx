@@ -21,6 +21,7 @@ import {
 import { useAgents } from "@/hooks/useAgents";
 import { nexusDb } from "@/integrations/supabase/nexus-client";
 import { getApiBase, callAPI } from "@/lib/api-client";
+import { collectMarkdownImageSpans, stripMarkdownImageSpans, imageUrlsEquivalent } from "@/lib/chatMessageDisplay";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -81,12 +82,12 @@ function formatCaughtError(e: unknown): string {
 // Extract image URLs from message content
 function extractImages(content: string): { text: string; images: string[] } {
   const images: string[] = [];
-  const mdImgRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/gi;
-  let match;
-  while ((match = mdImgRegex.exec(content)) !== null) {
-    const url = match[1];
-    if (url && !images.includes(url) && isValidImageUrl(url)) images.push(url);
+  const mdSpans = collectMarkdownImageSpans(content);
+  for (const sp of mdSpans) {
+    if (sp.url && !images.includes(sp.url) && isValidImageUrl(sp.url)) images.push(sp.url);
   }
+  let text = stripMarkdownImageSpans(content, mdSpans);
+  let match;
   const bareImgRegex = /(?<!\()(https?:\/\/[^\s"'<>]+\.(?:jpg|jpeg|png|gif|webp)[^\s"'<>]*)/gi;
   while ((match = bareImgRegex.exec(content)) !== null) {
     const url = match[1] || match[0];
@@ -96,8 +97,6 @@ function extractImages(content: string): { text: string; images: string[] } {
   while ((match = photoUrlRegex.exec(content)) !== null) {
     if (!images.includes(match[0]) && isValidImageUrl(match[0])) images.push(match[0]);
   }
-  let text = content;
-  text = text.replace(/!\[.*?\]\(https?:\/\/[^\s)]+\)/gi, "");
   text = text.replace(/^.*?ENVIAR_FOTOS?_VEICULOS?.*$/gmi, "");
   images.forEach((url) => { text = text.split(url).join(""); });
   text = text.replace(/\n{3,}/g, "\n\n").trim();
@@ -739,7 +738,29 @@ export default function AgentSandbox() {
             {text.trim() && text.trim() !== "[Vídeo institucional enviado]" && (
               !isUser ? (
                 <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:my-0.5 [&>p]:leading-relaxed text-[13px]">
-                  <ReactMarkdown>{text}</ReactMarkdown>
+                  <ReactMarkdown
+                    components={{
+                      img: ({ src, alt }) => {
+                        if (!src) return null;
+                        if (images.some((u) => imageUrlsEquivalent(u, src))) {
+                          return null;
+                        }
+                        return (
+                          <img
+                            src={src}
+                            alt={typeof alt === "string" ? alt : ""}
+                            loading="lazy"
+                            className="max-h-48 rounded-md object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = "none";
+                            }}
+                          />
+                        );
+                      },
+                    }}
+                  >
+                    {text}
+                  </ReactMarkdown>
                 </div>
               ) : isAudioTranscription ? (
                 <div className="flex items-center gap-2">

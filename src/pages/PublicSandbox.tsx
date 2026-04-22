@@ -2,6 +2,7 @@ import { useParams } from "react-router-dom";
 import { useState, useRef, useEffect } from "react";
 import { Send, Loader2, Lock, Mic, Paperclip, Camera, CheckCheck } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import { collectMarkdownImageSpans, stripMarkdownImageSpans, imageUrlsEquivalent } from "@/lib/chatMessageDisplay";
 import { AudioRecorder } from "@/components/sandbox/AudioRecorder";
 import { AttachmentPreview, classifyFile, type AttachmentFile } from "@/components/sandbox/AttachmentPreview";
 import { extractVideos, VideoPlayer, UserMediaPreview, type UserAttachmentMeta } from "@/components/sandbox/MediaBubble";
@@ -25,19 +26,17 @@ const MSG_SPLIT = "<<MSG_SPLIT>>";
 
 function extractImages(content: string): { text: string; images: string[] } {
   const images: string[] = [];
-  const mdImgRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/gi;
-  let match;
-  while ((match = mdImgRegex.exec(content)) !== null) {
-    const url = match[1];
-    if (url && !images.includes(url)) images.push(url);
+  const mdSpans = collectMarkdownImageSpans(content);
+  for (const sp of mdSpans) {
+    if (sp.url && !images.includes(sp.url)) images.push(sp.url);
   }
+  let text = stripMarkdownImageSpans(content, mdSpans);
+  let match;
   const bareImgRegex = /(?<!\()(https?:\/\/[^\s"'<>]+\.(?:jpg|jpeg|png|gif|webp)[^\s"'<>]*)/gi;
   while ((match = bareImgRegex.exec(content)) !== null) {
     const url = match[1] || match[0];
     if (!images.includes(url)) images.push(url);
   }
-  let text = content;
-  text = text.replace(/!\[.*?\]\(https?:\/\/[^\s)]+\)/gi, "");
   images.forEach((url) => { text = text.split(url).join(""); });
   text = text.replace(/\n{3,}/g, "\n\n").trim();
   return { text, images };
@@ -478,7 +477,27 @@ export default function PublicSandbox() {
             {text.trim() && (
               !isUser ? (
                 <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:my-0.5 [&>p]:leading-relaxed text-[13px]">
-                  <ReactMarkdown>{text}</ReactMarkdown>
+                  <ReactMarkdown
+                    components={{
+                      img: ({ src, alt }) => {
+                        if (!src) return null;
+                        if (images.some((u) => imageUrlsEquivalent(u, src))) return null;
+                        return (
+                          <img
+                            src={src}
+                            alt={typeof alt === "string" ? alt : ""}
+                            loading="lazy"
+                            className="max-h-48 rounded-md object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = "none";
+                            }}
+                          />
+                        );
+                      },
+                    }}
+                  >
+                    {text}
+                  </ReactMarkdown>
                 </div>
               ) : !hasUserMedia ? (
                 <p className="whitespace-pre-wrap text-[13px] leading-relaxed">{text}</p>

@@ -42,7 +42,7 @@ export interface Agent {
   providers?: Provider;
 }
 
-export type ToolType = 'sql_query' | 'web_scraper' | 'api_rest' | 'rag_search' | 'inventory_query' | 'nearest_unit' | 'fipe_query' | 'calendar_query' | 'chatwoot_assign' | 'send_notification' | 'omnibees_availability';
+export type ToolType = 'sql_query' | 'web_scraper' | 'api_rest' | 'rag_search' | 'inventory_query' | 'nearest_unit' | 'fipe_query' | 'calendar_query' | 'chatwoot_assign' | 'send_notification' | 'omnibees_availability' | 'suite_gallery_query';
 
 export interface Tool {
   id: string;
@@ -297,4 +297,25 @@ export interface Occurrence {
   updated_at: string;
   inventory?: OccurrenceInventorySummary | OccurrenceInventorySummary[] | null;
   contacts?: OccurrenceContactSummary | OccurrenceContactSummary[] | null;
+}
+
+export interface SuiteGalleryMedia {
+  url: string;
+  type: 'photo' | 'video';
+  caption?: string;
+}
+
+export interface SuiteGallery {
+  id: string;
+  tenant_id: string;
+  name: string;
+  description: string | null;
+  /** Instruções para o LLM sobre quando enviar fotos/vídeos desta galeria. */
+  llm_media_guidance?: string | null;
+  cover_image_url: string | null;
+  media_urls: SuiteGalleryMedia[];
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+  tenants?: { name: string } | null;
 }

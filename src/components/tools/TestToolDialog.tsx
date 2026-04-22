@@ -21,6 +21,7 @@ function generateExample(tool: Tool | null): string {
   if (!params?.properties) {
     if (tool?.tool_type === "web_scraper") return JSON.stringify({ url: "https://example.com" }, null, 2);
     if (tool?.tool_type === "rag_search") return JSON.stringify({ pergunta: "como funciona o tratamento para bruxismo?" }, null, 2);
+    if (tool?.tool_type === "suite_gallery_query") return JSON.stringify({ nome: "exemplo" }, null, 2);
     return "{}";
   }
   const example: Record<string, any> = {};

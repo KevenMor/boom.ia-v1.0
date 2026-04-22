@@ -18,7 +18,8 @@ export type ModuleKey =
   | "prompts"
   | "monitoring"
   | "audit"
-  | "settings";
+  | "settings"
+  | "suite_galleries";
 
 export interface TenantModuleDef {
   key: ModuleKey;
@@ -44,6 +45,12 @@ export const TENANT_MODULES: TenantModuleDef[] = [
     key: "service_catalog",
     label: "Catálogo",
     description: "Serviços e produtos (atendimento, agenda, RAG).",
+    group: "overview",
+  },
+  {
+    key: "suite_galleries",
+    label: "Galeria",
+    description: "Fotos e vídeos por galeria (nome e categorias à escolha do tenant).",
     group: "overview",
   },
   { key: "contacts", label: "Leads", description: "Gestão de contatos/leads.", group: "overview" },

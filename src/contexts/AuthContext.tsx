@@ -118,8 +118,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error as Error | null };
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      return { error: error as Error | null };
+    } catch (e) {
+      const raw = e instanceof Error ? e.message : String(e);
+      if (/JSON|Unexpected end of input/i.test(raw)) {
+        return {
+          error: new Error(
+            "O servidor de autenticação devolveu uma resposta inválida ou vazia. Confirme: (1) o backend está rodando na porta 3001 (ex.: npm run dev:all); (2) NEXUS_DB_URL está definido em server/.env; (3) o proxy /api/supabase-proxy responde — veja docker/LOGIN-CORS-SUPABASE.md."
+          ),
+        };
+      }
+      return { error: e instanceof Error ? e : new Error(raw) };
+    }
   };
 
   const signOut = async () => {

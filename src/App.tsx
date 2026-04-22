@@ -40,6 +40,7 @@ import ContactProfilePage from "@/pages/ContactProfilePage";
 import TokenAnalytics from "@/pages/TokenAnalytics";
 import PublicSandbox from "@/pages/PublicSandbox";
 import NotFound from "@/pages/NotFound";
+import SuiteGalleriesPage from "@/pages/SuiteGalleriesPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -166,6 +167,14 @@ const App = () => (
                 element={
                   <ModuleRoute moduleKey="occurrences">
                     <OccurrencesPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/galeria"
+                element={
+                  <ModuleRoute moduleKey="suite_galleries">
+                    <SuiteGalleriesPage />
                   </ModuleRoute>
                 }
               />

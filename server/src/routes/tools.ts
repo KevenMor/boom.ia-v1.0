@@ -200,6 +200,43 @@ export async function toolsRoutes(fastify: FastifyInstance) {
           break;
         }
 
+        case "suite_gallery_query": {
+          const tenantIdSg = tool.tenant_id;
+          if (!tenantIdSg) {
+            result = { error: "Tool sem tenant_id. Galeria está ligada ao tenant — defina o tenant da tool." };
+            break;
+          }
+          const { data: agentRowSg } = await supabase
+            .from("agents")
+            .select("id")
+            .eq("tenant_id", tenantIdSg)
+            .limit(1)
+            .maybeSingle();
+          const agentIdSg = agentRowSg?.id;
+          if (!agentIdSg) {
+            result = { error: "Nenhum agente encontrado para o tenant desta tool." };
+            break;
+          }
+          try {
+            const execResult = await executeTool(
+              {
+                id: tool.id,
+                name: tool.name,
+                tool_type: tool.tool_type,
+                tenant_id: tool.tenant_id,
+                execution_config: tool.execution_config,
+                function_def: tool.function_def,
+              },
+              (args || {}) as Record<string, unknown>,
+              String(agentIdSg)
+            );
+            result = execResult.success ? execResult.result : { error: execResult.error };
+          } catch (e: any) {
+            result = { error: e?.message || "Suite gallery query failed" };
+          }
+          break;
+        }
+
         case "fipe_query": {
           const fipeArgs: Record<string, any> = {};
           if (args?.marca || args?.brand) fipeArgs.marca = args.marca || args.brand;

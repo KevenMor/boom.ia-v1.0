@@ -28,6 +28,7 @@ import {
   Users,
   UserPlus,
   ClipboardList,
+  Images,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ModuleKey } from "@/lib/tenant-modules";
@@ -65,6 +66,7 @@ const navGroups: NavGroup[] = [
       { to: "/followups", icon: Bell, label: "Follow-ups", moduleKey: "followups" },
       { to: "/inventory", icon: Car, label: "Inventário", moduleKey: "inventory" },
       { to: "/occurrences", icon: ClipboardList, label: "Ocorrências", moduleKey: "occurrences" },
+      { to: "/galeria", icon: Images, label: "Galeria", moduleKey: "suite_galleries" },
       { to: "/catalog", icon: LayoutGrid, label: "Catálogo", moduleKey: "service_catalog" },
       { to: "/contacts", icon: Users, label: "Leads", moduleKey: "contacts" },
       { to: "/clients", icon: Building2, label: "Clientes", moduleKey: "clients" },
