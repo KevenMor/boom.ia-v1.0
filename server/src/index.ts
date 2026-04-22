@@ -169,12 +169,12 @@ async function build() {
       if (v && !["host", "connection", "content-length"].includes(k.toLowerCase())) headers[k] = Array.isArray(v) ? v[0] : v;
     }
 
-    // Storage: <img src="…/supabase-proxy/storage/…"> não envia apikey nem Authorization.
-    // Vários gateways Supabase exigem apikey (e por vezes Bearer anon) mesmo em buckets públicos.
+    // Storage: sempre substituir apikey pelo real — o browser pode enviar o demo key (fallback do nexus-client)
+    // que o Supabase real rejeita. Para writes (POST/PUT) preserva o Bearer JWT do usuário; para reads força anon.
     const nexusAnon = process.env.NEXUS_DB_ANON_KEY?.trim();
     if (nexusAnon && /\/storage\/v1\//.test(suffix)) {
+      headers.apikey = nexusAnon;
       const lower = new Set(Object.keys(headers).map((k) => k.toLowerCase()));
-      if (!lower.has("apikey")) headers.apikey = nexusAnon;
       if (!lower.has("authorization")) headers.Authorization = `Bearer ${nexusAnon}`;
     }
 
