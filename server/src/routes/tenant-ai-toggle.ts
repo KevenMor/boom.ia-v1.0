@@ -1,15 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
-import pg from "pg";
-
-const { Pool } = pg;
+import { createNexusClient } from "../services/supabase.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function getPool(): pg.Pool {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL não configurada no servidor");
-  return new Pool({ connectionString: url, ssl: { rejectUnauthorized: false } });
-}
 
 function getToggleSecret(req: FastifyRequest): string | null {
   const h = req.headers["x-tenant-ai-toggle-secret"];
@@ -35,50 +27,48 @@ function assertSecret(req: FastifyRequest, reply: FastifyReply): boolean {
   return true;
 }
 
-/** Dashboard Mega: controla status dos agentes (active/inactive) via pg direto. */
+/** Dashboard Mega: controla status dos agentes (active/inactive), não tenants.ai_globally_enabled. */
 export async function tenantAiToggleRoutes(fastify: FastifyInstance) {
   fastify.get(
     "/tenant-ai/status",
     async (req: FastifyRequest<{ Querystring: { tenant_id?: string } }>, reply: FastifyReply) => {
       if (!assertSecret(req, reply)) return;
-
       const tenantId = req.query?.tenant_id?.trim();
       if (!tenantId || !UUID_RE.test(tenantId)) {
         return reply.status(400).send({ error: "tenant_id UUID inválido ou ausente" });
       }
-
-      let pool: pg.Pool | null = null;
-      try {
-        pool = getPool();
-
-        const tenantRes = await pool.query(
-          "SELECT id FROM tenants WHERE id = $1",
-          [tenantId]
-        );
-        if (tenantRes.rowCount === 0) {
-          return reply.status(404).send({ error: "Tenant não encontrado" });
-        }
-
-        const agentsRes = await pool.query(
-          "SELECT id, status FROM agents WHERE tenant_id = $1",
-          [tenantId]
-        );
-        const rows = agentsRes.rows;
-        const total = rows.length;
-        const activeCount = rows.filter((r) => r.status === "active").length;
-        const agents_all_active = total > 0 && activeCount === total;
-
-        return reply.send({
-          tenant_id: tenantId,
-          agents_total: total,
-          agents_active_count: activeCount,
-          agents_all_active,
-        });
-      } catch (e: any) {
-        return reply.status(500).send({ error: e.message || String(e) });
-      } finally {
-        await pool?.end();
+      const supabase = createNexusClient();
+      const { data: tenant, error: tErr } = await supabase
+        .from("tenants")
+        .select("id")
+        .eq("id", tenantId)
+        .maybeSingle();
+      if (tErr) {
+        fastify.log.error({ err: tErr }, "[tenant-ai] erro ao buscar tenant");
+        return reply.status(500).send({ error: tErr.message });
       }
+      if (!tenant) {
+        return reply.status(404).send({ error: "Tenant não encontrado" });
+      }
+      const { data: agents, error: aErr } = await supabase
+        .from("agents")
+        .select("id, status")
+        .eq("tenant_id", tenantId);
+      if (aErr) {
+        fastify.log.error({ err: aErr }, "[tenant-ai] erro ao buscar agents");
+        return reply.status(500).send({ error: aErr.message });
+      }
+      const rows = agents ?? [];
+      const total = rows.length;
+      const activeCount = rows.filter((r) => r.status === "active").length;
+      const agents_all_active = total > 0 && activeCount === total;
+      fastify.log.info({ tenantId, total, activeCount }, "[tenant-ai] status");
+      return reply.send({
+        tenant_id: tenantId,
+        agents_total: total,
+        agents_active_count: activeCount,
+        agents_all_active,
+      });
     }
   );
 
@@ -89,52 +79,50 @@ export async function tenantAiToggleRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       if (!assertSecret(req, reply)) return;
-
       const tenantId = typeof req.body?.tenant_id === "string" ? req.body.tenant_id.trim() : "";
       const enabled = req.body?.enabled;
       if (!tenantId || !UUID_RE.test(tenantId)) {
         return reply.status(400).send({ error: "tenant_id UUID inválido ou ausente" });
       }
       if (typeof enabled !== "boolean") {
-        return reply.status(400).send({ error: "enabled deve ser boolean" });
+        return reply.status(400).send({ error: "enabled deve ser boolean (true = todos os agentes ativos)" });
       }
-
-      let pool: pg.Pool | null = null;
-      try {
-        pool = getPool();
-
-        const tenantRes = await pool.query(
-          "SELECT id FROM tenants WHERE id = $1",
-          [tenantId]
-        );
-        if (tenantRes.rowCount === 0) {
-          return reply.status(404).send({ error: "Tenant não encontrado" });
-        }
-
-        const newStatus = enabled ? "active" : "inactive";
-        const now = new Date().toISOString();
-        const updateRes = await pool.query(
-          "UPDATE agents SET status = $1, updated_at = $2 WHERE tenant_id = $3 RETURNING id, status",
-          [newStatus, now, tenantId]
-        );
-
-        const list = updateRes.rows;
-        const total = list.length;
-        const activeCount = list.filter((r) => r.status === "active").length;
-
-        return reply.send({
-          ok: true,
-          tenant_id: tenantId,
-          updated_count: total,
-          agents_total: total,
-          agents_active_count: activeCount,
-          agents_all_active: total > 0 && activeCount === total,
-        });
-      } catch (e: any) {
-        return reply.status(500).send({ error: e.message || String(e) });
-      } finally {
-        await pool?.end();
+      const supabase = createNexusClient();
+      const { data: tenant, error: tErr } = await supabase
+        .from("tenants")
+        .select("id")
+        .eq("id", tenantId)
+        .maybeSingle();
+      if (tErr) {
+        fastify.log.error({ err: tErr }, "[tenant-ai] erro ao buscar tenant");
+        return reply.status(500).send({ error: tErr.message });
       }
+      if (!tenant) {
+        return reply.status(404).send({ error: "Tenant não encontrado" });
+      }
+      const newStatus = enabled ? "active" : "inactive";
+      const now = new Date().toISOString();
+      const { data: updated, error: uErr } = await supabase
+        .from("agents")
+        .update({ status: newStatus, updated_at: now })
+        .eq("tenant_id", tenantId)
+        .select("id, status");
+      if (uErr) {
+        fastify.log.error({ err: uErr }, "[tenant-ai] erro ao atualizar agents");
+        return reply.status(500).send({ error: uErr.message });
+      }
+      const list = updated ?? [];
+      const total = list.length;
+      const activeCount = list.filter((r) => r.status === "active").length;
+      fastify.log.info({ tenantId, newStatus, total }, "[tenant-ai] toggle ok");
+      return reply.send({
+        ok: true,
+        tenant_id: tenantId,
+        updated_count: total,
+        agents_total: total,
+        agents_active_count: activeCount,
+        agents_all_active: total > 0 && activeCount === total,
+      });
     }
   );
 }

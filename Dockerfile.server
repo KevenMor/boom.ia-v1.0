@@ -3,6 +3,7 @@
 # Assim evita o erro "server/server: no such file or directory"
 
 FROM node:20-alpine AS builder
+# cache-bust: 2026-04-22
 WORKDIR /app
 COPY server/package*.json ./
 RUN npm ci
