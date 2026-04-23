@@ -17,6 +17,8 @@ import { calendarServicesRoutes } from "./routes/calendar-services.js";
 import { demoRoutes } from "./routes/demo.js";
 import { occurrencesRoutes } from "./routes/occurrences.js";
 import { suiteGalleriesRoutes } from "./routes/suite-galleries.js";
+import { auditRoutes } from "./routes/audit.js";
+import { tenantAiToggleRoutes } from "./routes/tenant-ai-toggle.js";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 
@@ -77,16 +79,65 @@ async function build() {
     .split(",")
     .map((o) => o.trim())
     .filter(Boolean);
+  const tenantToggleCorsOrigins = (process.env.TENANT_AI_TOGGLE_CORS_ORIGINS || "")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
+  const tenantToggleCorsReflect =
+    process.env.TENANT_AI_TOGGLE_CORS_REFLECT === "1" || process.env.TENANT_AI_TOGGLE_CORS_REFLECT === "true";
+
+  const corsStaticAllowList: (string | RegExp)[] = [
+    "http://localhost:5173",
+    "http://localhost:8080",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:8080",
+    /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|172\.\d+\.\d+\.\d+)(:\d+)?$/,
+    /\.lovable\.dev$/,
+    ...extraOrigins,
+  ];
+
+  function isTenantToggleCorsOrigin(origin: string): boolean {
+    for (const o of tenantToggleCorsOrigins) {
+      if (o === origin) return true;
+      if (o.startsWith("*.")) {
+        const d = o.slice(2);
+        try {
+          const host = new URL(origin).hostname;
+          if (host === d || host.endsWith("." + d)) return true;
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    return false;
+  }
+
   await fastify.register(cors, {
-    origin: [
-      "http://localhost:5173",
-      "http://localhost:8080",
-      "http://127.0.0.1:5173",
-      "http://127.0.0.1:8080",
-      /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|172\.\d+\.\d+\.\d+)(:\d+)?$/,
-      /\.lovable\.dev$/,
-      ...extraOrigins,
-    ],
+    origin: (origin, cb) => {
+      if (!origin) {
+        cb(null, true);
+        return;
+      }
+      for (const item of corsStaticAllowList) {
+        if (typeof item === "string" && item === origin) {
+          cb(null, true);
+          return;
+        }
+        if (item instanceof RegExp && item.test(origin)) {
+          cb(null, true);
+          return;
+        }
+      }
+      if (isTenantToggleCorsOrigin(origin)) {
+        cb(null, true);
+        return;
+      }
+      if (tenantToggleCorsReflect) {
+        cb(null, true);
+        return;
+      }
+      cb(null, false);
+    },
     credentials: true,
     allowedHeaders: [
       "authorization",
@@ -94,6 +145,7 @@ async function build() {
       "apikey",
       "content-type",
       "x-nexus-auth",
+      "x-tenant-ai-toggle-secret",
       "x-supabase-client-platform",
       "x-supabase-client-platform-version",
       "x-supabase-client-runtime",
@@ -116,6 +168,8 @@ async function build() {
   fastify.register(calendarServicesRoutes, { prefix: "/api" });
   fastify.register(occurrencesRoutes, { prefix: "/api" });
   fastify.register(suiteGalleriesRoutes, { prefix: "/api" });
+  fastify.register(auditRoutes, { prefix: "/api" });
+  fastify.register(tenantAiToggleRoutes, { prefix: "/api" });
   fastify.register(demoRoutes, { prefix: "/api" });
 
   fastify.get("/health", async () => ({ ok: true, timestamp: new Date().toISOString() }));

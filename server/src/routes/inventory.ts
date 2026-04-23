@@ -3,6 +3,7 @@ import { createNexusClient } from "../services/supabase.js";
 import { probeVideoUrl } from "../services/video-url-probe.js";
 import { isTenantModuleEnabled } from "../services/tenant-modules.js";
 import { canAccessTenant, canManageTenant, requireAuthenticated } from "../services/authorization.js";
+import { writeAuditLog } from "../services/audit.js";
 
 const LISTING_URL = "https://pplmotors.com.br/Veiculos";
 const PPL_MOTORS_TENANT_ID = "bc4a1dc9-a205-4b4b-9b6c-47bf677a2728";
@@ -351,6 +352,14 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
 
         const { data, error } = await supabase.from("inventory").insert(record).select().single();
         if (error) throw error;
+        void writeAuditLog({
+          tenantId,
+          auth,
+          resource: "inventory",
+          resourceId: (data as { id?: string }).id,
+          resourceLabel: [body.brand, body.model, body.version].filter(Boolean).join(" ") || null,
+          action: "create",
+        });
         return reply.send(data);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
@@ -432,6 +441,19 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
 
         const { data, error } = await supabase.from("inventory").update(updates).eq("id", id).select().single();
         if (error) throw error;
+        void writeAuditLog({
+          tenantId: existing.tenant_id,
+          auth,
+          resource: "inventory",
+          resourceId: id,
+          resourceLabel: [
+            (data as Record<string, unknown>).brand,
+            (data as Record<string, unknown>).model,
+            (data as Record<string, unknown>).version,
+          ].filter(Boolean).join(" ") || null,
+          action: "update",
+          metadata: { fields: Object.keys(updates).filter((k) => k !== "updated_at") },
+        });
         return reply.send(data);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
@@ -451,7 +473,7 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
         const { id } = req.params;
         const { data: existing, error: existingErr } = await supabase
           .from("inventory")
-          .select("tenant_id")
+          .select("tenant_id, brand, model, version")
           .eq("id", id)
           .maybeSingle();
         if (existingErr) throw existingErr;
@@ -459,9 +481,21 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
         if (!canManageTenant(auth, existing.tenant_id)) {
           return reply.status(403).send({ error: "forbidden_tenant_access" });
         }
-        if (await denyIfInventoryDisabled(supabase, existing.tenant_id, reply)) return;
+        if (await denyIfInventoryDisabled(supabase, (existing as Record<string, string>).tenant_id, reply)) return;
         const { error } = await supabase.from("inventory").delete().eq("id", id);
         if (error) throw error;
+        void writeAuditLog({
+          tenantId: existing.tenant_id,
+          auth,
+          resource: "inventory",
+          resourceId: id,
+          resourceLabel: [
+            (existing as Record<string, unknown>).brand,
+            (existing as Record<string, unknown>).model,
+            (existing as Record<string, unknown>).version,
+          ].filter(Boolean).join(" ") || null,
+          action: "delete",
+        });
         return reply.send({ success: true });
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);

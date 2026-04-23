@@ -58,3 +58,13 @@ export function useUpdateAdminUser() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-users"] }),
   });
 }
+
+export function useDeleteAdminUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      return callAPI<unknown>(`/admin/users/${id}`, { method: "DELETE" });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-users"] }),
+  });
+}

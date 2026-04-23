@@ -2,6 +2,8 @@ export interface Tenant {
   id: string;
   name: string;
   slug: string;
+  /** Quando false, webhooks não acionam LLM para nenhum agente desta tenant. */
+  ai_globally_enabled?: boolean;
   plan: string;
   status: string;
   db_host: string | null;

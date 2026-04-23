@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useTenantContext } from "@/contexts/TenantContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useFirstEnabledRoute } from "@/hooks/useFirstEnabledRoute";
 import type { Profile } from "@/types/database";
 
 interface ModuleRouteProps {
@@ -14,6 +15,7 @@ interface ModuleRouteProps {
 export function ModuleRoute({ moduleKey, children, requiredRoles }: ModuleRouteProps) {
   const { isModuleEnabled, tenantModulesLoading } = useTenantContext();
   const { profile, isSuperAdmin } = useAuth();
+  const firstRoute = useFirstEnabledRoute();
 
   if (requiredRoles && requiredRoles.length > 0 && !isSuperAdmin) {
     const role = profile?.role;
@@ -25,7 +27,7 @@ export function ModuleRoute({ moduleKey, children, requiredRoles }: ModuleRouteP
             Seu perfil não possui permissão para acessar esta tela.
           </p>
           <Button asChild className="mt-4">
-            <Link to="/dashboard">Voltar ao painel</Link>
+            <Link to={firstRoute}>Voltar ao painel</Link>
           </Button>
         </div>
       );
@@ -36,23 +38,10 @@ export function ModuleRoute({ moduleKey, children, requiredRoles }: ModuleRouteP
     return <div className="text-sm text-muted-foreground">Carregando módulos do tenant...</div>;
   }
 
-  if (isSuperAdmin) {
+  if (isSuperAdmin || isModuleEnabled(moduleKey)) {
     return <>{children}</>;
   }
 
-  if (isModuleEnabled(moduleKey)) {
-    return <>{children}</>;
-  }
-
-  return (
-    <div className="mx-auto max-w-xl rounded-lg border bg-card p-6 text-center">
-      <h2 className="text-lg font-semibold">Módulo não habilitado</h2>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Este módulo não está ativo para o tenant selecionado.
-      </p>
-      <Button asChild className="mt-4">
-        <Link to="/dashboard">Voltar ao painel</Link>
-      </Button>
-    </div>
-  );
+  // Módulo desabilitado — redireciona para a primeira rota acessível
+  return <Navigate to={firstRoute} replace />;
 }

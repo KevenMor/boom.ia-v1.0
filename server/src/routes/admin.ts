@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
-import { requireSuperadmin } from "../services/authorization.js";
+import { requireSuperadmin, resolveAccessContext } from "../services/authorization.js";
+import { writeAuditLog } from "../services/audit.js";
 import {
   getAllPromptConfigs,
   getPromptConfig,
@@ -379,6 +380,18 @@ export async function adminRoutes(fastify: FastifyInstance) {
         }
       }
 
+      const actor = await resolveAccessContext(req);
+      if (actor) {
+        void writeAuditLog({
+          tenantId: memberships[0]?.tenant_id ?? null,
+          auth: actor,
+          resource: "user",
+          resourceId: userId,
+          resourceLabel: full_name ?? email,
+          action: "create",
+          metadata: { email, tenants: memberships.map((m) => m.tenant_id) },
+        });
+      }
       return reply.status(201).send({
         id: userId,
         email: created.user.email,
@@ -411,11 +424,6 @@ export async function adminRoutes(fastify: FastifyInstance) {
       const { data: existing, error: fetchErr } = await supabase.from("profiles").select("id, role").eq("id", userId).maybeSingle();
       if (fetchErr) return reply.status(500).send({ error: fetchErr.message });
       if (!existing) return reply.status(404).send({ error: "usuário não encontrado" });
-
-      const existingRole = String((existing as { role?: string }).role ?? "").toLowerCase();
-      if (existingRole === "superadmin" || existingRole === "super_admin") {
-        return reply.status(403).send({ error: "não é permitido alterar membros de super admin por esta rota" });
-      }
 
       if (req.body?.full_name !== undefined) {
         const full_name = req.body.full_name === null ? null : String(req.body.full_name).trim() || null;
@@ -454,6 +462,111 @@ export async function adminRoutes(fastify: FastifyInstance) {
         }
       }
 
+      const actor = await resolveAccessContext(req);
+      if (actor) {
+        void writeAuditLog({
+          tenantId: req.body?.memberships?.[0]?.tenant_id ?? null,
+          auth: actor,
+          resource: "user",
+          resourceId: userId,
+          resourceLabel: req.body?.full_name ?? userId,
+          action: "update",
+          metadata: { fields: Object.keys(req.body ?? {}) },
+        });
+      }
+      return reply.send({ success: true });
+    }
+  );
+
+  // GET /admin/users/:id/acl?tenant_id=...
+  fastify.get(
+    "/admin/users/:id/acl",
+    async (
+      req: FastifyRequest<{ Params: { id: string }; Querystring: { tenant_id?: string } }>,
+      reply: FastifyReply
+    ) => {
+      const supabase = createNexusClient();
+      const { id: userId } = req.params;
+      const { tenant_id } = req.query;
+      if (!userId || !tenant_id) return reply.status(400).send({ error: "id e tenant_id obrigatórios" });
+
+      const { data, error } = await supabase
+        .from("user_module_acl")
+        .select("module_key, enabled, allowed_actions")
+        .eq("user_id", userId)
+        .eq("tenant_id", tenant_id);
+
+      if (error) return reply.status(500).send({ error: error.message });
+      return reply.send({ data: data ?? [] });
+    }
+  );
+
+  // PUT /admin/users/:id/acl — substitui toda a ACL do usuário para um tenant
+  fastify.put(
+    "/admin/users/:id/acl",
+    async (
+      req: FastifyRequest<{
+        Params: { id: string };
+        Body: {
+          tenant_id: string;
+          modules: Array<{ module_key: string; enabled: boolean; allowed_actions: string[] | null }>;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const supabase = createNexusClient();
+      const { id: userId } = req.params;
+      const { tenant_id, modules } = req.body ?? {};
+      if (!userId || !tenant_id) return reply.status(400).send({ error: "id e tenant_id obrigatórios" });
+
+      const { error: delErr } = await supabase
+        .from("user_module_acl")
+        .delete()
+        .eq("user_id", userId)
+        .eq("tenant_id", tenant_id);
+      if (delErr) return reply.status(500).send({ error: delErr.message });
+
+      if (Array.isArray(modules) && modules.length > 0) {
+        const rows = modules.map((m) => ({
+          user_id: userId,
+          tenant_id,
+          module_key: String(m.module_key),
+          enabled: m.enabled !== false,
+          allowed_actions: Array.isArray(m.allowed_actions) ? m.allowed_actions : null,
+          updated_at: new Date().toISOString(),
+        }));
+        const { error: insErr } = await supabase.from("user_module_acl").insert(rows);
+        if (insErr) return reply.status(500).send({ error: insErr.message });
+      }
+
+      return reply.send({ success: true });
+    }
+  );
+
+  fastify.delete(
+    "/admin/users/:id",
+    async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      if (!process.env.NEXUS_SERVICE_ROLE_KEY) {
+        return reply.status(503).send({ error: "NEXUS_SERVICE_ROLE_KEY not configured" });
+      }
+      const supabase = createNexusClient();
+      const userId = req.params.id;
+      if (!userId) return reply.status(400).send({ error: "id obrigatório" });
+
+      const { error: authErr } = await supabase.auth.admin.deleteUser(userId);
+      if (authErr) return reply.status(500).send({ error: authErr.message });
+
+      const actor = await resolveAccessContext(req);
+      if (actor) {
+        void writeAuditLog({
+          tenantId: null,
+          auth: actor,
+          resource: "user",
+          resourceId: userId,
+          resourceLabel: userId,
+          action: "delete",
+        });
+      }
       return reply.send({ success: true });
     }
   );
@@ -529,6 +642,18 @@ export async function adminRoutes(fastify: FastifyInstance) {
         req.log.info({ tenantId: data.id }, "Tenant schema provisioned successfully");
       }
 
+      const actor = await resolveAccessContext(req);
+      if (actor) {
+        void writeAuditLog({
+          tenantId: data.id,
+          auth: actor,
+          resource: "tenant",
+          resourceId: data.id,
+          resourceLabel: data.name,
+          action: "create",
+          metadata: { slug: data.slug, plan: data.plan },
+        });
+      }
       return reply.status(201).send(data);
     }
   );
@@ -544,6 +669,8 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
       const supabase = createNexusClient(); // service role bypasses RLS
 
+      const { data: tenantRow } = await supabase.from("tenants").select("name").eq("id", id).maybeSingle();
+
       // 1. Deletar memberships do tenant
       await supabase.from("tenant_memberships").delete().eq("tenant_id", id);
 
@@ -554,6 +681,17 @@ export async function adminRoutes(fastify: FastifyInstance) {
         return reply.status(500).send({ error: error.message });
       }
 
+      const actor = await resolveAccessContext(req);
+      if (actor) {
+        void writeAuditLog({
+          tenantId: id,
+          auth: actor,
+          resource: "tenant",
+          resourceId: id,
+          resourceLabel: (tenantRow as { name?: string } | null)?.name ?? id,
+          action: "delete",
+        });
+      }
       return reply.status(200).send({ success: true });
     }
   );

@@ -29,6 +29,7 @@ import {
   UserPlus,
   ClipboardList,
   Images,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ModuleKey } from "@/lib/tenant-modules";
@@ -54,7 +55,7 @@ interface NavGroup {
   items: { to: string; icon: React.ElementType; label: string; moduleKey?: ModuleKey }[];
 }
 
-const navGroups: NavGroup[] = [
+export const navGroups: NavGroup[] = [
   {
     label: "Visão geral",
     defaultOpen: true,
@@ -78,6 +79,7 @@ const navGroups: NavGroup[] = [
     items: [
       { to: "/tenants", icon: Building2, label: "Tenants", moduleKey: "tenants" },
       { to: "/users", icon: UserPlus, label: "Usuários", moduleKey: "tenants" },
+      { to: "/permissions", icon: ShieldCheck, label: "Permissões", moduleKey: "tenants" },
       { to: "/tools", icon: Wrench, label: "Ferramentas", moduleKey: "tools" },
       { to: "/providers", icon: Cpu, label: "Provedores", moduleKey: "providers" },
     ],

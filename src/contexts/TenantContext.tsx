@@ -113,24 +113,49 @@ export function TenantProvider({ children }: { children: ReactNode }) {
 
     setTenantModulesLoading(true);
     void (async () => {
-      const { data, error } = await nexusDb
-        .from("tenant_modules")
-        .select("module_key, enabled")
-        .eq("tenant_id", selectedTenantId);
+      const userId = (await nexusDb.auth.getUser()).data.user?.id ?? null;
+
+      const [{ data: tenantData, error: tenantError }, { data: aclData }] = await Promise.all([
+        nexusDb
+          .from("tenant_modules")
+          .select("module_key, enabled")
+          .eq("tenant_id", selectedTenantId),
+        userId
+          ? nexusDb
+              .from("user_module_acl")
+              .select("module_key, enabled")
+              .eq("tenant_id", selectedTenantId)
+              .eq("user_id", userId)
+          : Promise.resolve({ data: [] as { module_key: string; enabled: boolean }[] }),
+      ]);
 
       if (cancelled) return;
-      if (error) {
-        console.error("Failed to load tenant modules:", error.message);
+      if (tenantError) {
+        console.error("Failed to load tenant modules:", tenantError.message);
         setSelectedTenantModules(null);
-      } else {
-        const map: TenantModulesMap = {};
-        for (const row of data ?? []) {
+        setTenantModulesLoading(false);
+        return;
+      }
+
+      // Base: tenant-level modules
+      const map: TenantModulesMap = {};
+      for (const row of tenantData ?? []) {
+        const key = String((row as { module_key?: string }).module_key ?? "").trim();
+        if (!key) continue;
+        map[key] = (row as { enabled?: boolean }).enabled !== false;
+      }
+
+      // Override: user-level ACL (only applied when ACL rows exist for this user+tenant)
+      const acl = aclData ?? [];
+      if (acl.length > 0) {
+        for (const row of acl) {
           const key = String((row as { module_key?: string }).module_key ?? "").trim();
           if (!key) continue;
           map[key] = (row as { enabled?: boolean }).enabled !== false;
         }
-        setSelectedTenantModules(map);
       }
+
+      setSelectedTenantModules(map);
       setTenantModulesLoading(false);
     })();
 

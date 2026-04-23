@@ -25,6 +25,7 @@ import {
 import { useOccurrences } from "@/hooks/useOccurrences";
 import { useTenantContext } from "@/contexts/TenantContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useModuleActions } from "@/hooks/useModuleActions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CreateOccurrenceDialog } from "@/components/occurrences/CreateOccurrenceDialog";
 import { EditOccurrenceDialog } from "@/components/occurrences/EditOccurrenceDialog";
@@ -143,7 +144,8 @@ function formatOdometerKm(km: number | null | undefined): string | null {
 export default function OccurrencesPage() {
   const queryClient = useQueryClient();
   const { selectedTenantId } = useTenantContext();
-  const { isSuperAdmin, isTenantAdmin } = useAuth();
+  const { isSuperAdmin } = useAuth();
+  const { can } = useModuleActions();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [severityFilter, setSeverityFilter] = useState<string>("all");
@@ -153,7 +155,9 @@ export default function OccurrencesPage() {
   const [sellOcc, setSellOcc] = useState<Occurrence | null>(null);
   const [sellBusy, setSellBusy] = useState(false);
 
-  const canManage = isSuperAdmin || isTenantAdmin(selectedTenantId);
+  const canRegister = can("occurrences", "register");
+  const canEdit = can("occurrences", "edit");
+  const canDelete = can("occurrences", "delete");
 
   const listParams = useMemo(
     () => ({
@@ -239,7 +243,7 @@ export default function OccurrencesPage() {
           <h2 className="text-lg font-medium text-foreground">Ocorrências</h2>
           <span className="rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">{total} registo(s)</span>
         </div>
-        {canManage && (
+        {canRegister && (
           <Button
             className="gap-2 shrink-0"
             onClick={() => setCreateOpen(true)}
@@ -314,7 +318,7 @@ export default function OccurrencesPage() {
           <div className="rounded-xl border border-dashed border-border bg-card/50 p-8 text-center">
             <ClipboardList className="mx-auto h-10 w-10 text-muted-foreground/50 mb-2" />
             <p className="text-sm text-muted-foreground">Nenhuma ocorrência encontrada.</p>
-            {canManage && selectedTenantId && (
+            {canRegister && selectedTenantId && (
               <Button className="mt-4" size="sm" onClick={() => setCreateOpen(true)}>
                 Criar primeira ocorrência
               </Button>
@@ -326,7 +330,7 @@ export default function OccurrencesPage() {
           const photo = occurrenceListPhoto(occ, inv);
           const client = occurrenceContact(occ);
           const vehicleName = inv ? [inv.brand, inv.model, inv.version].filter(Boolean).join(" ") : "—";
-          const canRegistarVenda = Boolean(canManage && occ.contact_id && inv && inv.status !== "sold");
+          const canRegistarVenda = Boolean(canRegister && occ.contact_id && inv && inv.status !== "sold");
           return (
             <div
               key={occ.id}
@@ -396,17 +400,17 @@ export default function OccurrencesPage() {
                     Registar venda
                   </Button>
                 )}
-                {canManage && (
-                  <>
-                    <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => setEditOcc(occ)}>
-                      <Pencil className="h-4 w-4 mr-1" />
-                      Editar
-                    </Button>
-                    <Button variant="ghost" size="sm" className="h-8 px-2 text-destructive" onClick={() => setDeleteOcc(occ)}>
-                      <Trash2 className="h-4 w-4 mr-1" />
-                      Remover
-                    </Button>
-                  </>
+                {canEdit && (
+                  <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => setEditOcc(occ)}>
+                    <Pencil className="h-4 w-4 mr-1" />
+                    Editar
+                  </Button>
+                )}
+                {canDelete && (
+                  <Button variant="ghost" size="sm" className="h-8 px-2 text-destructive" onClick={() => setDeleteOcc(occ)}>
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Remover
+                  </Button>
                 )}
               </div>
             </div>
@@ -451,7 +455,7 @@ export default function OccurrencesPage() {
                     const inv = occurrenceVehicle(occ);
                     const photo = occurrenceListPhoto(occ, inv);
                     const vehicleName = inv ? [inv.brand, inv.model, inv.version].filter(Boolean).join(" ") : "—";
-                    const canRegistarVenda = Boolean(canManage && occ.contact_id && inv && inv.status !== "sold");
+                    const canRegistarVenda = Boolean(canRegister && occ.contact_id && inv && inv.status !== "sold");
                     return (
                       <tr key={occ.id} className="hover:bg-muted/30">
                         <td className="whitespace-nowrap px-4 py-3">
@@ -514,25 +518,25 @@ export default function OccurrencesPage() {
                                 <BadgeCheck className="h-4 w-4" />
                               </button>
                             )}
-                            {canManage && (
-                              <>
-                                <button
-                                  type="button"
-                                  className="p-2 text-muted-foreground hover:text-primary"
-                                  title="Editar"
-                                  onClick={() => setEditOcc(occ)}
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  className="p-2 text-muted-foreground hover:text-destructive"
-                                  title="Remover"
-                                  onClick={() => setDeleteOcc(occ)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </>
+                            {canEdit && (
+                              <button
+                                type="button"
+                                className="p-2 text-muted-foreground hover:text-primary"
+                                title="Editar"
+                                onClick={() => setEditOcc(occ)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </button>
+                            )}
+                            {canDelete && (
+                              <button
+                                type="button"
+                                className="p-2 text-muted-foreground hover:text-destructive"
+                                title="Remover"
+                                onClick={() => setDeleteOcc(occ)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
                             )}
                           </div>
                         </td>

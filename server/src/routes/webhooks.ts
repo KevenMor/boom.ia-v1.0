@@ -4,6 +4,7 @@ import { stripChatwootNamePrefix } from "../utils/sanitize.js";
 import { msgLog } from "../utils/flow-logger.js";
 import { upsertCrmContact } from "../services/crm-contact-sync.js";
 import { getChatwootAuthHeaders } from "../services/delivery.js";
+import { isTenantAiGloballyDisabled } from "../services/tenant-ai-global.js";
 
 const API_BASE = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
 
@@ -652,9 +653,10 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         }
       }
 
-      // Quando agente não está ativo: sempre sincronizar mensagens no banco (Chat ao Vivo para o gestor),
-      // mas nunca acionar a IA. Centraliza leitura de todos os atendimentos (humanos + IA).
-      if (agent.status !== "active" && chatwoot.isChatwoot) {
+      // Agente inativo OU IA desligada globalmente na tenant: sincronizar mensagens no banco (Chat ao Vivo),
+      // mas nunca acionar a IA.
+      const tenantAiOff = await isTenantAiGloballyDisabled(supabase, agent.tenant_id);
+      if (chatwoot.isChatwoot && (agent.status !== "active" || tenantAiOff)) {
         try {
           const { data: convData } = await supabase.rpc("find_or_create_webhook_conversation", {
             p_agent_id: agentId,
@@ -717,7 +719,9 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         }
         return reply.send({
           status: "saved_no_ai",
-          reason: `Agent ${agent.status}; messages synced for manager visibility`,
+          reason: tenantAiOff
+            ? "Tenant IA desligada globalmente"
+            : `Agent ${agent.status}; messages synced for manager visibility`,
         });
       }
 

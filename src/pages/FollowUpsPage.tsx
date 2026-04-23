@@ -45,6 +45,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 const CANCEL_REASON_LABELS: Record<string, string> = {
   human_assigned: "Agente humano atribuído",
+  tenant_ai_globally_disabled: "IA desligada globalmente (tenant)",
   user_replied: "Cliente enviou mensagem",
   appointment_confirmed: "Agendamento já confirmado",
   agent_inactive: "Agente inativo",

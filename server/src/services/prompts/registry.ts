@@ -270,7 +270,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: VALE_SUICO_DISPATCHER,
     followupPrompt: VALE_SUICO_FOLLOWUP,
     alwaysInjectCommRules: true,
-    version: "v1.2.4",
+    version: "v1.2.7",
     description: "Vitória — Vale Suíço Resort (qualificação de leads / orçamento WhatsApp)",
   },
   "vale-suico-resort": {
@@ -279,7 +279,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: VALE_SUICO_DISPATCHER,
     followupPrompt: VALE_SUICO_FOLLOWUP,
     alwaysInjectCommRules: true,
-    version: "v1.2.4",
+    version: "v1.2.7",
     description: "Vitória — Vale Suíço Resort (qualificação de leads / orçamento WhatsApp)",
   },
 };

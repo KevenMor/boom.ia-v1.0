@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useFirstEnabledRoute } from "@/hooks/useFirstEnabledRoute";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { TenantProvider } from "@/contexts/TenantContext";
@@ -14,6 +15,7 @@ import Dashboard from "@/pages/Dashboard";
 import Tenants from "@/pages/Tenants";
 import EditTenant from "@/pages/EditTenant";
 import UsersManagementPage from "@/pages/UsersManagementPage";
+import TenantPermissionsPage from "@/pages/TenantPermissionsPage";
 import Agents from "@/pages/Agents";
 import EditAgent from "@/pages/EditAgent";
 import AgentSandbox from "@/pages/AgentSandbox";
@@ -54,6 +56,11 @@ const queryClient = new QueryClient({
   },
 });
 
+function RootRedirect() {
+  const firstRoute = useFirstEnabledRoute();
+  return <Navigate to={firstRoute} replace />;
+}
+
 const App = () => (
   <ThemeProvider attribute="class" defaultTheme="dark" storageKey="boomia-theme">
   <QueryClientProvider client={queryClient}>
@@ -66,7 +73,7 @@ const App = () => (
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/demo/:agentId" element={<PublicSandbox />} />
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/" element={<RootRedirect />} />
             <Route
               element={
                 <ProtectedRoute>
@@ -103,6 +110,14 @@ const App = () => (
                 element={
                   <ModuleRoute moduleKey="tenants" requiredRoles={["superadmin"]}>
                     <UsersManagementPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/permissions"
+                element={
+                  <ModuleRoute moduleKey="tenants" requiredRoles={["superadmin"]}>
+                    <TenantPermissionsPage />
                   </ModuleRoute>
                 }
               />

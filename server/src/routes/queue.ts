@@ -26,6 +26,7 @@ import { shouldSkipFollowUpByContext } from "../services/followup-guard.js";
 import { buildPhotosSentMeta } from "../utils/photos-sent-metadata.js";
 import { appendMediaIdsFromSseEvent } from "../utils/merge-sse-media-ids.js";
 import { isWithinAgentBusinessHours, getNextBusinessHoursOpenIso } from "../utils/agent-business-hours.js";
+import { isTenantAiGloballyDisabled } from "../services/tenant-ai-global.js";
 
 const API_BASE = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
 
@@ -350,6 +351,19 @@ export async function processFollowUpItem(
     await supabase
       .from("follow_up_queue")
       .update({ status: "cancelled", cancel_reason: "agent_inactive", updated_at: new Date().toISOString() })
+      .eq("id", item.id);
+    return { processed: false, skipped: true };
+  }
+
+  if (await isTenantAiGloballyDisabled(supabase, agent.tenant_id)) {
+    followupLog.cancelled(item.id as string, "tenant_ai_globally_disabled");
+    await supabase
+      .from("follow_up_queue")
+      .update({
+        status: "cancelled",
+        cancel_reason: "tenant_ai_globally_disabled",
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", item.id);
     return { processed: false, skipped: true };
   }
@@ -794,6 +808,11 @@ export async function queueRoutes(fastify: FastifyInstance) {
         attachments,
         chatwoot_message_id,
       } = req.body;
+
+      const { data: agentTenantRow } = await supabase.from("agents").select("tenant_id").eq("id", agent_id).maybeSingle();
+      if (agentTenantRow?.tenant_id && (await isTenantAiGloballyDisabled(supabase, agentTenantRow.tenant_id))) {
+        return reply.send({ status: "skipped", reason: "tenant_ai_globally_disabled" });
+      }
 
       let finalMessage = user_message;
 

@@ -7,6 +7,7 @@ import {
   requireAuthenticated,
   type AccessContext,
 } from "../services/authorization.js";
+import { writeAuditLog } from "../services/audit.js";
 
 const MODULE_KEY = "occurrences";
 
@@ -36,6 +37,35 @@ async function denyIfOccurrencesDisabled(
   if (enabled) return false;
   reply.status(403).send({ error: "module_disabled", module_key: MODULE_KEY });
   return true;
+}
+
+/**
+ * Verifica se o utilizador tem uma action permitida via user_module_acl.
+ * Retorna true se permitido, false se negado.
+ * superadmin e tenant_admin têm acesso irrestrito.
+ */
+async function canActionViaUserAcl(
+  supabase: ReturnType<typeof createNexusClient>,
+  tenantId: string,
+  auth: AccessContext,
+  action: string
+): Promise<boolean> {
+  if (auth.role === "superadmin") return true;
+  if (auth.tenantAdminIds.includes(tenantId)) return true;
+
+  const { data: row } = await supabase
+    .from("user_module_acl")
+    .select("enabled, allowed_actions")
+    .eq("tenant_id", tenantId)
+    .eq("user_id", auth.userId)
+    .eq("module_key", MODULE_KEY)
+    .maybeSingle();
+
+  if (!row) return false; // sem ACL = sem permissão para tenant_user
+  if (!(row as { enabled?: boolean }).enabled) return false;
+  const actions = (row as { allowed_actions?: string[] | null }).allowed_actions;
+  if (!actions || actions.length === 0) return true; // null = todas as actions permitidas
+  return actions.includes(action);
 }
 
 /** Se existir pelo menos uma linha de ACL para o tenant, restringe a esses utilizadores. */
@@ -313,8 +343,11 @@ export async function occurrencesRoutes(fastify: FastifyInstance) {
         if (!tenantId || !inventoryId || !title) {
           return reply.status(400).send({ error: "tenant_id, inventory_id e title são obrigatórios" });
         }
-        if (!canManageTenant(auth, tenantId)) {
+        if (!canAccessTenant(auth, tenantId)) {
           return reply.status(403).send({ error: "forbidden_tenant_access" });
+        }
+        if (!(await canActionViaUserAcl(supabase, tenantId, auth, "register"))) {
+          return reply.status(403).send({ error: "unauthorized" });
         }
         if (await denyIfOccurrencesDisabled(supabase, tenantId, reply)) return;
         if (await denyIfOccurrenceAclDenied(supabase, tenantId, auth, true, reply)) return;
@@ -389,6 +422,14 @@ export async function occurrencesRoutes(fastify: FastifyInstance) {
 
         const { data, error } = await supabase.from("occurrences").insert(record).select().single();
         if (error) throw error;
+        void writeAuditLog({
+          tenantId,
+          auth,
+          resource: "occurrence",
+          resourceId: (data as { id?: string }).id,
+          resourceLabel: title,
+          action: "create",
+        });
         return reply.status(201).send(data);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
@@ -427,7 +468,7 @@ export async function occurrencesRoutes(fastify: FastifyInstance) {
 
         const { data: existing, error: exErr } = await supabase
           .from("occurrences")
-          .select("tenant_id, inventory_id, location_type, location_detail")
+          .select("tenant_id, inventory_id, location_type, location_detail, title")
           .eq("id", id)
           .maybeSingle();
 
@@ -435,8 +476,11 @@ export async function occurrencesRoutes(fastify: FastifyInstance) {
         if (!existing) return reply.status(404).send({ error: "Ocorrência não encontrada" });
 
         const tenantId = existing.tenant_id as string;
-        if (!canManageTenant(auth, tenantId)) {
+        if (!canAccessTenant(auth, tenantId)) {
           return reply.status(403).send({ error: "forbidden_tenant_access" });
+        }
+        if (!(await canActionViaUserAcl(supabase, tenantId, auth, "edit"))) {
+          return reply.status(403).send({ error: "unauthorized" });
         }
         if (await denyIfOccurrencesDisabled(supabase, tenantId, reply)) return;
         if (await denyIfOccurrenceAclDenied(supabase, tenantId, auth, true, reply)) return;
@@ -537,6 +581,15 @@ export async function occurrencesRoutes(fastify: FastifyInstance) {
 
         const { data, error } = await supabase.from("occurrences").update(updates).eq("id", id).select().single();
         if (error) throw error;
+        void writeAuditLog({
+          tenantId,
+          auth,
+          resource: "occurrence",
+          resourceId: id,
+          resourceLabel: (typeof body.title === "string" ? body.title : null) ?? (existing as { title?: string }).title ?? null,
+          action: "update",
+          metadata: { fields: Object.keys(updates) },
+        });
         return reply.send(data);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
@@ -556,7 +609,7 @@ export async function occurrencesRoutes(fastify: FastifyInstance) {
 
         const { data: existing, error: exErr } = await supabase
           .from("occurrences")
-          .select("tenant_id")
+          .select("tenant_id, title")
           .eq("id", id)
           .maybeSingle();
 
@@ -564,14 +617,25 @@ export async function occurrencesRoutes(fastify: FastifyInstance) {
         if (!existing) return reply.status(404).send({ error: "Ocorrência não encontrada" });
 
         const tenantId = existing.tenant_id as string;
-        if (!canManageTenant(auth, tenantId)) {
+        if (!canAccessTenant(auth, tenantId)) {
           return reply.status(403).send({ error: "forbidden_tenant_access" });
+        }
+        if (!(await canActionViaUserAcl(supabase, tenantId, auth, "delete"))) {
+          return reply.status(403).send({ error: "unauthorized" });
         }
         if (await denyIfOccurrencesDisabled(supabase, tenantId, reply)) return;
         if (await denyIfOccurrenceAclDenied(supabase, tenantId, auth, true, reply)) return;
 
         const { error } = await supabase.from("occurrences").delete().eq("id", id);
         if (error) throw error;
+        void writeAuditLog({
+          tenantId,
+          auth,
+          resource: "occurrence",
+          resourceId: id,
+          resourceLabel: (existing as { title?: string }).title ?? null,
+          action: "delete",
+        });
         return reply.send({ success: true });
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);

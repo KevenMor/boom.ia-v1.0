@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTenants, useUpdateTenant } from "@/hooks/useTenants";
+import { useAdminUsers } from "@/hooks/useAdminUsers";
 import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
 import type { ModuleGroup, ModuleKey } from "@/lib/tenant-modules";
 import { TENANT_MODULES, createDefaultModuleState } from "@/lib/tenant-modules";
@@ -109,8 +110,8 @@ export default function EditTenant() {
   const [moduleState, setModuleState] = useState<Record<ModuleKey, boolean>>(createDefaultModuleState);
   const [modulesLoading, setModulesLoading] = useState(false);
   const [membershipRows, setMembershipRows] = useState<TenantMembership[]>([]);
-  const [profilesOptions, setProfilesOptions] = useState<Array<{ id: string; full_name: string | null }>>([]);
   const [membershipsLoading, setMembershipsLoading] = useState(false);
+  const { data: adminUsers } = useAdminUsers();
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [selectedMembershipRole, setSelectedMembershipRole] = useState<"tenant_admin" | "tenant_user">("tenant_user");
 
@@ -172,23 +173,18 @@ export default function EditTenant() {
     let cancelled = false;
     setMembershipsLoading(true);
     void (async () => {
-      const [{ data: membershipsData, error: membershipsError }, { data: profilesData, error: profilesError }] = await Promise.all([
-        supabase
-          .from("tenant_memberships")
-          .select("*")
-          .eq("tenant_id", tenant.id)
-          .order("created_at", { ascending: false }),
-        supabase.from("profiles").select("id, full_name").order("full_name", { ascending: true }),
-      ]);
+      const { data: membershipsData, error: membershipsError } = await supabase
+        .from("tenant_memberships")
+        .select("*")
+        .eq("tenant_id", tenant.id)
+        .order("created_at", { ascending: false });
 
       if (cancelled) return;
-      if (membershipsError || profilesError) {
+      if (membershipsError) {
         toast.error("Erro ao carregar membros do tenant.");
         setMembershipRows([]);
-        setProfilesOptions([]);
       } else {
         setMembershipRows((membershipsData as TenantMembership[]) ?? []);
-        setProfilesOptions((profilesData as Array<{ id: string; full_name: string | null }>) ?? []);
       }
       setMembershipsLoading(false);
     })();
@@ -391,9 +387,11 @@ export default function EditTenant() {
                 <SelectValue placeholder="Selecione um usuário" />
               </SelectTrigger>
               <SelectContent>
-                {profilesOptions.map((profile) => (
-                  <SelectItem key={profile.id} value={profile.id}>
-                    {profile.full_name || profile.id}
+                {(adminUsers ?? []).map((u) => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.full_name
+                      ? `${u.full_name}${u.email ? ` — ${u.email}` : ""}`
+                      : (u.email ?? u.id)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -425,16 +423,19 @@ export default function EditTenant() {
           ) : (
             <div className="space-y-2">
               {membershipRows.map((membership) => {
-                const profile = profilesOptions.find((p) => p.id === membership.user_id);
+                const user = (adminUsers ?? []).find((u) => u.id === membership.user_id);
+                const displayName = user?.full_name || user?.email || membership.user_id;
+                const displaySub = user?.full_name && user?.email ? user.email : null;
                 return (
                   <div
                     key={membership.id}
                     className="flex items-center justify-between rounded-lg border border-border bg-muted/20 p-3"
                   >
                     <div>
-                      <p className="text-sm font-medium text-foreground">
-                        {profile?.full_name || membership.user_id}
-                      </p>
+                      <p className="text-sm font-medium text-foreground">{displayName}</p>
+                      {displaySub && (
+                        <p className="text-xs text-muted-foreground">{displaySub}</p>
+                      )}
                       <p className="text-xs text-muted-foreground">{membership.role}</p>
                     </div>
                     <Button
