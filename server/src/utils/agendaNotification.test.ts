@@ -6,6 +6,7 @@ import {
   buildCancelNotification,
   buildHandoffNotification,
   extractClientNameFromMessages,
+  userHasProvidedNameInMessages,
   extractPhoneFromMessages,
   resolveHandoffPhone,
   isBlockedAsName,
@@ -199,6 +200,37 @@ describe("extractClientNameFromMessages", () => {
     expect(
       extractClientNameFromMessages([{ role: "user", content: "meu nome é Ana Júlia" }])
     ).toBe("Ana Júlia");
+  });
+
+  it("não infere nome por frase curta sem pergunta prévia de nome", () => {
+    const messages = [
+      { role: "assistant", content: "Como funciona pra tirar CNH?" },
+      { role: "user", content: "nunca dirigi" },
+    ];
+    expect(extractClientNameFromMessages(messages)).toBeUndefined();
+  });
+
+  it("aceita nome quando foi resposta direta a pergunta de nome", () => {
+    const messages = [
+      { role: "assistant", content: "Como posso te chamar?" },
+      { role: "user", content: "João" },
+    ];
+    expect(extractClientNameFromMessages(messages)).toBe("João");
+  });
+});
+
+describe("userHasProvidedNameInMessages", () => {
+  it("não marca frases curtas como nome sem contexto de pergunta", () => {
+    const messages = [{ role: "user", content: "tenho interesse" }];
+    expect(userHasProvidedNameInMessages(messages)).toBe(false);
+  });
+
+  it("marca nome quando o cliente responde após pergunta de nome", () => {
+    const messages = [
+      { role: "assistant", content: "Como posso te chamar?" },
+      { role: "user", content: "Maria" },
+    ];
+    expect(userHasProvidedNameInMessages(messages)).toBe(true);
   });
 });
 

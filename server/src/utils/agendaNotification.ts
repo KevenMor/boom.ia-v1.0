@@ -190,6 +190,32 @@ const EXPLICIT_NAME_CAPTURES: RegExp[] = [
   /(?:meu\s+)?nome\s+(?:e|eh|é)\s+([A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+){0,3})/i,
 ];
 
+const NAME_QUESTION_HINT = /como\s+(?:posso|prefere)\s+(?:te|lhe)\s+chamar|com\s+quem\s+eu\s+falo|qual\s+(?:e|é)\s+seu\s+nome|me\s+fala\s+seu\s+nome|pode\s+me\s+dizer\s+seu\s+nome/i;
+
+function wasNameRecentlyRequested(
+  messages: Array<{ role: string; content: string }>,
+  userMsgIndex: number
+): boolean {
+  const start = Math.max(0, userMsgIndex - 4);
+  for (let i = userMsgIndex - 1; i >= start; i--) {
+    const prev = messages[i];
+    if (prev?.role !== "assistant") continue;
+    const text = (prev.content || "").trim();
+    if (!text) continue;
+    if (NAME_QUESTION_HINT.test(text)) return true;
+  }
+  return false;
+}
+
+function looksLikePersonNameByCasing(candidate: string): boolean {
+  const words = candidate
+    .split(/\s+/)
+    .map((w) => w.trim())
+    .filter((w) => w.length > 0);
+  if (words.length < 1 || words.length > 4) return false;
+  return words.every((w) => /^[A-ZÀ-Ý][a-zà-ÿ]+$/.test(w));
+}
+
 function tryExtractExplicitNameFromText(text: string): string | undefined {
   const t = text.trim();
   if (!t) return undefined;
@@ -217,12 +243,15 @@ function isValidHistoryPersonName(candidate: string): boolean {
  * Usado para NÃO injetar "Como posso te chamar?" quando o nome já foi dado.
  */
 export function userHasProvidedNameInMessages(messages: Array<{ role: string; content: string }>): boolean {
-  for (const m of messages) {
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
     if (m?.role !== "user") continue;
     const text = (m.content || "").trim();
     if (!text) continue;
     if (tryExtractExplicitNameFromText(text)) return true;
     const line = text.split(/\n/)[0];
+    const askedForName = wasNameRecentlyRequested(messages, i);
+    if (!askedForName && !looksLikePersonNameByCasing(line.trim())) continue;
     const words = line.split(/\s+/).filter((w) => w.length > 0);
     if (words.length >= 1 && words.length <= 4 && words.every((w) => /^[A-Za-zÀ-ÿ]+$/.test(w))) {
       if (isValidHistoryPersonName(line.trim())) return true;
@@ -264,6 +293,8 @@ export function extractClientNameFromMessages(messages: Array<{ role: string; co
       }
     }
     if (line.length >= 2 && line.length <= 60 && !cpfPattern.test(line) && !/^\d+$/.test(line)) {
+      const askedForName = wasNameRecentlyRequested(recent, i);
+      if (!askedForName && !looksLikePersonNameByCasing(line.trim())) continue;
       const words = line.split(/\s+/).filter((w) => w.length > 0);
       if (words.length >= 2 && words.length <= 4 && words.every((w) => /^[A-Za-zÀ-ÿ]+$/.test(w))) {
         const candidate = line.trim();
