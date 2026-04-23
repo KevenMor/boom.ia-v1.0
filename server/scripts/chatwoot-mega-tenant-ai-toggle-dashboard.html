@@ -155,93 +155,302 @@
     return CFG.UI_MODE === 'new_tab';
   }
 
-  /** Mesmos padrões visuais do cartão standalone, limitados ao modal. */
+  /** Modal alinhado a Chatwoot/Linear: slate sólido, indigo-600 marca, callouts, dark mode. */
   const MODAL_CARD_CSS = `
     #boom-ia-modal-scrim * { box-sizing: border-box; }
-    #boom-ia-modal-scrim {
-      position: fixed; inset: 0; z-index: 100000; display: none; align-items: center; justify-content: center;
-      padding: 24px 16px 32px; overflow-y: auto; background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(4px);
+    #boom-ia-modal-scrim.boom-ia-scrim {
+      position: fixed; inset: 0; z-index: 100000;
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px 16px 32px; overflow-y: auto;
+      background: rgba(15, 23, 42, 0.45);
+      backdrop-filter: blur(2px);
+      -webkit-backdrop-filter: blur(2px);
+      opacity: 0; visibility: hidden; pointer-events: none;
+      transition: opacity 0.22s ease, visibility 0.22s ease;
     }
-    #boom-ia-modal-scrim .boom-ia-modal-page {
+    #boom-ia-modal-scrim.boom-ia-scrim.boom-ia-scrim--open {
+      opacity: 1; visibility: visible; pointer-events: auto;
+    }
+    #boom-ia-modal-scrim .boom-ia-modal__page {
       width: 100%; max-width: 460px; margin: auto; min-height: min-content;
-      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-      background: transparent; padding: 8px 4px; box-shadow: none; pointer-events: auto;
+      padding: 8px 4px; pointer-events: none;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     }
-    #boom-ia-modal-scrim .card {
+    #boom-ia-modal-scrim .boom-ia-modal__surface {
+      pointer-events: auto;
       width: 100%; max-width: 440px; margin: 0 auto;
-      border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 18px;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
-      padding: 26px 24px 22px; backdrop-filter: blur(12px);
-      background: linear-gradient(165deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.98) 50%, rgba(236, 253, 245, 0.95) 100%);
+      border-radius: 12px;
+      border: 1px solid #e2e8f0;
+      background: #ffffff;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+      padding: 20px 20px 18px;
+      transform: translateY(8px) scale(0.985);
+      opacity: 0;
+      transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease, box-shadow 0.2s ease;
+    }
+    #boom-ia-modal-scrim.boom-ia-scrim--open .boom-ia-modal__surface {
+      transform: translateY(0) scale(1);
+      opacity: 1;
     }
     @media (prefers-color-scheme: dark) {
-      #boom-ia-modal-scrim .card {
-        background: rgba(30, 41, 59, 0.94) !important; border-color: rgba(148, 163, 184, 0.22) !important;
+      #boom-ia-modal-scrim .boom-ia-modal__surface {
+        background: #1e293b;
+        border-color: #334155;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.35), 0 4px 6px -2px rgba(0, 0, 0, 0.2);
       }
     }
-    #boom-ia-modal-scrim .brand { font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #4f46e5; margin-bottom: 6px; }
-    #boom-ia-modal-scrim h1 { margin: 0 0 10px; font-size: 1.45rem; font-weight: 700; line-height: 1.25; letter-spacing: -0.02em; }
-    #boom-ia-modal-scrim .lead { margin: 0 0 18px; font-size: 0.875rem; line-height: 1.55; color: #64748b; }
-    @media (prefers-color-scheme: dark) { #boom-ia-modal-scrim .lead { color: #94a3b8; } }
-    #boom-ia-modal-scrim .diag {
-      font-size: 11px; line-height: 1.5; padding: 12px 14px; border-radius: 12px; border: 1px solid #bae6fd; background: #f0f9ff;
-      font-family: ui-monospace, SFMono-Regular, monospace; white-space: pre-wrap; word-break: break-all; margin: 0 0 14px;
+    #boom-ia-modal-scrim .boom-ia-modal__header {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 12px; margin-bottom: 4px;
+    }
+    #boom-ia-modal-scrim .boom-ia-modal__brand {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+      color: #4f46e5; line-height: 1.2;
+    }
+    #boom-ia-modal-scrim .boom-ia-modal__close {
+      cursor: pointer; width: 40px; height: 40px; flex-shrink: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      margin: -6px -6px 0 0; padding: 0;
+      border-radius: 8px; border: 1px solid #e2e8f0; background: transparent;
+      color: #64748b; font-size: 1.35rem; line-height: 1; font-weight: 400;
+      transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    }
+    #boom-ia-modal-scrim .boom-ia-modal__close:hover {
+      background: #f8fafc; border-color: #cbd5e1; color: #0f172a;
     }
     @media (prefers-color-scheme: dark) {
-      #boom-ia-modal-scrim .diag { background: rgba(14, 165, 233, 0.14); border-color: rgba(125, 211, 252, 0.35); }
+      #boom-ia-modal-scrim .boom-ia-modal__close {
+        border-color: #475569; color: #94a3b8;
+      }
+      #boom-ia-modal-scrim .boom-ia-modal__close:hover {
+        background: #334155; border-color: #64748b; color: #e2e8f0;
+      }
     }
-    #boom-ia-modal-scrim .status {
-      border-radius: 12px; padding: 14px 16px; font-size: 0.95rem; font-weight: 600; margin-bottom: 16px;
-      background: rgba(241, 245, 249, 0.95); border-left: 4px solid #94a3b8; white-space: pre-wrap; line-height: 1.45;
+    #boom-ia-modal-scrim .boom-ia-modal__title {
+      margin: 0 0 8px; font-size: 1.25rem; font-weight: 600; line-height: 1.3; letter-spacing: -0.02em;
+      color: #0f172a;
     }
-    @media (prefers-color-scheme: dark) { #boom-ia-modal-scrim .status { background: rgba(15, 23, 42, 0.5); } }
-    #boom-ia-modal-scrim .row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
-    #boom-ia-modal-scrim .btn {
-      cursor: pointer; padding: 11px 18px; border-radius: 11px; border: none; font-weight: 600; font-size: 0.9rem; font-family: inherit;
-      transition: transform 0.07s ease, box-shadow 0.12s ease;
+    @media (prefers-color-scheme: dark) {
+      #boom-ia-modal-scrim .boom-ia-modal__title { color: #e2e8f0; }
     }
-    #boom-ia-modal-scrim .btn:disabled { opacity: 0.55; cursor: not-allowed; }
-    #boom-ia-modal-scrim .btn:active:not(:disabled) { transform: scale(0.98); }
-    #boom-ia-modal-scrim .btn.on { background: linear-gradient(180deg, #22c55e, #15803d); color: #fff; box-shadow: 0 4px 16px rgba(22, 163, 74, 0.38); }
-    #boom-ia-modal-scrim .btn.off { background: linear-gradient(180deg, #f97316, #9a3412); color: #fff; box-shadow: 0 4px 16px rgba(234, 88, 12, 0.32); }
-    #boom-ia-modal-scrim .btn.ghost { background: transparent; color: inherit; border: 1px solid rgba(100, 116, 139, 0.5); }
-    #boom-ia-modal-scrim .btn-x {
-      cursor: pointer; width: 38px; height: 38px; border-radius: 10px; border: 1px solid rgba(148, 163, 184, 0.45);
-      background: transparent; color: inherit; font-size: 1.25rem; line-height: 1; flex-shrink: 0;
+    #boom-ia-modal-scrim .boom-ia-modal__lead {
+      margin: 0 0 16px; font-size: 0.875rem; font-weight: 400; line-height: 1.55;
+      color: #64748b;
     }
-    #boom-ia-modal-scrim .foot { font-size: 11px; margin: 0; opacity: 0.8; line-height: 1.5; }
+    @media (prefers-color-scheme: dark) {
+      #boom-ia-modal-scrim .boom-ia-modal__lead { color: #94a3b8; }
+    }
+    #boom-ia-modal-scrim .boom-ia-modal__lead strong { font-weight: 500; color: #334155; }
+    @media (prefers-color-scheme: dark) {
+      #boom-ia-modal-scrim .boom-ia-modal__lead strong { color: #cbd5e1; }
+    }
+    #boom-ia-modal-scrim .boom-ia-diag {
+      font-size: 11px; font-weight: 400; line-height: 1.5; margin: 0 0 14px; padding: 12px 14px;
+      border-radius: 12px; border: 1px solid #e2e8f0; background: #f8fafc;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      white-space: pre-wrap; word-break: break-all; color: #475569;
+    }
+    #boom-ia-modal-scrim .boom-ia-diag.boom-ia-diag--ok {
+      border-color: #cbd5e1; background: #f8fafc; border-left: 3px solid #94a3b8;
+    }
+    #boom-ia-modal-scrim .boom-ia-diag.boom-ia-diag--err {
+      border-color: #fecaca; background: #fef2f2; border-left: 3px solid #dc2626; color: #991b1b;
+    }
+    @media (prefers-color-scheme: dark) {
+      #boom-ia-modal-scrim .boom-ia-diag {
+        background: #0f172a; border-color: #334155; color: #94a3b8;
+      }
+      #boom-ia-modal-scrim .boom-ia-diag.boom-ia-diag--ok {
+        background: #0f172a; border-color: #334155; border-left-color: #64748b; color: #94a3b8;
+      }
+      #boom-ia-modal-scrim .boom-ia-diag.boom-ia-diag--err {
+        background: #450a0a; border-color: #7f1d1d; border-left-color: #ef4444; color: #fecaca;
+      }
+    }
+    #boom-ia-modal-scrim .boom-ia-callout {
+      border-radius: 12px; padding: 12px 14px 12px 14px; margin: 0 0 14px;
+      font-size: 0.875rem; font-weight: 500; line-height: 1.45; white-space: pre-wrap;
+      background: #f8fafc; border: 1px solid #e2e8f0; border-left-width: 3px; border-left-style: solid;
+      color: #0f172a;
+    }
+    #boom-ia-modal-scrim .boom-ia-callout--neutral { border-left-color: #94a3b8; }
+    #boom-ia-modal-scrim .boom-ia-callout--success { border-left-color: #16a34a; }
+    #boom-ia-modal-scrim .boom-ia-callout--warning { border-left-color: #ea580c; }
+    #boom-ia-modal-scrim .boom-ia-callout--danger { border-left-color: #dc2626; }
+    @media (prefers-color-scheme: dark) {
+      #boom-ia-modal-scrim .boom-ia-callout {
+        background: #0f172a; border-color: #334155; color: #e2e8f0;
+      }
+      #boom-ia-modal-scrim .boom-ia-callout--neutral { border-left-color: #64748b; }
+      #boom-ia-modal-scrim .boom-ia-callout--success { border-left-color: #22c55e; }
+      #boom-ia-modal-scrim .boom-ia-callout--warning { border-left-color: #fb923c; }
+      #boom-ia-modal-scrim .boom-ia-callout--danger { border-left-color: #f87171; }
+    }
+    #boom-ia-modal-scrim .boom-ia-modal__actions {
+      display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;
+    }
+    #boom-ia-modal-scrim .boom-ia-btn {
+      cursor: pointer; height: 40px; padding: 0 16px; border-radius: 8px;
+      font-family: inherit; font-size: 0.8125rem; font-weight: 500; line-height: 1;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+    }
+    #boom-ia-modal-scrim .boom-ia-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    #boom-ia-modal-scrim .boom-ia-btn--solid {
+      border: 1px solid transparent; background: #16a34a; color: #ffffff;
+    }
+    #boom-ia-modal-scrim .boom-ia-btn--solid:hover:not(:disabled) {
+      background: #15803d; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+    }
+    #boom-ia-modal-scrim .boom-ia-btn--outline-warn {
+      border: 1px solid #fdba74; background: #ffffff; color: #c2410c;
+    }
+    #boom-ia-modal-scrim .boom-ia-btn--outline-warn:hover:not(:disabled) {
+      background: #fff7ed; border-color: #fb923c;
+    }
+    #boom-ia-modal-scrim .boom-ia-btn--outline-slate {
+      border: 1px solid #e2e8f0; background: #ffffff; color: #475569;
+    }
+    #boom-ia-modal-scrim .boom-ia-btn--outline-slate:hover:not(:disabled) {
+      background: #f8fafc; border-color: #cbd5e1; color: #0f172a;
+    }
+    @media (prefers-color-scheme: dark) {
+      #boom-ia-modal-scrim .boom-ia-btn--outline-warn {
+        background: #1e293b; border-color: #9a3412; color: #fdba74;
+      }
+      #boom-ia-modal-scrim .boom-ia-btn--outline-warn:hover:not(:disabled) {
+        background: #334155; border-color: #ea580c;
+      }
+      #boom-ia-modal-scrim .boom-ia-btn--outline-slate {
+        background: #1e293b; border-color: #475569; color: #cbd5e1;
+      }
+      #boom-ia-modal-scrim .boom-ia-btn--outline-slate:hover:not(:disabled) {
+        background: #334155; border-color: #64748b; color: #f1f5f9;
+      }
+    }
+    #boom-ia-modal-scrim .boom-ia-modal__foot {
+      font-size: 11px; font-weight: 400; margin: 0; line-height: 1.5; color: #64748b;
+    }
+    @media (prefers-color-scheme: dark) {
+      #boom-ia-modal-scrim .boom-ia-modal__foot { color: #94a3b8; }
+    }
+    /* Chatwoot: tema escuro por classe no <html> (sem depender do SO). */
+    html.dark #boom-ia-modal-scrim .boom-ia-modal__surface {
+      background: #1e293b; border-color: #334155;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.35), 0 4px 6px -2px rgba(0, 0, 0, 0.2);
+    }
+    html.dark #boom-ia-modal-scrim .boom-ia-modal__title { color: #e2e8f0; }
+    html.dark #boom-ia-modal-scrim .boom-ia-modal__lead { color: #94a3b8; }
+    html.dark #boom-ia-modal-scrim .boom-ia-modal__lead strong { color: #cbd5e1; }
+    html.dark #boom-ia-modal-scrim .boom-ia-diag {
+      background: #0f172a; border-color: #334155; color: #94a3b8;
+    }
+    html.dark #boom-ia-modal-scrim .boom-ia-diag.boom-ia-diag--ok {
+      background: #0f172a; border-color: #334155; border-left-color: #64748b; color: #94a3b8;
+    }
+    html.dark #boom-ia-modal-scrim .boom-ia-diag.boom-ia-diag--err {
+      background: #450a0a; border-color: #7f1d1d; border-left-color: #ef4444; color: #fecaca;
+    }
+    html.dark #boom-ia-modal-scrim .boom-ia-callout {
+      background: #0f172a; border-color: #334155; color: #e2e8f0;
+    }
+    html.dark #boom-ia-modal-scrim .boom-ia-callout--neutral { border-left-color: #64748b; }
+    html.dark #boom-ia-modal-scrim .boom-ia-callout--success { border-left-color: #22c55e; }
+    html.dark #boom-ia-modal-scrim .boom-ia-callout--warning { border-left-color: #fb923c; }
+    html.dark #boom-ia-modal-scrim .boom-ia-callout--danger { border-left-color: #f87171; }
+    html.dark #boom-ia-modal-scrim .boom-ia-btn--outline-warn {
+      background: #1e293b; border-color: #9a3412; color: #fdba74;
+    }
+    html.dark #boom-ia-modal-scrim .boom-ia-btn--outline-warn:hover:not(:disabled) {
+      background: #334155; border-color: #ea580c;
+    }
+    html.dark #boom-ia-modal-scrim .boom-ia-btn--outline-slate {
+      background: #1e293b; border-color: #475569; color: #cbd5e1;
+    }
+    html.dark #boom-ia-modal-scrim .boom-ia-btn--outline-slate:hover:not(:disabled) {
+      background: #334155; border-color: #64748b; color: #f1f5f9;
+    }
+    html.dark #boom-ia-modal-scrim .boom-ia-modal__foot { color: #94a3b8; }
+    html.dark #boom-ia-modal-scrim .boom-ia-modal__close {
+      border-color: #475569; color: #94a3b8;
+    }
+    html.dark #boom-ia-modal-scrim .boom-ia-modal__close:hover {
+      background: #334155; border-color: #64748b; color: #e2e8f0;
+    }
   `;
 
   const STANDALONE_PAGE_CSS = `
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-      background: linear-gradient(165deg, #e0e7ff 0%, #f8fafc 42%, #ecfdf5 100%); color: #0f172a; }
+    body {
+      margin: 0; min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f1f5f9; color: #0f172a;
+    }
     @media (prefers-color-scheme: dark) {
-      body { background: linear-gradient(165deg, #1e1b4b 0%, #0f172a 48%, #14532d 100%); color: #f1f5f9; }
-      .card { background: rgba(30, 41, 59, 0.94) !important; border-color: rgba(148, 163, 184, 0.22) !important; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45) !important; }
+      body { background: #0f172a; color: #e2e8f0; }
     }
     .page { min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 36px 16px 56px; }
-    .card { width: 100%; max-width: 440px; background: rgba(255, 255, 255, 0.96); border: 1px solid rgba(148, 163, 184, 0.28);
-      border-radius: 20px; box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.2); padding: 30px 28px 26px; backdrop-filter: blur(10px); }
-    .brand { font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #4f46e5; margin-bottom: 8px; }
-    h1 { margin: 0 0 12px; font-size: 1.5rem; font-weight: 700; line-height: 1.25; letter-spacing: -0.02em; }
-    .lead { margin: 0 0 20px; font-size: 0.875rem; line-height: 1.55; color: #64748b; }
+    .card {
+      width: 100%; max-width: 440px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+      padding: 24px 22px 20px;
+    }
+    @media (prefers-color-scheme: dark) {
+      .card { background: #1e293b; border-color: #334155; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.35), 0 4px 6px -2px rgba(0, 0, 0, 0.2); }
+    }
+    .brand { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #4f46e5; margin-bottom: 8px; }
+    h1 { margin: 0 0 10px; font-size: 1.25rem; font-weight: 600; line-height: 1.3; letter-spacing: -0.02em; color: #0f172a; }
+    @media (prefers-color-scheme: dark) { h1 { color: #e2e8f0; } }
+    .lead { margin: 0 0 18px; font-size: 0.875rem; font-weight: 400; line-height: 1.55; color: #64748b; }
     @media (prefers-color-scheme: dark) { .lead { color: #94a3b8; } }
-    .diag { font-size: 11px; line-height: 1.5; padding: 12px 14px; border-radius: 12px; border: 1px solid #bae6fd; background: #f0f9ff;
-      font-family: ui-monospace, SFMono-Regular, monospace; white-space: pre-wrap; word-break: break-all; margin: 0 0 16px; }
-    @media (prefers-color-scheme: dark) { .diag { background: rgba(14, 165, 233, 0.14); border-color: rgba(125, 211, 252, 0.35); } }
-    .status { border-radius: 12px; padding: 14px 16px; font-size: 0.95rem; font-weight: 600; margin-bottom: 18px;
-      background: rgba(241, 245, 249, 0.95); border-left: 4px solid #94a3b8; white-space: pre-wrap; line-height: 1.45; }
-    @media (prefers-color-scheme: dark) { .status { background: rgba(15, 23, 42, 0.5); } }
-    .row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
-    .btn { cursor: pointer; padding: 11px 18px; border-radius: 11px; border: none; font-weight: 600; font-size: 0.9rem; font-family: inherit;
-      transition: transform 0.07s ease, box-shadow 0.12s ease; }
-    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
-    .btn:active:not(:disabled) { transform: scale(0.98); }
-    .btn.on { background: linear-gradient(180deg, #22c55e, #15803d); color: #fff; box-shadow: 0 4px 16px rgba(22, 163, 74, 0.38); }
-    .btn.off { background: linear-gradient(180deg, #f97316, #9a3412); color: #fff; box-shadow: 0 4px 16px rgba(234, 88, 12, 0.32); }
-    .btn.ghost { background: transparent; color: inherit; border: 1px solid rgba(100, 116, 139, 0.5); }
-    .foot { font-size: 11px; margin: 0; opacity: 0.8; line-height: 1.5; }
+    .lead strong { font-weight: 500; color: #334155; }
+    @media (prefers-color-scheme: dark) { .lead strong { color: #cbd5e1; } }
+    .diag {
+      font-size: 11px; line-height: 1.5; padding: 12px 14px; border-radius: 12px; margin: 0 0 14px;
+      border: 1px solid #e2e8f0; background: #f8fafc; border-left: 3px solid #94a3b8;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: pre-wrap; word-break: break-all; color: #475569;
+    }
+    .diag.boom-ia-diag--err { border-color: #fecaca; background: #fef2f2; border-left-color: #dc2626; color: #991b1b; }
+    @media (prefers-color-scheme: dark) {
+      .diag { background: #0f172a; border-color: #334155; border-left-color: #64748b; color: #94a3b8; }
+      .diag.boom-ia-diag--err { background: #450a0a; border-color: #7f1d1d; border-left-color: #ef4444; color: #fecaca; }
+    }
+    .boom-ia-callout {
+      border-radius: 12px; padding: 12px 14px; margin: 0 0 14px; font-size: 0.875rem; font-weight: 500; line-height: 1.45; white-space: pre-wrap;
+      background: #f8fafc; border: 1px solid #e2e8f0; border-left-width: 3px; border-left-style: solid; color: #0f172a;
+    }
+    .boom-ia-callout--neutral { border-left-color: #94a3b8; }
+    .boom-ia-callout--success { border-left-color: #16a34a; }
+    .boom-ia-callout--warning { border-left-color: #ea580c; }
+    .boom-ia-callout--danger { border-left-color: #dc2626; }
+    @media (prefers-color-scheme: dark) {
+      .boom-ia-callout { background: #0f172a; border-color: #334155; color: #e2e8f0; }
+      .boom-ia-callout--neutral { border-left-color: #64748b; }
+      .boom-ia-callout--success { border-left-color: #22c55e; }
+      .boom-ia-callout--warning { border-left-color: #fb923c; }
+      .boom-ia-callout--danger { border-left-color: #f87171; }
+    }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .boom-ia-btn {
+      cursor: pointer; height: 40px; padding: 0 16px; border-radius: 8px; font-family: inherit; font-size: 0.8125rem; font-weight: 500;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .boom-ia-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .boom-ia-btn--solid { border: 1px solid transparent; background: #16a34a; color: #fff; }
+    .boom-ia-btn--solid:hover:not(:disabled) { background: #15803d; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06); }
+    .boom-ia-btn--outline-warn { border: 1px solid #fdba74; background: #fff; color: #c2410c; }
+    .boom-ia-btn--outline-warn:hover:not(:disabled) { background: #fff7ed; border-color: #fb923c; }
+    .boom-ia-btn--outline-slate { border: 1px solid #e2e8f0; background: #fff; color: #475569; }
+    .boom-ia-btn--outline-slate:hover:not(:disabled) { background: #f8fafc; border-color: #cbd5e1; color: #0f172a; }
+    @media (prefers-color-scheme: dark) {
+      .boom-ia-btn--outline-warn { background: #1e293b; border-color: #9a3412; color: #fdba74; }
+      .boom-ia-btn--outline-warn:hover:not(:disabled) { background: #334155; border-color: #ea580c; }
+      .boom-ia-btn--outline-slate { background: #1e293b; border-color: #475569; color: #cbd5e1; }
+      .boom-ia-btn--outline-slate:hover:not(:disabled) { background: #334155; border-color: #64748b; color: #f1f5f9; }
+    }
+    .foot { font-size: 11px; margin: 0; line-height: 1.5; color: #64748b; }
+    @media (prefers-color-scheme: dark) { .foot { color: #94a3b8; } }
   `;
 
   function escapeHtmlDoc(s) {
@@ -257,7 +466,7 @@
     "var K='__boom_tenant_ia_cfg_v1';" +
     "var raw=sessionStorage.getItem(K);sessionStorage.removeItem(K);" +
     "var h1=document.getElementById('h1');var st=document.getElementById('st');" +
-    "if(!raw){if(h1)h1.textContent='IA Global';if(st)st.textContent='Abre esta página pelo menu «IA Global» no Mega.';return;}" +
+    "if(!raw){if(h1)h1.textContent='IA Global';if(st){st.className='boom-ia-callout boom-ia-callout--neutral';st.textContent='Abre esta página pelo menu «IA Global» no Mega.';}return;}" +
     "var CFG=JSON.parse(raw);" +
     "function apiBase(){return String(CFG.API_BASE_URL||'').replace(/\\/+$/, '');}" +
     "function pre(){var b=apiBase();if(!b)return 'Define API_BASE_URL no script do Mega.';try{var a=new URL(b.indexOf('http')===0?b:'https://'+b);var p=new URL(location.href);" +
@@ -271,12 +480,11 @@
     "function load(){if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(CFG.TENANT_ID||''))return Promise.reject(new Error('TENANT_ID inválido'));" +
     "return apiF('/tenant-ai/status?tenant_id='+encodeURIComponent(CFG.TENANT_ID),{method:'GET'});}" +
     "function togg(en){return apiF('/tenant-ai/toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tenant_id:CFG.TENANT_ID,enabled:!!en})});}" +
-    "function paintD(ok){var d=document.getElementById('diag');if(!d)return;d.style.borderColor=ok?'#7dd3fc':'#fca5a5';d.style.background=ok?'#f0f9ff':'#fef2f2';" +
-    "if(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches){d.style.background=ok?'rgba(14,165,233,.14)':'rgba(248,113,113,.12)';}" +
+    "function paintD(ok){var d=document.getElementById('diag');if(!d)return;if(ok)d.classList.remove('boom-ia-diag--err');else d.classList.add('boom-ia-diag--err');" +
     "d.textContent='Origem: '+location.origin+'\\nAPI: '+apiBase()+'/api/tenant-ai/\\n.env TENANT_AI_TOGGLE_CORS_ORIGINS='+location.origin;}" +
-    "function refresh(){var ft=document.getElementById('foot');st.textContent='A carregar…';st.style.borderLeftColor='#94a3b8';st.style.color='#64748b';if(ft)ft.textContent='';paintD(true);" +
+    "function refresh(){var ft=document.getElementById('foot');st.className='boom-ia-callout boom-ia-callout--neutral';st.textContent='A carregar…';if(ft)ft.textContent='';paintD(true);" +
     "return load().then(function(j){var on=j.ai_globally_enabled!==false;st.textContent=on?'Estado: IA global LIGADA':'Estado: IA global DESLIGADA';" +
-    "st.style.borderLeftColor=on?'#22c55e':'#ea580c';st.style.color=on?'#166534':'#c2410c';if(ft)ft.textContent='tenant_id: '+(CFG.TENANT_ID||'').slice(0,8)+'…';}).catch(function(e){st.textContent='Erro: '+((e&&e.message)||String(e));st.style.borderLeftColor='#ef4444';st.style.color='#b91c1c';paintD(false);if(ft)ft.textContent='Reinicia o Node após alterar .env.';});}" +
+    "st.className='boom-ia-callout boom-ia-callout--'+(on?'success':'warning');if(ft)ft.textContent='tenant_id: '+(CFG.TENANT_ID||'').slice(0,8)+'…';}).catch(function(e){st.textContent='Erro: '+((e&&e.message)||String(e));st.className='boom-ia-callout boom-ia-callout--danger';paintD(false);if(ft)ft.textContent='Reinicia o Node após alterar .env.';});}" +
     "function toast(msg,ok){var x=document.getElementById('toast');if(!x){x=document.createElement('div');x.id='toast';x.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:12px 22px;border-radius:999px;font:14px system-ui,sans-serif;color:#fff;z-index:9999;box-shadow:0 12px 40px rgba(0,0,0,.2);';document.body.appendChild(x);}" +
     "x.style.background=ok?'#15803d':'#b91c1c';x.textContent=msg;x.style.display='block';clearTimeout(x._t);x._t=setTimeout(function(){x.style.display='none'},4200);}" +
     "h1.textContent=CFG.PANEL_TITLE||'IA Global';" +
@@ -290,7 +498,7 @@
 
   function buildStandaloneDocument() {
     const title = escapeHtmlDoc(CFG.PANEL_TITLE || 'IA Global');
-    return `<!DOCTYPE html><html lang="pt"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>${STANDALONE_PAGE_CSS}</style></head><body><div class="page"><div class="card" id="root"><div class="brand">Boom</div><h1 id="h1"></h1><p class="lead">Controla a IA para <strong>toda</strong> a organização (todos os agentes e webhooks desta tenant).</p><pre id="diag" class="diag"></pre><div id="st" class="status">A abrir…</div><div class="row"><button type="button" class="btn on" id="b-on">Ligar IA (global)</button><button type="button" class="btn off" id="b-off">Desligar IA (global)</button><button type="button" class="btn ghost" id="b-ref">Atualizar</button></div><p class="foot" id="foot"></p></div></div><script>${STANDALONE_APP_JS}<\/script></body></html>`;
+    return `<!DOCTYPE html><html lang="pt"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>${STANDALONE_PAGE_CSS}</style></head><body><div class="page"><div class="card" id="root"><div class="brand">Boom</div><h1 id="h1"></h1><p class="lead">Controla a IA para <strong>toda</strong> a organização (todos os agentes e webhooks desta tenant).</p><pre id="diag" class="diag"></pre><div id="st" class="boom-ia-callout boom-ia-callout--neutral" role="status">A abrir…</div><div class="row"><button type="button" class="boom-ia-btn boom-ia-btn--solid" id="b-on">Ligar IA (global)</button><button type="button" class="boom-ia-btn boom-ia-btn--outline-warn" id="b-off">Desligar IA (global)</button><button type="button" class="boom-ia-btn boom-ia-btn--outline-slate" id="b-ref">Atualizar</button></div><p class="foot" id="foot"></p></div></div><script>${STANDALONE_APP_JS}<\/script></body></html>`;
   }
 
   function openStandaloneTenantIaPage() {
@@ -333,11 +541,8 @@
   function modalPaintDiag(ok) {
     const d = $('#boom-ia-m-diag');
     if (!d) return;
-    d.style.borderColor = ok ? '#7dd3fc' : '#fca5a5';
-    d.style.background = ok ? '#f0f9ff' : '#fef2f2';
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      d.style.background = ok ? 'rgba(14,165,233,.14)' : 'rgba(248,113,113,.12)';
-    }
+    d.classList.remove('boom-ia-diag--ok', 'boom-ia-diag--err');
+    d.classList.add(ok ? 'boom-ia-diag--ok' : 'boom-ia-diag--err');
     d.textContent =
       'Origem (cola no servidor): ' +
       window.location.origin +
@@ -348,26 +553,28 @@
       window.location.origin;
   }
 
+  function setModalCallout(el, variant) {
+    if (!el) return;
+    el.className = 'boom-ia-callout boom-ia-callout--' + variant;
+  }
+
   async function modalRefreshStatus() {
     const st = $('#boom-ia-m-st');
     const foot = $('#boom-ia-m-foot');
     if (!st) return;
+    setModalCallout(st, 'neutral');
     st.textContent = 'A carregar estado…';
-    st.style.borderLeftColor = '#94a3b8';
-    st.style.color = '#64748b';
     if (foot) foot.textContent = '';
     modalPaintDiag(true);
     try {
       const j = await loadStatus();
       const on = j.ai_globally_enabled !== false;
       st.textContent = on ? 'Estado: IA global LIGADA' : 'Estado: IA global DESLIGADA';
-      st.style.borderLeftColor = on ? '#22c55e' : '#ea580c';
-      st.style.color = on ? '#166534' : '#c2410c';
+      setModalCallout(st, on ? 'success' : 'warning');
       if (foot) foot.textContent = 'tenant_id: ' + (CFG.TENANT_ID || '').slice(0, 8) + '…';
     } catch (e) {
       st.textContent = 'Erro: ' + ((e && e.message) || String(e));
-      st.style.borderLeftColor = '#ef4444';
-      st.style.color = '#b91c1c';
+      setModalCallout(st, 'danger');
       modalPaintDiag(false);
       if (foot) foot.textContent = 'Reinicia o Node após alterar .env.';
     }
@@ -375,12 +582,12 @@
 
   function hideTenantIaModal() {
     const scrim = $('#boom-ia-modal-scrim');
-    if (scrim) scrim.style.display = 'none';
+    if (scrim) scrim.classList.remove('boom-ia-scrim--open');
   }
 
   function isModalVisible() {
     const s = $('#boom-ia-modal-scrim');
-    return !!(s && s.style.display === 'flex');
+    return !!(s && s.classList.contains('boom-ia-scrim--open'));
   }
 
   function toggleTenantIaModal() {
@@ -397,26 +604,28 @@
     if (!scrim) {
       scrim = document.createElement('div');
       scrim.id = 'boom-ia-modal-scrim';
+      scrim.className = 'boom-ia-scrim';
       scrim.setAttribute('role', 'presentation');
-      scrim.innerHTML = `
-        <div class="boom-ia-modal-page" id="boom-ia-modal-page-inner">
-          <div class="card" role="dialog" aria-modal="true" aria-labelledby="boom-ia-m-h1">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:4px">
-              <div class="brand">Boom</div>
-              <button type="button" class="btn-x" id="boom-ia-m-close" title="Fechar" aria-label="Fechar">×</button>
-            </div>
-            <h1 id="boom-ia-m-h1"></h1>
-            <p class="lead">Controla a IA para <strong>toda</strong> a organização (todos os agentes e webhooks desta tenant).</p>
-            <pre id="boom-ia-m-diag" class="diag"></pre>
-            <div id="boom-ia-m-st" class="status">A abrir…</div>
-            <div class="row">
-              <button type="button" class="btn on" id="boom-ia-m-on">Ligar IA (global)</button>
-              <button type="button" class="btn off" id="boom-ia-m-off">Desligar IA (global)</button>
-              <button type="button" class="btn ghost" id="boom-ia-m-ref">Atualizar</button>
-            </div>
-            <p class="foot" id="boom-ia-m-foot"></p>
-          </div>
-        </div>`;
+      scrim.innerHTML = [
+        '<div class="boom-ia-modal__page" id="boom-ia-modal-page-inner">',
+        '  <div class="boom-ia-modal__surface" role="dialog" aria-modal="true" aria-labelledby="boom-ia-m-h1">',
+        '    <header class="boom-ia-modal__header">',
+        '      <span class="boom-ia-modal__brand">Boom</span>',
+        '      <button type="button" class="boom-ia-modal__close" id="boom-ia-m-close" title="Fechar" aria-label="Fechar">×</button>',
+        '    </header>',
+        '    <h1 class="boom-ia-modal__title" id="boom-ia-m-h1"></h1>',
+        '    <p class="boom-ia-modal__lead">Controla a IA para <strong>toda</strong> a organização (todos os agentes e webhooks desta tenant).</p>',
+        '    <pre class="boom-ia-diag boom-ia-diag--ok" id="boom-ia-m-diag" aria-label="Diagnóstico CORS"></pre>',
+        '    <div class="boom-ia-callout boom-ia-callout--neutral" id="boom-ia-m-st" role="status"></div>',
+        '    <div class="boom-ia-modal__actions">',
+        '      <button type="button" class="boom-ia-btn boom-ia-btn--solid" id="boom-ia-m-on">Ligar IA (global)</button>',
+        '      <button type="button" class="boom-ia-btn boom-ia-btn--outline-warn" id="boom-ia-m-off">Desligar IA (global)</button>',
+        '      <button type="button" class="boom-ia-btn boom-ia-btn--outline-slate" id="boom-ia-m-ref">Atualizar</button>',
+        '    </div>',
+        '    <p class="boom-ia-modal__foot" id="boom-ia-m-foot"></p>',
+        '  </div>',
+        '</div>',
+      ].join('');
       document.body.appendChild(scrim);
       on(scrim, 'click', (ev) => {
         if (ev.target === scrim) hideTenantIaModal();
@@ -461,7 +670,14 @@
         }
       });
     }
-    scrim.style.display = 'flex';
+    if (!scrim.classList.contains('boom-ia-scrim')) scrim.classList.add('boom-ia-scrim');
+    scrim.classList.remove('boom-ia-scrim--open');
+    void scrim.offsetWidth;
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        scrim.classList.add('boom-ia-scrim--open');
+      });
+    });
     const mh = $('#boom-ia-m-h1');
     if (mh) mh.textContent = CFG.PANEL_TITLE || 'IA Global';
     modalRefreshStatus();
