@@ -1,7 +1,9 @@
 -- =============================================================================
--- Dados para configurar o Dashboard Script (IA global por tenant)
+-- Dados para configurar o Dashboard Script no Mega (POST/GET /api/tenant-ai/*).
+-- O script altera o status de TODOS os agentes da tenant (active/inactive), não ai_globally_enabled.
 -- Executar no SQL Editor do Supabase (projeto Nexus / control plane).
--- Requer a migration: 20260422160000_tenant_ai_globally_enabled.sql
+-- Coluna tenants.ai_globally_enabled (migration 20260422160000) continua usada pelo servidor
+-- como corte extra de emergência; o Mega não a mexe.
 --
 -- CORS (servidor Node / Easypanel .env), senão o Mega mostra "Failed to fetch":
 --   TENANT_AI_TOGGLE_CORS_ORIGINS=<copia a "Origem" do painel do script, ex. https://mega...>

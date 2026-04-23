@@ -1,7 +1,7 @@
 <!--
-  Boom — Dashboard Script (Mega / Chatwoot): controle global de IA por tenant
+  Boom — Dashboard Script (Mega / Chatwoot): ativa/desativa todos os agentes da tenant (status active/inactive nos webhooks)
   ---------------------------------------------------------------------------
-  1. CFG.API_BASE_URL = URL pública HTTPS da API (nunca http://localhost se o Mega for HTTPS).
+  1. CFG.API_BASE_URL = URL pública HTTPS do Boom (ex. https://ia.agboom.com.br). Podes terminar em /api ou não — o script normaliza.
   2. Servidor .env: TENANT_AI_TOGGLE_SECRET + UMA destas para CORS:
      TENANT_AI_TOGGLE_CORS_ORIGINS=https://exato-do-mega.com
      ou padrão wildcard: TENANT_AI_TOGGLE_CORS_ORIGINS=*.seudominio.com
@@ -17,11 +17,11 @@
   /** ========== CONFIGURAÇÃO (obrigatório preencher) ========== */
   const CFG = {
     /**
-     * URL base da API Boom (SEM /api no fim).
-     * Mega em HTTPS + API em http://localhost = o browser bloqueia (mixed content ou CORS).
-     * Em produção: URL pública HTTPS (ex. https://api.teudominio.com) + TENANT_AI_TOGGLE_CORS_ORIGINS no .env.
+     * URL pública HTTPS do servidor Boom (ex. https://ia.agboom.com.br).
+     * Os pedidos usam sempre …/api/tenant-ai/… — se colares …/api no fim, o script remove o sufixo para não duplicar /api/api.
+     * Mega em HTTPS + API em http://localhost = mixed content. Em produção: TENANT_AI_TOGGLE_CORS_ORIGINS no .env do servidor.
      */
-    API_BASE_URL: 'http://localhost:3001',
+    API_BASE_URL: 'https://ia.agboom.com.br',
     /** Fallback; com ACCOUNT_SCOPE ativo o TENANT_ID é sobrescrito pelo mapa. */
     TENANT_ID: 'bc4a1dc9-a205-4b4b-9b6c-47bf677a2728',
     TOGGLE_SECRET: '12345678910',
@@ -37,11 +37,11 @@
       },
     },
 
-    LINK_TEXT: 'IA Global',
+    LINK_TEXT: 'Agentes IA',
     LINK_ICON: '🤖',
     /** Tenta cada texto até encontrar um <li> na sidebar (PT/EN). */
     POSITION: { mode: 'afterLabel', labels: ['Conversas', 'Conversations'], index: 0 },
-    PANEL_TITLE: 'Controle de IA (organização)',
+    PANEL_TITLE: 'Agentes — IA nos webhooks',
     PADDING: 16,
     SHOW_BORDER: true,
     /**
@@ -91,7 +91,32 @@
   const normalize = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
 
   function apiBase() {
-    return String(CFG.API_BASE_URL || '').replace(/\/+$/, '');
+    let s = String(CFG.API_BASE_URL || '').trim().replace(/\/+$/, '');
+    if (/\/api$/i.test(s)) s = s.replace(/\/api$/i, '');
+    return s;
+  }
+
+  /** Resposta GET /api/tenant-ai/status — estado alinhado ao painel Agentes (status active/inactive). */
+  function agentIaStatusFromResponse(j) {
+    const total = typeof j.agents_total === 'number' ? j.agents_total : 0;
+    const active = typeof j.agents_active_count === 'number' ? j.agents_active_count : 0;
+    const allActive = j.agents_all_active === true;
+    let text;
+    let variant;
+    if (total === 0) {
+      text = 'Estado: sem agentes nesta tenant';
+      variant = 'neutral';
+    } else if (allActive) {
+      text = 'Estado: todos os agentes Ativos (IA nos webhooks)';
+      variant = 'success';
+    } else if (active === 0) {
+      text = 'Estado: todos os agentes Inativos (sem IA nos webhooks)';
+      variant = 'warning';
+    } else {
+      text = 'Estado: misto — ' + active + '/' + total + ' agentes Ativos';
+      variant = 'warning';
+    }
+    return { text, variant, total };
   }
 
   function isUuidConfigured() {
@@ -116,7 +141,7 @@
   /** Devolve mensagem PT se houver bloqueio óbvio antes do fetch. */
   function networkPrecheck() {
     const base = apiBase();
-    if (!base) return 'Define CFG.API_BASE_URL (URL da API Boom, sem /api).';
+    if (!base) return 'Define CFG.API_BASE_URL (ex. https://ia.agboom.com.br ou …/api).';
     try {
       const apiU = new URL(base.startsWith('http') ? base : 'https://' + base);
       const pageU = new URL(window.location.href);
@@ -466,9 +491,9 @@
     "var K='__boom_tenant_ia_cfg_v1';" +
     "var raw=sessionStorage.getItem(K);sessionStorage.removeItem(K);" +
     "var h1=document.getElementById('h1');var st=document.getElementById('st');" +
-    "if(!raw){if(h1)h1.textContent='IA Global';if(st){st.className='boom-ia-callout boom-ia-callout--neutral';st.textContent='Abre esta página pelo menu «IA Global» no Mega.';}return;}" +
+    "if(!raw){if(h1)h1.textContent='Agentes — IA';if(st){st.className='boom-ia-callout boom-ia-callout--neutral';st.textContent='Abre esta página pelo menu «Agentes IA» no Mega.';}return;}" +
     "var CFG=JSON.parse(raw);" +
-    "function apiBase(){return String(CFG.API_BASE_URL||'').replace(/\\/+$/, '');}" +
+    "function apiBase(){var s=String(CFG.API_BASE_URL||'').trim().replace(/\\/+$/, '');if(/\\/api$/i.test(s))s=s.replace(/\\/api$/i,'');return s;}" +
     "function pre(){var b=apiBase();if(!b)return 'Define API_BASE_URL no script do Mega.';try{var a=new URL(b.indexOf('http')===0?b:'https://'+b);var p=new URL(location.href);" +
     "if(p.protocol==='https:'&&a.protocol==='http:')return 'Esta página é HTTPS mas a API está em HTTP (mixed content). Usa uma API em https://.';}catch(e){return 'API_BASE_URL inválida.';}return null;}" +
     "function ex(e){var m=(e&&e.message)||String(e);if(/Failed to fetch|NetworkError|Load failed/i.test(m))return m+'\\n\\nCORS: no servidor Node, TENANT_AI_TOGGLE_CORS_ORIGINS='+location.origin;return m;}" +
@@ -483,22 +508,21 @@
     "function paintD(ok){var d=document.getElementById('diag');if(!d)return;if(ok)d.classList.remove('boom-ia-diag--err');else d.classList.add('boom-ia-diag--err');" +
     "d.textContent='Origem: '+location.origin+'\\nAPI: '+apiBase()+'/api/tenant-ai/\\n.env TENANT_AI_TOGGLE_CORS_ORIGINS='+location.origin;}" +
     "function refresh(){var ft=document.getElementById('foot');st.className='boom-ia-callout boom-ia-callout--neutral';st.textContent='A carregar…';if(ft)ft.textContent='';paintD(true);" +
-    "return load().then(function(j){var on=j.ai_globally_enabled!==false;st.textContent=on?'Estado: IA global LIGADA':'Estado: IA global DESLIGADA';" +
-    "st.className='boom-ia-callout boom-ia-callout--'+(on?'success':'warning');if(ft)ft.textContent='tenant_id: '+(CFG.TENANT_ID||'').slice(0,8)+'…';}).catch(function(e){st.textContent='Erro: '+((e&&e.message)||String(e));st.className='boom-ia-callout boom-ia-callout--danger';paintD(false);if(ft)ft.textContent='Reinicia o Node após alterar .env.';});}" +
+    "return load().then(function(j){var t=j.agents_total||0,ac=j.agents_active_count||0,all=!!j.agents_all_active,msg,vc;if(t===0){msg='Sem agentes nesta tenant';vc='neutral';}else if(all){msg='Todos os agentes Ativos (IA nos webhooks)';vc='success';}else if(ac===0){msg='Todos Inativos (sem IA)';vc='warning';}else{msg='Misto: '+ac+'/'+t+' Ativos';vc='warning';}st.textContent='Estado: '+msg;st.className='boom-ia-callout boom-ia-callout--'+vc;if(ft)ft.textContent='tenant_id: '+(CFG.TENANT_ID||'').slice(0,8)+'… · agentes: '+t;}).catch(function(e){st.textContent='Erro: '+((e&&e.message)||String(e));st.className='boom-ia-callout boom-ia-callout--danger';paintD(false);if(ft)ft.textContent='Reinicia o Node após alterar .env.';});}" +
     "function toast(msg,ok){var x=document.getElementById('toast');if(!x){x=document.createElement('div');x.id='toast';x.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:12px 22px;border-radius:999px;font:14px system-ui,sans-serif;color:#fff;z-index:9999;box-shadow:0 12px 40px rgba(0,0,0,.2);';document.body.appendChild(x);}" +
     "x.style.background=ok?'#15803d':'#b91c1c';x.textContent=msg;x.style.display='block';clearTimeout(x._t);x._t=setTimeout(function(){x.style.display='none'},4200);}" +
-    "h1.textContent=CFG.PANEL_TITLE||'IA Global';" +
+    "h1.textContent=CFG.PANEL_TITLE||'Agentes — IA';" +
     "document.getElementById('b-ref').addEventListener('click',function(){refresh();});" +
     "document.getElementById('b-on').addEventListener('click',function(){var a=this,b=document.getElementById('b-off');a.disabled=b.disabled=true;" +
-    "togg(true).then(function(){toast('IA global ligada.',true);return refresh();}).catch(function(e){toast((e&&e.message)||String(e),false);}).finally(function(){a.disabled=b.disabled=false;});});" +
+    "togg(true).then(function(){toast('Todos os agentes Ativos.',true);return refresh();}).catch(function(e){toast((e&&e.message)||String(e),false);}).finally(function(){a.disabled=b.disabled=false;});});" +
     "document.getElementById('b-off').addEventListener('click',function(){var a=this,b=document.getElementById('b-on');a.disabled=b.disabled=true;" +
-    "togg(false).then(function(){toast('IA global desligada.',true);return refresh();}).catch(function(e){toast((e&&e.message)||String(e),false);}).finally(function(){a.disabled=b.disabled=false;});});" +
+    "togg(false).then(function(){toast('Todos os agentes Inativos.',true);return refresh();}).catch(function(e){toast((e&&e.message)||String(e),false);}).finally(function(){a.disabled=b.disabled=false;});});" +
     "refresh();" +
     "})();";
 
   function buildStandaloneDocument() {
-    const title = escapeHtmlDoc(CFG.PANEL_TITLE || 'IA Global');
-    return `<!DOCTYPE html><html lang="pt"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>${STANDALONE_PAGE_CSS}</style></head><body><div class="page"><div class="card" id="root"><div class="brand">Boom</div><h1 id="h1"></h1><p class="lead">Controla a IA para <strong>toda</strong> a organização (todos os agentes e webhooks desta tenant).</p><pre id="diag" class="diag"></pre><div id="st" class="boom-ia-callout boom-ia-callout--neutral" role="status">A abrir…</div><div class="row"><button type="button" class="boom-ia-btn boom-ia-btn--solid" id="b-on">Ligar IA (global)</button><button type="button" class="boom-ia-btn boom-ia-btn--outline-warn" id="b-off">Desligar IA (global)</button><button type="button" class="boom-ia-btn boom-ia-btn--outline-slate" id="b-ref">Atualizar</button></div><p class="foot" id="foot"></p></div></div><script>${STANDALONE_APP_JS}<\/script></body></html>`;
+    const title = escapeHtmlDoc(CFG.PANEL_TITLE || 'Agentes — IA');
+    return `<!DOCTYPE html><html lang="pt"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>${STANDALONE_PAGE_CSS}</style></head><body><div class="page"><div class="card" id="root"><div class="brand">Boom</div><h1 id="h1"></h1><p class="lead">Ativa ou desativa <strong>todos</strong> os agentes desta tenant (status Ativo/Inativo — igual ao painel Boom).</p><pre id="diag" class="diag"></pre><div id="st" class="boom-ia-callout boom-ia-callout--neutral" role="status">A abrir…</div><div class="row"><button type="button" class="boom-ia-btn boom-ia-btn--solid" id="b-on">Ativar todos</button><button type="button" class="boom-ia-btn boom-ia-btn--outline-warn" id="b-off">Desativar todos</button><button type="button" class="boom-ia-btn boom-ia-btn--outline-slate" id="b-ref">Atualizar</button></div><p class="foot" id="foot"></p></div></div><script>${STANDALONE_APP_JS}<\/script></body></html>`;
   }
 
   function openStandaloneTenantIaPage() {
@@ -568,10 +592,10 @@
     modalPaintDiag(true);
     try {
       const j = await loadStatus();
-      const on = j.ai_globally_enabled !== false;
-      st.textContent = on ? 'Estado: IA global LIGADA' : 'Estado: IA global DESLIGADA';
-      setModalCallout(st, on ? 'success' : 'warning');
-      if (foot) foot.textContent = 'tenant_id: ' + (CFG.TENANT_ID || '').slice(0, 8) + '…';
+      const { text, variant, total } = agentIaStatusFromResponse(j);
+      st.textContent = text;
+      setModalCallout(st, variant);
+      if (foot) foot.textContent = 'tenant_id: ' + (CFG.TENANT_ID || '').slice(0, 8) + '… · agentes: ' + total;
     } catch (e) {
       st.textContent = 'Erro: ' + ((e && e.message) || String(e));
       setModalCallout(st, 'danger');
@@ -614,12 +638,12 @@
         '      <button type="button" class="boom-ia-modal__close" id="boom-ia-m-close" title="Fechar" aria-label="Fechar">×</button>',
         '    </header>',
         '    <h1 class="boom-ia-modal__title" id="boom-ia-m-h1"></h1>',
-        '    <p class="boom-ia-modal__lead">Controla a IA para <strong>toda</strong> a organização (todos os agentes e webhooks desta tenant).</p>',
+        '    <p class="boom-ia-modal__lead">Define o estado <strong>Ativo / Inativo</strong> de <strong>todos</strong> os agentes desta tenant (igual ao painel Boom — webhooks só usam IA com agente Ativo).</p>',
         '    <pre class="boom-ia-diag boom-ia-diag--ok" id="boom-ia-m-diag" aria-label="Diagnóstico CORS"></pre>',
         '    <div class="boom-ia-callout boom-ia-callout--neutral" id="boom-ia-m-st" role="status"></div>',
         '    <div class="boom-ia-modal__actions">',
-        '      <button type="button" class="boom-ia-btn boom-ia-btn--solid" id="boom-ia-m-on">Ligar IA (global)</button>',
-        '      <button type="button" class="boom-ia-btn boom-ia-btn--outline-warn" id="boom-ia-m-off">Desligar IA (global)</button>',
+        '      <button type="button" class="boom-ia-btn boom-ia-btn--solid" id="boom-ia-m-on">Ativar todos os agentes</button>',
+        '      <button type="button" class="boom-ia-btn boom-ia-btn--outline-warn" id="boom-ia-m-off">Desativar todos os agentes</button>',
         '      <button type="button" class="boom-ia-btn boom-ia-btn--outline-slate" id="boom-ia-m-ref">Atualizar</button>',
         '    </div>',
         '    <p class="boom-ia-modal__foot" id="boom-ia-m-foot"></p>',
@@ -644,7 +668,7 @@
         if (b) b.disabled = true;
         try {
           await setEnabled(true);
-          toast('IA global ligada.', true);
+          toast('Todos os agentes ficaram Ativos.', true);
           await modalRefreshStatus();
         } catch (e) {
           toast((e && e.message) || String(e), false);
@@ -660,7 +684,7 @@
         if (b) b.disabled = true;
         try {
           await setEnabled(false);
-          toast('IA global desligada.', true);
+          toast('Todos os agentes ficaram Inativos.', true);
           await modalRefreshStatus();
         } catch (e) {
           toast((e && e.message) || String(e), false);
@@ -679,7 +703,7 @@
       });
     });
     const mh = $('#boom-ia-m-h1');
-    if (mh) mh.textContent = CFG.PANEL_TITLE || 'IA Global';
+    if (mh) mh.textContent = CFG.PANEL_TITLE || 'Agentes — IA';
     modalRefreshStatus();
   }
 
@@ -832,7 +856,7 @@
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
           <div style="flex:1;">
             <div id="boom-ia-panel-title" style="font-size:18px;font-weight:700;margin-bottom:4px;"></div>
-            <div id="boom-ia-panel-sub" style="font-size:12px;">Liga ou desliga a IA para <strong>toda</strong> a organização nesta tenant (todos os agentes / webhooks).</div>
+            <div id="boom-ia-panel-sub" style="font-size:12px;">Ativa ou desativa o estado <strong>Ativo / Inativo</strong> de <strong>todos</strong> os agentes desta tenant (webhooks).</div>
           </div>
           <button type="button" id="boom-ia-btn-close" title="Fechar" style="cursor:pointer;flex-shrink:0;width:36px;height:36px;border-radius:8px;border:1px solid rgba(128,128,128,.35);background:transparent;color:inherit;font-size:18px;line-height:1;">×</button>
         </div>
@@ -842,10 +866,10 @@
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:10px;">
           <button type="button" id="boom-ia-btn-on" style="cursor:pointer;padding:10px 18px;border-radius:10px;border:0;background:#166534;color:#fff;font-weight:600;font-size:14px;">
-            Ligar IA (global)
+            Ativar todos
           </button>
           <button type="button" id="boom-ia-btn-off" style="cursor:pointer;padding:10px 18px;border-radius:10px;border:0;background:#9a3412;color:#fff;font-weight:600;font-size:14px;">
-            Desligar IA (global)
+            Desativar todos
           </button>
           <button type="button" id="boom-ia-btn-refresh" style="cursor:pointer;padding:10px 14px;border-radius:10px;border:1px solid rgba(128,128,128,.35);background:transparent;color:inherit;font-weight:600;font-size:14px;">
             Atualizar
@@ -893,10 +917,11 @@
       paintDiag(true);
       try {
         const j = await loadStatus();
-        const on = j.ai_globally_enabled !== false;
-        st.textContent = on ? 'Estado: IA global LIGADA' : 'Estado: IA global DESLIGADA';
-        st.style.borderLeft = '4px solid ' + (on ? '#16a34a' : '#ea580c');
-        if (f) f.textContent = 'tenant_id: ' + (CFG.TENANT_ID || '').slice(0, 8) + '…';
+        const { text, variant, total } = agentIaStatusFromResponse(j);
+        st.textContent = text;
+        st.style.borderLeft =
+          '4px solid ' + (variant === 'success' ? '#16a34a' : variant === 'neutral' ? '#94a3b8' : '#ea580c');
+        if (f) f.textContent = 'tenant_id: ' + (CFG.TENANT_ID || '').slice(0, 8) + '… · agentes: ' + total;
       } catch (e) {
         st.textContent = 'Erro: ' + ((e && e.message) || String(e));
         st.style.borderLeft = '4px solid #dc2626';
@@ -911,7 +936,7 @@
       $('#boom-ia-btn-on').disabled = $('#boom-ia-btn-off').disabled = true;
       try {
         await setEnabled(true);
-        toast('IA global ligada.', true);
+        toast('Todos os agentes Ativos.', true);
         await refreshStatus();
       } catch (e) {
         toast((e && e.message) || String(e), false);
@@ -923,7 +948,7 @@
       $('#boom-ia-btn-on').disabled = $('#boom-ia-btn-off').disabled = true;
       try {
         await setEnabled(false);
-        toast('IA global desligada.', true);
+        toast('Todos os agentes Inativos.', true);
         await refreshStatus();
       } catch (e) {
         toast((e && e.message) || String(e), false);
@@ -966,7 +991,7 @@
     const link = li.querySelector('a');
     const spans = li.querySelectorAll('span');
     if (spans[0]) spans[0].textContent = CFG.LINK_ICON || '';
-    if (spans[1]) spans[1].textContent = CFG.LINK_TEXT || 'IA Global';
+    if (spans[1]) spans[1].textContent = CFG.LINK_TEXT || 'Agentes IA';
 
     let parentList = null;
     let ref = null;

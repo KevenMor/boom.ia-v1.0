@@ -140,6 +140,7 @@ async function build() {
     },
     credentials: true,
     allowedHeaders: [
+      "accept",
       "authorization",
       "x-client-info",
       "apikey",

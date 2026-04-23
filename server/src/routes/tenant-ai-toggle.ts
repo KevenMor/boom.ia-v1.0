@@ -27,6 +27,7 @@ function assertSecret(req: FastifyRequest, reply: FastifyReply): boolean {
   return true;
 }
 
+/** Dashboard Mega: controla status dos agentes (active/inactive), não tenants.ai_globally_enabled. */
 export async function tenantAiToggleRoutes(fastify: FastifyInstance) {
   fastify.get(
     "/tenant-ai/status",
@@ -37,16 +38,26 @@ export async function tenantAiToggleRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ error: "tenant_id UUID inválido ou ausente" });
       }
       const supabase = createNexusClient();
-      const { data, error } = await supabase.from("tenants").select("id, ai_globally_enabled").eq("id", tenantId).maybeSingle();
-      if (error) {
-        return reply.status(500).send({ error: error.message });
+      const { data: tenant, error: tErr } = await supabase.from("tenants").select("id").eq("id", tenantId).maybeSingle();
+      if (tErr) {
+        return reply.status(500).send({ error: tErr.message });
       }
-      if (!data) {
+      if (!tenant) {
         return reply.status(404).send({ error: "Tenant não encontrado" });
       }
+      const { data: agents, error: aErr } = await supabase.from("agents").select("id, status").eq("tenant_id", tenantId);
+      if (aErr) {
+        return reply.status(500).send({ error: aErr.message });
+      }
+      const rows = agents ?? [];
+      const total = rows.length;
+      const activeCount = rows.filter((r) => r.status === "active").length;
+      const agents_all_active = total > 0 && activeCount === total;
       return reply.send({
-        tenant_id: data.id,
-        ai_globally_enabled: data.ai_globally_enabled !== false,
+        tenant_id: tenantId,
+        agents_total: total,
+        agents_active_count: activeCount,
+        agents_all_active,
       });
     }
   );
@@ -64,26 +75,37 @@ export async function tenantAiToggleRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ error: "tenant_id UUID inválido ou ausente" });
       }
       if (typeof enabled !== "boolean") {
-        return reply.status(400).send({ error: "enabled deve ser boolean (true = IA ligada globalmente)" });
+        return reply.status(400).send({ error: "enabled deve ser boolean (true = todos os agentes ativos)" });
       }
       const supabase = createNexusClient();
-      const { data, error } = await supabase
-        .from("tenants")
-        .update({ ai_globally_enabled: enabled, updated_at: new Date().toISOString() })
-        .eq("id", tenantId)
-        .select("id, ai_globally_enabled")
-        .maybeSingle();
-
-      if (error) {
-        return reply.status(500).send({ error: error.message });
+      const { data: tenant, error: tErr } = await supabase.from("tenants").select("id").eq("id", tenantId).maybeSingle();
+      if (tErr) {
+        return reply.status(500).send({ error: tErr.message });
       }
-      if (!data) {
+      if (!tenant) {
         return reply.status(404).send({ error: "Tenant não encontrado" });
       }
+      const newStatus = enabled ? "active" : "inactive";
+      const now = new Date().toISOString();
+      const { data: updated, error: uErr } = await supabase
+        .from("agents")
+        .update({ status: newStatus, updated_at: now })
+        .eq("tenant_id", tenantId)
+        .select("id, status");
+
+      if (uErr) {
+        return reply.status(500).send({ error: uErr.message });
+      }
+      const list = updated ?? [];
+      const total = list.length;
+      const activeCount = list.filter((r) => r.status === "active").length;
       return reply.send({
         ok: true,
-        tenant_id: data.id,
-        ai_globally_enabled: data.ai_globally_enabled !== false,
+        tenant_id: tenantId,
+        updated_count: total,
+        agents_total: total,
+        agents_active_count: activeCount,
+        agents_all_active: total > 0 && activeCount === total,
       });
     }
   );
