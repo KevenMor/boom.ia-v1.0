@@ -20,7 +20,14 @@ describe("Autoescola Ideal — SYSTEM_PROMPT (contratos de negócio)", () => {
   });
 
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v8\.4/);
+    expect(SYSTEM_PROMPT).toMatch(/v8\.5/);
+  });
+
+  it("proíbe conselho sobre RG/polícia e exige encaminhar dúvida regulatória à unidade", () => {
+    expect(SYSTEM_PROMPT).toMatch(/RG|pol[ií]cia|Detran/i);
+    expect(SYSTEM_PROMPT).toMatch(/matriculado|mais perto|mais pr[oó]xim/i);
+    expect(SYSTEM_PROMPT).toMatch(/atendente humana|time da unidade/i);
+    expect(SYSTEM_PROMPT).toMatch(/INADMISS[IÍ]VEL INVENTAR|n[aã]o invente/i);
   });
 });
 
