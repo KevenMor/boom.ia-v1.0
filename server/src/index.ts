@@ -19,6 +19,7 @@ import { occurrencesRoutes } from "./routes/occurrences.js";
 import { suiteGalleriesRoutes } from "./routes/suite-galleries.js";
 import { auditRoutes } from "./routes/audit.js";
 import { tenantAiToggleRoutes } from "./routes/tenant-ai-toggle.js";
+import { financeiroRoutes } from "./routes/financeiro.js";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 
@@ -168,6 +169,7 @@ async function build() {
   fastify.register(crmContactsRoutes, { prefix: "/api" });
   fastify.register(calendarServicesRoutes, { prefix: "/api" });
   fastify.register(occurrencesRoutes, { prefix: "/api" });
+  fastify.register(financeiroRoutes, { prefix: "/api" });
   fastify.register(suiteGalleriesRoutes, { prefix: "/api" });
   fastify.register(auditRoutes, { prefix: "/api" });
   fastify.register(tenantAiToggleRoutes, { prefix: "/api" });
@@ -374,6 +376,12 @@ build()
     const { startFollowUpWorker } = await import("./workers/followup-worker.js");
 
     if (isRedisEnabled()) {
+      const { startFinanceiroCampaignWorker } = await import("./workers/financeiro-campaign-worker.js");
+      const financeiroWorker = startFinanceiroCampaignWorker();
+      if (financeiroWorker) {
+        console.log("[Server] Financeiro campaign BullMQ worker started");
+      }
+
       const worker = startFollowUpWorker();
       if (worker) {
         console.log("[Server] Follow-up BullMQ worker started");

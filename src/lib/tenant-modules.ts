@@ -5,6 +5,7 @@ export type ModuleKey =
   | "conversations"
   | "agents"
   | "calendar"
+  | "financeiro"
   | "followups"
   | "inventory"
   | "occurrences"
@@ -66,6 +67,13 @@ export const TENANT_MODULES: TenantModuleDef[] = [
     description: "Calendário e horários.",
     group: "overview",
     actions: [A("view", "Visualizar"), A("create", "Criar evento"), A("edit", "Editar evento"), A("delete", "Deletar evento")],
+  },
+  {
+    key: "financeiro",
+    label: "Financeiro",
+    description: "Cobranças e disparos financeiros em lote.",
+    group: "overview",
+    actions: [A("view", "Visualizar"), A("create", "Criar disparo")],
   },
   {
     key: "followups",

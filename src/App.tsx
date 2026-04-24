@@ -39,6 +39,7 @@ import EditCatalogItemPage from "@/pages/EditCatalogItemPage";
 import ContactsPage from "@/pages/ContactsPage";
 import ClientsPage from "@/pages/ClientsPage";
 import ContactProfilePage from "@/pages/ContactProfilePage";
+import FinanceiroPage from "@/pages/FinanceiroPage";
 import TokenAnalytics from "@/pages/TokenAnalytics";
 import PublicSandbox from "@/pages/PublicSandbox";
 import NotFound from "@/pages/NotFound";
@@ -246,6 +247,14 @@ const App = () => (
                 element={
                   <ModuleRoute moduleKey="clients">
                     <ContactProfilePage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/financeiro"
+                element={
+                  <ModuleRoute moduleKey="financeiro">
+                    <FinanceiroPage />
                   </ModuleRoute>
                 }
               />

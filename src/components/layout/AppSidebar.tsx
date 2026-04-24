@@ -21,6 +21,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   CalendarDays,
+  DollarSign,
   BarChart3,
   Bell,
   Car,
@@ -71,6 +72,7 @@ export const navGroups: NavGroup[] = [
       { to: "/catalog", icon: LayoutGrid, label: "Catálogo", moduleKey: "service_catalog" },
       { to: "/contacts", icon: Users, label: "Leads", moduleKey: "contacts" },
       { to: "/clients", icon: Building2, label: "Clientes", moduleKey: "clients" },
+      { to: "/financeiro", icon: DollarSign, label: "Financeiro", moduleKey: "financeiro" },
     ],
   },
   {
