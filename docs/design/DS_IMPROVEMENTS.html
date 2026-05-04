@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>O que o Chatwoot DS traz ao seu painel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    /* ── TOKENS (dark first, já que o painel do usuário é dark) ─────────── */
+    :root {
+      --slate-1:  17 17 19; --slate-2:  24 25 27; --slate-3:  33 34 37;
+      --slate-4:  39 42 45; --slate-5:  46 49 53; --slate-6:  54 58 63;
+      --slate-7:  67 72 78; --slate-8:  90 97 105;--slate-9: 105 110 119;
+      --slate-10:119 123 132;--slate-11:176 180 186;--slate-12:237 238 240;
+
+      --blue-1: 10 17 28;  --blue-2: 15 24 38;  --blue-3: 15 39 72;
+      --blue-4: 10 49 99;  --blue-5: 18 61 117; --blue-6: 29 84 134;
+      --blue-7: 40 89 156; --blue-8: 48 106 186;--blue-9: 39 129 246;
+      --blue-10:21 116 231;--blue-11:126 182 255;--blue-12:205 227 255;
+
+      --teal-1: 13 21 20;  --teal-2: 17 28 27;  --teal-3: 13 45 42;
+      --teal-4:  2 59 55;  --teal-5:  8 72 67;  --teal-6: 20 87 80;
+      --teal-7: 28 105 97; --teal-8: 32 126 115;--teal-9: 18 165 148;
+      --teal-10:14 179 158;--teal-11:11 216 182; --teal-12:173 240 221;
+
+      --ruby-1: 25 17 19;  --ruby-2: 30 21 23;  --ruby-3: 58 20 30;
+      --ruby-4: 78 19 37;  --ruby-5: 94 26 46;  --ruby-6:111 37 57;
+      --ruby-7:136 52 71;  --ruby-8:179 68 90;  --ruby-9:229 70 102;
+      --ruby-10:236 90 114;--ruby-11:255 148 157;--ruby-12:254 210 225;
+
+      --amber-1:22 18 12;  --amber-2:29 24 15;  --amber-3:48 32 8;
+      --amber-4:63 39 0;   --amber-5:77 48 0;   --amber-6:92 61 5;
+      --amber-7:113 79 25; --amber-8:143 100 36; --amber-9:255 197 61;
+      --amber-10:255 214 10;--amber-11:255 202 22;--amber-12:255 231 179;
+
+      --iris-1:19 19 30;   --iris-2:23 22 37;   --iris-3:32 34 72;
+      --iris-4:38 42 101;  --iris-5:48 51 116;  --iris-6:61 62 130;
+      --iris-7:74 74 149;  --iris-8:89 88 177;  --iris-9:91 91 214;
+      --iris-10:84 114 228;--iris-11:158 177 255;--iris-12:224 223 254;
+
+      --background-color:28 29 32;
+      --surface-1:20 21 23; --surface-2:22 23 26;
+      --card-color:28 30 34;
+      --border-weak:31 31 37; --border-strong:46 45 50;
+      --solid-2:29 30 36;    --solid-3:44 45 54;
+      --label-background:36 38 45;
+      --button-color:42 43 51;
+      --alpha-2:147,153,176,0.12;
+      --black-alpha-1:0,0,0,0.3;
+      --overlay:0,0,0,0.5;
+    }
+
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+    body {
+      font-family:'Inter',-apple-system,system-ui,sans-serif;
+      font-size:14px; line-height:1.5;
+      background:rgb(var(--background-color));
+      color:rgb(var(--slate-12));
+      -webkit-font-smoothing:antialiased;
+    }
+
+    /* ── PAGE ────────────────────────────────────────────────────────────── */
+    .page { max-width:1100px; margin:0 auto; padding:40px 24px 80px; }
+
+    .page-header { margin-bottom:40px; }
+    .page-header h1 {
+      font-size:1.375rem; font-weight:600; letter-spacing:-0.03em;
+      color:rgb(var(--slate-12));
+    }
+    .page-header p { font-size:.875rem; color:rgb(var(--slate-10)); margin-top:4px; }
+
+    /* improvement pill */
+    .pill {
+      display:inline-flex; align-items:center; gap:5px;
+      background:rgba(var(--teal-9),.15); color:rgb(var(--teal-11));
+      border:1px solid rgba(var(--teal-9),.25);
+      border-radius:999px; padding:3px 10px; font-size:.6875rem; font-weight:500;
+      margin-bottom:6px;
+    }
+
+    /* ── SECTION ─────────────────────────────────────────────────────────── */
+    .section { margin-bottom:36px; }
+    .section-header {
+      display:flex; align-items:flex-start; justify-content:space-between;
+      gap:16px; margin-bottom:18px; flex-wrap:wrap;
+    }
+    .section-title {
+      font-size:.6875rem; font-weight:600; letter-spacing:.06em;
+      text-transform:uppercase; color:rgb(var(--slate-9)); margin-bottom:4px;
+    }
+    .section-desc { font-size:.8125rem; color:rgb(var(--slate-11)); max-width:520px; }
+
+    .diff-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .diff-label {
+      font-size:.6875rem; font-weight:500; letter-spacing:.04em;
+      text-transform:uppercase; color:rgb(var(--slate-9));
+      margin-bottom:8px;
+    }
+    .diff-label.new { color:rgb(var(--teal-10)); }
+    @media(max-width:640px){ .diff-grid{grid-template-columns:1fr;} }
+
+    /* ── CARD BASE ───────────────────────────────────────────────────────── */
+    .card {
+      background:rgb(var(--card-color));
+      border:1px solid rgb(var(--border-weak));
+      border-radius:14px;
+      padding:20px;
+    }
+
+    /* ── 1. STAT CARDS ───────────────────────────────────────────────────── */
+    /* ANTES */
+    .stat-old {
+      background:#1a1d22;
+      border:1px solid #2a2d35;
+      border-radius:8px;
+      padding:18px;
+    }
+    .stat-old-icon { font-size:1.25rem; margin-bottom:8px; }
+    .stat-old-label { font-size:.75rem; color:#8b9099; margin-bottom:2px; }
+    .stat-old-value { font-size:1.5rem; font-weight:700; color:#eee; }
+    .stat-old-delta { font-size:.75rem; color:#22c55e; margin-top:4px; }
+
+    /* DEPOIS */
+    .stat-new {
+      background:rgb(var(--card-color));
+      border:1px solid rgb(var(--border-weak));
+      border-radius:14px;
+      padding:20px;
+      display:flex; flex-direction:column; gap:12px;
+      transition:border-color .15s;
+    }
+    .stat-new:hover { border-color:rgb(var(--border-strong)); }
+    .stat-new-top { display:flex; align-items:flex-start; justify-content:space-between; }
+    .stat-new-icon-wrap {
+      width:36px; height:36px; border-radius:10px;
+      display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    }
+    .stat-new-icon-wrap svg { width:18px; height:18px; }
+    .stat-new-label { font-size:.75rem; font-weight:500; color:rgb(var(--slate-10)); }
+    .stat-new-value {
+      font-size:1.625rem; font-weight:600; letter-spacing:-0.04em;
+      color:rgb(var(--slate-12)); line-height:1.1;
+    }
+    .stat-new-delta {
+      display:inline-flex; align-items:center; gap:3px;
+      font-size:.6875rem; font-weight:500; border-radius:6px;
+      padding:2px 7px;
+    }
+    .delta-up   { background:rgba(var(--teal-9),.15); color:rgb(var(--teal-11)); }
+    .delta-down { background:rgba(var(--ruby-9),.15); color:rgb(var(--ruby-11)); }
+    .delta-neu  { background:rgba(var(--slate-9),.1); color:rgb(var(--slate-10)); }
+
+    /* ── 2. SIDEBAR ITEMS ────────────────────────────────────────────────── */
+    .sidebar-wrap {
+      background:rgb(var(--surface-1));
+      border:1px solid rgb(var(--border-weak));
+      border-radius:12px; padding:8px; width:180px;
+    }
+    .nav-item {
+      display:flex; align-items:center; gap:9px;
+      padding:8px 10px; border-radius:9px;
+      font-size:.875rem; font-weight:420; cursor:pointer;
+      color:rgb(var(--slate-11));
+      transition:background .1s, color .1s;
+      position:relative;
+    }
+    /* ANTES */
+    .nav-item-old svg { opacity:.6; }
+    .nav-item-old.active-old { background:#1e2430; color:#fff; border-left:3px solid #00c9a0; border-radius:0 8px 8px 0; padding-left:7px; }
+    .nav-item-old:hover:not(.active-old) { background:#1e2430; }
+    /* DEPOIS */
+    .nav-item-new:hover:not(.active-new) { background:rgb(var(--slate-3)); color:rgb(var(--slate-12)); }
+    .nav-item-new.active-new { background:rgb(var(--blue-3)); color:rgb(var(--blue-11)); font-weight:500; }
+    .nav-item-new.active-new svg { color:rgb(var(--blue-11)); }
+    .nav-badge {
+      margin-left:auto; font-size:.625rem; font-weight:600;
+      background:rgb(var(--blue-4)); color:rgb(var(--blue-11));
+      border-radius:5px; padding:1px 5px;
+    }
+
+    /* ── 3. LABEL / STATUS TAGS ──────────────────────────────────────────── */
+    .tag-old {
+      display:inline-flex; align-items:center; gap:5px;
+      padding:3px 8px; border-radius:4px; font-size:.6875rem; font-weight:600;
+    }
+    .tag-old-green  { background:#063; color:#4ade80; }
+    .tag-old-yellow { background:#431407; color:#fbbf24; }
+    .tag-old-red    { background:#450a0a; color:#f87171; }
+    .tag-old-gray   { background:#1f2937; color:#9ca3af; }
+
+    .tag-new {
+      display:inline-flex; align-items:center; gap:5px;
+      padding:0 9px; height:24px; border-radius:7px; font-size:.6875rem; font-weight:500;
+      outline:1px solid transparent; outline-offset:-1px;
+    }
+    .tag-teal  { background:rgb(var(--teal-3));  outline-color:rgb(var(--teal-5));  color:rgb(var(--teal-11)); }
+    .tag-amber { background:rgb(var(--amber-3)); outline-color:rgb(var(--amber-5)); color:rgb(var(--amber-11)); }
+    .tag-ruby  { background:rgb(var(--ruby-3));  outline-color:rgb(var(--ruby-5));  color:rgb(var(--ruby-11)); }
+    .tag-slate { background:rgb(var(--label-background)); outline-color:rgba(var(--black-alpha-1)); color:rgb(var(--slate-11)); }
+    .tag-blue  { background:rgb(var(--blue-3));  outline-color:rgb(var(--blue-5));  color:rgb(var(--blue-11)); }
+
+    /* ── 4. BUTTONS ──────────────────────────────────────────────────────── */
+    .btn {
+      display:inline-flex; align-items:center; gap:6px;
+      padding:0 14px; height:34px; border-radius:9px;
+      font-family:inherit; font-size:.875rem; font-weight:500;
+      border:none; cursor:pointer; outline:1px solid transparent;
+      transition:all .1s ease-out; white-space:nowrap;
+    }
+    .btn:active:not(:disabled) { transform:scale(.98); }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+    .btn-sm { height:28px; padding:0 10px; font-size:.8125rem; border-radius:8px; }
+
+    /* velhos (flat genérico) */
+    .btn-old-primary { background:#008060; color:#fff; }
+    .btn-old-primary:hover { background:#00a07a; }
+    .btn-old-danger  { background:#7f1d1d; color:#fca5a5; border:1px solid #991b1b; }
+    .btn-old-sec     { background:#1f2937; color:#d1d5db; border:1px solid #374151; }
+    .btn-old-sec:hover { background:#273044; }
+
+    /* novos (sistema Chatwoot) */
+    .btn-teal-solid  { background:rgb(var(--teal-9));  color:#fff; }
+    .btn-teal-solid:hover  { background:rgb(var(--teal-10)); }
+    .btn-blue-solid  { background:rgb(var(--blue-9));  color:#fff; }
+    .btn-blue-solid:hover  { filter:brightness(1.1); }
+    .btn-ruby-solid  { background:rgb(var(--ruby-9));  color:#fff; }
+    .btn-ruby-solid:hover  { background:rgb(var(--ruby-10)); }
+    .btn-ruby-faded  { background:rgba(var(--ruby-9),.12); color:rgb(var(--ruby-11)); outline-color:transparent; }
+    .btn-ruby-faded:hover  { background:rgba(var(--ruby-9),.2); }
+    .btn-slate-solid { background:rgb(var(--button-color)); color:rgb(var(--slate-12)); outline:1px solid rgb(var(--border-strong)); }
+    .btn-slate-solid:hover { background:rgb(var(--solid-3)); }
+    .btn-teal-faded  { background:rgba(var(--teal-9),.12); color:rgb(var(--teal-11)); }
+    .btn-teal-faded:hover  { background:rgba(var(--teal-9),.2); }
+    .btn-ghost { background:transparent; color:rgb(var(--slate-11)); outline-color:transparent; }
+    .btn-ghost:hover { background:rgba(var(--alpha-2)); }
+    .btn-link { background:transparent; color:rgb(var(--blue-11)); outline-color:transparent; padding:0; height:auto; }
+    .btn-link:hover { text-decoration:underline; }
+
+    /* ── 5. INPUT ─────────────────────────────────────────────────────────── */
+    .field-old {
+      width:100%; padding:8px 12px; border-radius:6px;
+      background:#111827; color:#e5e7eb;
+      border:1px solid #374151; font-family:inherit; font-size:.875rem; outline:none;
+    }
+    .field-old:focus { border-color:#008060; }
+
+    .field-new {
+      width:100%; height:38px; padding:0 12px; border-radius:9px;
+      background:rgba(var(--black-alpha-1)); color:rgb(var(--slate-12));
+      border:none; outline:1px solid rgb(var(--border-weak));
+      font-family:inherit; font-size:.875rem; transition:outline-color .15s;
+    }
+    .field-new::placeholder { color:rgb(var(--slate-8)); }
+    .field-new:hover { outline-color:rgb(var(--slate-6)); }
+    .field-new:focus { outline:2px solid rgb(var(--blue-9)); }
+
+    /* ── 6. BANNER / TOAST ───────────────────────────────────────────────── */
+    .banner {
+      display:flex; align-items:center; justify-content:space-between;
+      gap:10px; padding:10px 14px; border-radius:11px;
+      font-size:.875rem; border:1px solid transparent;
+    }
+    .banner-blue  { background:rgb(var(--blue-3));  border-color:rgb(var(--blue-5));  color:rgb(var(--blue-11)); }
+    .banner-amber { background:rgb(var(--amber-3)); border-color:rgb(var(--amber-5)); color:rgb(var(--amber-11)); }
+    .banner-ruby  { background:rgb(var(--ruby-3));  border-color:rgb(var(--ruby-5));  color:rgb(var(--ruby-11)); }
+    .banner-teal  { background:rgb(var(--teal-3));  border-color:rgb(var(--teal-5));  color:rgb(var(--teal-11)); }
+    .banner-action {
+      padding:3px 10px; border-radius:7px; font-size:.8125rem; font-weight:500;
+      cursor:pointer; border:none; flex-shrink:0;
+    }
+    .banner-blue  .banner-action { background:rgb(var(--blue-4));  color:rgb(var(--blue-11)); }
+    .banner-amber .banner-action { background:rgb(var(--amber-4)); color:rgb(var(--amber-11)); }
+    .banner-ruby  .banner-action { background:rgb(var(--ruby-4));  color:rgb(var(--ruby-11)); }
+    .banner-teal  .banner-action { background:rgb(var(--teal-4));  color:rgb(var(--teal-11)); }
+
+    /* ── 7. AGENT ROW ────────────────────────────────────────────────────── */
+    .agent-row {
+      display:flex; align-items:center; gap:12px;
+      padding:12px 16px; border-bottom:1px solid rgb(var(--border-weak));
+      transition:background .1s;
+    }
+    .agent-row:last-child { border-bottom:none; }
+    .agent-row:hover { background:rgb(var(--solid-2)); border-radius:10px; }
+    .avatar {
+      width:34px; height:34px; border-radius:50%; flex-shrink:0;
+      display:flex; align-items:center; justify-content:center;
+      font-weight:600; font-size:.8125rem;
+    }
+    .av-teal  { background:rgb(var(--teal-3));  color:rgb(var(--teal-11)); }
+    .av-blue  { background:rgb(var(--blue-3));  color:rgb(var(--blue-11)); }
+    .av-ruby  { background:rgb(var(--ruby-3));  color:rgb(var(--ruby-11)); }
+    .av-amber { background:rgb(var(--amber-3)); color:rgb(var(--amber-11)); }
+    .agent-name { font-weight:500; color:rgb(var(--slate-12)); font-size:.875rem; }
+    .agent-sub  { font-size:.75rem; color:rgb(var(--slate-10)); }
+    .agent-num  { margin-left:auto; text-align:right; }
+    .agent-tokens { font-size:.875rem; font-weight:600; color:rgb(var(--slate-12)); }
+    .agent-cost   { font-size:.75rem; color:rgb(var(--slate-10)); }
+
+    /* ── 8. PROGRESS BAR ─────────────────────────────────────────────────── */
+    .progress-wrap { display:flex; flex-direction:column; gap:6px; }
+    .progress-header { display:flex; justify-content:space-between; font-size:.75rem; color:rgb(var(--slate-10)); }
+    .progress-track { height:6px; border-radius:99px; background:rgb(var(--slate-3)); overflow:hidden; }
+    .progress-fill  { height:100%; border-radius:99px; transition:width .6s ease; }
+
+    /* ── 9. COST CARD ─────────────────────────────────────────────────────── */
+    .cost-value { font-size:1.75rem; font-weight:700; letter-spacing:-0.04em; color:rgb(var(--slate-12)); }
+    .cost-row   { display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid rgb(var(--border-weak)); font-size:.8125rem; }
+    .cost-row:last-child { border-bottom:none; }
+    .cost-key   { color:rgb(var(--slate-10)); }
+    .cost-val   { font-weight:500; color:rgb(var(--slate-12)); }
+
+    /* ── DIALOG ───────────────────────────────────────────────────────────── */
+    .dialog {
+      background:rgb(var(--card-color));
+      border:1px solid rgb(var(--border-weak));
+      border-radius:16px; padding:24px;
+      box-shadow:0 24px 60px rgba(var(--overlay));
+      max-width:380px;
+    }
+    .dialog-title { font-size:1rem; font-weight:600; color:rgb(var(--slate-12)); margin-bottom:6px; }
+    .dialog-body  { font-size:.875rem; color:rgb(var(--slate-11)); line-height:1.6; margin-bottom:20px; }
+    .dialog-actions { display:flex; gap:8px; justify-content:flex-end; }
+
+    /* ── TOOLTIP ──────────────────────────────────────────────────────────── */
+    [data-tip] { position:relative; cursor:default; }
+    [data-tip]::after {
+      content:attr(data-tip); position:absolute; bottom:calc(100% + 7px);
+      left:50%; transform:translateX(-50%);
+      background:rgb(var(--slate-12)); color:rgb(var(--slate-1));
+      font-size:.75rem; white-space:nowrap; padding:5px 9px; border-radius:7px;
+      pointer-events:none; opacity:0; transition:opacity .15s; z-index:50;
+    }
+    [data-tip]:hover::after { opacity:1; }
+
+    /* ── SPINNER ──────────────────────────────────────────────────────────── */
+    .spinner { width:16px; height:16px; border-radius:50%; border:2px solid rgba(255,255,255,.2); border-top-color:#fff; animation:spin .65s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* ── UTIL ─────────────────────────────────────────────────────────────── */
+    .flex { display:flex; }
+    .fw   { flex-wrap:wrap; }
+    .aic  { align-items:center; }
+    .jcsb { justify-content:space-between; }
+    .g2   { gap:8px; }  .g3 { gap:12px; } .g4 { gap:16px; }
+    .mb1  { margin-bottom:4px; }  .mb2 { margin-bottom:8px; }
+    .mb3  { margin-bottom:12px; } .mb4 { margin-bottom:16px; }
+    .f-col { flex-direction:column; }
+    .divider { height:1px; background:rgb(var(--border-weak)); margin:16px 0; }
+    .mono { font-family:ui-monospace,monospace; }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ── HEADER ─────────────────────────────────────────────────────────── -->
+  <div class="page-header">
+    <div class="pill">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+      Chatwoot DS aplicado ao Boom IA
+    </div>
+    <h1>O que o Design System traz de novo</h1>
+    <p>7 melhorias visuais concretas para o seu painel — cada uma com antes e depois</p>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!-- 1. STAT CARDS                                                        -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <div>
+        <p class="section-title">01 · Stat Cards</p>
+        <p class="section-desc">Ícone com fundo <strong>faded</strong> contextual, valor com <strong>letter-spacing negativo</strong>, delta com badge semântico (não só texto verde/vermelho).</p>
+      </div>
+    </div>
+    <div class="diff-grid">
+      <div>
+        <p class="diff-label">Antes</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div class="stat-old">
+            <div class="stat-old-icon">⚡</div>
+            <div class="stat-old-label">Tokens Hoje</div>
+            <div class="stat-old-value">95.0k</div>
+            <div class="stat-old-delta">▲ -91% vs ontem</div>
+          </div>
+          <div class="stat-old">
+            <div class="stat-old-icon">🔧</div>
+            <div class="stat-old-label">Tool Calls</div>
+            <div class="stat-old-value">3</div>
+            <div class="stat-old-delta" style="color:#f87171;">▼ 39 ontem</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <p class="diff-label new">Depois</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div class="stat-new">
+            <div class="stat-new-top">
+              <div class="stat-new-icon-wrap" style="background:rgba(var(--blue-9),.12);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="rgb(var(--blue-11))" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              </div>
+              <span class="stat-new-delta delta-up">▲ 91%</span>
+            </div>
+            <div>
+              <p class="stat-new-label mb1">Tokens Hoje</p>
+              <p class="stat-new-value">95.0k</p>
+            </div>
+          </div>
+          <div class="stat-new">
+            <div class="stat-new-top">
+              <div class="stat-new-icon-wrap" style="background:rgba(var(--ruby-9),.12);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="rgb(var(--ruby-11))" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+              </div>
+              <span class="stat-new-delta delta-down">▼ 39</span>
+            </div>
+            <div>
+              <p class="stat-new-label mb1">Tool Calls</p>
+              <p class="stat-new-value">3</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!-- 2. SIDEBAR NAVIGATION                                                -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <div>
+        <p class="section-title">02 · Sidebar Navigation</p>
+        <p class="section-desc">Item ativo com <strong>fundo blue-3 + texto blue-11</strong> em vez de borda lateral + fundo escuro genérico. Contador como badge com tokens da paleta.</p>
+      </div>
+    </div>
+    <div class="diff-grid">
+      <div>
+        <p class="diff-label">Antes</p>
+        <div class="sidebar-wrap">
+          <div class="nav-item nav-item-old active-old">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            Painel
+          </div>
+          <div class="nav-item nav-item-old">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Chat ao Vivo
+            <span style="margin-left:auto;background:#1e3a5f;color:#60a5fa;border-radius:4px;padding:1px 5px;font-size:.625rem;font-weight:600;">5</span>
+          </div>
+          <div class="nav-item nav-item-old">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Agentes
+          </div>
+          <div class="nav-item nav-item-old">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            Relatórios
+          </div>
+        </div>
+      </div>
+      <div>
+        <p class="diff-label new">Depois</p>
+        <div class="sidebar-wrap">
+          <div class="nav-item nav-item-new active-new">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            Painel
+          </div>
+          <div class="nav-item nav-item-new">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Chat ao Vivo
+            <span class="nav-badge">5</span>
+          </div>
+          <div class="nav-item nav-item-new">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            Agentes
+          </div>
+          <div class="nav-item nav-item-new">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            Relatórios
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!-- 3. STATUS LABELS                                                     -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <div>
+        <p class="section-title">03 · Status Labels</p>
+        <p class="section-desc"><strong>Outline interno</strong> com <code>outline-offset:-1px</code> dá um contorno preciso sem alterar o layout. Escala de cor 3/5/11 para fundo, borda e texto — uniforme em light e dark.</p>
+      </div>
+    </div>
+    <div class="diff-grid">
+      <div>
+        <p class="diff-label">Antes</p>
+        <div class="flex fw g2">
+          <span class="tag-old tag-old-green">● Online</span>
+          <span class="tag-old tag-old-yellow">● Ocupado</span>
+          <span class="tag-old tag-old-red">● Erro</span>
+          <span class="tag-old tag-old-gray">● Offline</span>
+        </div>
+      </div>
+      <div>
+        <p class="diff-label new">Depois</p>
+        <div class="flex fw g2">
+          <span class="tag-new tag-teal">
+            <span style="width:6px;height:6px;border-radius:50%;background:rgb(var(--teal-9));flex-shrink:0;"></span>
+            Online
+          </span>
+          <span class="tag-new tag-amber">
+            <span style="width:6px;height:6px;border-radius:50%;background:rgb(var(--amber-9));flex-shrink:0;"></span>
+            Ocupado
+          </span>
+          <span class="tag-new tag-ruby">
+            <span style="width:6px;height:6px;border-radius:50%;background:rgb(var(--ruby-9));flex-shrink:0;"></span>
+            Erro
+          </span>
+          <span class="tag-new tag-slate">
+            <span style="width:6px;height:6px;border-radius:50%;background:rgb(var(--slate-8));flex-shrink:0;"></span>
+            Offline
+          </span>
+          <span class="tag-new tag-blue">
+            <span style="width:6px;height:6px;border-radius:50%;background:rgb(var(--blue-9));flex-shrink:0;"></span>
+            Em revisão
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!-- 4. BUTTONS                                                           -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <div>
+        <p class="section-title">04 · Botões</p>
+        <p class="section-desc">5 variantes com lógica de cor semântica. <strong>faded</strong> para ações secundárias sem peso visual; <strong>ghost</strong> para ícones de toolbar; <strong>ruby faded</strong> para ações destrutivas que não assustam antes de confirmar.</p>
+      </div>
+    </div>
+    <div class="diff-grid">
+      <div>
+        <p class="diff-label">Antes</p>
+        <div class="flex fw g2 mb3">
+          <button class="btn btn-old-primary">Exportar</button>
+          <button class="btn btn-old-sec">Filtrar</button>
+          <button class="btn btn-old-danger btn-sm">Excluir</button>
+        </div>
+        <p style="font-size:.75rem;color:rgb(var(--slate-9));">Verde genérico, cinza flat, vermelho pesado</p>
+      </div>
+      <div>
+        <p class="diff-label new">Depois</p>
+        <div class="flex fw g2 mb3">
+          <button class="btn btn-teal-solid">Exportar</button>
+          <button class="btn btn-slate-solid">Filtrar</button>
+          <button class="btn btn-ruby-faded btn-sm">Excluir</button>
+        </div>
+        <div class="flex fw g2 mb3">
+          <button class="btn btn-blue-solid">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Novo Agente
+          </button>
+          <button class="btn btn-ghost">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+          </button>
+          <button class="btn btn-slate-solid">
+            <span class="spinner"></span>
+            Carregando
+          </button>
+        </div>
+        <p style="font-size:.75rem;color:rgb(var(--slate-9));">Semântico, hierárquico, estados claros</p>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!-- 5. BANNERS CONTEXTUAIS                                               -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <div>
+        <p class="section-title">05 · Banners Contextuais</p>
+        <p class="section-desc">Alertas dentro do painel com <strong>cor semântica por escala</strong> — ideais para avisos de custo, limite de token, falha de integração ou atualização disponível.</p>
+      </div>
+    </div>
+    <div class="flex f-col g3">
+      <div class="banner banner-amber">
+        <div class="flex aic g2">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span>Projeção mensal ultrapassará <strong>R$ 50,00</strong> com o ritmo atual de uso.</span>
+        </div>
+        <button class="banner-action">Ver custos</button>
+      </div>
+      <div class="banner banner-blue">
+        <div class="flex aic g2">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span>Nova versão disponível: <strong>v3.12.0</strong> — inclui melhorias de latência.</span>
+        </div>
+        <button class="banner-action">Atualizar</button>
+      </div>
+      <div class="banner banner-ruby">
+        <div class="flex aic g2">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span>Integração com <strong>OpenAI</strong> falhou. Verifique as credenciais do provedor.</span>
+        </div>
+        <button class="banner-action">Reconectar</button>
+      </div>
+      <div class="banner banner-teal">
+        <span>✓ Configurações salvas com sucesso.</span>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!-- 6. AGENT LIST com avatar + progress                                  -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <div>
+        <p class="section-title">06 · Lista de Agentes com Progresso</p>
+        <p class="section-desc"><strong>Avatar com paleta semântica</strong>, progress bar usando tokens teal/blue/ruby, e custo visível sem precisar expandir.</p>
+      </div>
+    </div>
+    <div class="diff-grid">
+      <div>
+        <p class="diff-label">Antes</p>
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div style="padding:10px 16px;border-bottom:1px solid rgb(var(--border-weak));">
+            <div class="flex aic jcsb" style="margin-bottom:4px;">
+              <div class="flex aic g3">
+                <div style="width:32px;height:32px;border-radius:50%;background:#0d4f3c;color:#4ade80;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.75rem;">V</div>
+                <div>
+                  <div style="font-weight:500;font-size:.875rem;">Vitória</div>
+                  <div style="font-size:.75rem;color:#6b7280;">Vale Suíço</div>
+                </div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-weight:600;">14.3M</div>
+                <div style="font-size:.75rem;color:#6b7280;">R$ 11,50</div>
+              </div>
+            </div>
+            <div style="height:4px;background:#1f2937;border-radius:4px;overflow:hidden;margin-top:8px;">
+              <div style="width:99%;height:100%;background:#00c9a0;border-radius:4px;"></div>
+            </div>
+          </div>
+          <div style="padding:10px 16px;">
+            <div class="flex aic jcsb" style="margin-bottom:4px;">
+              <div class="flex aic g3">
+                <div style="width:32px;height:32px;border-radius:50%;background:#1e3a5f;color:#60a5fa;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.75rem;">C</div>
+                <div>
+                  <div style="font-weight:500;font-size:.875rem;">Carlos</div>
+                  <div style="font-size:.75rem;color:#6b7280;">Vale Suíço</div>
+                </div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-weight:600;">0.9M</div>
+                <div style="font-size:.75rem;color:#6b7280;">R$ 0,70</div>
+              </div>
+            </div>
+            <div style="height:4px;background:#1f2937;border-radius:4px;overflow:hidden;margin-top:8px;">
+              <div style="width:6%;height:100%;background:#3b82f6;border-radius:4px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <p class="diff-label new">Depois</p>
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div class="agent-row">
+            <div class="avatar av-teal">V</div>
+            <div style="flex:1;min-width:0;">
+              <div class="flex aic jcsb mb1">
+                <div>
+                  <div class="agent-name">Vitória</div>
+                  <div class="agent-sub">Vale Suíço</div>
+                </div>
+                <div class="agent-num">
+                  <div class="agent-tokens">14.3M</div>
+                  <div class="agent-cost">R$ 11,50</div>
+                </div>
+              </div>
+              <div class="progress-wrap">
+                <div class="progress-track">
+                  <div class="progress-fill" style="width:99%;background:rgb(var(--teal-9));"></div>
+                </div>
+                <div class="progress-header">
+                  <span>99% do total</span>
+                  <span>746 req</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="agent-row">
+            <div class="avatar av-blue">C</div>
+            <div style="flex:1;min-width:0;">
+              <div class="flex aic jcsb mb1">
+                <div>
+                  <div class="agent-name">Carlos</div>
+                  <div class="agent-sub">Vale Suíço</div>
+                </div>
+                <div class="agent-num">
+                  <div class="agent-tokens">0.9M</div>
+                  <div class="agent-cost">R$ 0,70</div>
+                </div>
+              </div>
+              <div class="progress-wrap">
+                <div class="progress-track">
+                  <div class="progress-fill" style="width:6%;background:rgb(var(--blue-9));"></div>
+                </div>
+                <div class="progress-header">
+                  <span>1% do total</span>
+                  <span>12 req</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!-- 7. DIALOG DE CONFIRMAÇÃO                                             -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <div>
+        <p class="section-title">07 · Dialog de Confirmação</p>
+        <p class="section-desc">Padrão <strong>Cancel → Ação destrutiva</strong> com botão ruby-solid. Sombra com <code>rgba(--overlay)</code> adaptada ao dark mode sem parecer cartão flutuante genérico.</p>
+      </div>
+    </div>
+    <div class="diff-grid">
+      <div>
+        <p class="diff-label">Antes</p>
+        <div style="background:#111827;border:1px solid #374151;border-radius:8px;padding:20px;max-width:360px;">
+          <p style="font-size:1rem;font-weight:700;color:#fff;margin-bottom:6px;">Excluir Agente?</p>
+          <p style="font-size:.875rem;color:#9ca3af;line-height:1.6;margin-bottom:16px;">Esta ação não pode ser desfeita. Todos os dados serão perdidos.</p>
+          <div style="display:flex;gap:8px;justify-content:flex-end;">
+            <button class="btn btn-old-sec btn-sm">Cancelar</button>
+            <button class="btn btn-old-danger btn-sm">Excluir</button>
+          </div>
+        </div>
+      </div>
+      <div>
+        <p class="diff-label new">Depois</p>
+        <div class="dialog">
+          <p class="dialog-title">Excluir Agente?</p>
+          <p class="dialog-body">Esta ação removerá permanentemente o agente e todo o histórico de conversas. Não é possível desfazer.</p>
+          <div class="dialog-actions">
+            <button class="btn btn-slate-solid btn-sm">Cancelar</button>
+            <button class="btn btn-ruby-solid btn-sm">Excluir</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!-- BONUS: CUSTO CARD COMPLETO                                           -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <div>
+        <p class="section-title">Bônus · Custo Estimado reimaginado</p>
+        <p class="section-desc">Card de custo usando todos os tokens juntos: stat com delta badge, dividers com border-weak, e label-tag para categoria.</p>
+      </div>
+    </div>
+    <div style="max-width:320px;">
+      <div class="card">
+        <div class="flex aic jcsb mb3">
+          <p style="font-size:.8125rem;font-weight:500;color:rgb(var(--slate-10));">Custo Estimado</p>
+          <span class="tag-new tag-teal" data-tip="Dados de hoje">Hoje</span>
+        </div>
+        <div class="flex aic g3 mb2">
+          <div class="stat-new-icon-wrap" style="background:rgba(var(--teal-9),.12);">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgb(var(--teal-11))" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          </div>
+          <p class="cost-value">R$ 0,07</p>
+          <span class="stat-new-delta delta-up">▲ 91%</span>
+        </div>
+        <p style="font-size:.75rem;color:rgb(var(--slate-9));margin-bottom:14px;">94.9k tokens in · 0.1k out</p>
+        <div class="divider" style="margin:0 0 12px;"></div>
+        <div class="cost-row">
+          <span class="cost-key">Projeção mensal</span>
+          <span class="cost-val">R$ 2,23</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-key">Total no período</span>
+          <span class="cost-val" style="color:rgb(var(--blue-11));font-weight:600;">R$ 2,62</span>
+        </div>
+        <div style="margin-top:14px;">
+          <button class="btn btn-teal-faded btn-sm" style="width:100%;">Ver relatório completo</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

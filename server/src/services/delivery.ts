@@ -345,4 +345,23 @@ async function replyToChatwoot(
   }
 }
 
-export { extractImagesFromMarkdown, sendChatwootTextMessage, sendChatwootImageMessage, sendChatwootMediaMessage, sendChatwootPrivateNote, getHumanizationConfig, replyToChatwoot, applyJitter };
+/**
+ * Headers de autenticação para API Chatwoot.
+ * Por padrão usa api_access_token (documentação oficial).
+ * Se cfg.chatwoot_use_bearer === true, usa Authorization: Bearer (para Nginx sem underscores_in_headers).
+ */
+export function getChatwootAuthHeaders(apiToken: string, cfg?: Record<string, unknown>): Record<string, string> {
+  const useBearer = cfg && (cfg.chatwoot_use_bearer === true || cfg.chatwoot_auth_style === "bearer");
+  return useBearer ? { Authorization: `Bearer ${apiToken}` } : { api_access_token: apiToken };
+}
+
+export {
+  extractImagesFromMarkdown,
+  sendChatwootTextMessage,
+  sendChatwootImageMessage,
+  sendChatwootMediaMessage,
+  sendChatwootPrivateNote,
+  getHumanizationConfig,
+  replyToChatwoot,
+  applyJitter,
+};

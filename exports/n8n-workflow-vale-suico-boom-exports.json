@@ -1,0 +1,62 @@
+{
+  "name": "Vale Suíço — prompts Boom (referência)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Vale Suíço — export Boom → n8n\n\n**Por que o JSON grande não virou estrutura?**\nO arquivo n8n-vale-suico-agent-full.json é dados (prompts + tools), NÃO é o formato de workflow do n8n. Colar no canvas não cria nós.\n\n**O que fazer**\n1. Menu Workflow → Import from File (ou colar JSON) usando n8n-workflow-vale-suico-boom-exports.json na pasta exports/.\n2. System message do AI Agent: abra vale-suico-system-combined.txt e copie o texto inteiro (UTF-8).\n3. Dispatcher (2 fases): vale-suico-dispatcher.txt.\n4. Follow-up: vale-suico-followup.txt.\n5. Tools: rode Test no workflow e use openai_functions do nó Carregar tools, ou use n8n-vale-suico-tools-openai.json.\n\nRegenerar: cd server && npm run export:n8n:vale-suico",
+        "height": 520,
+        "width": 460,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -280
+      ],
+      "id": "a94445d8-db62-4386-acfd-186f27988abd",
+      "name": "Instruções"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "95b0e28b-d78e-4148-89bb-7f27f68ae0f6",
+      "name": "Quando clicar em Test workflow"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Tools OpenAI (Boom / Vale Suíço). Regen: cd server && npm run export:n8n:vale-suico\nconst openai_functions = [{\"type\":\"function\",\"function\":{\"name\":\"consultar_disponibilidade_vale_suico\",\"description\":\"Consulta Omnibees (read-only): preços e disponibilidade. Só cite valores em R$ após resultado neste turno com rooms e summaryText válidos. No Boom: tool_type omnibees_availability.\",\"parameters\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"checkIn\",\"checkOut\"],\"properties\":{\"checkIn\":{\"type\":\"string\",\"description\":\"DDMMYYYY ou YYYY-MM-DD (aliases: check_in, CheckIn)\"},\"checkOut\":{\"type\":\"string\",\"description\":\"DDMMYYYY ou YYYY-MM-DD (aliases: check_out, CheckOut)\"},\"adults\":{\"type\":\"integer\",\"minimum\":1},\"children\":{\"type\":\"integer\",\"minimum\":0},\"childAges\":{\"type\":\"string\",\"description\":\"Idades separadas por vírgula (aliases: child_ages, ag)\"},\"rooms\":{\"type\":\"integer\",\"minimum\":1,\"description\":\"Alias: NRooms\"}}}}},{\"type\":\"function\",\"function\":{\"name\":\"suite_gallery_query\",\"description\":\"Galerias do tenant (fotos Markdown, URLs de vídeo). Vídeo institucional: galeria Institucional. No Boom: tool_type suite_gallery_query.\",\"parameters\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"nome\":{\"type\":\"string\"},\"nome_galeria\":{\"type\":\"string\"},\"filtro\":{\"type\":\"string\"},\"q\":{\"type\":\"string\"}}}}},{\"type\":\"function\",\"function\":{\"name\":\"rag_search\",\"description\":\"Busca semântica na base de conhecimento do tenant (se configurada). No Boom: tool_type rag_search; parâmetro típico: query.\",\"parameters\":{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\"}}}}}];\nreturn [{\n  json: {\n    openai_functions,\n    arquivos_prompt_txt: [\n      'exports/vale-suico-system-combined.txt',\n      'exports/vale-suico-dispatcher.txt',\n      'exports/vale-suico-followup.txt',\n    ],\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ],
+      "id": "6383da54-98ed-425b-ac53-b66188b5b450",
+      "name": "Carregar tools"
+    }
+  ],
+  "connections": {
+    "Quando clicar em Test workflow": {
+      "main": [
+        [
+          {
+            "node": "Carregar tools",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}

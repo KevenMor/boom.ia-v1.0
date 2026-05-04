@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://ia.agboom.com.br/api/health/nexus\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://ia.agboom.com.br/api/supabase-proxy/rest/v1/\")",
+      "Bash(curl -s \"https://ia.agboom.com.br/api/health/nexus\")",
+      "Bash(grep -E \"\\\\.ts$\")",
+      "Bash(git checkout *)",
+      "Bash(git merge dev --no-ff -m ' *)",
+      "Bash(git merge *)",
+      "Bash(git rm *)",
+      "Bash(xargs grep *)",
+      "Bash(node -e \"const d = new Date\\('2026-06-14'\\); console.log\\('14/06/2026 é:', d.toLocaleDateString\\('pt-BR', {weekday: 'long'}\\)\\); const d2 = new Date\\('2026-06-17'\\); console.log\\('17/06/2026 é:', d2.toLocaleDateString\\('pt-BR', {weekday: 'long'}\\)\\)\")",
+      "Bash(npx esbuild *)"
+    ]
+  }
+}

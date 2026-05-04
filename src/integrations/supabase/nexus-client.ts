@@ -10,9 +10,16 @@ const PROD_API_ORIGIN = safeApiUrl
   ? safeApiUrl.replace(/\/api\/?$/, "").replace(/\/$/, "")
   : "https://conexoesapp-server-boomia-lb.kgn6uc.easypanel.host";
 
-const proxyBase = isTrulyLocal
-  ? (import.meta.env.VITE_SUPABASE_PROXY_URL || "/api/supabase-proxy")
-  : `${PROD_API_ORIGIN}/api/supabase-proxy`;
+/** supabase-js exige URL absoluta; em dev costumamos usar path relativo `/api/supabase-proxy`. */
+function resolveLocalProxyBase(): string {
+  const raw = (import.meta.env.VITE_SUPABASE_PROXY_URL as string | undefined)?.trim() || "/api/supabase-proxy";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const path = raw.startsWith("/") ? raw : `/${raw}`;
+  const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:5173";
+  return `${origin}${path}`;
+}
+
+const proxyBase = isTrulyLocal ? resolveLocalProxyBase() : `${PROD_API_ORIGIN}/api/supabase-proxy`;
 
 const NEXUS_URL = proxyBase;
 // Always use the Nexus (self-hosted) anon key — the proxy on the VPS should override,

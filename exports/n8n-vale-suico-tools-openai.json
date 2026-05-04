@@ -1,0 +1,87 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "consultar_disponibilidade_vale_suico",
+      "description": "Consulta Omnibees (read-only): preços e disponibilidade. Só cite valores em R$ após resultado neste turno com rooms e summaryText válidos. No Boom: tool_type omnibees_availability.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "checkIn",
+          "checkOut"
+        ],
+        "properties": {
+          "checkIn": {
+            "type": "string",
+            "description": "DDMMYYYY ou YYYY-MM-DD (aliases: check_in, CheckIn)"
+          },
+          "checkOut": {
+            "type": "string",
+            "description": "DDMMYYYY ou YYYY-MM-DD (aliases: check_out, CheckOut)"
+          },
+          "adults": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "children": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "childAges": {
+            "type": "string",
+            "description": "Idades separadas por vírgula (aliases: child_ages, ag)"
+          },
+          "rooms": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Alias: NRooms"
+          }
+        }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "suite_gallery_query",
+      "description": "Galerias do tenant (fotos Markdown, URLs de vídeo). Vídeo institucional: galeria Institucional. No Boom: tool_type suite_gallery_query.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "nome": {
+            "type": "string"
+          },
+          "nome_galeria": {
+            "type": "string"
+          },
+          "filtro": {
+            "type": "string"
+          },
+          "q": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "rag_search",
+      "description": "Busca semântica na base de conhecimento do tenant (se configurada). No Boom: tool_type rag_search; parâmetro típico: query.",
+      "parameters": {
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "properties": {
+          "query": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+]

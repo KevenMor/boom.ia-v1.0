@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \":*)",
+      "Bash(npx tsc:*)",
+      "Bash(git -C \"c:/Users/keven/OneDrive/Área de Trabalho/Boom/boom-agents\" show b7eb7dc --stat)",
+      "Bash(git commit -m ' *)"
+    ]
+  }
+}
