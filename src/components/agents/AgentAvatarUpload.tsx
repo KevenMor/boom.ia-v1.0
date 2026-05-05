@@ -1,102 +1,173 @@
-import { useState, useRef } from "react";
-import { Camera, Loader2, ImagePlus } from "lucide-react";
-import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
-import { toast } from "sonner";
+import { useState, useEffect } from "react";
+import { Check, X, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+/** 4 avatares pré-definidos (3D estilo Pixar/Disney) */
+const PRESET_AVATARS = [
+  { url: "/avatars/agent-1.png", label: "Avatar 1" },
+  { url: "/avatars/agent-2.png", label: "Avatar 2" },
+  { url: "/avatars/agent-3.png", label: "Avatar 3" },
+  { url: "/avatars/agent-4.png", label: "Avatar 4" },
+];
 
 interface Props {
   agentId?: string;
   currentUrl?: string | null;
-  onUploaded: (url: string) => void;
+  onUploaded: (url: string | null) => void;
   className?: string;
+  /** Layout grande estilo Stitch / Material (Editar agente premium). */
+  layout?: "default" | "stitch";
 }
 
-export function AgentAvatarUpload({ agentId, currentUrl, onUploaded, className }: Props) {
-  const [uploading, setUploading] = useState(false);
-  const [preview, setPreview] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+export function AgentAvatarUpload({ currentUrl, onUploaded, className, layout = "default" }: Props) {
+  const [selected, setSelected] = useState<string | null>(currentUrl ?? null);
+  const [showPicker, setShowPicker] = useState(!currentUrl);
 
-  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  useEffect(() => {
+    setSelected(currentUrl ?? null);
+    setShowPicker(!currentUrl);
+  }, [currentUrl]);
 
-    if (!file.type.startsWith("image/")) {
-      toast.error("Selecione um arquivo de imagem");
-      return;
-    }
-
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error("Imagem deve ter no máximo 2MB");
-      return;
-    }
-
-    const objectUrl = URL.createObjectURL(file);
-    setPreview(objectUrl);
-
-    setUploading(true);
-    try {
-      const ext = file.name.split(".").pop() ?? "png";
-      const path = `${agentId ?? crypto.randomUUID()}.${ext}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("agent-avatars")
-        .upload(path, file, { upsert: true });
-
-      if (uploadError) throw uploadError;
-
-      const { data } = supabase.storage.from("agent-avatars").getPublicUrl(path);
-      const publicUrl = `${data.publicUrl}?t=${Date.now()}`;
-      onUploaded(publicUrl);
-      toast.success("Logo atualizado!");
-    } catch (err: any) {
-      toast.error("Erro no upload: " + (err.message ?? "desconhecido"));
-      setPreview(null);
-    } finally {
-      setUploading(false);
-    }
+  const handleSelect = (url: string) => {
+    setSelected(url);
+    setShowPicker(false);
+    onUploaded(url);
   };
 
-  const displayUrl = preview || currentUrl;
+  const handleClear = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelected(null);
+    onUploaded(null);
+    setShowPicker(true);
+  };
+
+  const handleShowMore = () => {
+    setShowPicker(true);
+  };
+
+  const displayUrl = selected || currentUrl;
+
+  if (layout === "stitch") {
+    return (
+      <div className={cn("flex w-full flex-col items-center gap-4", className)}>
+        <div className="relative shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowPicker(true)}
+            className="group relative flex h-32 w-32 cursor-pointer overflow-hidden rounded-full border-2 border-[#ccc3d8] bg-[#dce9ff] dark:border-border dark:bg-muted"
+          >
+            {displayUrl ? (
+              <>
+                <img src={displayUrl} alt="" className="h-full w-full object-cover object-top" />
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                  <Pencil className="h-6 w-6 text-white" />
+                </div>
+              </>
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                <span className="text-sm">?</span>
+              </div>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              handleClear(e);
+            }}
+            className={cn(
+              "absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white transition-colors hover:bg-black/80",
+              !displayUrl && "hidden"
+            )}
+            title="Remover avatar"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={handleShowMore}
+          className="text-[12px] font-semibold tracking-wide text-[#630ed4] hover:underline dark:text-violet-400 md:self-start"
+        >
+          Alterar avatar
+        </button>
+        {showPicker ? (
+          <div className="flex w-full max-w-[240px] flex-wrap justify-center gap-2 pt-2 md:max-w-none md:justify-start">
+            {PRESET_AVATARS.map(({ url, label }) => (
+              <button
+                key={url}
+                type="button"
+                onClick={() => handleSelect(url)}
+                className={cn(
+                  "relative h-11 w-11 shrink-0 overflow-hidden rounded-full border-2 transition-all",
+                  "hover:ring-2 hover:ring-[#7c3aed]/50 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-[#7c3aed]",
+                  displayUrl === url ? "border-[#7c3aed] ring-2 ring-[#7c3aed]" : "border-[#ccc3d8] dark:border-border"
+                )}
+                title={label}
+              >
+                <img src={url} alt={label} className="h-full w-full object-cover" />
+                {selected === url && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-[#7c3aed]/30">
+                    <Check className="h-3 w-3 text-white drop-shadow" strokeWidth={3} />
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
-    <div
-      className={cn(
-        "group relative w-full cursor-pointer overflow-hidden rounded-lg bg-gradient-to-br from-card to-muted/40 border border-border transition-all hover:ring-2 hover:ring-primary/30",
-        className
-      )}
-      onClick={() => inputRef.current?.click()}
-    >
-      {displayUrl ? (
-        <div className="flex items-center justify-center p-4">
-          <img
-            src={displayUrl}
-            alt="Logo do agente"
-            className="max-h-20 w-auto object-contain"
-          />
-        </div>
-      ) : (
-        <div className="flex flex-col items-center justify-center gap-1.5 p-6 text-muted-foreground">
-          <ImagePlus className="h-6 w-6" />
-          <span className="text-[11px]">Clique para adicionar logo</span>
-        </div>
-      )}
+    <div className={cn("space-y-2", className)}>
+      <p className="text-xs font-medium text-muted-foreground">Avatar do agente</p>
 
-      {/* Overlay on hover */}
-      <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-        {uploading ? (
-          <Loader2 className="h-5 w-5 animate-spin text-white" />
-        ) : (
-          <Camera className="h-5 w-5 text-white" />
-        )}
-      </div>
+      {displayUrl && !showPicker ? (
+        <div className="flex items-center gap-3">
+          <div className="relative shrink-0 overflow-hidden rounded-full border-2 border-border bg-muted/30 w-12 h-12 shadow-sm">
+            <img src={displayUrl} alt="Avatar do agente" className="h-full w-full object-cover" />
+            <button
+              type="button"
+              onClick={handleClear}
+              className="absolute -top-0.5 -right-0.5 rounded-full bg-black/60 p-0.5 text-white transition-colors hover:bg-black/80"
+              title="Remover avatar"
+            >
+              <X className="h-2.5 w-2.5" />
+            </button>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm text-muted-foreground">Avatar selecionado</p>
+            <button type="button" onClick={handleShowMore} className="mt-0.5 text-xs text-primary hover:underline">
+              Escolher outro
+            </button>
+          </div>
+        </div>
+      ) : null}
 
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handleFile}
-      />
+      {showPicker && (
+        <div className="flex flex-wrap gap-2">
+          {PRESET_AVATARS.map(({ url, label }) => (
+            <button
+              key={url}
+              type="button"
+              onClick={() => handleSelect(url)}
+              className={cn(
+                "relative h-11 w-11 shrink-0 overflow-hidden rounded-full border-2 transition-all",
+                "hover:ring-2 hover:ring-primary/50 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-primary",
+                displayUrl === url ? "border-primary ring-2 ring-primary" : "border-border hover:border-primary/50"
+              )}
+              title={label}
+            >
+              <img src={url} alt={label} className="h-full w-full object-cover" />
+              {selected === url && (
+                <div className="absolute inset-0 flex items-center justify-center bg-primary/30">
+                  <Check className="h-3 w-3 text-primary drop-shadow" strokeWidth={3} />
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -9,6 +9,7 @@ export const providerModels: Record<string, { label: string; models: { value: st
       { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash", description: "Thinking rápido e econômico" },
       { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", description: "Ultra econômico, alto volume" },
       { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash", description: "Rápido, multimodal, uso geral" },
+      { value: "gemini-2.0-flash-preview", label: "Gemini 2.0 Flash Preview", description: "Versão preview do Flash 2.0" },
       { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite", description: "Mais leve e econômico" },
       { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro", description: "Contexto longo (2M tokens)" },
       { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash", description: "Rápido, contexto longo" },
@@ -51,6 +52,19 @@ export const providerModels: Record<string, { label: string; models: { value: st
       { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B", description: "Ultra rápido" },
       { value: "mixtral-8x7b-32768", label: "Mixtral 8x7B", description: "MoE, contexto longo" },
       { value: "gemma2-9b-it", label: "Gemma 2 9B", description: "Google, compacto" },
+    ],
+  },
+  Ollama: {
+    label: "Ollama",
+    models: [
+      { value: "llama3.2", label: "Llama 3.2", description: "Uso geral (ajuste ao que tiver no ollama pull)" },
+      { value: "llama3.1", label: "Llama 3.1", description: "Família Meta" },
+      { value: "mistral", label: "Mistral", description: "Mistral 7B" },
+      { value: "mixtral", label: "Mixtral", description: "MoE local" },
+      { value: "phi3", label: "Phi-3", description: "Microsoft compacto" },
+      { value: "gemma2", label: "Gemma 2", description: "Google" },
+      { value: "qwen2.5", label: "Qwen 2.5", description: "Alibaba" },
+      { value: "codellama", label: "Code Llama", description: "Código" },
     ],
   },
 };

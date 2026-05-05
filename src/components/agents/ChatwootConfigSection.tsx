@@ -2,6 +2,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Copy, ExternalLink, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 
 interface Props {
@@ -18,6 +19,8 @@ interface Props {
   setWahaApiKey?: (v: string) => void;
   wahaSession?: string;
   setWahaSession?: (v: string) => void;
+  deliverMediaViaWaha?: boolean;
+  setDeliverMediaViaWaha?: (v: boolean) => void;
 }
 
 export function ChatwootConfigSection({
@@ -34,6 +37,8 @@ export function ChatwootConfigSection({
   setWahaApiKey,
   wahaSession = "default",
   setWahaSession,
+  deliverMediaViaWaha = false,
+  setDeliverMediaViaWaha,
 }: Props) {
   return (
     <div className="space-y-4">
@@ -172,6 +177,24 @@ export function ChatwootConfigSection({
           <p className="text-[10px] text-muted-foreground">
             Usado para envio direto de mensagens ao WhatsApp (ex: novo contato pelo Chat ao Vivo).
           </p>
+
+          {setDeliverMediaViaWaha && (
+            <div className="flex items-center justify-between gap-3 rounded-md border border-border/40 bg-muted/30 p-2">
+              <div className="min-w-0">
+                <Label className="text-xs font-medium text-foreground">
+                  Enviar arquivos direto pelo WAHA
+                </Label>
+                <p className="text-[10px] text-muted-foreground">
+                  Imagens e vídeos vão direto pelo WAHA (ordem correta no WhatsApp). Texto continua pelo Chatwoot. Se o WAHA falhar, volta automaticamente para o Chatwoot.
+                </p>
+              </div>
+              <Switch
+                checked={deliverMediaViaWaha}
+                onCheckedChange={setDeliverMediaViaWaha}
+                disabled={!wahaUrl || !wahaApiKey}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>

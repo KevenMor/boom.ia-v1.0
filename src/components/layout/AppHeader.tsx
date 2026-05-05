@@ -19,6 +19,7 @@ const routeTitles: Record<string, string> = {
   "/agents": "Agentes",
   "/conversations": "Conversas",
   "/calendar": "Agenda",
+  "/followups": "Follow-ups e Lembretes",
   "/tools": "Tools",
   "/providers": "Providers",
   "/analytics/tokens": "Analytics de Tokens",
@@ -44,14 +45,19 @@ export function AppHeader() {
   const title = getTitle(location.pathname);
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-background/70 backdrop-blur-xl px-4 md:px-6">
-      <div className="flex items-center gap-3">
+    <header className="sticky top-0 z-30 flex h-14 min-h-14 items-center justify-between border-b border-border bg-background px-3 pt-[env(safe-area-inset-top,0px)] pb-0 supports-[padding-top:env(safe-area-inset-top)]:pb-0 md:h-16 md:min-h-16 md:px-6">
+      <div className="flex items-center gap-2 sm:gap-3">
         {isMobile && (
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={() => setMobileOpen(true)}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="-ml-0.5 h-11 w-11 touch-manipulation text-muted-foreground"
+            onClick={() => setMobileOpen(true)}
+          >
             <Menu className="h-5 w-5" />
           </Button>
         )}
-        <h1 className="text-sm font-bold tracking-tight">{title}</h1>
+        <h1 className="min-w-0 truncate text-sm font-bold tracking-tight">{title}</h1>
       </div>
 
       <div className="flex items-center gap-1">
@@ -59,14 +65,12 @@ export function AppHeader() {
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="ml-1 h-8 w-8 rounded-full bg-primary/10 text-primary hover:bg-primary/20">
+            <Button variant="ghost" size="icon" className="h-11 w-11 touch-manipulation rounded-full bg-primary/10 text-primary hover:bg-primary/20">
               <User className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem className="text-xs text-muted-foreground">
-              {user?.email ?? "—"}
-            </DropdownMenuItem>
+            <DropdownMenuItem className="text-xs text-muted-foreground">{user?.email ?? "—"}</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => navigate("/profile")}>
               <User className="mr-2 h-3 w-3" />

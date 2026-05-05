@@ -1,5 +1,12 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  type DashboardVisual,
+  chartAxisTickClass,
+  chartGridClass,
+  chartTooltipStyle,
+  subtitleClass,
+} from "@/lib/dashboard-visual";
+import {
   LineChart,
   Line,
   XAxis,
@@ -15,9 +22,10 @@ import type { UsageDailySummary } from "@/hooks/useUsageMetrics";
 interface Props {
   data: UsageDailySummary[];
   loading?: boolean;
+  visual?: DashboardVisual;
 }
 
-export function LatencyChart({ data, loading }: Props) {
+export function LatencyChart({ data, loading, visual = "default" }: Props) {
   const byDay = new Map<string, { day: string; totalLatency: number; totalReqs: number; maxP95: number }>();
   for (const row of data) {
     if (row.phase !== "conversational") continue;
@@ -42,12 +50,18 @@ export function LatencyChart({ data, loading }: Props) {
     <div className="box h-full">
       <div className="box-header justify-between">
         <div className="flex items-center gap-2.5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-warning/10">
-            <Timer className="h-4 w-4 text-warning" />
+          <span
+            className={
+              visual === "cw"
+                ? "flex h-8 w-8 items-center justify-center rounded-lg border border-cw-weak bg-cw-alpha"
+                : "flex h-8 w-8 items-center justify-center rounded-lg bg-warning/10"
+            }
+          >
+            <Timer className={visual === "cw" ? "h-4 w-4 text-cw-slate-11" : "h-4 w-4 text-warning"} />
           </span>
           <div>
             <span className="box-title">Latência</span>
-            <p className="text-[11px] text-muted-foreground">Média vs P95 — últimos 14 dias</p>
+            <p className={subtitleClass(visual)}>Média vs P95 — últimos 14 dias</p>
           </div>
         </div>
       </div>
@@ -55,29 +69,42 @@ export function LatencyChart({ data, loading }: Props) {
         {loading ? (
           <Skeleton className="h-[220px] w-full rounded-xl" />
         ) : chartData.length === 0 ? (
-          <div className="flex h-[220px] items-center justify-center text-sm text-muted-foreground">
+          <div
+            className={
+              visual === "cw"
+                ? "flex h-[220px] items-center justify-center text-sm text-cw-slate-10"
+                : "flex h-[220px] items-center justify-center text-sm text-muted-foreground"
+            }
+          >
             Nenhum dado de latência ainda
           </div>
         ) : (
           <div className="h-[220px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
-                <XAxis dataKey="day" axisLine={false} tickLine={false} className="text-[11px] fill-muted-foreground" />
-                <YAxis axisLine={false} tickLine={false} className="text-[11px] fill-muted-foreground" unit="ms" />
+                <CartesianGrid strokeDasharray="3 3" className={chartGridClass(visual)} vertical={false} />
+                <XAxis dataKey="day" axisLine={false} tickLine={false} className={chartAxisTickClass(visual)} />
+                <YAxis axisLine={false} tickLine={false} className={chartAxisTickClass(visual)} unit="ms" />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: "hsl(var(--popover))",
-                    border: "1px solid hsl(var(--border))",
-                    borderRadius: "8px",
-                    fontSize: "12px",
-                    color: "hsl(var(--popover-foreground))",
-                  }}
+                  contentStyle={chartTooltipStyle(visual)}
                   formatter={(value: number, name: string) => [`${value.toLocaleString()}ms`, name === "avg" ? "Média" : "P95"]}
                 />
                 <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: "11px" }} formatter={(v) => (v === "avg" ? "Média" : "P95")} />
-                <Line type="monotone" dataKey="avg" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3, fill: "hsl(var(--primary))" }} />
-                <Line type="monotone" dataKey="p95" stroke="hsl(var(--primary-tint1))" strokeWidth={2} dot={{ r: 3, fill: "hsl(var(--primary-tint1))" }} strokeDasharray="5 5" />
+                <Line
+                  type="monotone"
+                  dataKey="avg"
+                  stroke={visual === "cw" ? "var(--cw-brand)" : "hsl(var(--primary))"}
+                  strokeWidth={2}
+                  dot={{ r: 3, fill: visual === "cw" ? "var(--cw-brand)" : "hsl(var(--primary))" }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="p95"
+                  stroke={visual === "cw" ? "var(--cw-series-3)" : "hsl(var(--primary-tint1))"}
+                  strokeWidth={2}
+                  dot={{ r: 3, fill: visual === "cw" ? "var(--cw-series-3)" : "hsl(var(--primary-tint1))" }}
+                  strokeDasharray="5 5"
+                />
               </LineChart>
             </ResponsiveContainer>
           </div>

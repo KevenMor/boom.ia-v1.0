@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { nexusDb } from "@/integrations/supabase/nexus-client";
+import { fetchAgentTokenUsageInRange } from "@/lib/fetch-agent-token-usage";
 
 export interface AgentTokenSummary {
   agent_id: string;
@@ -32,7 +33,6 @@ function getModelCost(model: string): { input: number; output: number } {
   for (const [key, cost] of Object.entries(MODEL_COSTS)) {
     if (lower.includes(key)) return cost;
   }
-  // Default fallback
   if (lower.includes("gemini")) return { input: 0.15, output: 0.60 };
   if (lower.includes("gpt")) return { input: 0.15, output: 0.60 };
   return { input: 0.10, output: 0.40 };
@@ -43,6 +43,9 @@ export function estimateCostUsd(promptTokens: number, completionTokens: number, 
   return (promptTokens / 1_000_000) * cost.input + (completionTokens / 1_000_000) * cost.output;
 }
 
+const TOKEN_ROWS_SELECT =
+  "agent_id, provider, model, prompt_tokens, completion_tokens, total_tokens, metadata, message_role";
+
 export function useTokensByAgent(days = 7, tenantId?: string | null) {
   return useQuery({
     queryKey: ["tokens-by-agent", days, tenantId ?? "all"],
@@ -50,17 +53,12 @@ export function useTokensByAgent(days = 7, tenantId?: string | null) {
       const since = new Date();
       since.setDate(since.getDate() - days);
 
-      let query = nexusDb
-        .from("agent_token_usage")
-        .select("agent_id, provider, model, prompt_tokens, completion_tokens, total_tokens, metadata, message_role")
-        .gte("created_at", since.toISOString())
-        .order("created_at", { ascending: false })
-        .limit(10000);
+      const raw = await fetchAgentTokenUsageInRange(since, tenantId, {
+        columns: TOKEN_ROWS_SELECT,
+        globalLimit: 80_000,
+      });
 
-      const { data: rows, error } = await query;
-      if (error) throw error;
-
-      let usage = (rows ?? []) as Array<{
+      const usage = raw as Array<{
         agent_id: string;
         provider: string;
         model: string;
@@ -70,20 +68,6 @@ export function useTokensByAgent(days = 7, tenantId?: string | null) {
         metadata: Record<string, unknown> | null;
         message_role: string;
       }>;
-
-      if (tenantId && usage.length > 0) {
-        const agentIds = [...new Set(usage.map((r) => r.agent_id).filter(Boolean))];
-        const { data: agents } = await nexusDb
-          .from("agents")
-          .select("id, tenant_id")
-          .in("id", agentIds);
-        const tenantAgentIds = new Set(
-          (agents ?? []).filter((a: { tenant_id: string }) => a.tenant_id === tenantId).map((a: { id: string }) => a.id)
-        );
-        if (tenantAgentIds.size > 0) {
-          usage = usage.filter((r) => tenantAgentIds.has(r.agent_id));
-        }
-      }
 
       const events = usage.map((r) => ({
         agent_id: r.agent_id,
@@ -97,38 +81,49 @@ export function useTokensByAgent(days = 7, tenantId?: string | null) {
         phase: r.message_role,
       }));
 
-      // Load agents for name mapping
-      const { data: agents } = await nexusDb
-        .from("agents")
-        .select("id, name, tenants(name)");
+      const { data: agents } = await nexusDb.from("agents").select("id, name, tenants(name)");
 
       const agentMap = new Map<string, { name: string; tenant: string }>();
       for (const a of agents ?? []) {
         agentMap.set(a.id, {
           name: a.name || "Sem nome",
-          tenant: (a.tenants as any)?.name || "—",
+          tenant: (a.tenants as { name?: string } | null)?.name || "—",
         });
       }
 
-      // Aggregate by agent
-      const byAgent = new Map<string, {
-        prompt: number; completion: number; total: number;
-        requests: number; toolCalls: number; latencySum: number; latencyCount: number;
-        costUsd: number; models: Set<string>;
-      }>();
+      const byAgent = new Map<
+        string,
+        {
+          prompt: number;
+          completion: number;
+          total: number;
+          requests: number;
+          toolCalls: number;
+          latencySum: number;
+          latencyCount: number;
+          costUsd: number;
+          models: Set<string>;
+        }
+      >();
 
-      for (const e of events ?? []) {
+      for (const e of events) {
         const key = e.agent_id || "unknown";
         const existing = byAgent.get(key) || {
-          prompt: 0, completion: 0, total: 0,
-          requests: 0, toolCalls: 0, latencySum: 0, latencyCount: 0,
-          costUsd: 0, models: new Set<string>(),
+          prompt: 0,
+          completion: 0,
+          total: 0,
+          requests: 0,
+          toolCalls: 0,
+          latencySum: 0,
+          latencyCount: 0,
+          costUsd: 0,
+          models: new Set<string>(),
         };
         const pt = e.prompt_tokens || 0;
         const ct = e.completion_tokens || 0;
         existing.prompt += pt;
         existing.completion += ct;
-        existing.total += e.total_tokens || (pt + ct);
+        existing.total += e.total_tokens || pt + ct;
         existing.requests += 1;
         existing.toolCalls += e.tool_calls_count || 0;
         if (e.latency_ms) {

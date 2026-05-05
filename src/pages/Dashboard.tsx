@@ -19,29 +19,27 @@ import { RevenueChart } from "@/components/dashboard/RevenueChart";
 import { SprintProgress } from "@/components/dashboard/SprintProgress";
 import { FeatureAdoption } from "@/components/dashboard/FeatureAdoption";
 import { RecentDeployments } from "@/components/dashboard/RecentDeployments";
+import type { Agent } from "@/types/database";
 
 const Dashboard = React.forwardRef<HTMLDivElement>(function Dashboard(_props, ref) {
   const { selectedTenantId } = useTenantContext();
   const { data: tenants, isLoading: loadingTenants } = useTenants();
   const { data: agents, isLoading: loadingAgents } = useAgents(selectedTenantId ?? undefined);
-  const { data: providers, isLoading: loadingProviders } = useProviders();
+  const { data: providers } = useProviders();
   const { data: dailySummary, isLoading: loadingDaily } = useUsageDailySummary(selectedTenantId);
-  const { data: recentEvents, isLoading: loadingEvents } = useRecentUsageEvents(200, selectedTenantId);
+  const { data: recentEvents, isLoading: loadingEvents } = useRecentUsageEvents(8000, selectedTenantId);
   const { data: providerTokens, isLoading: loadingProviderTokens } = useTokensByProvider(selectedTenantId);
   const { data: agentTokens, isLoading: loadingAgentTokens } = useTokensByAgent(7, selectedTenantId);
 
   const activeTenants = tenants?.filter((t) => t.status === "active").length ?? 0;
-  const activeAgents = agents?.filter((a: any) => a.status === "active").length ?? 0;
-  const pausedAgents = agents?.filter((a: any) => a.status !== "active").length ?? 0;
+  const activeAgents = agents?.filter((a: Agent) => a.status === "active").length ?? 0;
+  const pausedAgents = agents?.filter((a: Agent) => a.status !== "active").length ?? 0;
   const totalAgents = agents?.length ?? 0;
 
   return (
-    <div className="space-y-6">
-
-      {/* ROW 1: 4 KPI Stats */}
+    <div ref={ref} className="space-y-6">
       <UsageStatsRow events={recentEvents ?? []} dailySummary={dailySummary ?? []} loading={loadingEvents} />
 
-      {/* ROW 2: Token Chart + Model Breakdown */}
       <div className="grid grid-cols-12 gap-4">
         <div className="col-span-12 xl:col-span-8">
           <TokenUsageChart data={dailySummary ?? []} loading={loadingDaily} />
@@ -51,7 +49,6 @@ const Dashboard = React.forwardRef<HTMLDivElement>(function Dashboard(_props, re
         </div>
       </div>
 
-      {/* ROW 3: Agent Tokens + Landing Pages (Latency) + Cost */}
       <div className="grid grid-cols-12 gap-4">
         <div className="col-span-12 xl:col-span-5">
           <AgentTokenBreakdown data={agentTokens ?? []} loading={loadingAgentTokens} />
@@ -64,7 +61,6 @@ const Dashboard = React.forwardRef<HTMLDivElement>(function Dashboard(_props, re
         </div>
       </div>
 
-      {/* ROW 4: Conversations + Agents + Adoption + Provider Tokens */}
       <div className="grid grid-cols-12 gap-4">
         <div className="col-span-12 md:col-span-6 lg:col-span-3">
           <RevenueChart />
@@ -78,23 +74,21 @@ const Dashboard = React.forwardRef<HTMLDivElement>(function Dashboard(_props, re
           />
         </div>
         <div className="col-span-12 md:col-span-6 lg:col-span-3">
-          <FeatureAdoption
-            agents={totalAgents}
-            providers={providers?.length ?? 0}
-            tenants={activeTenants}
-          />
+          <FeatureAdoption agents={totalAgents} providers={providers?.length ?? 0} tenants={activeTenants} />
         </div>
         <div className="col-span-12 md:col-span-6 lg:col-span-3">
           <ProviderTokensCard data={providerTokens ?? []} loading={loadingProviderTokens} />
         </div>
       </div>
 
-      {/* ROW 5: Activity Feed + Recent Tenants */}
-      <div className="grid grid-cols-12 gap-4">
-        <div className="col-span-12 lg:col-span-6">
-          <RecentDeployments tenants={tenants ?? []} loading={loadingTenants} />
+      {/* Lista de tenants faz sentido só na visão agregada (superadmin sem tenant fixo). */}
+      {selectedTenantId === null && (
+        <div className="grid grid-cols-12 gap-4">
+          <div className="col-span-12 lg:col-span-6">
+            <RecentDeployments tenants={tenants ?? []} loading={loadingTenants} />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 });

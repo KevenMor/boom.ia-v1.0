@@ -1,14 +1,33 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
+import { callAPI } from "@/lib/api-client";
 import type { Tenant } from "@/types/database";
+import { useAuth } from "@/contexts/AuthContext";
 
 export function useTenants() {
+  const { user, isSuperAdmin, memberships, loading } = useAuth();
+
   return useQuery({
-    queryKey: ["tenants"],
+    queryKey: ["tenants", user?.id ?? null, isSuperAdmin, memberships.length],
+    enabled: !loading && !!user,
     queryFn: async () => {
+      if (isSuperAdmin) {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        const response = await callAPI<{ data: Tenant[] }>("/admin/tenants", {
+          method: "GET",
+          headers: token ? { "x-nexus-auth": `Bearer ${token}` } : {},
+        });
+        return response.data ?? [];
+      }
+
+      const tenantIds = memberships.map((m) => m.tenant_id);
+      if (tenantIds.length === 0) return [] as Tenant[];
+
       const { data, error } = await supabase
         .from("tenants")
         .select("*")
+        .in("id", tenantIds)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data as Tenant[];
@@ -20,34 +39,39 @@ export function useCreateTenant() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (tenant: Partial<Tenant>) => {
-      // 1. Insert tenant (status = provisioning by default)
-      const { data, error } = await supabase
-        .from("tenants")
-        .insert(tenant)
-        .select()
-        .single();
-      if (error) throw error;
+      // Call backend endpoint to bypass RLS (uses SERVICE_ROLE_KEY)
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
 
-      const created = data as Tenant;
-
-      // 2. Provision Data Plane schema
-      const { error: provError } = await supabase.rpc("provision_tenant_schema", {
-        p_tenant_id: created.id,
+      const response = await fetch("/api/admin/tenants", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token && { "x-nexus-auth": `Bearer ${token}` }),
+        },
+        body: JSON.stringify({
+          name: tenant.name,
+          slug: tenant.slug,
+          plan: tenant.plan,
+          description: tenant.description,
+        }),
       });
-      if (provError) {
-        // Cleanup: remove tenant if provisioning fails
-        await supabase.from("tenants").delete().eq("id", created.id);
-        throw new Error("Falha no provisionamento: " + provError.message);
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to create tenant");
       }
 
-      // 3. Refetch to get updated status
+      const data = await response.json();
+
+      // Refetch para obter status atualizado (db_name preenchido pelo provisionamento)
       const { data: updated } = await supabase
         .from("tenants")
         .select("*")
-        .eq("id", created.id)
+        .eq("id", data.id)
         .single();
 
-      return (updated ?? created) as Tenant;
+      return (updated ?? data) as Tenant;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tenants"] }),
   });
@@ -74,18 +98,20 @@ export function useDeleteTenant() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      // 1. Deprovision schema first
-      const { error: deprovError } = await supabase.rpc("deprovision_tenant_schema", {
-        p_tenant_id: id,
-      });
-      // Log but don't block deletion if deprov fails
-      if (deprovError) {
-        console.warn("Deprovision warning:", deprovError.message);
-      }
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
 
-      // 2. Delete tenant record
-      const { error } = await supabase.from("tenants").delete().eq("id", id);
-      if (error) throw error;
+      const response = await fetch(`/api/admin/tenants/${id}`, {
+        method: "DELETE",
+        headers: {
+          ...(token && { "x-nexus-auth": `Bearer ${token}` }),
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to delete tenant");
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tenants"] }),
   });

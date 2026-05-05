@@ -230,6 +230,242 @@ async function fireDeliverMessage(
   }
 }
 
+export async function processFollowUpItem(
+  item: any,
+  supabase: any,
+  baseUrl: string,
+  nexusKey: string
+): Promise<{ processed: boolean; nextId?: string; nextDelay?: number }> {
+  const { data: agent } = await supabase
+    .from("agents")
+    .select("id, name, provider_id, model, system_prompt, tenant_id, config, status")
+    .eq("id", item.agent_id)
+    .single();
+
+  if (!agent) {
+    await supabase
+      .from("follow_up_queue")
+      .update({ status: "cancelled", updated_at: new Date().toISOString() })
+      .eq("id", item.id);
+    return { processed: false };
+  }
+
+  if (agent.status === "inactive") {
+    await supabase
+      .from("follow_up_queue")
+      .update({ status: "cancelled", updated_at: new Date().toISOString() })
+      .eq("id", item.id);
+    return { processed: false };
+  }
+
+  const cfg = (agent.config || {}) as Record<string, any>;
+
+  const quietStart = Number(cfg.followup_quiet_start ?? 23);
+  const quietEnd = Number(cfg.followup_quiet_end ?? 7);
+  const nowBrasilia = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+  const currentHour = nowBrasilia.getHours();
+  const inQuietHours = quietStart > quietEnd
+    ? (currentHour >= quietStart || currentHour < quietEnd)
+    : (currentHour >= quietStart && currentHour < quietEnd);
+
+  if (inQuietHours) {
+    return { processed: false };
+  }
+
+  if (item.chatwoot_conversation_id && cfg.chatwoot_url && cfg.chatwoot_api_token && cfg.chatwoot_account_id) {
+    try {
+      const chatwootBase = cfg.chatwoot_url.replace(/\/+$/, "");
+      const convUrl = `${chatwootBase}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${item.chatwoot_conversation_id}`;
+      const convResp = await fetch(convUrl, {
+        headers: { api_access_token: cfg.chatwoot_api_token },
+        signal: AbortSignal.timeout(10_000),
+      });
+
+      if (convResp.ok) {
+        const convData = await convResp.json() as { meta?: { assignee?: { id?: number } } };
+        const currentAssigneeId = convData?.meta?.assignee?.id ?? null;
+
+        if (agent.status === "test") {
+          const testAssigneeId = cfg.test_assignee_id != null ? Number(cfg.test_assignee_id) : null;
+          if (testAssigneeId == null || currentAssigneeId !== testAssigneeId) {
+            console.log(`[FollowUp] Test mode: skipping ${item.id} (assignee ${currentAssigneeId} != test ${testAssigneeId})`);
+            await supabase
+              .from("follow_up_queue")
+              .update({ status: "cancelled", updated_at: new Date().toISOString() })
+              .eq("id", item.id);
+            return { processed: false };
+          }
+        }
+
+        if (currentAssigneeId && agent.status === "active") {
+          console.log(`[FollowUp] Human assigned (${currentAssigneeId}): cancelling ${item.id}`);
+          await supabase
+            .from("follow_up_queue")
+            .update({ status: "cancelled", updated_at: new Date().toISOString() })
+            .eq("id", item.id);
+          return { processed: false };
+        }
+      }
+    } catch (e: any) {
+      console.warn("[FollowUp] Chatwoot assignee check failed:", e.message);
+    }
+  }
+
+  const { data: tenant } = await supabase
+    .from("tenants")
+    .select("slug")
+    .eq("id", agent.tenant_id)
+    .single();
+
+  const tenantSlug = tenant?.slug ?? null;
+
+  let conversationMessages: { role: string; content: string }[] = [];
+  if (item.conversation_id) {
+    try {
+      const { data: history } = await supabase.rpc("load_conversation_messages", {
+        p_agent_id: item.agent_id,
+        p_conversation_id: item.conversation_id,
+      });
+      if (history && Array.isArray(history)) {
+        conversationMessages = history.slice(-20).map((m: any) => ({
+          role: m.role === "tool" ? "system" : m.role,
+          content: (m.content as string) || "",
+        }));
+      }
+    } catch (e: any) {
+      console.warn("[FollowUp] Could not load history:", e.message);
+    }
+  }
+
+  const confirmedMsgs = conversationMessages.filter((m) =>
+    m.role === "assistant" && /confirmad[oa]|agendad[oa]|marcad[oa]|appointment.*confirm/i.test(m.content)
+  );
+  if (confirmedMsgs.length > 0) {
+    console.log(`[FollowUp] Appointment confirmed: cancelling ${item.id}`);
+    await supabase
+      .from("follow_up_queue")
+      .update({ status: "cancelled", updated_at: new Date().toISOString() })
+      .eq("id", item.id);
+    return { processed: false };
+  }
+
+  const lastMsg = conversationMessages[conversationMessages.length - 1];
+  if (lastMsg?.role === "user") {
+    await supabase
+      .from("follow_up_queue")
+      .update({ status: "cancelled", updated_at: new Date().toISOString() })
+      .eq("id", item.id);
+    return { processed: false };
+  }
+
+  const attempt = item.attempt || 1;
+  const maxAttempts = item.max_attempts || 3;
+  const intervals: number[] = (() => {
+    try {
+      const raw = item.intervals_minutes;
+      return Array.isArray(raw) ? raw : JSON.parse(raw);
+    } catch {
+      return [10, 20, 30];
+    }
+  })();
+
+  let followupPrompt = getFollowupPrompt(tenantSlug);
+  if (!followupPrompt) {
+    followupPrompt = `[SISTEMA INTERNO - FOLLOW-UP]\nEscreva uma mensagem curta de follow-up (tentativa {attempt} de {max_attempts}). Seja natural, breve (1-2 frases) e use o contexto da conversa.`;
+  }
+  followupPrompt = followupPrompt
+    .replace(/\{attempt\}/g, String(attempt))
+    .replace(/\{max_attempts\}/g, String(maxAttempts));
+
+  const messages = [
+    ...conversationMessages,
+    { role: "user", content: followupPrompt },
+  ];
+
+  const chatResult = await callChatAgent(
+    baseUrl,
+    nexusKey,
+    item.agent_id,
+    messages,
+    item.conversation_id,
+    undefined,
+    item.external_user_id,
+    item.chatwoot_conversation_id ?? null
+  );
+
+  if (chatResult.error) {
+    console.error("[FollowUp] LLM failed for", item.id, chatResult.error.slice(0, 200));
+    return { processed: false };
+  }
+
+  const followupText = sanitizeLLMOutput(chatResult.fullContent.trim());
+  if (!followupText) {
+    console.warn("[FollowUp] Empty response for", item.id);
+    return { processed: false };
+  }
+
+  if (item.conversation_id) {
+    try {
+      await supabase.rpc("save_message", {
+        p_agent_id: item.agent_id,
+        p_conversation_id: item.conversation_id,
+        p_role: "assistant",
+        p_content: followupText,
+        p_model: "followup",
+        p_tokens_input: 0,
+        p_tokens_output: 0,
+        p_latency_ms: null,
+      });
+    } catch (e: any) {
+      console.warn("[FollowUp] Save message failed:", e.message);
+    }
+  }
+
+  if (item.chatwoot_conversation_id && cfg.chatwoot_url && cfg.chatwoot_api_token && cfg.chatwoot_account_id) {
+    const chatwootBase = cfg.chatwoot_url.replace(/\/+$/, "");
+    const msgUrl = `${chatwootBase}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${item.chatwoot_conversation_id}/messages`;
+    const humanization = getHumanizationConfig(cfg);
+
+    if (humanization.typingDelayMs > 0) {
+      await new Promise((r) => setTimeout(r, applyJitter(humanization.typingDelayMs)));
+    }
+
+    const sent = await sendChatwootTextMessage(msgUrl, cfg.chatwoot_api_token, followupText);
+    if (!sent) {
+      console.error("[FollowUp] Chatwoot send failed for", item.id);
+    }
+  }
+
+  await supabase
+    .from("follow_up_queue")
+    .update({ status: "sent", updated_at: new Date().toISOString() })
+    .eq("id", item.id);
+
+  console.log(`[FollowUp] Sent attempt ${attempt}/${maxAttempts} for conversation ${item.conversation_id}`);
+
+  if (attempt < maxAttempts) {
+    const nextDelay = intervals[attempt] || intervals[intervals.length - 1] || 30;
+    try {
+      const { data: nextItemId } = await supabase.rpc("schedule_followup", {
+        p_agent_id: item.agent_id,
+        p_conversation_id: item.conversation_id,
+        p_external_user_id: item.external_user_id,
+        p_channel: item.channel,
+        p_chatwoot_conversation_id: item.chatwoot_conversation_id,
+        p_attempt: attempt + 1,
+        p_max_attempts: maxAttempts,
+        p_intervals_minutes: JSON.stringify(intervals),
+        p_delay_minutes: nextDelay,
+      });
+      return { processed: true, nextId: nextItemId ?? undefined, nextDelay };
+    } catch (e: any) {
+      console.warn("[FollowUp] Schedule next attempt failed:", e.message);
+    }
+  }
+
+  return { processed: true };
+}
+
 export async function queueRoutes(fastify: FastifyInstance) {
   fastify.post(
     "/queue/process",
@@ -511,6 +747,99 @@ export async function queueRoutes(fastify: FastifyInstance) {
     }
   );
 
+  /** Lista para o painel Follow-ups (filtra por tenant via agentes). */
+  fastify.get(
+    "/queue/followups/list",
+    async (req: FastifyRequest<{ Querystring: { tenant_id?: string } }>, reply: FastifyReply) => {
+      const tenantId =
+        typeof req.query?.tenant_id === "string" ? req.query.tenant_id.trim() : "";
+      if (!tenantId) {
+        return reply.status(400).send({ error: "tenant_id is required" });
+      }
+
+      const supabase = createNexusClient();
+
+      const { data: agents, error: agentsErr } = await supabase
+        .from("agents")
+        .select("id, name")
+        .eq("tenant_id", tenantId);
+
+      if (agentsErr) {
+        console.error("[FollowUp list] agents:", agentsErr.message);
+        return reply.status(500).send({ error: agentsErr.message });
+      }
+
+      const agentRows = (agents ?? []) as { id: string; name: string | null }[];
+      const agentIds = agentRows.map((a) => a.id);
+      const nameById = new Map(agentRows.map((a) => [a.id, a.name]));
+
+      if (agentIds.length === 0) {
+        return reply.send([]);
+      }
+
+      const { data: rows, error: queueErr } = await supabase
+        .from("follow_up_queue")
+        .select(
+          "id, agent_id, conversation_id, external_user_id, channel, chatwoot_conversation_id, attempt, max_attempts, scheduled_at, status, cancel_reason, created_at, updated_at"
+        )
+        .in("agent_id", agentIds)
+        .order("scheduled_at", { ascending: false })
+        .limit(1000);
+
+      if (queueErr) {
+        console.error("[FollowUp list] queue:", queueErr.message);
+        return reply.status(500).send({ error: queueErr.message });
+      }
+
+      const list = (rows ?? []).map((r: Record<string, unknown>) => ({
+        ...r,
+        agent_name: nameById.get(String(r.agent_id)) ?? null,
+      }));
+
+      return reply.send(list);
+    }
+  );
+
+  /** Lista de lembretes de agenda por tenant (painel Follow-ups). */
+  fastify.get(
+    "/queue/reminders/list",
+    async (req: FastifyRequest<{ Querystring: { tenant_id?: string } }>, reply: FastifyReply) => {
+      const tenantId =
+        typeof req.query?.tenant_id === "string" ? req.query.tenant_id.trim() : "";
+      if (!tenantId) {
+        return reply.status(400).send({ error: "tenant_id is required" });
+      }
+
+      const supabase = createNexusClient();
+
+      const { data: agents } = await supabase
+        .from("agents")
+        .select("id, name")
+        .eq("tenant_id", tenantId);
+      const agentRows = (agents ?? []) as { id: string; name: string | null }[];
+      const nameById = new Map(agentRows.map((a) => [a.id, a.name]));
+
+      const { data: rows, error } = await supabase
+        .from("appointment_reminders")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .order("remind_at", { ascending: false })
+        .limit(1000);
+
+      if (error) {
+        console.error("[Reminders list]:", error.message);
+        return reply.status(500).send({ error: error.message });
+      }
+
+      const list = (rows ?? []).map((r: Record<string, unknown>) => ({
+        ...r,
+        agent_name: nameById.get(String(r.agent_id)) ?? null,
+      }));
+
+      return reply.send(list);
+    }
+  );
+
   fastify.post("/queue/followups", async (_req: FastifyRequest, reply: FastifyReply) => {
     const supabase = createNexusClient();
     const baseUrl = API_BASE.replace(/\/+$/, "").replace(/\/api$/, "") || `http://localhost:${process.env.PORT || 3001}`;
@@ -538,288 +867,19 @@ export async function queueRoutes(fastify: FastifyInstance) {
     }
 
     let processed = 0;
-    let skipped = 0;
 
     for (const item of pending) {
       try {
-        // #region agent log
-        fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-start',message:'processing followup item',data:{itemId:item.id,agentId:item.agent_id,conversationId:item.conversation_id,chatwootConvId:item.chatwoot_conversation_id,attempt:item.attempt,scheduledAt:item.scheduled_at},timestamp:Date.now(),hypothesisId:'followup-flow'})}).catch(()=>{});
-        // #endregion
-
-        const { data: agent } = await supabase
-          .from("agents")
-          .select("id, name, provider_id, model, system_prompt, tenant_id, config, status")
-          .eq("id", item.agent_id)
-          .single();
-
-        if (!agent) {
-          // #region agent log
-          fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-cancel',message:'CANCELLED: agent not found',data:{itemId:item.id,agentId:item.agent_id},timestamp:Date.now(),hypothesisId:'H-agent-missing'})}).catch(()=>{});
-          // #endregion
-          await supabase
-            .from("follow_up_queue")
-            .update({ status: "cancelled", updated_at: new Date().toISOString() })
-            .eq("id", item.id);
-          continue;
+        const result = await processFollowUpItem(item, supabase, baseUrl, nexusKey);
+        if (result.processed) {
+          processed++;
         }
-
-        // #region agent log
-        fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-agent',message:'agent found',data:{itemId:item.id,agentStatus:agent.status,agentName:agent.name},timestamp:Date.now(),hypothesisId:'followup-flow'})}).catch(()=>{});
-        // #endregion
-
-        if (agent.status === "inactive") {
-          // #region agent log
-          fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-cancel',message:'CANCELLED: agent inactive',data:{itemId:item.id,agentStatus:agent.status},timestamp:Date.now(),hypothesisId:'H-inactive'})}).catch(()=>{});
-          // #endregion
-          await supabase
-            .from("follow_up_queue")
-            .update({ status: "cancelled", updated_at: new Date().toISOString() })
-            .eq("id", item.id);
-          continue;
-        }
-
-        const cfg = (agent.config || {}) as Record<string, any>;
-
-        const quietStart = Number(cfg.followup_quiet_start ?? 23);
-        const quietEnd = Number(cfg.followup_quiet_end ?? 7);
-        const nowBrasilia = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
-        const currentHour = nowBrasilia.getHours();
-        const inQuietHours = quietStart > quietEnd
-          ? (currentHour >= quietStart || currentHour < quietEnd)
-          : (currentHour >= quietStart && currentHour < quietEnd);
-
-        if (inQuietHours) {
-          // #region agent log
-          fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-skip',message:'SKIPPED: quiet hours',data:{itemId:item.id,currentHour,quietStart,quietEnd},timestamp:Date.now(),hypothesisId:'H-quiet'})}).catch(()=>{});
-          // #endregion
-          skipped++;
-          continue;
-        }
-
-        // --- CENÁRIO 2 e 3: Verificar assignee atual no Chatwoot ---
-        if (item.chatwoot_conversation_id && cfg.chatwoot_url && cfg.chatwoot_api_token && cfg.chatwoot_account_id) {
-          try {
-            const chatwootBase = cfg.chatwoot_url.replace(/\/+$/, "");
-            const convUrl = `${chatwootBase}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${item.chatwoot_conversation_id}`;
-            const convResp = await fetch(convUrl, {
-              headers: { api_access_token: cfg.chatwoot_api_token },
-              signal: AbortSignal.timeout(10_000),
-            });
-
-            if (convResp.ok) {
-              const convData = await convResp.json() as { meta?: { assignee?: { id?: number } } };
-              const currentAssigneeId = convData?.meta?.assignee?.id ?? null;
-
-              // #region agent log
-              fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-assignee',message:'Chatwoot assignee check',data:{itemId:item.id,agentStatus:agent.status,currentAssigneeId,testAssigneeId:cfg.test_assignee_id??null,convDataKeys:Object.keys(convData||{})},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-              // #endregion
-
-              // CENÁRIO 3: Agente em teste — só enviar follow-up se assignee = test_assignee_id
-              if (agent.status === "test") {
-                const testAssigneeId = cfg.test_assignee_id != null ? Number(cfg.test_assignee_id) : null;
-                if (testAssigneeId == null || currentAssigneeId !== testAssigneeId) {
-                  console.log(`[FollowUp] Test mode: skipping ${item.id} (assignee ${currentAssigneeId} != test ${testAssigneeId})`);
-                  // #region agent log
-                  fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-cancel',message:'CANCELLED: test mode assignee mismatch',data:{itemId:item.id,currentAssigneeId,testAssigneeId},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
-                  // #endregion
-                  await supabase
-                    .from("follow_up_queue")
-                    .update({ status: "cancelled", updated_at: new Date().toISOString() })
-                    .eq("id", item.id);
-                  continue;
-                }
-              }
-
-              // CENÁRIO 2: Se conversa tem assignee humano (não é bot), cancelar follow-up
-              if (currentAssigneeId && agent.status === "active") {
-                console.log(`[FollowUp] Human assigned (${currentAssigneeId}): cancelling ${item.id}`);
-                // #region agent log
-                fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-cancel',message:'CANCELLED: human assigned (active agent)',data:{itemId:item.id,currentAssigneeId},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
-                // #endregion
-                await supabase
-                  .from("follow_up_queue")
-                  .update({ status: "cancelled", updated_at: new Date().toISOString() })
-                  .eq("id", item.id);
-                continue;
-              }
-            }
-          } catch (e: any) {
-            console.warn("[FollowUp] Chatwoot assignee check failed:", e.message);
-          }
-        }
-
-        const { data: tenant } = await supabase
-          .from("tenants")
-          .select("slug")
-          .eq("id", agent.tenant_id)
-          .single();
-
-        const tenantSlug = tenant?.slug ?? null;
-
-        let conversationMessages: { role: string; content: string }[] = [];
-        if (item.conversation_id) {
-          try {
-            const { data: history } = await supabase.rpc("load_conversation_messages", {
-              p_agent_id: item.agent_id,
-              p_conversation_id: item.conversation_id,
-            });
-            if (history && Array.isArray(history)) {
-              conversationMessages = history.slice(-20).map((m: any) => ({
-                role: m.role === "tool" ? "system" : m.role,
-                content: (m.content as string) || "",
-              }));
-            }
-          } catch (e: any) {
-            console.warn("[FollowUp] Could not load history:", e.message);
-          }
-        }
-
-        // --- CENÁRIO 1: Verificar se houve agendamento confirmado ---
-        const confirmedMsgs = conversationMessages.filter((m) =>
-          m.role === "assistant" && /confirmad[oa]|agendad[oa]|marcad[oa]|appointment.*confirm/i.test(m.content)
-        );
-        const hasConfirmedSchedule = confirmedMsgs.length > 0;
-
-        // #region agent log
-        fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-history',message:'conversation history check',data:{itemId:item.id,totalMessages:conversationMessages.length,lastMsgRole:conversationMessages[conversationMessages.length-1]?.role??null,lastMsgPreview:conversationMessages[conversationMessages.length-1]?.content?.slice(0,80)??null,hasConfirmedSchedule,confirmedMsgPreviews:confirmedMsgs.map(m=>m.content.slice(0,80))},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-        // #endregion
-
-        if (hasConfirmedSchedule) {
-          console.log(`[FollowUp] Appointment confirmed: cancelling ${item.id}`);
-          // #region agent log
-          fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-cancel',message:'CANCELLED: confirmed schedule regex match',data:{itemId:item.id,confirmedMsgPreviews:confirmedMsgs.map(m=>m.content.slice(0,120))},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-          // #endregion
-          await supabase
-            .from("follow_up_queue")
-            .update({ status: "cancelled", updated_at: new Date().toISOString() })
-            .eq("id", item.id);
-          continue;
-        }
-
-        const lastMsg = conversationMessages[conversationMessages.length - 1];
-        if (lastMsg?.role === "assistant") {
-          // No reply from user since our last message — proceed with follow-up
-        } else if (lastMsg?.role === "user") {
-          // #region agent log
-          fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'queue.ts:followup-cancel',message:'CANCELLED: last message is from user (user replied)',data:{itemId:item.id,lastMsgPreview:lastMsg.content.slice(0,80)},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
-          // #endregion
-          await supabase
-            .from("follow_up_queue")
-            .update({ status: "cancelled", updated_at: new Date().toISOString() })
-            .eq("id", item.id);
-          continue;
-        }
-
-        const attempt = item.attempt || 1;
-        const maxAttempts = item.max_attempts || 3;
-        const intervals: number[] = (() => {
-          try {
-            const raw = item.intervals_minutes;
-            return Array.isArray(raw) ? raw : JSON.parse(raw);
-          } catch {
-            return [10, 20, 30];
-          }
-        })();
-
-        let followupPrompt = getFollowupPrompt(tenantSlug);
-        if (!followupPrompt) {
-          followupPrompt = `[SISTEMA INTERNO - FOLLOW-UP]\nEscreva uma mensagem curta de follow-up (tentativa {attempt} de {max_attempts}). Seja natural, breve (1-2 frases) e use o contexto da conversa.`;
-        }
-        followupPrompt = followupPrompt
-          .replace(/\{attempt\}/g, String(attempt))
-          .replace(/\{max_attempts\}/g, String(maxAttempts));
-
-        const messages = [
-          ...conversationMessages,
-          { role: "user", content: followupPrompt },
-        ];
-
-        const chatResult = await callChatAgent(
-          baseUrl,
-          nexusKey,
-          item.agent_id,
-          messages,
-          item.conversation_id,
-          undefined,
-          item.external_user_id,
-          item.chatwoot_conversation_id ?? null
-        );
-
-        if (chatResult.error) {
-          console.error("[FollowUp] LLM failed for", item.id, chatResult.error.slice(0, 200));
-          continue;
-        }
-
-        const followupText = sanitizeLLMOutput(chatResult.fullContent.trim());
-        if (!followupText) {
-          console.warn("[FollowUp] Empty response for", item.id);
-          continue;
-        }
-
-        if (item.conversation_id) {
-          try {
-            await supabase.rpc("save_message", {
-              p_agent_id: item.agent_id,
-              p_conversation_id: item.conversation_id,
-              p_role: "assistant",
-              p_content: followupText,
-              p_model: "followup",
-              p_tokens_input: 0,
-              p_tokens_output: 0,
-              p_latency_ms: null,
-            });
-          } catch (e: any) {
-            console.warn("[FollowUp] Save message failed:", e.message);
-          }
-        }
-
-        if (item.chatwoot_conversation_id && cfg.chatwoot_url && cfg.chatwoot_api_token && cfg.chatwoot_account_id) {
-          const chatwootBase = cfg.chatwoot_url.replace(/\/+$/, "");
-          const msgUrl = `${chatwootBase}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${item.chatwoot_conversation_id}/messages`;
-          const humanization = getHumanizationConfig(cfg);
-
-          if (humanization.typingDelayMs > 0) {
-            await new Promise((r) => setTimeout(r, applyJitter(humanization.typingDelayMs)));
-          }
-
-          const sent = await sendChatwootTextMessage(msgUrl, cfg.chatwoot_api_token, followupText);
-          if (!sent) {
-            console.error("[FollowUp] Chatwoot send failed for", item.id);
-          }
-        }
-
-        await supabase
-          .from("follow_up_queue")
-          .update({ status: "sent", updated_at: new Date().toISOString() })
-          .eq("id", item.id);
-
-        if (attempt < maxAttempts) {
-          const nextDelay = intervals[attempt] || intervals[intervals.length - 1] || 30;
-          try {
-            await supabase.rpc("schedule_followup", {
-              p_agent_id: item.agent_id,
-              p_conversation_id: item.conversation_id,
-              p_external_user_id: item.external_user_id,
-              p_channel: item.channel,
-              p_chatwoot_conversation_id: item.chatwoot_conversation_id,
-              p_attempt: attempt + 1,
-              p_max_attempts: maxAttempts,
-              p_intervals_minutes: JSON.stringify(intervals),
-              p_delay_minutes: nextDelay,
-            });
-          } catch (e: any) {
-            console.warn("[FollowUp] Schedule next attempt failed:", e.message);
-          }
-        }
-
-        processed++;
-        console.log(`[FollowUp] Sent attempt ${attempt}/${maxAttempts} for conversation ${item.conversation_id}`);
       } catch (e: any) {
         console.error("[FollowUp] Error processing item", item.id, e.message);
       }
     }
 
-    return reply.send({ processed, skipped, total: pending.length });
+    return reply.send({ processed, total: pending.length });
   });
 
   fastify.post("/queue/reminders", async (_req: FastifyRequest, reply: FastifyReply) => {

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { nexusDb } from "@/integrations/supabase/nexus-client";
+import { fetchAgentTokenUsageInRange } from "@/lib/fetch-agent-token-usage";
 
 export interface ProviderTokenSummary {
   provider: string;
@@ -9,6 +9,8 @@ export interface ProviderTokenSummary {
   total_requests: number;
 }
 
+const TOKEN_ROWS_PROVIDER = "agent_id, provider, prompt_tokens, completion_tokens, total_tokens";
+
 export function useTokensByProvider(tenantId?: string | null) {
   return useQuery({
     queryKey: ["tokens-by-provider", tenantId ?? "all"],
@@ -16,32 +18,20 @@ export function useTokensByProvider(tenantId?: string | null) {
       const since = new Date();
       since.setDate(since.getDate() - 30);
 
-      let query = nexusDb
-        .from("agent_token_usage")
-        .select("agent_id, provider, prompt_tokens, completion_tokens, total_tokens")
-        .gte("created_at", since.toISOString())
-        .limit(10000);
+      const raw = await fetchAgentTokenUsageInRange(since, tenantId, {
+        columns: TOKEN_ROWS_PROVIDER,
+        globalLimit: 80_000,
+      });
 
-      const { data: rows, error } = await query;
-      if (error) throw error;
+      const usage = raw as Array<{
+        agent_id: string;
+        provider?: string;
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        total_tokens?: number;
+      }>;
 
-      const usage = rows ?? [];
       if (usage.length === 0) return [] as ProviderTokenSummary[];
-
-      if (tenantId) {
-        const agentIds = [...new Set(usage.map((r: { agent_id: string }) => r.agent_id).filter(Boolean))];
-        const { data: agents } = await nexusDb
-          .from("agents")
-          .select("id, tenant_id")
-          .in("id", agentIds);
-        const tenantAgentIds = new Set(
-          (agents ?? []).filter((a: { tenant_id: string }) => a.tenant_id === tenantId).map((a: { id: string }) => a.id)
-        );
-        if (tenantAgentIds.size > 0) {
-          const filtered = usage.filter((r: { agent_id: string }) => tenantAgentIds.has(r.agent_id));
-          return aggregateByProvider(filtered);
-        }
-      }
 
       return aggregateByProvider(usage);
     },
@@ -49,7 +39,9 @@ export function useTokensByProvider(tenantId?: string | null) {
   });
 }
 
-function aggregateByProvider(rows: Array<{ provider?: string; prompt_tokens?: number; completion_tokens?: number; total_tokens?: number }>): ProviderTokenSummary[] {
+function aggregateByProvider(
+  rows: Array<{ provider?: string; prompt_tokens?: number; completion_tokens?: number; total_tokens?: number }>,
+): ProviderTokenSummary[] {
   const byProvider = new Map<string, ProviderTokenSummary>();
   for (const row of rows) {
     const key = row.provider || "unknown";

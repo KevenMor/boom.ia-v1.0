@@ -2,11 +2,18 @@ import { useParams } from "react-router-dom";
 import { useState, useRef, useEffect } from "react";
 import { Send, Loader2, Lock, Mic, Paperclip, Camera, CheckCheck } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import { collectMarkdownImageSpans, stripMarkdownImageSpans, imageUrlsEquivalent } from "@/lib/chatMessageDisplay";
 import { AudioRecorder } from "@/components/sandbox/AudioRecorder";
 import { AttachmentPreview, classifyFile, type AttachmentFile } from "@/components/sandbox/AttachmentPreview";
 import { extractVideos, VideoPlayer, UserMediaPreview, type UserAttachmentMeta } from "@/components/sandbox/MediaBubble";
-import { nexusDb, getSupabaseBaseUrl } from "@/integrations/supabase/nexus-client";
+import { nexusDb } from "@/integrations/supabase/nexus-client";
 import { format } from "date-fns";
+
+/** Base da API no backend Node (sem Edge Functions). Em dev/prod usa o mesmo host com /api. */
+function getApiBase(): string {
+  if (typeof window === "undefined") return import.meta.env.VITE_API_URL ?? "";
+  return "";
+}
 
 type Msg = {
   role: "user" | "assistant";
@@ -15,24 +22,21 @@ type Msg = {
   userAttachments?: UserAttachmentMeta[];
 };
 
-const CHAT_URL = `${getSupabaseBaseUrl()}/functions/v1/chat-agent`;
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 
 function extractImages(content: string): { text: string; images: string[] } {
   const images: string[] = [];
-  const mdImgRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/gi;
-  let match;
-  while ((match = mdImgRegex.exec(content)) !== null) {
-    const url = match[1];
-    if (url && !images.includes(url)) images.push(url);
+  const mdSpans = collectMarkdownImageSpans(content);
+  for (const sp of mdSpans) {
+    if (sp.url && !images.includes(sp.url)) images.push(sp.url);
   }
+  let text = stripMarkdownImageSpans(content, mdSpans);
+  let match;
   const bareImgRegex = /(?<!\()(https?:\/\/[^\s"'<>]+\.(?:jpg|jpeg|png|gif|webp)[^\s"'<>]*)/gi;
   while ((match = bareImgRegex.exec(content)) !== null) {
     const url = match[1] || match[0];
     if (!images.includes(url)) images.push(url);
   }
-  let text = content;
-  text = text.replace(/!\[.*?\]\(https?:\/\/[^\s)]+\)/gi, "");
   images.forEach((url) => { text = text.split(url).join(""); });
   text = text.replace(/\n{3,}/g, "\n\n").trim();
   return { text, images };
@@ -52,7 +56,17 @@ function sanitizeContent(content: string): string {
   let cleaned = content
     .replace(/^\s*\{["\s]*total[":].*$/gm, "")
     .replace(/^\s*\{["\s]*id[":].*$/gm, "")
-    .replace(/^\s*\[?\{["\s]*id[":].*$/gm, "");
+    .replace(/^\s*\[?\{["\s]*id[":].*$/gm, "")
+    .replace(/\*\*?tool_code[\s\S]*?\)\s*\)\*\*?/gim, "")
+    .replace(/tool_code[\s\S]*?\)\s*\)(?=\s|$|\.|,|;)/gim, "")
+    .replace(/\b(assign_agent|atribuir_agente|chatwoot_assign)\s*\(\s*[^)]*\)/gim, "")
+    .replace(/\bprint\s*\(\s*(?:json\.dumps\s*)?\([^)]*assign_agent[^)]*\)\s*\)/gim, "")
+    .replace(/^\s*\[SYSTEM\][\s\S]*?(?=\n\s*\n|$)/gim, "")
+    .replace(/^\s*(user_message|user_id|conversation_id|timestamp)\s*:\s*.*$/gim, "")
+    .replace(/\[CONTEXTO\s+TEMPORAL\][^\n]*/gim, "")
+    .replace(/^\s*SAUDA[ÇC][ÃA]O\s+E\s+APRESENTA[ÇC][ÃA]O\s*:?\s*$/gim, "")
+    .replace(/^\s*VERIFICA[ÇC][ÃA]O\s+DE\s+REGRAS\s*:?\s*$/gim, "")
+    .replace(/^\s*\[\s*PLANO\s+DE\s+A[ÇC][ÃA]O\s*\]\s*$/gim, "");
   const trimmed = cleaned.trim();
   if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
     try { JSON.parse(trimmed); return ""; } catch {}
@@ -61,8 +75,19 @@ function sanitizeContent(content: string): string {
     try { JSON.parse(trimmed); return ""; } catch {}
   }
   cleaned = cleaned.replace(/\{"total":\d+.*?"vehicles":\[.*?\]\}/gs, "");
+  cleaned = cleaned
+    .split("\n")
+    .filter((line) => !/\[\s*(?:SISTEMA|HINT|CONTEXTO\s+TEMPORAL|PLANO\s+DE\s+A[ÇC][ÃA]O)[^\]]*\]/i.test(line))
+    .join("\n");
   cleaned = cleaned.replace(/\n{3,}/g, "\n\n").trim();
   return cleaned;
+}
+
+function splitAssistantDisplayParts(content: string): string[] {
+  return content
+    .split(/\n{2,}/)
+    .map((part) => part.trim())
+    .filter(Boolean);
 }
 
 interface AgentPublicInfo {
@@ -76,6 +101,7 @@ interface AgentPublicInfo {
 export default function PublicSandbox() {
   const { agentId } = useParams<{ agentId: string }>();
   const [agent, setAgent] = useState<AgentPublicInfo | null>(null);
+  const [loadError, setLoadError] = useState<{ status?: number; message?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
   const [password, setPassword] = useState("");
@@ -84,35 +110,55 @@ export default function PublicSandbox() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const conversationIdRef = useRef<string | null>(null);
   const [attachments, setAttachments] = useState<AttachmentFile[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
+
+  useEffect(() => {
+    conversationIdRef.current = null;
+    setConversationId(null);
+  }, [agentId]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Load agent public info via edge function (no auth required)
+  // Carrega dados públicos do agente via backend Node (sem Edge Functions)
   useEffect(() => {
     if (!agentId) return;
+    setLoadError(null);
     (async () => {
       try {
-        const url = `${getSupabaseBaseUrl()}/functions/v1/public-agent-info?agent_id=${agentId}`;
-        const resp = await fetch(url, {
-          headers: {
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-        });
-        if (!resp.ok) throw new Error(`Status ${resp.status}`);
-        const data = await resp.json();
+        const url = `${getApiBase()}/api/demo/public-agent-info?agent_id=${encodeURIComponent(agentId)}`;
+        const resp = await fetch(url);
+        const bodyText = await resp.text();
+        if (!resp.ok) {
+          let errMsg = `Status ${resp.status}`;
+          try {
+            const json = JSON.parse(bodyText);
+            if (json?.error) errMsg = json.error;
+          } catch {}
+          setLoadError({ status: resp.status, message: errMsg });
+          console.warn("[PublicSandbox] public-agent-info failed:", resp.status, bodyText.slice(0, 200));
+          setAgent(null);
+          return;
+        }
+        const data = JSON.parse(bodyText);
         setAgent(data as AgentPublicInfo);
         // If no password configured, skip gate
         if (!data?.config?.sandbox_password) {
           setAuthenticated(true);
         }
-      } catch {
+      } catch (e) {
+        setLoadError({ message: (e as Error)?.message ?? "Erro de rede" });
+        console.warn("[PublicSandbox] public-agent-info error:", e);
         setAgent(null);
       } finally {
         setLoading(false);
@@ -189,13 +235,14 @@ export default function PublicSandbox() {
     setIsLoading(true);
 
     let hasAssistantContent = false;
+    let requestFailed = false;
     const allMessages = [...messages, userMsg];
 
     try {
       const body: any = {
         agent_id: agentId,
         messages: allMessages.map((m) => ({ role: m.role, content: m.content })),
-        conversation_id: conversationId,
+        conversation_id: conversationIdRef.current ?? conversationId,
       };
       if (apiAttachments.length > 0) body.attachments = apiAttachments;
 
@@ -206,11 +253,11 @@ export default function PublicSandbox() {
         nexusToken = session?.access_token;
       } catch {}
 
-      const resp = await fetch(CHAT_URL, {
+      const chatUrl = `${getApiBase()}/api/chat`;
+      const resp = await fetch(chatUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           ...(nexusToken ? { "x-nexus-auth": `Bearer ${nexusToken}` } : {}),
         },
         body: JSON.stringify(body),
@@ -244,8 +291,9 @@ export default function PublicSandbox() {
 
           try {
             const parsed = JSON.parse(jsonStr);
-            if (parsed.conversation_id && !conversationId) {
-              setConversationId(parsed.conversation_id);
+            if (parsed.conversation_id) {
+              conversationIdRef.current = parsed.conversation_id as string;
+              setConversationId(parsed.conversation_id as string);
               continue;
             }
             if (parsed.debug || parsed.edge_logs) continue; // skip debug in public
@@ -281,12 +329,25 @@ export default function PublicSandbox() {
       }
     } catch (e: any) {
       console.error("Chat error:", e);
+      requestFailed = true;
       // Show error as assistant message instead of removing user message
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: "Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente.", timestamp: new Date() },
       ]);
     } finally {
+      // Em alguns cenários o backend encerra o stream sem conteúdo útil.
+      // No demo, mostramos fallback para não deixar o usuário sem resposta.
+      if (!requestFailed && !hasAssistantContent) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: "Desculpe, não consegui gerar uma resposta agora. Pode tentar novamente?",
+            timestamp: new Date(),
+          },
+        ]);
+      }
       setIsLoading(false);
     }
   };
@@ -308,6 +369,15 @@ export default function PublicSandbox() {
 
   // ─── Agent not found ─────────
   if (!agent) {
+    const is404 = loadError?.status === 404;
+    const is5xx = loadError?.status && loadError.status >= 500;
+    const hint = is404
+      ? "Verifique se o link está correto e se o agente existe."
+      : is5xx
+        ? "Serviço temporariamente indisponível. Tente novamente em instantes."
+        : loadError?.message
+          ? loadError.message
+          : "Agente não encontrado ou link inválido.";
     return (
       <div className="flex items-center justify-center bg-background px-4" style={{ minHeight: '100dvh' }}>
         <div className="text-center space-y-3">
@@ -315,6 +385,7 @@ export default function PublicSandbox() {
             <Lock className="h-7 w-7 text-muted-foreground" />
           </div>
           <p className="text-muted-foreground">Agente não encontrado ou link inválido.</p>
+          <p className="text-sm text-muted-foreground/80">{hint}</p>
         </div>
       </div>
     );
@@ -372,83 +443,114 @@ export default function PublicSandbox() {
   const renderBubble = (msg: Msg, i: number) => {
     const isUser = msg.role === "user";
     const hasUserMedia = isUser && msg.userAttachments && msg.userAttachments.length > 0;
-    let text = msg.content;
-    let images: string[] = [];
-    let videoUrls: string[] = [];
-
-    if (!isUser) {
-      text = sanitizeContent(text);
-      const imgResult = extractImages(text);
-      text = imgResult.text;
-      images = imgResult.images;
-      const vidResult = extractVideos(text);
-      text = vidResult.text;
-      videoUrls = vidResult.videoUrls;
-    }
-
     const time = msg.timestamp ? format(msg.timestamp, "HH:mm") : "";
+    const assistantParts = !isUser ? splitAssistantDisplayParts(sanitizeContent(msg.content)) : [msg.content];
 
     return (
       <div key={i}>
-        <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-1.5`}>
-          {!isUser && (
-            <div className="h-8 w-8 rounded-full shrink-0 mr-2 mt-1 overflow-hidden">
-              {agent.avatar_url ? (
-                <img src={agent.avatar_url} alt={agent.name} className="h-8 w-8 object-cover" />
-              ) : (
-                <div className="h-8 w-8 bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">{agentInitial}</div>
-              )}
-            </div>
-          )}
-          <div
-            className={`relative max-w-[85%] md:max-w-[65%] rounded-xl px-3 py-1.5 shadow-sm ${
-              isUser
-                ? "bg-primary text-primary-foreground shadow-primary/20"
-                : "bg-card border border-border text-foreground"
-            }`}
-            style={{
-              borderTopLeftRadius: !isUser ? 0 : undefined,
-              borderTopRightRadius: isUser ? 0 : undefined,
-            }}
-          >
-            {hasUserMedia && (
-              <div className="space-y-1 mb-1 -mx-1 -mt-0.5">
-                {msg.userAttachments!.map((att, j) => (
-                  <UserMediaPreview key={j} attachment={att} />
-                ))}
-              </div>
-            )}
-            {videoUrls.length > 0 && (
-              <div className="space-y-1 mb-1 -mx-1 -mt-0.5">
-                {videoUrls.map((url, j) => <VideoPlayer key={j} src={url} />)}
-              </div>
-            )}
-            {images.length > 0 && (
-              <div className={`${images.length > 1 ? "grid grid-cols-2 gap-1" : ""} mb-1 -mx-1 -mt-0.5`}>
-                {images.map((url, imgIdx) => (
-                  <a key={imgIdx} href={url} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-md">
-                    <img src={url} alt="" loading="lazy" className="rounded-md w-full object-cover max-h-64 cursor-pointer hover:opacity-90 transition-opacity"
-                      onError={(e) => { (e.target as HTMLImageElement).closest("a")!.style.display = "none"; }}
-                    />
-                  </a>
-                ))}
-              </div>
-            )}
-            {text.trim() && (
-              !isUser ? (
-                <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:my-0.5 [&>p]:leading-relaxed text-[13px]">
-                  <ReactMarkdown>{text}</ReactMarkdown>
+        {(isUser ? [msg.content] : assistantParts).map((partContent, partIdx, partArr) => {
+          let text = partContent;
+          let images: string[] = [];
+          let videoUrls: string[] = [];
+
+          if (!isUser) {
+            const imgResult = extractImages(text);
+            text = imgResult.text;
+            images = imgResult.images;
+            const vidResult = extractVideos(text);
+            text = vidResult.text;
+            videoUrls = vidResult.videoUrls;
+          }
+
+          const showAvatar = !isUser && partIdx === 0;
+          const showTime = partIdx === partArr.length - 1;
+
+          return (
+            <div key={`${i}-${partIdx}`} className={`flex ${isUser ? "justify-end" : "justify-start"} mb-1.5`}>
+              {!isUser && (
+                <div className="h-8 w-8 rounded-full shrink-0 mr-2 mt-1 overflow-hidden">
+                  {showAvatar ? (
+                    agent.avatar_url ? (
+                      <img src={agent.avatar_url} alt={agent.name} className="h-8 w-8 object-cover" />
+                    ) : (
+                      <div className="h-8 w-8 bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">{agentInitial}</div>
+                    )
+                  ) : null}
                 </div>
-              ) : !hasUserMedia ? (
-                <p className="whitespace-pre-wrap text-[13px] leading-relaxed">{text}</p>
-              ) : null
-            )}
-            <div className="flex items-center gap-1 justify-end -mb-0.5 mt-0.5">
-              <span className={`text-[10px] leading-none ${isUser ? "text-primary-foreground/60" : "text-muted-foreground"}`}>{time}</span>
-              {isUser && <CheckCheck className="h-3 w-3 text-primary-foreground/70" />}
+              )}
+              <div
+                className={`relative max-w-[85%] md:max-w-[65%] rounded-xl px-3 py-1.5 shadow-sm ${
+                  isUser
+                    ? "bg-primary text-primary-foreground shadow-primary/20"
+                    : "bg-card border border-border text-foreground"
+                }`}
+                style={{
+                  borderTopLeftRadius: !isUser ? 0 : undefined,
+                  borderTopRightRadius: isUser ? 0 : undefined,
+                }}
+              >
+                {hasUserMedia && (
+                  <div className="space-y-1 mb-1 -mx-1 -mt-0.5">
+                    {msg.userAttachments!.map((att, j) => (
+                      <UserMediaPreview key={j} attachment={att} />
+                    ))}
+                  </div>
+                )}
+                {videoUrls.length > 0 && (
+                  <div className="space-y-1 mb-1 -mx-1 -mt-0.5">
+                    {videoUrls.map((url, j) => <VideoPlayer key={j} src={url} />)}
+                  </div>
+                )}
+                {images.length > 0 && (
+                  <div className={`${images.length > 1 ? "grid grid-cols-2 gap-1" : ""} mb-1 -mx-1 -mt-0.5`}>
+                    {images.map((url, imgIdx) => (
+                      <a key={imgIdx} href={url} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-md">
+                        <img src={url} alt="" loading="lazy" className="rounded-md w-full object-cover max-h-64 cursor-pointer hover:opacity-90 transition-opacity"
+                          onError={(e) => { (e.target as HTMLImageElement).closest("a")!.style.display = "none"; }}
+                        />
+                      </a>
+                    ))}
+                  </div>
+                )}
+                {text.trim() && (
+                  !isUser ? (
+                    <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:my-0.5 [&>p]:leading-relaxed text-[13px]">
+                      <ReactMarkdown
+                        components={{
+                          img: ({ src, alt }) => {
+                            if (!src) return null;
+                            if (images.some((u) => imageUrlsEquivalent(u, src))) return null;
+                            return (
+                              <img
+                                src={src}
+                                alt={typeof alt === "string" ? alt : ""}
+                                loading="lazy"
+                                className="max-h-48 rounded-md object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = "none";
+                                }}
+                              />
+                            );
+                          },
+                        }}
+                      >
+                        {text}
+                      </ReactMarkdown>
+                    </div>
+                  ) : !hasUserMedia ? (
+                    <p className="whitespace-pre-wrap text-[13px] leading-relaxed">{text}</p>
+                  ) : null
+                )}
+                {showTime && (
+                  <div className="flex items-center gap-1 justify-end -mb-0.5 mt-0.5">
+                    <span className={`text-[10px] leading-none ${isUser ? "text-primary-foreground/60" : "text-muted-foreground"}`}>{time}</span>
+                    {isUser && <CheckCheck className="h-3 w-3 text-primary-foreground/70" />}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        </div>
+          );
+        })}
       </div>
     );
   };

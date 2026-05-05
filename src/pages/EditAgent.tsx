@@ -1,34 +1,49 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useEffect, useState } from "react";
-import { ArrowLeft, Bot, Save, Loader2, Wrench, Plus, X, Link2, Copy } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  ArrowLeft,
+  Bot,
+  Save,
+  Loader2,
+  Wrench,
+  Plus,
+  X,
+  Link2,
+  Copy,
+  Maximize2,
+  ChevronDown,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Separator } from "@/components/ui/separator";
+
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { useAgents, useUpdateAgent } from "@/hooks/useAgents";
 import { useTenants } from "@/hooks/useTenants";
 import { useProviders } from "@/hooks/useProviders";
 import { useTools } from "@/hooks/useTools";
 import { nexusDb } from "@/integrations/supabase/nexus-client";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { getModelsForProvider } from "@/lib/provider-models";
-import { getApiBase } from "@/lib/api-client";
+import { getApiBase, callAPI } from "@/lib/api-client";
 import { ChatwootConfigSection } from "@/components/agents/ChatwootConfigSection";
 import { FollowUpConfigSection } from "@/components/agents/FollowUpConfigSection";
 import { AgentAvatarUpload } from "@/components/agents/AgentAvatarUpload";
 import { ReminderConfigSection } from "@/components/agents/ReminderConfigSection";
 import { BusinessHoursSection, DEFAULT_BUSINESS_HOURS, type BusinessHours } from "@/components/agents/BusinessHoursSection";
-import type { Agent } from "@/types/database";
-
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
 const WEBHOOK_BASE = `${getApiBase()}/webhooks`;
 
 const schema = z.object({
@@ -46,6 +61,38 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>;
 
+interface AdminPromptDetail {
+  slug: string;
+  version?: string;
+  description?: string;
+  systemPrompt?: string;
+  fullComposedPrompt?: string;
+  fullPromptLength?: number;
+}
+
+type EditAgentTab = "basic" | "model" | "integration" | "schedule" | "advanced";
+
+/** Campos Stitch / Material Amethyst — alinhado ao mock Editar agente Boom IA Premium */
+const fld =
+  "w-full rounded-lg border border-[#ccc3d8] bg-white px-4 py-2.5 font-jakarta text-base text-[#0b1c30] outline-none transition-all placeholder:text-muted-foreground focus:border-[#7c3aed] focus:ring-2 focus:ring-[#7c3aed]/20 dark:border-border dark:bg-card dark:text-foreground";
+
+/** Cartões tipo Stitch Material — surface-container-lowest */
+const stitchCard =
+  "rounded-xl border border-[#ccc3d8] bg-white p-5 shadow-sm dark:border-border dark:bg-card sm:p-6";
+
+const stitchLbl = "mb-2 block text-sm font-semibold tracking-wide text-[#4a4455] dark:text-muted-foreground";
+
+const EDIT_AGENT_STITCH_TABS: { id: EditAgentTab; label: string }[] = [
+  { id: "basic", label: "Informações Básicas" },
+  { id: "model", label: "Modelo de IA" },
+  { id: "integration", label: "Integração" },
+  { id: "schedule", label: "Horário e Follow-up" },
+  { id: "advanced", label: "Parâmetros Avançados" },
+];
+
+/** Mesma coluna para header + conteúdo (evita desalinhamento entre abas e cards) */
+const editAgentCol = "mx-auto w-full max-w-[1280px] px-5 sm:px-6 lg:px-8";
+
 export default function EditAgent() {
   const { agentId } = useParams<{ agentId: string }>();
   const navigate = useNavigate();
@@ -54,9 +101,9 @@ export default function EditAgent() {
   const { data: tenants } = useTenants();
   const { data: providers } = useProviders();
   const { data: allTools } = useTools();
-  const queryClient = useQueryClient();
 
   const agent = agents?.find((a) => a.id === agentId) ?? null;
+
 
   // Fetch linked tool IDs for this agent
   const { data: linkedToolIds, refetch: refetchLinks } = useQuery({
@@ -119,6 +166,7 @@ export default function EditAgent() {
   const [wahaUrl, setWahaUrl] = useState("");
   const [wahaApiKey, setWahaApiKey] = useState("");
   const [wahaSession, setWahaSession] = useState("default");
+  const [deliverMediaViaWaha, setDeliverMediaViaWaha] = useState(false);
   const [followupEnabled, setFollowupEnabled] = useState(false);
   const [followupMaxAttempts, setFollowupMaxAttempts] = useState(3);
   const [followupIntervals, setFollowupIntervals] = useState<number[]>([10, 20, 30]);
@@ -126,6 +174,8 @@ export default function EditAgent() {
   const [followupQuietEnd, setFollowupQuietEnd] = useState("08:00");
   const [followupPrompt, setFollowupPrompt] = useState("");
   const [followupAgentId, setFollowupAgentId] = useState("");
+  const [followupNegativeGuardEnabled, setFollowupNegativeGuardEnabled] = useState(true);
+  const [followupThinkingDelayMinutes, setFollowupThinkingDelayMinutes] = useState(2880);
   const [businessHoursEnabled, setBusinessHoursEnabled] = useState(false);
   const [businessHours, setBusinessHours] = useState<BusinessHours>(DEFAULT_BUSINESS_HOURS);
   const [offlineMessage, setOfflineMessage] = useState("");
@@ -134,8 +184,29 @@ export default function EditAgent() {
   const [reminderMinutesBefore, setReminderMinutesBefore] = useState(60);
   const [reminderTemplate, setReminderTemplate] = useState("");
   const [testAssigneeId, setTestAssigneeId] = useState("");
+  const [agentAssigneeId, setAgentAssigneeId] = useState("");
+  const [leadLabelEnabled, setLeadLabelEnabled] = useState(false);
+  const [agentTab, setAgentTab] = useState<EditAgentTab>("basic");
+  const [promptDlg, setPromptDlg] = useState<"closed" | "production" | "override">("closed");
+  const [dbPromptOpen, setDbPromptOpen] = useState(false);
 
   const { register, handleSubmit, setValue, watch, reset } = useForm<FormData>({ resolver: zodResolver(schema) });
+
+  const tenantIdEffective = watch("tenant_id") || agent?.tenant_id || "";
+  const tenantSlugForPrompt = useMemo(() => {
+    if (!tenantIdEffective || !tenants?.length) return null;
+    return tenants.find((t) => t.id === tenantIdEffective)?.slug?.trim() || null;
+  }, [tenantIdEffective, tenants]);
+
+  const { data: promptDetail, isLoading: promptPreviewLoading, isError: promptPreviewIsError } = useQuery({
+    queryKey: ["admin_prompt_preview", tenantSlugForPrompt],
+    queryFn: () =>
+      callAPI<AdminPromptDetail>(`/admin/prompts?slug=${encodeURIComponent(tenantSlugForPrompt!)}`, { method: "GET" }),
+    enabled: Boolean(agent && tenantSlugForPrompt),
+    staleTime: 60_000,
+  });
+
+  const hasRegistryPreview = Boolean(promptDetail?.fullComposedPrompt && promptDetail.fullComposedPrompt.length > 0);
 
   useEffect(() => {
     if (agent) {
@@ -165,6 +236,7 @@ export default function EditAgent() {
       setWahaUrl((cfg as any).waha_url ?? "");
       setWahaApiKey((cfg as any).waha_api_key ?? "");
       setWahaSession((cfg as any).waha_session ?? "default");
+      setDeliverMediaViaWaha(Boolean((cfg as any).deliver_media_via_waha));
       setFollowupEnabled((cfg as any).followup_enabled ?? false);
       setFollowupMaxAttempts((cfg as any).followup_max_attempts ?? 3);
       setFollowupIntervals((cfg as any).followup_intervals ?? [10, 20, 30]);
@@ -172,6 +244,8 @@ export default function EditAgent() {
       setFollowupQuietEnd((cfg as any).followup_quiet_end ?? "08:00");
       setFollowupPrompt((cfg as any).followup_prompt ?? "");
       setFollowupAgentId((cfg as any).followup_agent_id ?? "");
+      setFollowupNegativeGuardEnabled((cfg as any).followup_negative_guard_enabled !== false);
+      setFollowupThinkingDelayMinutes((cfg as any).followup_thinking_delay_minutes ?? 2880);
       setBusinessHoursEnabled((cfg as any).business_hours_enabled ?? false);
       setBusinessHours((cfg as any).business_hours ?? DEFAULT_BUSINESS_HOURS);
       setOfflineMessage((cfg as any).business_hours_offline_message ?? "");
@@ -180,8 +254,19 @@ export default function EditAgent() {
       setReminderMinutesBefore((cfg as any).reminder_minutes_before ?? 60);
       setReminderTemplate((cfg as any).reminder_template ?? "");
       setTestAssigneeId(String((cfg as any).test_assignee_id ?? ""));
+      setAgentAssigneeId(String((cfg as any).agent_assignee_id ?? ""));
+      setLeadLabelEnabled((cfg as any).lead_label_enabled ?? false);
     }
   }, [agent, reset]);
+
+  useEffect(() => {
+    if (!agent) return;
+    const n = agent.name?.trim();
+    document.title = n ? `Editar Agente: ${n} - Boom IA` : "Editar Agente - Boom IA";
+    return () => {
+      document.title = "Boom IA — Plataforma de Agentes";
+    };
+  }, [agent]);
 
   const onSubmit = async (data: FormData) => {
     if (!agent) return;
@@ -205,13 +290,16 @@ export default function EditAgent() {
           chatwoot_account_id: chatwootAccountId || undefined,
           waha_url: wahaUrl || undefined, waha_api_key: wahaApiKey || undefined,
           waha_session: wahaSession || "default",
+          deliver_media_via_waha: deliverMediaViaWaha,
           followup_enabled: followupEnabled,
-          followup_max_attempts: followupMaxAttempts,
+          followup_max_attempts: followupIntervals.length,
           followup_intervals: followupIntervals,
           followup_quiet_start: followupQuietStart || undefined,
           followup_quiet_end: followupQuietEnd || undefined,
           followup_prompt: followupPrompt || undefined,
           followup_agent_id: followupAgentId || undefined,
+          followup_negative_guard_enabled: followupNegativeGuardEnabled,
+          followup_thinking_delay_minutes: followupThinkingDelayMinutes,
           business_hours_enabled: businessHoursEnabled,
           business_hours: businessHours,
           business_hours_offline_message: offlineMessage || undefined,
@@ -220,6 +308,8 @@ export default function EditAgent() {
           reminder_minutes_before: reminderMinutesBefore,
           reminder_template: reminderTemplate || undefined,
           test_assignee_id: testAssigneeId ? Number(testAssigneeId) : undefined,
+          agent_assignee_id: agentAssigneeId ? Number(agentAssigneeId) : undefined,
+          lead_label_enabled: leadLabelEnabled,
         },
       });
       toast.success("Agente atualizado");
@@ -233,9 +323,11 @@ export default function EditAgent() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6 py-6">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-[600px] w-full rounded-xl" />
+      <div className="-mx-4 flex min-h-[50vh] flex-1 flex-col bg-[#f8f9ff] py-8 dark:bg-background md:-mx-6">
+        <div className={cn(editAgentCol, "space-y-6")}>
+          <Skeleton className="h-9 max-w-md rounded-lg" />
+          <Skeleton className="min-h-[560px] w-full rounded-xl border border-[#ccc3d8]/80 dark:border-border" />
+        </div>
       </div>
     );
   }
@@ -251,481 +343,654 @@ export default function EditAgent() {
   }
 
   return (
-    <div className="space-y-8 pb-12">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => navigate("/agents")}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-semibold text-foreground">Editar Agente</h1>
-          <p className="text-sm text-muted-foreground">Configure o comportamento, modelo e integrações do agente</p>
-        </div>
-      </div>
-
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
-        {/* Avatar + Basic Info */}
-        <div className="rounded-xl border border-border bg-card p-6 space-y-6">
-          <h3 className="text-base font-semibold text-foreground">Informações Básicas</h3>
-
-          <AgentAvatarUpload agentId={agent.id} currentUrl={avatarUrl} onUploaded={(url) => setAvatarUrl(url)} />
-
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <div className="space-y-3">
-              <Label className="text-sm font-medium text-muted-foreground">Nome</Label>
-              <Input {...register("name")} className="h-11 rounded-lg bg-background border-border" />
+    <>
+      <div className="-mx-4 flex min-h-[calc(100dvh-6rem)] flex-1 flex-col overflow-hidden bg-[#f8f9ff] dark:bg-background md:-mx-6">
+        <header className="sticky top-0 z-40 shrink-0 border-b border-[#ccc3d8] bg-white/90 backdrop-blur-md dark:border-border dark:bg-card/95">
+          <div className={cn(editAgentCol, "flex flex-wrap items-center gap-4 py-4 sm:flex-nowrap")}>
+            <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+              <Button variant="ghost" size="icon" type="button" className="h-9 w-9 shrink-0 -ml-1" onClick={() => navigate("/agents")}>
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <h2 className="min-w-0 truncate text-lg font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-xl">
+                Editar Agente: {watch("name")?.trim() || "…"}
+              </h2>
             </div>
-            <div className="space-y-3">
-              <Label className="text-sm font-medium text-muted-foreground">Tenant</Label>
-              <Select value={watch("tenant_id") || agent.tenant_id} onValueChange={(v) => setValue("tenant_id", v)}>
-                <SelectTrigger className="h-11 rounded-lg bg-background border-border"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {activeTenants.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+            <div className="flex w-full shrink-0 justify-end gap-2 sm:w-auto">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 shrink-0 rounded-lg border border-[#ccc3d8] bg-white px-5 font-semibold text-[#630ed4] transition-colors hover:bg-[#cbdbf5] dark:border-border dark:bg-card dark:text-violet-400 dark:hover:bg-accent sm:px-6"
+                onClick={() => navigate("/agents")}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                form="edit-agent-form"
+                disabled={update.isPending}
+                className="h-11 shrink-0 gap-2 rounded-lg bg-[#7c3aed] px-5 font-semibold text-white shadow-sm hover:bg-[#630ed4] sm:px-6"
+              >
+                {update.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Salvar Alterações
+              </Button>
             </div>
           </div>
+        </header>
 
-          <div className="space-y-3">
-            <Label className="text-sm font-medium text-muted-foreground">Descrição</Label>
-            <Input {...register("description")} className="h-11 rounded-lg bg-background border-border" />
-          </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className={cn(editAgentCol, "pb-12 pt-6 md:pt-8")}>
+            <form id="edit-agent-form" onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+              <nav
+                className="-mx-px flex gap-6 overflow-x-auto border-b border-[#ccc3d8] dark:border-border [-ms-overflow-style:none] [scrollbar-width:none] sm:gap-8 md:gap-10 [&::-webkit-scrollbar]:hidden"
+                aria-label="Seções do formulário"
+              >
+                {EDIT_AGENT_STITCH_TABS.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={agentTab === t.id}
+                    onClick={() => setAgentTab(t.id)}
+                    className={cn(
+                      "relative -mb-px shrink-0 whitespace-nowrap border-b-2 pb-3 pt-0.5 text-sm font-semibold tracking-wide outline-none ring-offset-background transition-colors focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-[#7c3aed]/40 dark:ring-offset-card",
+                      agentTab === t.id
+                        ? "border-[#630ed4] text-[#630ed4]"
+                        : "border-transparent text-[#4a4455] hover:border-[#ccc3d8]/80 hover:text-[#630ed4] dark:text-muted-foreground dark:hover:border-border dark:hover:text-foreground"
+                    )}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </nav>
 
-          <div className="space-y-3">
-            <Label className="text-sm font-medium text-muted-foreground">Status</Label>
-            <Select value={watch("status") || agent.status} onValueChange={(v) => setValue("status", v)}>
-              <SelectTrigger className="h-11 rounded-lg bg-background border-border"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">
-                  <div className="flex flex-col items-start">
-                    <span>🟢 Ativo</span>
-                    <span className="text-[10px] text-muted-foreground">Atende todos, exceto conversas com atendente humano</span>
+              {agentTab === "basic" && (
+              <section className={cn(stitchCard)}>
+                <h3 className="mb-6 text-xl font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-2xl">Informações Básicas</h3>
+                <div className="grid grid-cols-1 gap-8 md:grid-cols-[minmax(0,13.5rem)_minmax(0,1fr)] md:items-start md:gap-10 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] lg:gap-12">
+                  <div className="flex w-full flex-col items-center md:items-start">
+                    <Label className={cn(stitchLbl, "w-full text-center md:text-left")}>Foto do perfil</Label>
+                    <AgentAvatarUpload
+                      agentId={agent.id}
+                      currentUrl={avatarUrl}
+                      onUploaded={(url) => setAvatarUrl(url)}
+                      layout="stitch"
+                      className="md:items-start"
+                    />
                   </div>
-                </SelectItem>
-                <SelectItem value="test">
-                  <div className="flex flex-col items-start">
-                    <span>🧪 Teste</span>
-                    <span className="text-[10px] text-muted-foreground">Responde apenas contatos com assignee específico</span>
+                  <div className="min-w-0 space-y-6">
+                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label className={stitchLbl}>Nome do Agente</Label>
+                        <Input {...register("name")} className={fld} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className={stitchLbl}>Tenant</Label>
+                        <Select value={watch("tenant_id") || agent.tenant_id} onValueChange={(v) => setValue("tenant_id", v)}>
+                          <SelectTrigger className={cn(fld, "flex h-auto min-h-11 items-center")}>
+                            <SelectValue placeholder="Tenant" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {activeTenants.map((t) => (
+                              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className={stitchLbl}>Descrição interna</Label>
+                      <Textarea {...register("description")} rows={3} className={cn(fld, "min-h-[88px] resize-y")} />
+                    </div>
+                    <div className="rounded-lg border border-[#ccc3d8] bg-[#eff4ff] p-4 dark:border-border dark:bg-muted/40">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <h4 className="text-sm font-semibold text-[#0b1c30] dark:text-foreground">Status do Agente</h4>
+                          <p className="mt-1 text-sm text-[#4a4455] dark:text-muted-foreground">
+                            Escolha ativo (produção), teste ou inativo conforme sua operação no Chatwoot.
+                          </p>
+                        </div>
+                        <div className="w-full sm:max-w-xs">
+                          <Label className="sr-only">Status</Label>
+                          <Select value={watch("status") || agent.status} onValueChange={(v) => setValue("status", v)}>
+                            <SelectTrigger className={cn(fld, "h-11 shrink-0 items-center [&>span]:line-clamp-1")}>
+                              <SelectValue placeholder="Escolher status" />
+                            </SelectTrigger>
+                            <SelectContent className="min-w-[var(--radix-select-trigger-width)]">
+                              <SelectItem value="active" textValue="Ativo">
+                                🟢 Ativo
+                              </SelectItem>
+                              <SelectItem value="test" textValue="Teste">
+                                🧪 Teste
+                              </SelectItem>
+                              <SelectItem value="inactive" textValue="Inativo">
+                                ⛔ Inativo
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {(watch("status") || agent.status) === "test" && (
+                      <div className="space-y-3 rounded-lg border border-dashed border-[#630ed4]/40 bg-[#ede0ff]/40 p-4 dark:bg-primary/10">
+                        <Label className="text-sm font-semibold text-foreground">Assignee ID para Teste</Label>
+                        <Input
+                          type="number"
+                          placeholder="ID do atendente no Chatwoot"
+                          value={testAssigneeId}
+                          onChange={(e) => setTestAssigneeId(e.target.value)}
+                          className={cn(fld, "font-mono text-sm")}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          No status <strong>Teste</strong>, o agente só interage quando a conversa no Chatwoot estiver atribuída a este ID.
+                        </p>
+                      </div>
+                    )}
+                    {(watch("status") || agent.status) === "active" && (
+                      <div className="space-y-3 rounded-lg border border-dashed border-[#630ed4]/40 bg-[#ede0ff]/40 p-4 dark:bg-primary/10">
+                        <Label className="text-sm font-semibold text-foreground">Assignee ID do agente (bot)</Label>
+                        <Input
+                          type="number"
+                          placeholder="ID do usuário no Chatwoot que representa o bot"
+                          value={agentAssigneeId}
+                          onChange={(e) => setAgentAssigneeId(e.target.value)}
+                          className={cn(fld, "font-mono text-sm")}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Após a primeira mensagem da IA a conversa é atribuída a este ID. Follow-ups só ocorrem com este assignee ou sem assignee.
+                        </p>
+                      </div>
+                    )}
                   </div>
-                </SelectItem>
-                <SelectItem value="inactive">
-                  <div className="flex flex-col items-start">
-                    <span>⛔ Inativo</span>
-                    <span className="text-[10px] text-muted-foreground">Não interage com ninguém</span>
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+                </div>
+              </section>
+            )}
 
-          {/* Test Assignee ID — only visible when status is "test" */}
-          {(watch("status") || agent.status) === "test" && (
-            <div className="space-y-3 rounded-lg border border-dashed border-primary/30 bg-primary/5 p-4">
-              <Label className="text-sm font-medium text-foreground">🧪 Assignee ID para Teste</Label>
-              <Input
-                type="number"
-                placeholder="ID do atendente no Chatwoot"
-                value={testAssigneeId}
-                onChange={(e) => setTestAssigneeId(e.target.value)}
-                className="h-11 rounded-lg bg-background border-border font-mono text-sm"
-              />
-              <p className="text-xs text-muted-foreground">
-                Regra exclusiva do status <strong>Teste</strong>: o agente só interage quando a conversa no Chatwoot estiver atribuída a este ID. Qualquer mensagem em conversa com outro atendente (ou sem atribuição) não será respondida pelo agente.
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Provider & Model */}
-        <div className="rounded-xl border border-border bg-card p-6 space-y-6">
-          <h3 className="text-base font-semibold text-foreground">Modelo de IA</h3>
-
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <div className="space-y-3">
-              <Label className="text-sm font-medium text-muted-foreground">Provider</Label>
-              <Select defaultValue={agent.provider_id ?? undefined} onValueChange={(v) => {
-                setValue("provider_id", v);
-                const prov = (providers ?? []).find((p) => p.id === v);
-                const models = getModelsForProvider(prov?.name);
-                if (models.length > 0) setValue("model", models[0].value);
-              }}>
-                <SelectTrigger className="h-11 rounded-lg bg-background border-border"><SelectValue placeholder="Nenhum" /></SelectTrigger>
-                <SelectContent>
-                  {(providers ?? []).map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-3">
-              {(() => {
-                const selectedProviderId = watch("provider_id") || agent.provider_id;
-                const selectedProvider = (providers ?? []).find((p) => p.id === selectedProviderId);
-                const models = getModelsForProvider(selectedProvider?.name);
-                if (models.length === 0) {
-                  return (
-                    <>
-                      <Label className="text-sm font-medium text-muted-foreground">Modelo</Label>
-                      <Input {...register("model")} className="h-11 rounded-lg bg-background border-border font-mono text-sm" />
-                    </>
-                  );
-                }
-                return (
-                  <>
-                    <Label className="text-sm font-medium text-muted-foreground">Modelo</Label>
-                    <Select defaultValue={agent.model ?? models[0].value} onValueChange={(v) => setValue("model", v)}>
-                      <SelectTrigger className="h-auto min-h-[44px] rounded-lg bg-background border-border py-2">
-                        <SelectValue>
-                          {(() => {
-                            const currentModel = watch("model") || agent.model;
-                            const found = models.find((m) => m.value === currentModel);
-                            if (!found) return <span className="text-sm">{currentModel}</span>;
-                            return (
-                              <div className="flex flex-col items-start text-left">
-                                <span className="text-sm font-medium">{found.label}</span>
-                                <span className="text-xs text-muted-foreground">{found.description}</span>
-                              </div>
-                            );
-                          })()}
-                        </SelectValue>
+            {agentTab === "model" && (
+              <section className={cn(stitchCard, "space-y-6")}>
+                <h3 className="text-xl font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-2xl">Configuração do Modelo de IA</h3>
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label className={stitchLbl}>Provedor</Label>
+                    <Select defaultValue={agent.provider_id ?? undefined} onValueChange={(v) => {
+                      setValue("provider_id", v);
+                      const prov = (providers ?? []).find((p) => p.id === v);
+                      const models = getModelsForProvider(prov?.name);
+                      if (models.length > 0) setValue("model", models[0].value);
+                    }}>
+                      <SelectTrigger className={cn(fld, "flex h-auto min-h-11 items-center")}>
+                        <SelectValue placeholder="Nenhum" />
                       </SelectTrigger>
                       <SelectContent>
-                        {models.map((m) => (
-                          <SelectItem key={m.value} value={m.value} className="py-2.5">
-                            <div className="flex flex-col">
-                              <span className="text-sm font-medium">{m.label}</span>
-                              <span className="text-xs text-muted-foreground">{m.description}</span>
-                            </div>
-                          </SelectItem>
+                        {(providers ?? []).map((p) => (
+                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                  </>
-                );
-              })()}
-            </div>
-          </div>
-
-          {/* System Prompt — managed in code */}
-          <div className="rounded-lg border border-dashed border-border/50 p-4">
-            <p className="text-xs text-muted-foreground">
-              <strong>System Prompt</strong> é gerenciado no código por tenant.
-              Acesse <a href="/prompts" className="text-primary underline">Prompts</a> para visualizar o prompt atual.
-            </p>
-          </div>
-
-          {/* Dispatcher Provider */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <Label className="text-sm font-medium text-muted-foreground">Dispatcher Provider (Phase 1)</Label>
-              <Badge variant="secondary" className="text-[10px]">Tool Calling</Badge>
-            </div>
-            <p className="text-xs text-muted-foreground -mt-1">
-              Provider usado para decidir quando acionar ferramentas. Deixe vazio para desabilitar.
-            </p>
-            <Select
-              value={dispatcherProviderId || "_none"}
-              onValueChange={(v) => setDispatcherProviderId(v === "_none" ? "" : v)}
-            >
-              <SelectTrigger className="h-11 rounded-lg bg-background border-border">
-                <SelectValue placeholder="Nenhum (desabilitado)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_none">Nenhum (desabilitado)</SelectItem>
-                {(providers ?? []).map((p) => (
-                  <SelectItem key={p.id} value={p.id}>{p.name} {p.model_default ? `(${p.model_default})` : ''}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {dispatcherProviderId && (() => {
-              const dp = (providers ?? []).find((p) => p.id === dispatcherProviderId);
-              const dpModels = dp ? getModelsForProvider(dp.name) : [];
-              return dpModels.length > 0 ? (
-                <div className="mt-3">
-                  <Label className="text-xs text-muted-foreground">Modelo do Dispatcher</Label>
-                  <Select
-                    value={dispatcherModel || "_default"}
-                    onValueChange={(v) => setDispatcherModel(v === "_default" ? "" : v)}
-                  >
-                    <SelectTrigger className="h-11 rounded-lg bg-background border-border mt-1">
-                      <SelectValue placeholder="Padrão do provider" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="_default">Padrão ({dp?.model_default || "gpt-4o-mini"})</SelectItem>
-                      {dpModels.map((m) => (
-                        <SelectItem key={m.value} value={m.value}>{m.label} — {m.description}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : null;
-            })()}
-          </div>
-
-          {/* Dispatcher Prompt — managed in code per tenant */}
-          <div className="rounded-lg border border-dashed border-border/50 p-4">
-            <p className="text-xs text-muted-foreground">
-              <strong>Dispatcher Prompt</strong> também é gerenciado no código por tenant.
-              Acesse <a href="/prompts" className="text-primary underline">Prompts</a> para visualizar todos os prompts.
-            </p>
-          </div>
-        </div>
-
-        {/* LLM Params */}
-        <div className="rounded-xl border border-border bg-card p-6 space-y-6">
-          <h3 className="text-base font-semibold text-foreground">Parâmetros de Geração</h3>
-
-          <div className="space-y-6">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium text-muted-foreground">Temperature</Label>
-                <span className="font-mono text-sm text-primary">{temp.toFixed(2)}</span>
-              </div>
-              <Slider value={[temp]} onValueChange={([v]) => { setTemp(v); setValue("temperature", v); }} min={0} max={2} step={0.05} />
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium text-muted-foreground">Top P</Label>
-                <span className="font-mono text-sm text-primary">{topP.toFixed(2)}</span>
-              </div>
-              <Slider value={[topP]} onValueChange={([v]) => { setTopP(v); setValue("top_p", v); }} min={0} max={1} step={0.05} />
-              <p className="text-xs text-muted-foreground">Limita palavras improváveis (0.8 = focado)</p>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium text-muted-foreground">Top K</Label>
-                <span className="font-mono text-sm text-primary">{topK}</span>
-              </div>
-              <Slider value={[topK]} onValueChange={([v]) => { setTopK(v); setValue("top_k", v); }} min={1} max={100} step={1} />
-              <p className="text-xs text-muted-foreground">Vocabulário considerado (40 = rico mas focado)</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Delays */}
-        <div className="rounded-xl border border-border bg-card p-6 space-y-6">
-          <h3 className="text-base font-semibold text-foreground">⏱ Delays de Humanização</h3>
-          <p className="text-sm text-muted-foreground -mt-2">Tempo em segundos. Variação automática de ±30%.</p>
-
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-            <div className="space-y-3">
-              <Label className="text-sm font-medium text-muted-foreground">Leitura</Label>
-              <Input type="number" min={0} step={0.5} value={readDelay} onChange={(e) => setReadDelay(Number(e.target.value))} className="h-11 rounded-lg bg-background border-border font-mono text-sm" />
-            </div>
-            <div className="space-y-3">
-              <Label className="text-sm font-medium text-muted-foreground">Digitando</Label>
-              <Input type="number" min={0} step={0.5} value={typingDelay} onChange={(e) => setTypingDelay(Number(e.target.value))} className="h-11 rounded-lg bg-background border-border font-mono text-sm" />
-            </div>
-            <div className="space-y-3">
-              <Label className="text-sm font-medium text-muted-foreground">Entre blocos</Label>
-              <Input type="number" min={0} step={0.5} value={blockGap} onChange={(e) => setBlockGap(Number(e.target.value))} className="h-11 rounded-lg bg-background border-border font-mono text-sm" />
-            </div>
-          </div>
-        </div>
-
-        {/* Debounce */}
-        <div className="rounded-xl border border-border bg-card p-6 space-y-6">
-          <h3 className="text-base font-semibold text-foreground">📨 Debounce de Mensagens</h3>
-
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium text-muted-foreground">Janela de espera (s)</Label>
-              <span className="font-mono text-sm text-primary">{debounceMs}s</span>
-            </div>
-            <Input type="number" min={0} max={30} step={1} value={debounceMs} onChange={(e) => setDebounceMs(Number(e.target.value))} className="h-11 rounded-lg bg-background border-border font-mono text-sm" />
-            <p className="text-xs text-muted-foreground">
-              {debounceMs > 0 ? `Aguarda ${debounceMs}s após a última mensagem para consolidar` : "Desativado — responde cada mensagem individualmente"}
-            </p>
-          </div>
-        </div>
-
-        {/* Boas-vindas (vídeo + pergunta do nome) */}
-        <div className="rounded-xl border border-border bg-card p-6 space-y-4">
-          <h3 className="text-base font-semibold text-foreground">Boas-vindas (primeiro contato)</h3>
-          <p className="text-xs text-muted-foreground">
-            No primeiro contato o assistente envia o texto de boas-vindas, depois o vídeo (se preenchido) e em seguida pergunta o nome.
-          </p>
-          <div className="space-y-3">
-            <div>
-              <Label className="text-sm text-muted-foreground">URL do vídeo da loja</Label>
-              <Input
-                type="url"
-                placeholder="https://exemplo.com/loja.mp4"
-                value={welcomeVideoUrl}
-                onChange={(e) => setWelcomeVideoUrl(e.target.value)}
-                className="h-11 rounded-lg bg-background border-border mt-1 font-mono text-sm"
-              />
-              <p className="text-xs text-muted-foreground mt-1">Link público do vídeo (MP4). O sistema baixa e envia como arquivo. Deixe vazio para não enviar vídeo.</p>
-            </div>
-            <div>
-              <Label className="text-sm text-muted-foreground">Pergunta do nome (opcional)</Label>
-              <Input
-                type="text"
-                placeholder="Como posso te chamar?"
-                value={welcomeNameQuestion}
-                onChange={(e) => setWelcomeNameQuestion(e.target.value)}
-                className="h-11 rounded-lg bg-background border-border mt-1"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Chatwoot */}
-        <div className="rounded-xl border border-border bg-card p-6 space-y-4">
-          <h3 className="text-base font-semibold text-foreground">Integração Chatwoot & WAHA</h3>
-          <ChatwootConfigSection
-            chatwootUrl={chatwootUrl} setChatwootUrl={setChatwootUrl}
-            chatwootApiToken={chatwootApiToken} setChatwootApiToken={setChatwootApiToken}
-            chatwootAccountId={chatwootAccountId} setChatwootAccountId={setChatwootAccountId}
-            webhookUrl={`${WEBHOOK_BASE}?agent_id=${agent.id}`}
-            wahaUrl={wahaUrl} setWahaUrl={setWahaUrl}
-            wahaApiKey={wahaApiKey} setWahaApiKey={setWahaApiKey}
-            wahaSession={wahaSession} setWahaSession={setWahaSession}
-          />
-        </div>
-
-        {/* Business Hours */}
-        <div className="rounded-xl border border-border bg-card p-6 space-y-4">
-          <BusinessHoursSection
-            enabled={businessHoursEnabled} setEnabled={setBusinessHoursEnabled}
-            hours={businessHours} setHours={setBusinessHours}
-            offlineMessage={offlineMessage} setOfflineMessage={setOfflineMessage}
-          />
-        </div>
-
-        {/* Follow-up */}
-        <div className="rounded-xl border border-border bg-card p-6 space-y-4">
-          <FollowUpConfigSection
-            enabled={followupEnabled} setEnabled={setFollowupEnabled}
-            intervals={followupIntervals} setIntervals={setFollowupIntervals}
-            quietStart={followupQuietStart} setQuietStart={setFollowupQuietStart}
-            quietEnd={followupQuietEnd} setQuietEnd={setFollowupQuietEnd}
-            followupPrompt={followupPrompt} setFollowupPrompt={setFollowupPrompt}
-          />
-        </div>
-
-        {/* Appointment Reminders */}
-        <div className="rounded-xl border border-border bg-card p-6 space-y-4">
-          <ReminderConfigSection
-            enabled={reminderEnabled} setEnabled={setReminderEnabled}
-            minutesBefore={reminderMinutesBefore} setMinutesBefore={setReminderMinutesBefore}
-            template={reminderTemplate} setTemplate={setReminderTemplate}
-          />
-        </div>
-
-        {/* Demo / Public Sandbox */}
-        <div className="rounded-xl border border-border bg-card p-6 space-y-4">
-          <div className="flex items-center gap-2">
-            <Link2 className="h-5 w-5 text-primary" />
-            <h3 className="text-base font-semibold text-foreground">Demo Público</h3>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Link público para o cliente testar o agente. Se definir uma senha, o cliente precisará informá-la para acessar.
-          </p>
-          <div className="space-y-3">
-            <div>
-              <Label className="text-xs">Senha do Demo</Label>
-              <Input
-                placeholder="Deixe vazio para acesso livre"
-                value={sandboxPassword}
-                onChange={(e) => setSandboxPassword(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-            {agentId && (
-              <div>
-                <Label className="text-xs">Link do Demo</Label>
-                <div className="flex items-center gap-1.5 mt-1 rounded-lg border border-border bg-muted/30 px-3 py-2">
-                  <code className="flex-1 truncate text-xs text-muted-foreground select-all">
-                    {`${window.location.origin}/demo/${agentId}`}
-                  </code>
-                  <button
-                    type="button"
-                    className="shrink-0 rounded p-1 text-muted-foreground/50 transition-colors hover:bg-muted hover:text-foreground"
-                    onClick={() => {
-                      navigator.clipboard.writeText(`${window.location.origin}/demo/${agentId}`);
-                      toast.success("Link copiado!");
-                    }}
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Tools */}
-        <div className="rounded-xl border border-border bg-card p-6 space-y-4">
-          <div className="flex items-center gap-2">
-            <Wrench className="h-5 w-5 text-primary" />
-            <h3 className="text-base font-semibold text-foreground">Tools Vinculadas</h3>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Tools vinculadas são carregadas pelo Dispatcher (Phase 1) para function calling.
-          </p>
-
-          {/* Linked tools */}
-          {linkedTools.length === 0 ? (
-            <p className="text-sm text-muted-foreground italic">Nenhuma tool vinculada a este agente.</p>
-          ) : (
-            <div className="space-y-1">
-              {linkedTools.map((tool) => (
-                <div key={tool.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
-                  <div className="flex items-center gap-2">
-                    <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-sm font-mono">{tool.name}</span>
-                    <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{tool.tool_type}</span>
                   </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                    onClick={() => unlinkTool(tool.id)}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
+                  <div className="space-y-2">
+                    {(() => {
+                      const selectedProviderId = watch("provider_id") || agent.provider_id;
+                      const selectedProvider = (providers ?? []).find((p) => p.id === selectedProviderId);
+                      const models = getModelsForProvider(selectedProvider?.name);
+                      if (models.length === 0) {
+                        return (
+                          <>
+                            <Label className={stitchLbl}>Modelo</Label>
+                            <Input {...register("model")} className={cn(fld, "font-mono text-sm")} />
+                          </>
+                        );
+                      }
+                      return (
+                        <>
+                          <Label className={stitchLbl}>Modelo</Label>
+                          <Select defaultValue={agent.model ?? models[0].value} onValueChange={(v) => setValue("model", v)}>
+                            <SelectTrigger className={cn(fld, "h-auto min-h-[44px] py-2")}>
+                              <SelectValue>
+                                {(() => {
+                                  const currentModel = watch("model") || agent.model;
+                                  const found = models.find((m) => m.value === currentModel);
+                                  if (!found) return <span className="text-sm">{currentModel}</span>;
+                                  return (
+                                    <div className="flex flex-col items-start text-left">
+                                      <span className="text-sm font-medium">{found.label}</span>
+                                      <span className="text-xs text-muted-foreground">{found.description}</span>
+                                    </div>
+                                  );
+                                })()}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {models.map((m) => (
+                                <SelectItem key={m.value} value={m.value} className="py-2.5">
+                                  <div className="flex flex-col">
+                                    <span className="text-sm font-medium">{m.label}</span>
+                                    <span className="text-xs text-muted-foreground">{m.description}</span>
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </>
+                      );
+                    })()}
+                  </div>
                 </div>
-              ))}
-            </div>
-          )}
 
-          {/* Add tool */}
-          {unlinkableTools.length > 0 && (
-            <div className="space-y-2">
-              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Adicionar Tool</Label>
-              <div className="flex gap-2 flex-wrap">
-                {unlinkableTools.map((tool) => (
-                  <Button
-                    key={tool.id}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs gap-1"
-                    onClick={() => linkTool(tool.id)}
-                  >
-                    <Plus className="h-3 w-3" />
-                    {tool.name}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Label className={cn(stitchLbl, "!mb-0")}>Prompt em produção</Label>
+                      {hasRegistryPreview && promptDetail?.version ? (
+                        <Badge variant="secondary" className="font-mono text-[10px]">
+                          {promptDetail.slug} · v{promptDetail.version}
+                        </Badge>
+                      ) : null}
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={promptPreviewLoading || (hasRegistryPreview && !promptDetail?.fullComposedPrompt)}
+                        className="h-auto gap-1 px-2 text-[#630ed4] hover:bg-transparent hover:underline disabled:opacity-50 dark:text-violet-400"
+                        onClick={() => setPromptDlg(hasRegistryPreview ? "production" : "override")}
+                      >
+                        <Maximize2 className="h-4 w-4" /> Expandir
+                      </Button>
+                      {hasRegistryPreview && promptDetail?.fullComposedPrompt ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-auto gap-1 px-2 text-muted-foreground hover:bg-transparent hover:text-foreground"
+                          onClick={() => {
+                            void navigator.clipboard.writeText(promptDetail.fullComposedPrompt ?? "");
+                            toast.success("Prompt copiado.");
+                          }}
+                        >
+                          <Copy className="h-4 w-4" /> Copiar
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-4 pt-2">
-          <Button type="button" variant="outline" className="h-11 rounded-lg px-8" onClick={() => navigate("/agents")}>
-            Cancelar
-          </Button>
-          <Button type="submit" disabled={update.isPending} className="h-11 rounded-lg px-8 gap-2">
-            {update.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Salvar Alterações
-          </Button>
+                  {promptPreviewLoading ? <Skeleton className="min-h-[160px] w-full rounded-lg" /> : null}
+
+                  {!promptPreviewLoading && hasRegistryPreview ? (
+                    <>
+                      <Textarea
+                        readOnly
+                        rows={10}
+                        value={promptDetail?.fullComposedPrompt ?? ""}
+                        className={cn(
+                          fld,
+                          "min-h-[200px] cursor-default resize-y bg-[#f8f9ff] font-mono text-sm leading-relaxed text-[#4a4455] dark:bg-muted/30 dark:text-foreground",
+                        )}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Montado pelo servidor (bloco do tenant + regras globais, idioma e data). É um preview aproximado — no chat pode variar conforme ferramentas e calendário.
+                        Código-fonte no painel{" "}
+                        <Link className="text-[#630ed4] underline dark:text-violet-400" to="/prompts">Prompts</Link>.
+                      </p>
+                      <p className="rounded-lg border border-amber-200/90 bg-amber-50/90 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+                        Este tenant tem prompt no repositório. O motor usa essa base no código — o campo{" "}
+                        <code className="rounded bg-black/[0.06] px-1 py-0.5 dark:bg-white/10">system_prompt</code> neste agente
+                        não substitui esse texto principal.
+                      </p>
+                      <Collapsible open={dbPromptOpen} onOpenChange={setDbPromptOpen}>
+                        <CollapsibleTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="flex h-auto w-full items-center justify-between gap-2 border-dashed py-3 text-left text-sm font-semibold text-[#630ed4] dark:border-border dark:text-violet-400"
+                          >
+                            Campo system_prompt no banco (opcional)
+                            <ChevronDown className={cn("h-4 w-4 shrink-0 opacity-70 transition-transform", dbPromptOpen && "rotate-180")} />
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="space-y-2 pt-3">
+                          <Textarea rows={6} {...register("system_prompt")} className={cn(fld, "resize-y font-mono text-sm")} />
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <Button
+                              type="button"
+                              variant="link"
+                              className="h-auto p-0 text-xs text-[#630ed4] dark:text-violet-400"
+                              onClick={() => setPromptDlg("override")}
+                            >
+                              Expandir em janela
+                            </Button>
+                            <span className="text-[11px] text-muted-foreground">
+                              Em uso principalmente quando não há entrada no registry. Pode ficar vazio.
+                            </span>
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    </>
+                  ) : null}
+
+                  {!promptPreviewLoading && !hasRegistryPreview ? (
+                    <>
+                      {promptPreviewIsError ? (
+                        <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                          Não foi possível carregar o preview do código
+                          {tenantSlugForPrompt ? ` (slug “${tenantSlugForPrompt}”)` : ""}. Verifique permissão ou registry.
+                          Abaixo, o texto salvo na linha do agente vale como base quando não há prompt de tenant no servidor.
+                        </p>
+                      ) : null}
+                      {!promptPreviewIsError && !tenantSlugForPrompt ? (
+                        <p className="text-xs text-muted-foreground">Defina o tenant para buscar prompt do código pelo slug.</p>
+                      ) : null}
+                      <Textarea
+                        rows={8}
+                        {...register("system_prompt")}
+                        className={cn(fld, "min-h-[160px] resize-y font-mono text-sm leading-relaxed text-[#4a4455] dark:text-foreground")}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Prompt base gravado neste agente. Ver também{" "}
+                        <Link className="text-[#630ed4] underline dark:text-violet-400" to="/prompts">Prompts</Link>.
+                      </p>
+                    </>
+                  ) : null}
+                </div>
+              </section>
+            )}
+
+            {agentTab === "integration" && (
+              <>
+                <section className={cn(stitchCard, "space-y-4")}>
+                  <h3 className="text-xl font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-2xl">Integração Chatwoot &amp; WAHA</h3>
+                  <ChatwootConfigSection
+                    chatwootUrl={chatwootUrl} setChatwootUrl={setChatwootUrl}
+                    chatwootApiToken={chatwootApiToken} setChatwootApiToken={setChatwootApiToken}
+                    chatwootAccountId={chatwootAccountId} setChatwootAccountId={setChatwootAccountId}
+                    webhookUrl={`${WEBHOOK_BASE}?agent_id=${agent.id}`}
+                    wahaUrl={wahaUrl} setWahaUrl={setWahaUrl}
+                    wahaApiKey={wahaApiKey} setWahaApiKey={setWahaApiKey}
+                    wahaSession={wahaSession} setWahaSession={setWahaSession}
+                    deliverMediaViaWaha={deliverMediaViaWaha}
+                    setDeliverMediaViaWaha={setDeliverMediaViaWaha}
+                  />
+                  <div className="mt-4 flex flex-col gap-3 rounded-lg border border-[#ccc3d8] bg-[#f8f9ff] p-4 dark:border-border dark:bg-muted/30 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <Label className="text-sm font-semibold text-[#0b1c30] dark:text-foreground">Etiquetar novo lead automaticamente</Label>
+                      <p className="mt-1 text-xs text-muted-foreground">Ao identificar novo lead, aplica a etiqueta leadsDD-MM-YYYY no Chatwoot.</p>
+                    </div>
+                    <Switch checked={leadLabelEnabled} onCheckedChange={setLeadLabelEnabled} />
+                  </div>
+                </section>
+
+                <section className={cn(stitchCard, "space-y-4")}>
+                  <div className="flex items-center gap-2">
+                    <Wrench className="h-6 w-6 text-[#630ed4]" />
+                    <h3 className="text-xl font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-2xl">Tools vinculadas</h3>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Carregadas pelo dispatcher (phase 1) para function calling.</p>
+                  {linkedTools.length === 0 ? (
+                    <p className="text-sm italic text-muted-foreground">Nenhuma tool vinculada.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {linkedTools.map((tool) => (
+                        <div key={tool.id} className="flex items-center justify-between rounded-lg border border-[#ccc3d8] px-3 py-2 dark:border-border">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="font-mono text-sm">{tool.name}</span>
+                            <Badge variant="secondary" className="text-[10px]">{tool.tool_type}</Badge>
+                          </div>
+                          <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => unlinkTool(tool.id)}>
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {unlinkableTools.length > 0 && (
+                    <div className="space-y-2 border-t border-dashed border-[#ccc3d8] pt-4 dark:border-border">
+                      <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Adicionar tool</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {unlinkableTools.map((tool) => (
+                          <Button key={tool.id} type="button" variant="outline" size="sm" className="h-8 gap-1 border-[#ccc3d8] text-xs dark:border-border" onClick={() => linkTool(tool.id)}>
+                            <Plus className="h-3 w-3" /> {tool.name}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </section>
+              </>
+            )}
+
+            {agentTab === "schedule" && (
+              <>
+                <section className={cn(stitchCard, "space-y-4")}>
+                  <BusinessHoursSection
+                    enabled={businessHoursEnabled} setEnabled={setBusinessHoursEnabled}
+                    hours={businessHours} setHours={setBusinessHours}
+                    offlineMessage={offlineMessage} setOfflineMessage={setOfflineMessage}
+                  />
+                </section>
+                <section className={cn(stitchCard, "space-y-4")}>
+                  <FollowUpConfigSection
+                    enabled={followupEnabled} setEnabled={setFollowupEnabled}
+                    intervals={followupIntervals} setIntervals={setFollowupIntervals}
+                    quietStart={followupQuietStart} setQuietStart={setFollowupQuietStart}
+                    quietEnd={followupQuietEnd} setQuietEnd={setFollowupQuietEnd}
+                    followupPrompt={followupPrompt} setFollowupPrompt={setFollowupPrompt}
+                    negativeGuardEnabled={followupNegativeGuardEnabled} setNegativeGuardEnabled={setFollowupNegativeGuardEnabled}
+                    thinkingDelayMinutes={followupThinkingDelayMinutes} setThinkingDelayMinutes={setFollowupThinkingDelayMinutes}
+                  />
+                </section>
+                <section className={cn(stitchCard, "space-y-4")}>
+                  <ReminderConfigSection
+                    enabled={reminderEnabled} setEnabled={setReminderEnabled}
+                    minutesBefore={reminderMinutesBefore} setMinutesBefore={setReminderMinutesBefore}
+                    template={reminderTemplate} setTemplate={setReminderTemplate}
+                  />
+                </section>
+              </>
+            )}
+
+            {agentTab === "advanced" && (
+              <>
+                <section className={cn(stitchCard, "space-y-6")}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-xl font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-2xl">Dispatcher (Phase 1)</h3>
+                    <Badge variant="secondary" className="text-[10px]">Tool calling</Badge>
+                  </div>
+                  <p className="-mt-2 text-xs text-muted-foreground">
+                    Escolha o modelo que decide quando acionar ferramentas. Prompt do dispatcher pode estar definido por tenant — veja{' '}
+                    <Link className="text-[#630ed4] underline dark:text-violet-400" to="/prompts">Prompts</Link>.
+                  </p>
+                  <div className="space-y-2">
+                    <Label className={stitchLbl}>Provedor do dispatcher</Label>
+                    <Select value={dispatcherProviderId || "_none"} onValueChange={(v) => setDispatcherProviderId(v === "_none" ? "" : v)}>
+                      <SelectTrigger className={cn(fld, "flex h-auto min-h-11 items-center")}>
+                        <SelectValue placeholder="Nenhum (desabilitado)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_none">Nenhum (desabilitado)</SelectItem>
+                        {(providers ?? []).map((p) => (
+                          <SelectItem key={p.id} value={p.id}>{p.name} {p.model_default ? ` (${p.model_default})` : ""}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {dispatcherProviderId && (() => {
+                    const dp = (providers ?? []).find((p) => p.id === dispatcherProviderId);
+                    const dpModels = dp ? getModelsForProvider(dp.name) : [];
+                    if (dpModels.length === 0) return null;
+                    return (
+                      <div className="space-y-2">
+                        <Label className={stitchLbl}>Modelo do dispatcher</Label>
+                        <Select value={dispatcherModel || "_default"} onValueChange={(v) => setDispatcherModel(v === "_default" ? "" : v)}>
+                          <SelectTrigger className={cn(fld, "flex h-auto min-h-11 items-center")}>
+                            <SelectValue placeholder="Padrão do provedor" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="_default">Padrão ({dp?.model_default || "gpt-4o-mini"})</SelectItem>
+                            {dpModels.map((m) => (
+                              <SelectItem key={m.value} value={m.value}>{m.label} — {m.description}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    );
+                  })()}
+                </section>
+
+                <section className={cn(stitchCard, "space-y-6")}>
+                  <h3 className="text-xl font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-2xl">Parâmetros de geração</h3>
+                  <div className="space-y-6">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium text-muted-foreground">Temperature</Label>
+                        <span className="font-mono text-sm text-[#630ed4]">{temp.toFixed(2)}</span>
+                      </div>
+                      <Slider value={[temp]} onValueChange={([v]) => { setTemp(v); setValue("temperature", v); }} min={0} max={2} step={0.05} />
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium text-muted-foreground">Top P</Label>
+                        <span className="font-mono text-sm text-[#630ed4]">{topP.toFixed(2)}</span>
+                      </div>
+                      <Slider value={[topP]} onValueChange={([v]) => { setTopP(v); setValue("top_p", v); }} min={0} max={1} step={0.05} />
+                      <p className="text-xs text-muted-foreground">Limita palavras pouco prováveis (0,8 mais focado).</p>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium text-muted-foreground">Top K</Label>
+                        <span className="font-mono text-sm text-[#630ed4]">{topK}</span>
+                      </div>
+                      <Slider value={[topK]} onValueChange={([v]) => { setTopK(v); setValue("top_k", v); }} min={1} max={100} step={1} />
+                      <p className="text-xs text-muted-foreground">Tamanho do vocabulário considerado em cada passo.</p>
+                    </div>
+                  </div>
+                </section>
+
+                <section className={cn(stitchCard, "space-y-6")}>
+                  <h3 className="text-xl font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-2xl">Delays de humanização</h3>
+                  <p className="-mt-2 text-sm text-muted-foreground">Tempo em segundos com variação automática ±30%.</p>
+                  <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label className={stitchLbl}>Leitura</Label>
+                      <Input type="number" min={0} step={0.5} value={readDelay} onChange={(e) => setReadDelay(Number(e.target.value))} className={cn(fld, "font-mono text-sm")} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className={stitchLbl}>Digitando</Label>
+                      <Input type="number" min={0} step={0.5} value={typingDelay} onChange={(e) => setTypingDelay(Number(e.target.value))} className={cn(fld, "font-mono text-sm")} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className={stitchLbl}>Entre blocos</Label>
+                      <Input type="number" min={0} step={0.5} value={blockGap} onChange={(e) => setBlockGap(Number(e.target.value))} className={cn(fld, "font-mono text-sm")} />
+                    </div>
+                  </div>
+                </section>
+
+                <section className={cn(stitchCard, "space-y-4")}>
+                  <h3 className="text-xl font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-2xl">Debounce de mensagens</h3>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-medium text-muted-foreground">Janela (s)</Label>
+                    <span className="font-mono text-sm text-[#630ed4]">{debounceMs}s</span>
+                  </div>
+                  <Input type="number" min={0} max={30} step={1} value={debounceMs} onChange={(e) => setDebounceMs(Number(e.target.value))} className={cn(fld, "font-mono text-sm")} />
+                  <p className="text-xs text-muted-foreground">
+                    {debounceMs > 0 ? `Espera ${debounceMs}s após a última mensagem para consolidar.` : "Desativado — responde a cada mensagem."}
+                  </p>
+                </section>
+
+                <section className={cn(stitchCard, "space-y-4")}>
+                  <h3 className="text-xl font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-2xl">Boas-vindas (primeiro contato)</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Fluxo típico: texto de boas-vindas, vídeo opcional em seguida, depois pergunta o nome se configurado.
+                  </p>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label className={stitchLbl}>URL do vídeo (MP4)</Label>
+                      <Input type="url" placeholder="https://exemplo.com/loja.mp4" value={welcomeVideoUrl} onChange={(e) => setWelcomeVideoUrl(e.target.value)} className={cn(fld, "font-mono text-sm")} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className={stitchLbl}>Pergunta do nome (opcional)</Label>
+                      <Input type="text" placeholder="Como posso te chamar?" value={welcomeNameQuestion} onChange={(e) => setWelcomeNameQuestion(e.target.value)} className={fld} />
+                    </div>
+                  </div>
+                </section>
+
+                <section className={cn(stitchCard, "space-y-4")}>
+                  <div className="flex items-center gap-2">
+                    <Link2 className="h-6 w-6 text-[#630ed4]" />
+                    <h3 className="text-xl font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-2xl">Demo público</h3>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className={stitchLbl}>Senha do demo (vazio = livre)</Label>
+                    <Input placeholder="Opcional" value={sandboxPassword} onChange={(e) => setSandboxPassword(e.target.value)} className={fld} />
+                  </div>
+                  {agentId && (
+                    <div className="space-y-2">
+                      <Label className={stitchLbl}>Link do demo</Label>
+                      <div className={cn(fld, "flex items-center gap-2 py-2")}>
+                        <code className="flex-1 truncate font-mono text-xs text-muted-foreground select-all">
+                          {`${window.location.origin}/demo/${agentId}`}
+                        </code>
+                        <button
+                          type="button"
+                          className="rounded p-1.5 text-muted-foreground hover:bg-muted"
+                          onClick={() => {
+                            void navigator.clipboard.writeText(`${window.location.origin}/demo/${agentId}`);
+                            toast.success("Link copiado!");
+                          }}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </section>
+              </>
+            )}
+          </form>
+          </div>
         </div>
-      </form>
-    </div>
+      </div>
+
+      <Dialog open={promptDlg !== "closed"} onOpenChange={(open) => !open && setPromptDlg("closed")}>
+        <DialogContent className="max-h-[90vh] max-w-[min(100vw-2rem,42rem)] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <DialogTitle className="text-left">
+                {promptDlg === "production" ? "Prompt em produção (preview)" : "System prompt no banco"}
+              </DialogTitle>
+              {promptDlg === "production" && promptDetail?.fullComposedPrompt ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 gap-1 sm:self-auto"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(promptDetail.fullComposedPrompt ?? "");
+                    toast.success("Copiado!");
+                  }}
+                >
+                  <Copy className="h-3.5 w-3.5" /> Copiar
+                </Button>
+              ) : null}
+            </div>
+          </DialogHeader>
+          <Textarea
+            readOnly={promptDlg === "production"}
+            value={
+              promptDlg === "production" ? (promptDetail?.fullComposedPrompt ?? "") : (watch("system_prompt") ?? "")
+            }
+            onChange={(e) => promptDlg === "override" && setValue("system_prompt", e.target.value)}
+            rows={22}
+            className={cn(
+              fld,
+              "min-h-[380px] font-mono text-sm leading-relaxed",
+              promptDlg === "production" && "cursor-default bg-muted/20 dark:bg-muted/30",
+            )}
+          />
+        </DialogContent>
+      </Dialog>
+    </>
   );
+
 }

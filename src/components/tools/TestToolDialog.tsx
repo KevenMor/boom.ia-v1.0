@@ -20,12 +20,16 @@ function generateExample(tool: Tool | null): string {
   const params = tool?.function_def?.parameters as any;
   if (!params?.properties) {
     if (tool?.tool_type === "web_scraper") return JSON.stringify({ url: "https://example.com" }, null, 2);
+    if (tool?.tool_type === "rag_search") return JSON.stringify({ pergunta: "como funciona o tratamento para bruxismo?" }, null, 2);
+    if (tool?.tool_type === "suite_gallery_query") return JSON.stringify({ nome: "exemplo" }, null, 2);
     return "{}";
   }
   const example: Record<string, any> = {};
   for (const [key, schema] of Object.entries(params.properties) as [string, any][]) {
-    if (schema.type === "string") example[key] = schema.example || `exemplo_${key}`;
-    else if (schema.type === "number" || schema.type === "integer") example[key] = schema.example || 1;
+    if (schema.type === "string") {
+      if (key === "pergunta" || key === "query") example[key] = "como funciona o tratamento para bruxismo?";
+      else example[key] = schema.example || `exemplo_${key}`;
+    } else if (schema.type === "number" || schema.type === "integer") example[key] = schema.example || 1;
     else if (schema.type === "boolean") example[key] = true;
     else example[key] = null;
   }
@@ -120,7 +124,7 @@ export function TestToolDialog({ tool, open, onOpenChange }: Props) {
               onChange={(e) => setArgs(e.target.value)}
               className="font-mono text-xs mt-1"
               rows={4}
-              placeholder='{"query": "exemplo"}'
+              placeholder={tool?.tool_type === "rag_search" ? '{"pergunta": "como funciona o tratamento?"}' : '{"key": "value"}'}
             />
           </div>
 

@@ -18,7 +18,7 @@ import { useTenants } from "@/hooks/useTenants";
 import { useAgents } from "@/hooks/useAgents";
 import { nexusDb } from "@/integrations/supabase/nexus-client";
 import { toast } from "sonner";
-import { Database, Globe, Server, Search, Car, MapPin, DollarSign, CalendarDays, Link, UserCheck, Bell } from "lucide-react";
+import { Database, Globe, Server, Search, Car, MapPin, DollarSign, CalendarDays, Link, UserCheck, Bell, Building2, Images } from "lucide-react";
 import type { ToolType } from "@/types/database";
 
 const TOOL_TYPE_META: Record<ToolType, { label: string; icon: any; description: string }> = {
@@ -32,12 +32,14 @@ const TOOL_TYPE_META: Record<ToolType, { label: string; icon: any; description: 
   calendar_query: { label: "Agenda", icon: CalendarDays, description: "Consulta e agenda horários no calendário" },
   chatwoot_assign: { label: "Atribuir Agente", icon: UserCheck, description: "Atribui atendente humano e/ou equipe no Chatwoot" },
   send_notification: { label: "Notificação", icon: Bell, description: "Envia notificação (mensagem, webhook) em eventos" },
+  omnibees_availability: { label: "Omnibees (hotel)", icon: Building2, description: "Disponibilidade e tarifas via motor Omnibees (HTML)" },
+  suite_gallery_query: { label: "Galeria", icon: Images, description: "Fotos e vídeos do painel Galeria do tenant (qualquer vertical)" },
 };
 
 const schema = z.object({
   name: z.string().min(2, "Nome obrigatório (snake_case)"),
   description: z.string().min(3, "Descrição obrigatória para o LLM"),
-  tool_type: z.enum(["sql_query", "web_scraper", "api_rest", "rag_search", "inventory_query", "nearest_unit", "fipe_query", "calendar_query", "chatwoot_assign", "send_notification"]),
+  tool_type: z.enum(["sql_query", "web_scraper", "api_rest", "rag_search", "inventory_query", "nearest_unit", "fipe_query", "calendar_query", "chatwoot_assign", "send_notification", "omnibees_availability", "suite_gallery_query"]),
   tenant_id: z.string().optional(),
   endpoint: z.string().optional(),
   parameters_json: z.string().optional(),
@@ -154,6 +156,8 @@ export function CreateToolDialog({ open, onOpenChange }: Props) {
       case "calendar_query": return '{}';
       case "chatwoot_assign": return '{\n  "assignee_id": 15,\n  "team_id": null\n}';
       case "send_notification": return '{\n  "channel": "chatwoot_message",\n  "conversation_id": 123\n}';
+      case "omnibees_availability": return '{\n  "chain_id": "4486",\n  "hotel_id": "8164",\n  "currency_id": "16",\n  "lang": "pt-BR"\n}';
+      case "suite_gallery_query": return "{}";
     }
   };
 
@@ -326,10 +330,21 @@ export function CreateToolDialog({ open, onOpenChange }: Props) {
             <TabsContent value="params">
               <Textarea
                 {...register("parameters_json")}
-                placeholder='{ "type": "object", "properties": { "email": { "type": "string" } } }'
+                placeholder={
+                  toolType === "chatwoot_assign"
+                    ? '{ "type": "object", "required": ["reason"], "properties": { "reason": { "type": "string", "description": "Unidade ou escalacao" } } }'
+                    : '{ "type": "object", "properties": { "email": { "type": "string" } } }'
+                }
                 className="min-h-[120px] font-mono text-xs bg-background"
               />
-              <p className="mt-1 text-[10px] text-muted-foreground">JSON Schema dos parâmetros que o LLM pode enviar</p>
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                JSON Schema dos parâmetros que o LLM pode enviar
+                {toolType === "chatwoot_assign" ? (
+                  <span className="block mt-0.5">
+                    Chatwoot com regras por unidade: inclua <code className="text-[9px]">reason</code> obrigatório — o backend casa com os rótulos da aba Config de Execução.
+                  </span>
+                ) : null}
+              </p>
             </TabsContent>
             <TabsContent value="exec">
               <Textarea

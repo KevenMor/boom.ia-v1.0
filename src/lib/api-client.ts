@@ -1,18 +1,14 @@
-// Detecta se realmente roda em localhost (window.location, não VITE_API_URL)
-const isTrulyLocal =
+import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
+
+// Em dev (localhost) usa /api relativo (proxy do Vite); em produção usa origem atual.
+const isLocalhost =
   typeof window !== "undefined" &&
   /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(window.location.origin);
 
-const DEFAULT_PROD_API = "https://conexoesapp-server-boomia-lb.kgn6uc.easypanel.host/api";
-const configuredApiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
-const configuredIsLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(configuredApiUrl || "");
-const PROD_API = !isTrulyLocal && configuredIsLocalhost
-  ? DEFAULT_PROD_API
-  : (configuredApiUrl || DEFAULT_PROD_API);
-
-const API_BASE = isTrulyLocal
-  ? "/api"
-  : PROD_API;
+const API_BASE =
+  typeof window !== "undefined"
+    ? (isLocalhost ? "/api" : `${window.location.origin}/api`)
+    : (import.meta.env.VITE_API_URL || "http://localhost:3001/api");
 
 export function getApiBase(): string {
   return API_BASE.replace(/\/+$/, "");
@@ -24,13 +20,21 @@ export async function callAPI<T = unknown>(
 ): Promise<T> {
   const { method = "POST", body, headers = {} } = options;
   const url = endpoint.startsWith("http") ? endpoint : `${getApiBase()}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
+  const resolvedHeaders: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...headers,
+  };
+
+  if (!resolvedHeaders["x-nexus-auth"]) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      resolvedHeaders["x-nexus-auth"] = `Bearer ${session.access_token}`;
+    }
+  }
 
   const res = await fetch(url, {
     method,
-    headers: {
-      "Content-Type": "application/json",
-      ...headers,
-    },
+    headers: resolvedHeaders,
     body: method !== "GET" && body !== undefined ? JSON.stringify(body) : undefined,
   });
 

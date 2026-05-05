@@ -114,6 +114,10 @@ export default function EditProvider() {
           <div className="space-y-3">
             <Label className="text-sm font-medium text-muted-foreground">Base URL</Label>
             <Input {...register("base_url")} className="h-11 rounded-lg bg-background border-border font-mono text-sm" />
+            <p className="text-xs text-muted-foreground">
+              OpenAI: <span className="font-mono">https://api.openai.com/v1</span> · Gemini: URL do projeto · Ollama (local):{" "}
+              <span className="font-mono">http://127.0.0.1:11434/v1</span> — o servidor precisa estar acessível a partir do host onde a API Boom corre (Docker: use host.docker.internal ou IP da máquina).
+            </p>
           </div>
 
           <div className="space-y-3">
@@ -146,7 +150,9 @@ export default function EditProvider() {
                 {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">A chave é criptografada antes de ser salva. Deixe vazio para manter a chave atual.</p>
+            <p className="text-xs text-muted-foreground">
+              A chave é criptografada antes de ser salva. Deixe vazio para manter a chave atual. Para Ollama em URL com porta 11434, a API Key pode ficar vazia (uso interno com token placeholder).
+            </p>
           </div>
         </div>
 

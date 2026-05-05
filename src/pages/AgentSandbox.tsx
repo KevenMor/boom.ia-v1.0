@@ -21,6 +21,7 @@ import {
 import { useAgents } from "@/hooks/useAgents";
 import { nexusDb } from "@/integrations/supabase/nexus-client";
 import { getApiBase, callAPI } from "@/lib/api-client";
+import { collectMarkdownImageSpans, stripMarkdownImageSpans, imageUrlsEquivalent } from "@/lib/chatMessageDisplay";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -44,6 +45,8 @@ type Msg = {
   edgeLogs?: LogEntry[];
   tokenUsage?: TokenUsageData;
   userAttachments?: UserAttachmentMeta[];
+  metadata?: { type?: string; video_url?: string };
+  inventoryImages?: string[];
 };
 type Conversation = {
   id: string;
@@ -56,15 +59,35 @@ type Conversation = {
 const CHAT_URL = `${getApiBase()}/chat`;
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 
+/** Mensagem legível para toast (PostgREST / Supabase devolvem objeto, não sempre Error). */
+function formatCaughtError(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (e && typeof e === "object") {
+    const o = e as Record<string, unknown>;
+    const parts: string[] = [];
+    if (typeof o.message === "string" && o.message.trim()) parts.push(o.message.trim());
+    if (typeof o.details === "string" && o.details.trim()) parts.push(o.details.trim());
+    if (typeof o.hint === "string" && o.hint.trim()) parts.push(o.hint.trim());
+    if (typeof o.code === "string" && o.code.trim()) parts.unshift(`[${o.code}]`);
+    if (parts.length > 0) return parts.join(" — ");
+    try {
+      return JSON.stringify(e);
+    } catch {
+      return "erro desconhecido";
+    }
+  }
+  return String(e);
+}
+
 // Extract image URLs from message content
 function extractImages(content: string): { text: string; images: string[] } {
   const images: string[] = [];
-  const mdImgRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/gi;
-  let match;
-  while ((match = mdImgRegex.exec(content)) !== null) {
-    const url = match[1];
-    if (url && !images.includes(url) && isValidImageUrl(url)) images.push(url);
+  const mdSpans = collectMarkdownImageSpans(content);
+  for (const sp of mdSpans) {
+    if (sp.url && !images.includes(sp.url) && isValidImageUrl(sp.url)) images.push(sp.url);
   }
+  let text = stripMarkdownImageSpans(content, mdSpans);
+  let match;
   const bareImgRegex = /(?<!\()(https?:\/\/[^\s"'<>]+\.(?:jpg|jpeg|png|gif|webp)[^\s"'<>]*)/gi;
   while ((match = bareImgRegex.exec(content)) !== null) {
     const url = match[1] || match[0];
@@ -74,8 +97,6 @@ function extractImages(content: string): { text: string; images: string[] } {
   while ((match = photoUrlRegex.exec(content)) !== null) {
     if (!images.includes(match[0]) && isValidImageUrl(match[0])) images.push(match[0]);
   }
-  let text = content;
-  text = text.replace(/!\[.*?\]\(https?:\/\/[^\s)]+\)/gi, "");
   text = text.replace(/^.*?ENVIAR_FOTOS?_VEICULOS?.*$/gmi, "");
   images.forEach((url) => { text = text.split(url).join(""); });
   text = text.replace(/\n{3,}/g, "\n\n").trim();
@@ -128,10 +149,21 @@ export default function AgentSandbox() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  /** ID da conversa atual no servidor — atualizado assim que o SSE envia conversation_id (antes do [DONE]). */
+  const conversationIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
+
+  useEffect(() => {
+    conversationIdRef.current = null;
+    setConversationId(null);
+  }, [agentId]);
 
   const loadConversations = useCallback(async () => {
     if (!agentId) return;
@@ -140,10 +172,15 @@ export default function AgentSandbox() {
         p_agent_id: agentId,
         p_limit: 50,
       });
-      if (error) throw error;
+      if (error) {
+        console.error("[Sandbox] list_agent_conversations:", error);
+        toast.error(`Não foi possível carregar o histórico de conversas: ${formatCaughtError(error)}`);
+        return;
+      }
       setConversations((data ?? []) as Conversation[]);
     } catch (e) {
       console.error("[Sandbox] erro ao carregar conversas:", e);
+      toast.error(`Não foi possível carregar o histórico de conversas: ${formatCaughtError(e)}`);
     }
   }, [agentId]);
 
@@ -151,7 +188,7 @@ export default function AgentSandbox() {
     loadConversations();
   }, [loadConversations]);
 
-  // Sanitize message content to remove leaked JSON dispatcher data
+  // Sanitize message content to remove leaked JSON dispatcher data and tool_code/assign_agent
   const sanitizeContent = (content: string): string => {
     if (!content) return content;
     // Remove lines that start with JSON-like patterns (dispatcher hints)
@@ -159,6 +196,12 @@ export default function AgentSandbox() {
       .replace(/^\s*\{["\s]*total[":].*$/gm, "")
       .replace(/^\s*\{["\s]*id[":].*$/gm, "")
       .replace(/^\s*\[?\{["\s]*id[":].*$/gm, "");
+    // Remove tool_code / assign_agent leakage (ex.: tool_code print(json.dumps(...)))
+    cleaned = cleaned
+      .replace(/\*\*?tool_code[\s\S]*?\)\s*\)\*\*?/gim, "")
+      .replace(/tool_code[\s\S]*?\)\s*\)(?=\s|$|\.|,|;)/gim, "")
+      .replace(/\b(assign_agent|atribuir_agente|chatwoot_assign)\s*\(\s*[^)]*\)/gim, "")
+      .replace(/\bprint\s*\(\s*(?:json\.dumps\s*)?\([^)]*assign_agent[^)]*\)\s*\)/gim, "");
     // If content is entirely JSON (starts with { or [), discard it
     const trimmed = cleaned.trim();
     if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
@@ -190,8 +233,9 @@ export default function AgentSandbox() {
             role: m.role as "user" | "assistant",
             content: m.role === "assistant" ? sanitizeContent(m.content) : m.content,
             timestamp: new Date(m.created_at),
+            metadata: m.metadata as { type?: string; video_url?: string } | undefined,
           }))
-          .filter((m) => m.content.trim() !== "")
+          .filter((m) => m.content.trim() !== "" || (m.metadata?.type === "welcome_video" && m.metadata?.video_url))
       );
       setConversationId(convId);
       setShowHistory(false);
@@ -204,6 +248,7 @@ export default function AgentSandbox() {
 
   const startNewConversation = () => {
     setMessages([]);
+    conversationIdRef.current = null;
     setConversationId(null);
     setShowHistory(false);
   };
@@ -319,7 +364,7 @@ export default function AgentSandbox() {
       const body: any = {
         agent_id: agentId,
         messages: allMessages.map((m) => ({ role: m.role, content: m.content })),
-        conversation_id: conversationId,
+        conversation_id: conversationIdRef.current ?? conversationId,
       };
       if (apiAttachments.length > 0) {
         body.attachments = apiAttachments;
@@ -410,8 +455,24 @@ export default function AgentSandbox() {
           try {
             const parsed = JSON.parse(jsonStr);
 
-            if (parsed.conversation_id && !conversationId) {
-              setConversationId(parsed.conversation_id);
+            if (parsed.conversation_id) {
+              conversationIdRef.current = parsed.conversation_id as string;
+              setConversationId(parsed.conversation_id as string);
+              continue;
+            }
+
+            if (parsed.metadata?.type === "welcome_video" && parsed.metadata?.video_url) {
+              hasAssistantContent = true;
+              const meta = { type: "welcome_video" as const, video_url: parsed.metadata.video_url };
+              setMessages((prev) => {
+                const last = prev[prev.length - 1];
+                if (last?.role === "assistant") {
+                  return prev.map((m, i) =>
+                    i === prev.length - 1 ? { ...m, metadata: meta } : m
+                  );
+                }
+                return [...prev, { role: "assistant" as const, content: "", timestamp: new Date(), metadata: meta }];
+              });
               continue;
             }
 
@@ -429,6 +490,16 @@ export default function AgentSandbox() {
             if (parsed.debug) {
               debugData = parsed.debug;
               setPendingDebug(parsed.debug);
+              setMessages((prev) => {
+                const lastIdx = prev.length - 1;
+                if (lastIdx >= 0 && prev[lastIdx].role === "assistant") {
+                  return prev.map((m, idx) =>
+                    idx === lastIdx ? { ...m, debug: parsed.debug } : m
+                  );
+                }
+                // Debug chegou antes do conteúdo; criar mensagem assistant para anexar
+                return [...prev, { role: "assistant" as const, content: streamAccum, timestamp: new Date(), debug: parsed.debug }];
+              });
               continue;
             }
 
@@ -447,6 +518,42 @@ export default function AgentSandbox() {
                 }
                 return prev;
               });
+              continue;
+            }
+
+            if (parsed.media_commands) {
+              const photoIds: string[] = Array.isArray(parsed.media_commands.photo_inventory_ids)
+                ? parsed.media_commands.photo_inventory_ids
+                : [];
+              if (photoIds.length > 0) {
+                nexusDb
+                  .from("inventory")
+                  .select("id, photos, photo_url")
+                  .in("id", photoIds)
+                  .then(({ data }) => {
+                    const urls: string[] = [];
+                    for (const row of data ?? []) {
+                      if (row.photos) {
+                        try {
+                          const parsed = typeof row.photos === "string" ? JSON.parse(row.photos) : row.photos;
+                          if (Array.isArray(parsed)) urls.push(...(parsed as string[]).filter(Boolean));
+                        } catch { /* ignore */ }
+                      }
+                      if (urls.length === 0 && row.photo_url) urls.push(row.photo_url);
+                    }
+                    if (urls.length > 0) {
+                      setMessages((prev) => {
+                        const lastIdx = prev.length - 1;
+                        if (lastIdx >= 0 && prev[lastIdx].role === "assistant") {
+                          return prev.map((m, idx) =>
+                            idx === lastIdx ? { ...m, inventoryImages: urls } : m
+                          );
+                        }
+                        return prev;
+                      });
+                    }
+                  });
+              }
               continue;
             }
 
@@ -536,6 +643,11 @@ export default function AgentSandbox() {
       const imgResult = extractImages(msg.content);
       text = imgResult.text;
       images = imgResult.images;
+      if (msg.inventoryImages && msg.inventoryImages.length > 0) {
+        for (const u of msg.inventoryImages) {
+          if (!images.includes(u)) images.push(u);
+        }
+      }
       const vidResult = extractVideos(text);
       text = vidResult.text;
       videoUrls = vidResult.videoUrls;
@@ -549,7 +661,7 @@ export default function AgentSandbox() {
     return (
       <div key={i}>
         {/* Debug block */}
-        {!isUser && (msg.debug || msg.edgeLogs) && showDebug && (
+        {!isUser && showDebug && (msg.debug?.length || msg.edgeLogs?.length || msg.tokenUsage) && (
           <div className="flex justify-start mb-1">
             <DebugBlock debug={msg.debug || []} edgeLogs={msg.edgeLogs} tokenUsage={msg.tokenUsage} />
           </div>
@@ -572,6 +684,13 @@ export default function AgentSandbox() {
                 {msg.userAttachments!.map((att, j) => (
                   <UserMediaPreview key={j} attachment={att} />
                 ))}
+              </div>
+            )}
+
+            {/* Vídeo institucional (welcome_video do Chat ao Vivo) */}
+            {!isUser && msg.metadata?.type === "welcome_video" && msg.metadata?.video_url && (
+              <div className="mb-1 -mx-1 -mt-0.5">
+                <VideoPlayer src={msg.metadata.video_url} />
               </div>
             )}
 
@@ -615,11 +734,33 @@ export default function AgentSandbox() {
               </div>
             )}
 
-            {/* Text content */}
-            {text.trim() && (
+            {/* Text content (oculta apenas placeholder "[Vídeo institucional enviado]" do delivery) */}
+            {text.trim() && text.trim() !== "[Vídeo institucional enviado]" && (
               !isUser ? (
                 <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:my-0.5 [&>p]:leading-relaxed text-[13px]">
-                  <ReactMarkdown>{text}</ReactMarkdown>
+                  <ReactMarkdown
+                    components={{
+                      img: ({ src, alt }) => {
+                        if (!src) return null;
+                        if (images.some((u) => imageUrlsEquivalent(u, src))) {
+                          return null;
+                        }
+                        return (
+                          <img
+                            src={src}
+                            alt={typeof alt === "string" ? alt : ""}
+                            loading="lazy"
+                            className="max-h-48 rounded-md object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = "none";
+                            }}
+                          />
+                        );
+                      },
+                    }}
+                  >
+                    {text}
+                  </ReactMarkdown>
                 </div>
               ) : isAudioTranscription ? (
                 <div className="flex items-center gap-2">
@@ -781,6 +922,14 @@ export default function AgentSandbox() {
 
           <div className="space-y-1.5 py-4">
             {messages.map((msg, i) => renderBubble(msg, i))}
+
+            {showDebug && messages.some((m) => !m.role || m.role === "assistant") && !messages.some((m) => m.role === "assistant" && (m.debug?.length || m.edgeLogs?.length || m.tokenUsage)) && (
+              <div className="flex justify-start mb-1">
+                <div className="text-[10px] text-muted-foreground bg-muted/50 border border-border rounded-lg px-3 py-2">
+                  Debug ativado. O debug (modelo, tokens, tools) aparece abaixo de cada resposta do agente. Envie uma mensagem para ver.
+                </div>
+              </div>
+            )}
 
             {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
               <div className="flex justify-start mb-1">

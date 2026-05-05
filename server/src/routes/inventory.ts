@@ -1,5 +1,12 @@
+import { randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
+import {
+  requireAuthenticated,
+  canAccessTenant,
+  canManageTenant,
+} from "../services/authorization.js";
+import { probeVideoUrl } from "../services/video-url-probe.js";
 
 const LISTING_URL = "https://pplmotors.com.br/Veiculos";
 const PPL_MOTORS_TENANT_ID = "bc4a1dc9-a205-4b4b-9b6c-47bf677a2728";
@@ -128,7 +135,310 @@ function parseDetailPage(html: string): { photos: string[]; features: string[]; 
   return { photos, features, optionals };
 }
 
+/** Superadmin ou tenant_admin do tenant do recurso. */
+function canManageInventoryTenant(
+  auth: NonNullable<Awaited<ReturnType<typeof requireAuthenticated>>>,
+  tenantId: string
+): boolean {
+  if (auth.role === "superadmin") return true;
+  return canManageTenant(auth, tenantId);
+}
+
 export async function inventoryRoutes(fastify: FastifyInstance) {
+  const supabase = createNexusClient();
+
+  fastify.get(
+    "/inventory",
+    async (
+      req: FastifyRequest<{
+        Querystring: {
+          tenant_id?: string;
+          status?: string;
+          limit?: string;
+          offset?: string;
+          search?: string;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
+
+        const { tenant_id, status, limit = "100", offset = "0", search } = req.query;
+
+        if (auth.role !== "superadmin" && !tenant_id) {
+          return reply.status(400).send({ error: "tenant_id is required" });
+        }
+
+        if (tenant_id && !canAccessTenant(auth, tenant_id)) {
+          return reply.status(403).send({ error: "forbidden_tenant_access" });
+        }
+
+        let query = supabase
+          .from("inventory")
+          .select(
+            "id, external_id, tenant_id, brand, model, version, year, price, mileage, color, transmission, fuel_type, photo_url, photos, detail_url, description, status, video_details, raw_data, last_synced_at, created_at, updated_at, tenants(name)",
+            { count: "exact" }
+          )
+          .order("created_at", { ascending: false });
+
+        if (tenant_id) query = query.eq("tenant_id", tenant_id);
+        if (status && status !== "all") query = query.eq("status", status);
+
+        if (search?.trim()) {
+          const safe = search.trim().replace(/,/g, " ");
+          const term = `%${safe}%`;
+          query = query.or(`brand.ilike.${term},model.ilike.${term},version.ilike.${term}`);
+        }
+
+        const limitNum = Math.min(parseInt(limit, 10) || 100, 500);
+        const offsetNum = Math.max(0, parseInt(offset, 10) || 0);
+        query = query.range(offsetNum, offsetNum + limitNum - 1);
+
+        const { data, error, count } = await query;
+        if (error) throw error;
+
+        return reply.send({ data: data ?? [], total: count ?? 0 });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("inventory list error:", err);
+        return reply.status(500).send({ error: message });
+      }
+    }
+  );
+
+  fastify.post("/inventory/video-probe", async (req: FastifyRequest, reply: FastifyReply) => {
+    const auth = await requireAuthenticated(req, reply);
+    if (!auth) return;
+
+    const body = req.body as { url?: string; tenant_id?: string };
+    const url = typeof body.url === "string" ? body.url.trim() : "";
+    const tenantId = typeof body.tenant_id === "string" ? body.tenant_id.trim() : "";
+    if (tenantId && !canAccessTenant(auth, tenantId)) {
+      return reply.status(403).send({ error: "forbidden_tenant_access" });
+    }
+
+    const result = await probeVideoUrl(url);
+    return reply.send(result);
+  });
+
+  fastify.post("/inventory", async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const auth = await requireAuthenticated(req, reply);
+      if (!auth) return;
+
+      const body = req.body as Record<string, unknown>;
+      const tenantId = typeof body.tenant_id === "string" ? body.tenant_id.trim() : "";
+      if (!tenantId) {
+        return reply.status(400).send({ error: "tenant_id is required" });
+      }
+      if (!canAccessTenant(auth, tenantId)) {
+        return reply.status(403).send({ error: "forbidden_tenant_access" });
+      }
+      if (!canManageInventoryTenant(auth, tenantId)) {
+        return reply.status(403).send({ error: "forbidden", detail: "manage_required" });
+      }
+
+      const brand = String(body.brand ?? "").trim();
+      const model = String(body.model ?? "").trim();
+      if (!brand || !model) {
+        return reply.status(400).send({ error: "brand and model are required" });
+      }
+
+      const status =
+        typeof body.status === "string" && ["available", "sold", "reserved"].includes(body.status)
+          ? body.status
+          : "available";
+
+      const insert = {
+        tenant_id: tenantId,
+        external_id: `manual-${randomUUID()}`,
+        brand,
+        model,
+        version: body.version != null && body.version !== "" ? String(body.version).trim() : null,
+        year: body.year != null && body.year !== "" ? Number(body.year) : null,
+        price: body.price != null && body.price !== "" ? Number(body.price) : null,
+        mileage: body.mileage != null && body.mileage !== "" ? Number(body.mileage) : null,
+        color: body.color != null && body.color !== "" ? String(body.color).trim() : null,
+        transmission:
+          body.transmission != null && body.transmission !== ""
+            ? String(body.transmission).trim()
+            : null,
+        fuel_type:
+          body.fuel_type != null && body.fuel_type !== "" ? String(body.fuel_type).trim() : null,
+        photo_url:
+          body.photo_url != null && body.photo_url !== "" ? String(body.photo_url).trim() : null,
+        detail_url:
+          body.detail_url != null && body.detail_url !== "" ? String(body.detail_url).trim() : null,
+        description:
+          body.description != null && body.description !== ""
+            ? String(body.description).trim()
+            : null,
+        status,
+        photos: null,
+        raw_data: null,
+        last_synced_at: null,
+      };
+
+      const { data, error } = await supabase
+        .from("inventory")
+        .insert(insert)
+        .select(
+          "id, external_id, tenant_id, brand, model, version, year, price, mileage, color, transmission, fuel_type, photo_url, photos, detail_url, description, status, video_details, raw_data, last_synced_at, created_at, updated_at"
+        )
+        .single();
+
+      if (error) throw error;
+      return reply.status(201).send(data);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("inventory create error:", err);
+      return reply.status(500).send({ error: message });
+    }
+  });
+
+  fastify.patch("/inventory/:id", async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    try {
+      const auth = await requireAuthenticated(req, reply);
+      if (!auth) return;
+
+      const id = req.params.id?.trim();
+      if (!id) return reply.status(400).send({ error: "id is required" });
+
+      const { data: existing, error: fetchErr } = await supabase
+        .from("inventory")
+        .select("tenant_id")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (fetchErr) throw fetchErr;
+      if (!existing?.tenant_id) {
+        return reply.status(404).send({ error: "not_found" });
+      }
+
+      if (!canAccessTenant(auth, existing.tenant_id)) {
+        return reply.status(403).send({ error: "forbidden_tenant_access" });
+      }
+      if (!canManageInventoryTenant(auth, existing.tenant_id)) {
+        return reply.status(403).send({ error: "forbidden", detail: "manage_required" });
+      }
+
+      const body = req.body as Record<string, unknown>;
+      const updates: Record<string, unknown> = {};
+
+      if (body.brand !== undefined) updates.brand = String(body.brand ?? "").trim();
+      if (body.model !== undefined) updates.model = String(body.model ?? "").trim();
+      if (body.version !== undefined) {
+        updates.version = body.version === null || body.version === "" ? null : String(body.version).trim();
+      }
+      if (body.year !== undefined) {
+        updates.year = body.year === null || body.year === "" ? null : Number(body.year);
+      }
+      if (body.price !== undefined) {
+        updates.price = body.price === null || body.price === "" ? null : Number(body.price);
+      }
+      if (body.mileage !== undefined) {
+        updates.mileage = body.mileage === null || body.mileage === "" ? null : Number(body.mileage);
+      }
+      if (body.color !== undefined) {
+        updates.color = body.color === null || body.color === "" ? null : String(body.color).trim();
+      }
+      if (body.transmission !== undefined) {
+        updates.transmission =
+          body.transmission === null || body.transmission === ""
+            ? null
+            : String(body.transmission).trim();
+      }
+      if (body.fuel_type !== undefined) {
+        updates.fuel_type =
+          body.fuel_type === null || body.fuel_type === "" ? null : String(body.fuel_type).trim();
+      }
+      if (body.photo_url !== undefined) {
+        updates.photo_url =
+          body.photo_url === null || body.photo_url === "" ? null : String(body.photo_url).trim();
+      }
+      if (body.detail_url !== undefined) {
+        updates.detail_url =
+          body.detail_url === null || body.detail_url === "" ? null : String(body.detail_url).trim();
+      }
+      if (body.description !== undefined) {
+        updates.description =
+          body.description === null || body.description === ""
+            ? null
+            : String(body.description).trim();
+      }
+      if (body.status !== undefined) {
+        const s = String(body.status ?? "").trim();
+        if (!["available", "sold", "reserved"].includes(s)) {
+          return reply.status(400).send({ error: "invalid status" });
+        }
+        updates.status = s;
+      }
+      if (body.video_details !== undefined) {
+        updates.video_details =
+          body.video_details === null || body.video_details === ""
+            ? null
+            : String(body.video_details).trim();
+      }
+
+      updates.updated_at = new Date().toISOString();
+
+      const { data, error } = await supabase
+        .from("inventory")
+        .update(updates)
+        .eq("id", id)
+        .select(
+          "id, external_id, tenant_id, brand, model, version, year, price, mileage, color, transmission, fuel_type, photo_url, photos, detail_url, description, status, video_details, raw_data, last_synced_at, created_at, updated_at"
+        )
+        .single();
+
+      if (error) throw error;
+      return reply.send(data);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("inventory patch error:", err);
+      return reply.status(500).send({ error: message });
+    }
+  });
+
+  fastify.delete("/inventory/:id", async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    try {
+      const auth = await requireAuthenticated(req, reply);
+      if (!auth) return;
+
+      const id = req.params.id?.trim();
+      if (!id) return reply.status(400).send({ error: "id is required" });
+
+      const { data: existing, error: fetchErr } = await supabase
+        .from("inventory")
+        .select("tenant_id")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (fetchErr) throw fetchErr;
+      if (!existing?.tenant_id) {
+        return reply.status(404).send({ error: "not_found" });
+      }
+
+      if (!canAccessTenant(auth, existing.tenant_id)) {
+        return reply.status(403).send({ error: "forbidden_tenant_access" });
+      }
+      if (!canManageInventoryTenant(auth, existing.tenant_id)) {
+        return reply.status(403).send({ error: "forbidden", detail: "manage_required" });
+      }
+
+      const { error } = await supabase.from("inventory").delete().eq("id", id);
+      if (error) throw error;
+
+      return reply.status(204).send();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("inventory delete error:", err);
+      return reply.status(500).send({ error: message });
+    }
+  });
+
   fastify.post("/inventory/sync", async (req: FastifyRequest, reply: FastifyReply) => {
     const nexusAuth = (req.headers["x-nexus-auth"] as string) || "";
     const supabase = createNexusClient(nexusAuth);

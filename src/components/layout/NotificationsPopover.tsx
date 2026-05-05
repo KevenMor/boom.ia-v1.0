@@ -9,8 +9,14 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useNotifications, getReadIds, markAsRead, markAllAsRead, type AppNotification } from "@/hooks/useNotifications";
 import { cn } from "@/lib/utils";
+import { Ms } from "@/components/ui/material-symbol";
 
-export function NotificationsPopover() {
+interface NotificationsPopoverProps {
+  /** Botão inspirado no painel Stitch (ícone Material + chrome claro). */
+  premiumDash?: boolean;
+}
+
+export function NotificationsPopover({ premiumDash = false }: NotificationsPopoverProps) {
   const { data: notifications = [], isLoading } = useNotifications();
   const [readIds, setReadIds] = useState<Set<string>>(getReadIds);
   const [open, setOpen] = useState(false);
@@ -48,12 +54,20 @@ export function NotificationsPopover() {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
-          variant="ghost"
+          variant={premiumDash ? "outline" : "ghost"}
           size="icon"
-          className="relative h-8 w-8 text-muted-foreground hover:text-foreground"
+          className={
+            premiumDash
+              ? "relative h-10 w-10 rounded-xl border border-slate-200/60 bg-white text-[#64748b] shadow-sm transition-all duration-300 hover:border-slate-200/80 hover:text-[#7c3aed] hover:shadow-md active:scale-95 dark:border-border dark:bg-card dark:text-muted-foreground"
+              : "relative h-8 w-8 text-muted-foreground hover:text-foreground"
+          }
           title="Notificações"
         >
-          <Bell className="h-4 w-4" />
+          {premiumDash ? (
+            <Ms name="notifications" className={cn("!text-[22px]", unreadCount > 0 && "relative")} />
+          ) : (
+            <Bell className="h-4 w-4" />
+          )}
           {unreadCount > 0 && (
             <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
               {unreadCount > 9 ? "9+" : unreadCount}

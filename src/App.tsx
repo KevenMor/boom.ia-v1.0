@@ -3,15 +3,19 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useFirstEnabledRoute } from "@/hooks/useFirstEnabledRoute";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { TenantProvider } from "@/contexts/TenantContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { ModuleRoute } from "@/components/ModuleRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import Tenants from "@/pages/Tenants";
 import EditTenant from "@/pages/EditTenant";
+import UsersManagementPage from "@/pages/UsersManagementPage";
+import TenantPermissionsPage from "@/pages/TenantPermissionsPage";
 import Agents from "@/pages/Agents";
 import EditAgent from "@/pages/EditAgent";
 import AgentSandbox from "@/pages/AgentSandbox";
@@ -26,11 +30,37 @@ import SettingsPage from "@/pages/SettingsPage";
 import PromptsPage from "@/pages/PromptsPage";
 import ProfilePage from "@/pages/ProfilePage";
 import CalendarPage from "@/pages/CalendarPage";
+import FollowUpsPage from "@/pages/FollowUpsPage";
+import InventoryPage from "@/pages/InventoryPage";
+import OccurrencesPage from "@/pages/OccurrencesPage";
+import ServiceCatalogPage from "@/pages/ServiceCatalogPage";
+import CatalogProfessionalsPage from "@/pages/CatalogProfessionalsPage";
+import EditCatalogItemPage from "@/pages/EditCatalogItemPage";
+import ContactsPage from "@/pages/ContactsPage";
+import ClientsPage from "@/pages/ClientsPage";
+import ContactProfilePage from "@/pages/ContactProfilePage";
+import FinanceiroPage from "@/pages/FinanceiroPage";
 import TokenAnalytics from "@/pages/TokenAnalytics";
 import PublicSandbox from "@/pages/PublicSandbox";
 import NotFound from "@/pages/NotFound";
+import SuiteGalleriesPage from "@/pages/SuiteGalleriesPage";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,   // Não refaz ao remontar se dados estão em cache
+      staleTime: 1000 * 60 * 10,  // Dados válidos por 10 minutos
+      gcTime: 1000 * 60 * 30,     // Mantém no cache por 30 minutos
+      retry: 1,
+    },
+  },
+});
+
+function RootRedirect() {
+  const firstRoute = useFirstEnabledRoute();
+  return <Navigate to={firstRoute} replace />;
+}
 
 const App = () => (
   <ThemeProvider attribute="class" defaultTheme="dark" storageKey="boomia-theme">
@@ -44,7 +74,7 @@ const App = () => (
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/demo/:agentId" element={<PublicSandbox />} />
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/" element={<RootRedirect />} />
             <Route
               element={
                 <ProtectedRoute>
@@ -52,23 +82,255 @@ const App = () => (
                 </ProtectedRoute>
               }
             >
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/tenants" element={<Tenants />} />
-              <Route path="/tenants/:tenantId/edit" element={<EditTenant />} />
-              <Route path="/agents" element={<Agents />} />
-              <Route path="/agents/:agentId/edit" element={<EditAgent />} />
-              <Route path="/agents/:agentId/sandbox" element={<AgentSandbox />} />
-              <Route path="/conversations" element={<Conversations />} />
-              <Route path="/calendar" element={<CalendarPage />} />
-              <Route path="/tools" element={<Tools />} />
-              <Route path="/tools/:toolId/edit" element={<EditTool />} />
-              <Route path="/providers" element={<Providers />} />
-              <Route path="/providers/:providerId/edit" element={<EditProvider />} />
-              <Route path="/analytics/tokens" element={<TokenAnalytics />} />
-              <Route path="/monitoring" element={<Monitoring />} />
-              <Route path="/audit" element={<Audit />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="/prompts" element={<PromptsPage />} />
+              <Route path="/dashboard/v2" element={<Navigate to="/dashboard" replace />} />
+              <Route
+                path="/dashboard"
+                element={
+                  <ModuleRoute moduleKey="dashboard">
+                    <Dashboard />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/tenants"
+                element={
+                  <ModuleRoute moduleKey="tenants" requiredRoles={["superadmin"]}>
+                    <Tenants />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/tenants/:tenantId/edit"
+                element={
+                  <ModuleRoute moduleKey="tenants" requiredRoles={["superadmin"]}>
+                    <EditTenant />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/users"
+                element={
+                  <ModuleRoute moduleKey="tenants" requiredRoles={["superadmin"]}>
+                    <UsersManagementPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/permissions"
+                element={
+                  <ModuleRoute moduleKey="tenants" requiredRoles={["superadmin"]}>
+                    <TenantPermissionsPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/agents"
+                element={
+                  <ModuleRoute moduleKey="agents">
+                    <Agents />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/agents/:agentId/edit"
+                element={
+                  <ModuleRoute moduleKey="agents">
+                    <EditAgent />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/agents/:agentId/sandbox"
+                element={
+                  <ModuleRoute moduleKey="agents">
+                    <AgentSandbox />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/conversations"
+                element={
+                  <ModuleRoute moduleKey="conversations">
+                    <Conversations />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/calendar"
+                element={
+                  <ModuleRoute moduleKey="calendar">
+                    <CalendarPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/followups"
+                element={
+                  <ModuleRoute moduleKey="followups">
+                    <FollowUpsPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/inventory"
+                element={
+                  <ModuleRoute moduleKey="inventory">
+                    <InventoryPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/occurrences"
+                element={
+                  <ModuleRoute moduleKey="occurrences">
+                    <OccurrencesPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/galeria"
+                element={
+                  <ModuleRoute moduleKey="suite_galleries">
+                    <SuiteGalleriesPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/catalog"
+                element={
+                  <ModuleRoute moduleKey="service_catalog">
+                    <ServiceCatalogPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/catalog/professionals"
+                element={
+                  <ModuleRoute moduleKey="service_catalog">
+                    <CatalogProfessionalsPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/catalog/items/:itemId"
+                element={
+                  <ModuleRoute moduleKey="service_catalog">
+                    <EditCatalogItemPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/contacts"
+                element={
+                  <ModuleRoute moduleKey="contacts">
+                    <ContactsPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/clients"
+                element={
+                  <ModuleRoute moduleKey="clients">
+                    <ClientsPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/contacts/:contactId"
+                element={
+                  <ModuleRoute moduleKey="contacts">
+                    <ContactProfilePage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/clients/:contactId"
+                element={
+                  <ModuleRoute moduleKey="clients">
+                    <ContactProfilePage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/financeiro"
+                element={
+                  <ModuleRoute moduleKey="financeiro">
+                    <FinanceiroPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/tools"
+                element={
+                  <ModuleRoute moduleKey="tools">
+                    <Tools />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/tools/:toolId/edit"
+                element={
+                  <ModuleRoute moduleKey="tools">
+                    <EditTool />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/providers"
+                element={
+                  <ModuleRoute moduleKey="providers">
+                    <Providers />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/providers/:providerId/edit"
+                element={
+                  <ModuleRoute moduleKey="providers">
+                    <EditProvider />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/analytics/tokens"
+                element={
+                  <ModuleRoute moduleKey="analytics_tokens">
+                    <TokenAnalytics />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/monitoring"
+                element={
+                  <ModuleRoute moduleKey="monitoring">
+                    <Monitoring />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/audit"
+                element={
+                  <ModuleRoute moduleKey="audit">
+                    <Audit />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/settings"
+                element={
+                  <ModuleRoute moduleKey="settings">
+                    <SettingsPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/prompts"
+                element={
+                  <ModuleRoute moduleKey="prompts">
+                    <PromptsPage />
+                  </ModuleRoute>
+                }
+              />
               <Route path="/profile" element={<ProfilePage />} />
             </Route>
             <Route path="*" element={<NotFound />} />

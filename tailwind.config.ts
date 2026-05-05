@@ -14,9 +14,12 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ["'Sora'", "'DM Sans'", "system-ui", "-apple-system", "sans-serif"],
-        serif: ["'DM Serif Display'", "Georgia", "serif"],
-        mono: ["'DM Mono'", "'IBM Plex Mono'", "'Menlo'", "monospace"],
+        sans: ["Poppins", "system-ui", "-apple-system", "sans-serif"],
+        /** Painel Stitch — alinhado ao HTML de referência (não misturar com Poppins). */
+        jakarta: ['"Plus Jakarta Sans"', "Poppins", "system-ui", "sans-serif"],
+        cw: ["Inter", "ui-sans-serif", "system-ui", "-apple-system", "sans-serif"],
+        serif: ["Georgia", "serif"],
+        mono: ["'IBM Plex Mono'", "Menlo", "monospace"],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -80,6 +83,20 @@ export default {
           "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
+        },
+        /* Chatwoot-scoped tokens — parent must have .ds-chatwoot */
+        cw: {
+          brand: "var(--cw-brand)",
+          "ruby-8": "var(--cw-ruby-8)",
+          "ruby-9": "var(--cw-ruby-9)",
+          "slate-10": "var(--cw-slate-10)",
+          "slate-11": "var(--cw-slate-11)",
+          "slate-12": "var(--cw-slate-12)",
+          weak: "var(--cw-weak)",
+          "solid-2": "var(--cw-solid-2)",
+          surface: "var(--cw-surface)",
+          elevated: "var(--cw-elevated)",
+          alpha: "var(--cw-alpha)",
         },
       },
       borderRadius: {

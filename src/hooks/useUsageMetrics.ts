@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { nexusDb } from "@/integrations/supabase/nexus-client";
+import { fetchAgentTenantMap, fetchAgentTokenUsageInRange } from "@/lib/fetch-agent-token-usage";
 
 export interface UsageDailySummary {
   day: string;
@@ -46,6 +47,9 @@ interface AgentTokenUsageRow {
   metadata: Record<string, unknown> | null;
 }
 
+const USAGE_SELECT_FULL =
+  "id, created_at, agent_id, conversation_id, message_role, model, provider, prompt_tokens, completion_tokens, total_tokens, metadata";
+
 function extractToolCallsCount(metadata: Record<string, unknown> | null, messageRole: string): number {
   if (!metadata) return 0;
   const dispatcher = metadata.dispatcher as Record<string, unknown> | undefined;
@@ -57,45 +61,30 @@ export function useUsageDailySummary(tenantId?: string | null) {
   return useQuery({
     queryKey: ["usage-daily-summary", tenantId ?? "all"],
     queryFn: async () => {
-      const twoDaysAgo = new Date();
-      twoDaysAgo.setDate(twoDaysAgo.getDate() - 14);
+      const since = new Date();
+      since.setDate(since.getDate() - 30);
 
-      let query = nexusDb
-        .from("agent_token_usage")
-        .select("id, created_at, agent_id, message_role, model, provider, prompt_tokens, completion_tokens, total_tokens, metadata")
-        .gte("created_at", twoDaysAgo.toISOString())
-        .order("created_at", { ascending: false })
-        .limit(5000);
-
-      const { data: rows, error } = await query;
-      if (error) throw error;
-
-      const usage = (rows ?? []) as AgentTokenUsageRow[];
+      const raw = await fetchAgentTokenUsageInRange(since, tenantId, {
+        columns: USAGE_SELECT_FULL,
+        globalLimit: 80_000,
+      });
+      const usage = raw as AgentTokenUsageRow[];
 
       if (usage.length === 0) return [] as UsageDailySummary[];
 
-      const agentIds = [...new Set(usage.map((r) => r.agent_id).filter(Boolean))];
-      const { data: agents } = await nexusDb
-        .from("agents")
-        .select("id, tenant_id")
-        .in("id", agentIds);
-
-      const agentToTenant = new Map<string, string>();
-      for (const a of agents ?? []) {
-        agentToTenant.set(a.id, (a as { tenant_id: string }).tenant_id ?? "");
-      }
-
-      let filtered = usage;
+      let agentToTenant = new Map<string, string>();
       if (tenantId) {
-        const tenantAgentIds = new Set(
-          (agents ?? []).filter((a: { tenant_id: string }) => a.tenant_id === tenantId).map((a: { id: string }) => a.id)
-        );
-        filtered = usage.filter((r) => tenantAgentIds.has(r.agent_id));
+        for (const r of usage) {
+          if (r.agent_id) agentToTenant.set(r.agent_id, tenantId);
+        }
+      } else {
+        const agentIds = [...new Set(usage.map((r) => r.agent_id).filter(Boolean))];
+        agentToTenant = await fetchAgentTenantMap(agentIds);
       }
 
       const tz = "America/Sao_Paulo";
       const byKey = new Map<string, UsageDailySummary>();
-      for (const row of filtered) {
+      for (const row of usage) {
         const day = new Date(row.created_at).toLocaleDateString("en-CA", { timeZone: tz });
         const tenantIdVal = agentToTenant.get(row.agent_id) ?? "";
         const key = `${day}|${tenantIdVal}|${row.agent_id}|${row.model ?? ""}|${row.message_role ?? ""}`;
@@ -127,47 +116,35 @@ export function useUsageDailySummary(tenantId?: string | null) {
   });
 }
 
-export function useRecentUsageEvents(limit = 200, tenantId?: string | null) {
+export function useRecentUsageEvents(limit = 4000, tenantId?: string | null) {
   return useQuery({
     queryKey: ["usage-events-recent", limit, tenantId ?? "all"],
     queryFn: async () => {
-      const twoDaysAgo = new Date();
-      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+      const since = new Date();
+      since.setDate(since.getDate() - 35);
 
-      let query = nexusDb
-        .from("agent_token_usage")
-        .select("id, created_at, agent_id, conversation_id, message_role, model, provider, prompt_tokens, completion_tokens, total_tokens, metadata")
-        .gte("created_at", twoDaysAgo.toISOString())
-        .order("created_at", { ascending: false })
-        .limit(1000);
-
-      const { data: rows, error } = await query;
-      if (error) throw error;
-
-      const usage = (rows ?? []) as AgentTokenUsageRow[];
+      const raw = await fetchAgentTokenUsageInRange(since, tenantId, {
+        columns: USAGE_SELECT_FULL,
+        globalLimit: 80_000,
+      });
+      let usage = raw as AgentTokenUsageRow[];
 
       if (usage.length === 0) return [] as UsageEvent[];
 
-      const agentIds = [...new Set(usage.map((r) => r.agent_id).filter(Boolean))];
-      const { data: agents } = await nexusDb
-        .from("agents")
-        .select("id, tenant_id")
-        .in("id", agentIds);
-
-      const agentToTenant = new Map<string, string>();
-      for (const a of agents ?? []) {
-        agentToTenant.set(a.id, (a as { tenant_id: string }).tenant_id ?? "");
-      }
-
-      let filtered = usage;
+      let agentToTenant = new Map<string, string>();
       if (tenantId) {
-        const tenantAgentIds = new Set(
-          (agents ?? []).filter((a: { tenant_id: string }) => a.tenant_id === tenantId).map((a: { id: string }) => a.id)
-        );
-        filtered = usage.filter((r) => tenantAgentIds.has(r.agent_id));
+        for (const r of usage) {
+          if (r.agent_id) agentToTenant.set(r.agent_id, tenantId);
+        }
+      } else {
+        const agentIds = [...new Set(usage.map((r) => r.agent_id).filter(Boolean))];
+        agentToTenant = await fetchAgentTenantMap(agentIds);
       }
 
-      const events: UsageEvent[] = filtered.slice(0, limit).map((row) => ({
+      usage.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      usage = usage.slice(0, limit);
+
+      const events: UsageEvent[] = usage.map((row) => ({
         id: row.id,
         tenant_id: agentToTenant.get(row.agent_id) ?? "",
         agent_id: row.agent_id,

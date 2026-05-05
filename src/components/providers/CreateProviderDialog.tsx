@@ -17,7 +17,14 @@ const presets = [
   { name: "OpenAI", base_url: "https://api.openai.com/v1", model_default: "gpt-4o", icon: "◉" },
   { name: "Anthropic", base_url: "https://api.anthropic.com/v1", model_default: "claude-sonnet-4-20250514", icon: "◈" },
   { name: "Groq", base_url: "https://api.groq.com/openai/v1", model_default: "llama-3.3-70b-versatile", icon: "⚡" },
-];
+  {
+    name: "Ollama",
+    base_url: "http://127.0.0.1:11434/v1",
+    model_default: "llama3.2",
+    icon: "🦙",
+    apiKeyOptional: true as const,
+  },
+] as const;
 
 const schema = z.object({
   name: z.string().min(2, "Nome obrigatório"),
@@ -48,6 +55,9 @@ export function CreateProviderDialog({ open, onOpenChange }: Props) {
     setValue("name", p.name);
     setValue("base_url", p.base_url);
     setValue("model_default", p.model_default);
+    if ("apiKeyOptional" in p && p.apiKeyOptional) {
+      setValue("api_key", "");
+    }
   };
 
   const onSubmit = async (data: FormData) => {
@@ -78,7 +88,7 @@ export function CreateProviderDialog({ open, onOpenChange }: Props) {
           <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
             <Sparkles className="h-3 w-3" /> Presets
           </Label>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {presets.map((p, i) => (
               <button
                 key={p.name}
@@ -113,11 +123,19 @@ export function CreateProviderDialog({ open, onOpenChange }: Props) {
           </div>
           <div className="space-y-2">
             <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">API Key</Label>
+            <p className="text-[11px] text-muted-foreground">
+              Preset Ollama: deixe vazio se for local; a API Boom precisa alcançar o host (Docker: tente{" "}
+              <span className="font-mono">host.docker.internal:11434/v1</span>).
+            </p>
             <div className="relative">
               <Input
                 {...register("api_key")}
                 type={showKey ? "text" : "password"}
-                placeholder="sk-..."
+                placeholder={
+                  selectedPreset !== null && presets[selectedPreset]?.name === "Ollama"
+                    ? "opcional (Ollama local)"
+                    : "sk-..."
+                }
                 className="h-9 bg-background font-mono text-sm pr-10"
                 autoComplete="off"
               />
