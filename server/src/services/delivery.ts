@@ -205,9 +205,12 @@ function getHumanizationConfig(cfg: Record<string, any>): HumanizationConfig {
   };
 }
 
-const MAX_IMAGES_PER_BATCH = 1;
-/** Delay entre cada foto enviada ao Chatwoot/WhatsApp (ms), para dar tempo de processar e evitar que só as primeiras sejam entregues. */
-const IMAGE_BLOCK_DELAY_MS = 2200;
+/**
+ * Delay após cada bloco de imagens antes de continuar com o próximo conteúdo (texto ou outro bloco de imagens).
+ * Necessário porque o Chatwoot/WhatsApp leva tempo para processar e entregar mídia ao cliente; se enviarmos texto
+ * imediatamente após as imagens, o texto chega antes das fotos no WhatsApp do cliente.
+ */
+const POST_IMAGES_TEXT_DELAY_MS = 15000;
 
 interface ConsolidatedPart {
   type: "text" | "images";
@@ -268,7 +271,7 @@ async function replyToChatwoot(
 
 
   const startTime = Date.now();
-  const MAX_BUDGET_MS = 28000;
+  const MAX_BUDGET_MS = 90000;
   const hasTimeBudget = () => Date.now() - startTime < MAX_BUDGET_MS;
 
   const safeDelay = async (ms: number) => {
@@ -291,41 +294,21 @@ async function replyToChatwoot(
     console.warn(`[Deliver] replyToChatwoot: total image URLs to send=${totalImageUrls}, blocks=${consolidated.filter((b) => b.type === "images").length}`);
   }
 
-  // #region agent log
-  fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'delivery.ts:consolidated',message:'consolidated parts order',data:{totalParts:consolidated.length,types:consolidated.map(b=>b.type),imageCounts:consolidated.map(b=>b.imageUrls?.length??0),textPreviews:consolidated.map(b=>b.content?.slice(0,60)??null),totalImageUrls},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
-
-  let prevBlockWasImages = false;
-  let prevImageCount = 0;
-
   for (let i = 0; i < consolidated.length; i++) {
     const block = consolidated[i];
     const isLast = i === consolidated.length - 1;
 
     if (block.type === "images" && block.imageUrls?.length) {
-      const urls = block.imageUrls;
-      // #region agent log
-      fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'delivery.ts:imageBlock',message:'sending image block',data:{blockIdx:i,imageCount:urls.length,budgetRemaining:MAX_BUDGET_MS-(Date.now()-startTime)},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-      // #endregion
-      for (let j = 0; j < urls.length; j++) {
-        await sendChatwootImagesBatch(msgUrl, apiToken, [urls[j]], "");
-        if (j < urls.length - 1) {
-          await safeDelay(applyJitter(IMAGE_BLOCK_DELAY_MS));
-        }
-      }
-      prevBlockWasImages = true;
-      prevImageCount = urls.length;
-      if (!isLast) {
-        const postImageDelay = Math.max(IMAGE_BLOCK_DELAY_MS, prevImageCount * 800);
-        // #region agent log
-        fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'delivery.ts:postImageDelay',message:'waiting after image block before next part',data:{blockIdx:i,postImageDelay,prevImageCount,budgetRemaining:MAX_BUDGET_MS-(Date.now()-startTime)},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
-        // #endregion
-        await new Promise((resolve) => setTimeout(resolve, postImageDelay));
+      // Envia TODAS as fotos do bloco em 1 único POST (FormData com múltiplos attachments[]).
+      // Isso garante que o cliente receba o álbum agrupado, não fotos separadas chegando em ordem caótica.
+      await sendChatwootImagesBatch(msgUrl, apiToken, block.imageUrls, "");
+
+      // Após imagens, aguarda 15s antes de continuar. Mídia leva mais tempo para ser entregue ao
+      // WhatsApp do cliente do que texto; sem essa espera, o próximo texto chegaria antes das fotos.
+      if (!isLast && hasTimeBudget()) {
+        await safeDelay(POST_IMAGES_TEXT_DELAY_MS);
       }
     } else if (block.type === "text" && block.content) {
-      // #region agent log
-      fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'faf2ea'},body:JSON.stringify({sessionId:'faf2ea',location:'delivery.ts:textBlock',message:'sending text block',data:{blockIdx:i,textPreview:block.content.slice(0,60),prevBlockWasImages,prevImageCount,budgetRemaining:MAX_BUDGET_MS-(Date.now()-startTime)},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
-      // #endregion
       if (humanization.typingDelayMs > 0 && hasTimeBudget()) {
         await setChatwootTyping(chatwootUrl, apiToken, accountId, conversationId, "on");
         await safeDelay(applyJitter(humanization.typingDelayMs));
@@ -334,13 +317,13 @@ async function replyToChatwoot(
       if (humanization.typingDelayMs > 0) {
         setChatwootTyping(chatwootUrl, apiToken, accountId, conversationId, "off").catch(() => {});
       }
-      prevBlockWasImages = false;
-      prevImageCount = 0;
-    }
 
-    if (!isLast && hasTimeBudget()) {
-      const gapMs = humanization.blockGapMs > 0 ? applyJitter(humanization.blockGapMs) : 2000;
-      await safeDelay(gapMs);
+      // Gap entre blocos de texto. Não aplicar se o próximo bloco for imagem — a transição
+      // texto→imagem deve ser rápida para o cliente ver o texto introdutório seguido logo das fotos.
+      if (!isLast && consolidated[i + 1]?.type !== "images" && hasTimeBudget()) {
+        const gapMs = humanization.blockGapMs > 0 ? applyJitter(humanization.blockGapMs) : 2000;
+        await safeDelay(gapMs);
+      }
     }
   }
 }

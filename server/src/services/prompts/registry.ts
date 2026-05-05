@@ -23,6 +23,12 @@ import {
   DISPATCHER_PROMPT as PH_DISPATCHER,
   FOLLOWUP_PROMPT as PH_FOLLOWUP,
 } from "./pet-home.js";
+import {
+  SYSTEM_PROMPT as VS_SYSTEM,
+  COMMUNICATION_RULES as VS_COMM_RULES,
+  DISPATCHER_PROMPT as VS_DISPATCHER,
+  FOLLOWUP_PROMPT as VS_FOLLOWUP,
+} from "./vale-suico.js";
 
 /**
  * Configura?�?�o de prompt por tenant.
@@ -42,6 +48,8 @@ interface TenantPromptConfig {
   version: string;
   /** Descri?�?�o para exibi?�?�o no painel */
   description: string;
+  /** Se false, o painel pode marcar o tenant como inativo (opcional no registry em código) */
+  active?: boolean;
 }
 
 /**
@@ -54,7 +62,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: PPL_DISPATCHER,
     followupPrompt: PPL_FOLLOWUP,
     version: "v2.0.0",
-    description: "Ana J??lia ��� SDR PPL Motors (Concession?�ria Sorocaba/SP)",
+    description: "Ana Júlia — SDR PPL Motors (Concessionária Sorocaba/SP)",
   },
   "ppl-motors": {
     systemPrompt: PPL_SYSTEM,
@@ -62,7 +70,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: PPL_DISPATCHER,
     followupPrompt: PPL_FOLLOWUP,
     version: "v2.0.0",
-    description: "Ana J??lia ��� SDR PPL Motors (Concession?�ria Sorocaba/SP)",
+    description: "Ana Júlia — SDR PPL Motors (Concessionária Sorocaba/SP)",
   },
   "instituto-vicentim-maekawa": {
     systemPrompt: IVM_SYSTEM,
@@ -71,9 +79,9 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     followupPrompt: IVM_FOLLOWUP,
     alwaysInjectCommRules: true,
     version: "v1.2.0",
-    description: "Mariana ��� Recepcionista Instituto Vicentim Maekawa (Odontologia Sorocaba/SP)",
+    description: "Mariana — Recepcionista Instituto Vicentim Maekawa (Odontologia Sorocaba/SP)",
   },
-  // Typo variant in database ��� maps to the same config
+  // Typo variant in database — maps to the same config
   "insituto-vicentim-maekawa": {
     systemPrompt: IVM_SYSTEM,
     communicationRules: IVM_COMM_RULES,
@@ -81,7 +89,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     followupPrompt: IVM_FOLLOWUP,
     alwaysInjectCommRules: true,
     version: "v1.2.0",
-    description: "Mariana ��� Recepcionista Instituto Vicentim Maekawa (Odontologia Sorocaba/SP)",
+    description: "Mariana — Recepcionista Instituto Vicentim Maekawa (Odontologia Sorocaba/SP)",
   },
   "pet-home": {
     systemPrompt: PH_SYSTEM,
@@ -90,7 +98,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     followupPrompt: PH_FOLLOWUP,
     alwaysInjectCommRules: true,
     version: "v1.2.1",
-    description: "Tia Ana ��� Atendente Pet Home (Hotel e Creche para Cachorros Sorocaba/SP)",
+    description: "Tia Ana — Atendente Pet Home (Hotel e Creche para Cachorros Sorocaba/SP)",
   },
   "pet-home-tia-erica": {
     systemPrompt: PH_SYSTEM,
@@ -99,7 +107,25 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     followupPrompt: PH_FOLLOWUP,
     alwaysInjectCommRules: true,
     version: "v1.2.1",
-    description: "Tia Ana ��� Atendente Pet Home (Hotel e Creche para Cachorros Sorocaba/SP)",
+    description: "Tia Ana — Atendente Pet Home (Hotel e Creche para Cachorros Sorocaba/SP)",
+  },
+  "vale-suico": {
+    systemPrompt: VS_SYSTEM,
+    communicationRules: VS_COMM_RULES,
+    dispatcherPrompt: VS_DISPATCHER,
+    followupPrompt: VS_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.2.39",
+    description: "Vitória — Consultora de reservas Vale Suíço Resort",
+  },
+  "vale-suico-resort": {
+    systemPrompt: VS_SYSTEM,
+    communicationRules: VS_COMM_RULES,
+    dispatcherPrompt: VS_DISPATCHER,
+    followupPrompt: VS_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.2.39",
+    description: "Vitória — Consultora de reservas Vale Suíço Resort",
   },
 };
 
