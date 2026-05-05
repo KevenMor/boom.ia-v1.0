@@ -29,6 +29,42 @@ import {
   DISPATCHER_PROMPT as VS_DISPATCHER,
   FOLLOWUP_PROMPT as VS_FOLLOWUP,
 } from "./vale-suico.js";
+import {
+  SYSTEM_PROMPT as DV_SYSTEM,
+  COMMUNICATION_RULES as DV_COMM_RULES,
+  DISPATCHER_PROMPT as DV_DISPATCHER,
+  FOLLOWUP_PROMPT as DV_FOLLOWUP,
+} from "./durce-vita.js";
+import {
+  SYSTEM_PROMPT as CI_SYSTEM,
+  COMMUNICATION_RULES as CI_COMM_RULES,
+  DISPATCHER_PROMPT as CI_DISPATCHER,
+  FOLLOWUP_PROMPT as CI_FOLLOWUP,
+} from "./contabilidade-ideal.js";
+import {
+  SYSTEM_PROMPT as CO_SYSTEM,
+  COMMUNICATION_RULES as CO_COMM_RULES,
+  DISPATCHER_PROMPT as CO_DISPATCHER,
+  FOLLOWUP_PROMPT as CO_FOLLOWUP,
+} from "./clinica-odonto.js";
+import {
+  SYSTEM_PROMPT as IC_SYSTEM,
+  COMMUNICATION_RULES as IC_COMM_RULES,
+  DISPATCHER_PROMPT as IC_DISPATCHER,
+  FOLLOWUP_PROMPT as IC_FOLLOWUP,
+} from "./imperio-cfc.js";
+import {
+  SYSTEM_PROMPT as AI_SYSTEM,
+  COMMUNICATION_RULES as AI_COMM_RULES,
+  DISPATCHER_PROMPT as AI_DISPATCHER,
+  FOLLOWUP_PROMPT as AI_FOLLOWUP,
+} from "./autoescola-ideal.js";
+import {
+  SYSTEM_PROMPT as DI_SYSTEM,
+  COMMUNICATION_RULES as DI_COMM_RULES,
+  DISPATCHER_PROMPT as DI_DISPATCHER,
+  FOLLOWUP_PROMPT as DI_FOLLOWUP,
+} from "./dr-iuri.js";
 
 /**
  * Configura?�?�o de prompt por tenant.
@@ -126,6 +162,106 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     alwaysInjectCommRules: true,
     version: "v1.2.39",
     description: "Vitória — Consultora de reservas Vale Suíço Resort",
+  },
+  /** Slugs alinhados ao cabeçalho de durce-vita.ts */
+  "durce-vita": {
+    systemPrompt: DV_SYSTEM,
+    communicationRules: DV_COMM_RULES,
+    dispatcherPrompt: DV_DISPATCHER,
+    followupPrompt: DV_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.2.1",
+    description: "Juliana — Recepcionista Clínica Odontológica Durce Vita (São Paulo/SP)",
+  },
+  "durce-vitta": {
+    systemPrompt: DV_SYSTEM,
+    communicationRules: DV_COMM_RULES,
+    dispatcherPrompt: DV_DISPATCHER,
+    followupPrompt: DV_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.2.1",
+    description: "Juliana — Recepcionista Clínica Odontológica Durce Vita (São Paulo/SP)",
+  },
+  "eliane-durce": {
+    systemPrompt: DV_SYSTEM,
+    communicationRules: DV_COMM_RULES,
+    dispatcherPrompt: DV_DISPATCHER,
+    followupPrompt: DV_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.2.1",
+    description: "Juliana — Recepcionista Clínica Odontológica Durce Vita (São Paulo/SP)",
+  },
+  "eliane-durce-vitta": {
+    systemPrompt: DV_SYSTEM,
+    communicationRules: DV_COMM_RULES,
+    dispatcherPrompt: DV_DISPATCHER,
+    followupPrompt: DV_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.2.1",
+    description: "Juliana — Recepcionista Clínica Odontológica Durce Vita (São Paulo/SP)",
+  },
+  "contabilidade-ideal": {
+    systemPrompt: CI_SYSTEM,
+    communicationRules: CI_COMM_RULES,
+    dispatcherPrompt: CI_DISPATCHER,
+    followupPrompt: CI_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.0",
+    description: "Vitória — Lead Converter Grupo Ideal (Contabilidade / IRPF)",
+  },
+  "clinica-odonto-generica": {
+    systemPrompt: CO_SYSTEM,
+    communicationRules: CO_COMM_RULES,
+    dispatcherPrompt: CO_DISPATCHER,
+    followupPrompt: CO_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.0.0",
+    description: "Recepcionista — Clínica odontológica genérica (template)",
+  },
+  "imperio": {
+    systemPrompt: IC_SYSTEM,
+    communicationRules: IC_COMM_RULES,
+    dispatcherPrompt: IC_DISPATCHER,
+    followupPrompt: IC_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v2.0",
+    description: "Roberta — SDR Autoescola Império CFC (Sorocaba/SP)",
+  },
+  "imperio-cfc": {
+    systemPrompt: IC_SYSTEM,
+    communicationRules: IC_COMM_RULES,
+    dispatcherPrompt: IC_DISPATCHER,
+    followupPrompt: IC_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v2.0",
+    description: "Roberta — SDR Autoescola Império CFC (Sorocaba/SP)",
+  },
+  "ideal": {
+    systemPrompt: AI_SYSTEM,
+    communicationRules: AI_COMM_RULES,
+    dispatcherPrompt: AI_DISPATCHER,
+    followupPrompt: AI_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v8.5",
+    description: "Bia — SDR Autoescola Ideal (Sorocaba/SP)",
+  },
+  "autoescola-ideal": {
+    systemPrompt: AI_SYSTEM,
+    communicationRules: AI_COMM_RULES,
+    dispatcherPrompt: AI_DISPATCHER,
+    followupPrompt: AI_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v8.5",
+    description: "Bia — SDR Autoescola Ideal (Sorocaba/SP)",
+  },
+  "dr-iuri": {
+    systemPrompt: DI_SYSTEM,
+    communicationRules: DI_COMM_RULES,
+    dispatcherPrompt: DI_DISPATCHER,
+    followupPrompt: DI_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.0",
+    description: "Camila — Assistente Dr. Iuri (Otomodelação Salvador/BA)",
   },
 };
 
