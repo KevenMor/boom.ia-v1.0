@@ -59,8 +59,10 @@
     --sidebar-border: 222 40% 16%;
     --sidebar-ring: 174 99% 42%;
 
-    font-family: Poppins, system-ui, -apple-system, sans-serif;
-    font-size: 0.8125rem;
+    /* Corpo = mock Stitch: Plus Jakarta Sans + ~15px / peso médio (body-md) */
+    font-family: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+    font-size: 15px;
+    font-weight: 500;
   }
 
   .dark {
@@ -127,7 +129,7 @@
   }
 
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background text-foreground antialiased font-sans text-body-md;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     position: relative;
@@ -138,7 +140,7 @@
     z-index: 1;
   }
 
-  /* Google Stitch UI — mesmo bloco dos exports HTML */
+  /* Material Symbols — intervalo de peso como no HTML de referência */
   .material-symbols-outlined {
     font-family: "Material Symbols Outlined", system-ui, sans-serif;
     font-weight: normal;
@@ -232,16 +234,16 @@
     @apply absolute left-0 top-3 bottom-3 w-[3px] rounded-full;
   }
 
-  /* Mono number styling */
+  /* Métricas — mesma família do shell Stitch */
   .metric-value {
-    font-family: Poppins, system-ui, sans-serif;
+    font-family: "Plus Jakarta Sans", system-ui, sans-serif;
     letter-spacing: -0.01em;
     font-variant-numeric: tabular-nums;
   }
 
-  /* Heading serif */
+  /* Título legacy — Jakarta em vez de Poppins para não “duas personalidades” */
   .heading-serif {
-    font-family: Poppins, system-ui, sans-serif;
+    font-family: "Plus Jakarta Sans", system-ui, sans-serif;
   }
 
   /* Trend pill — translucent colored background */

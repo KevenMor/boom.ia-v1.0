@@ -106,15 +106,15 @@ function PremiumSection({
           <div className="flex items-center gap-3">
             <Ms
               name="settings"
-              className="!text-[20px] text-[#64748b] transition-colors group-hover:text-[#0f172a] dark:text-slate-400 dark:group-hover:text-slate-100"
+              className="!text-[20px] text-on-surface-variant transition-colors group-hover:text-on-surface dark:text-slate-400 dark:group-hover:text-slate-100"
             />
-            <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#64748b] transition-colors group-hover:text-[#0f172a] dark:text-slate-400 dark:group-hover:text-slate-100">
+            <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-on-surface-variant transition-colors group-hover:text-on-surface dark:text-slate-400 dark:group-hover:text-slate-100">
               {group.label}
             </span>
           </div>
           <Ms
             name={open ? "expand_less" : "expand_more"}
-            className="!text-[18px] text-[#64748b] dark:text-slate-400"
+            className="!text-[18px] text-on-surface-variant dark:text-slate-400"
           />
         </button>
         {open && (
@@ -127,10 +127,10 @@ function PremiumSection({
                   to={item.to}
                   onClick={onLinkClick}
                   className={cn(
-                    "flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-semibold tracking-wide transition-all dark:text-slate-300",
+                    "flex items-center gap-3 rounded-xl px-4 py-2.5 text-label-md transition-all dark:text-slate-300",
                     isActive
                       ? "bg-[#7c3aed]/10 text-[#7c3aed] dark:bg-[#7c3aed]/20 dark:text-[#c4b5fd]"
-                      : "text-[#64748b] hover:bg-slate-50 hover:text-[#0f172a] dark:hover:bg-slate-800/60 dark:hover:text-slate-100",
+                      : "text-on-surface-variant hover:bg-slate-50 hover:text-on-surface dark:hover:bg-slate-800/60 dark:hover:text-slate-100",
                   )}
                 >
                   <Ms name={item.ms} className="!text-[20px]" />
@@ -146,7 +146,7 @@ function PremiumSection({
 
   return (
     <div>
-      <h3 className="mb-3 px-4 text-[11px] font-bold uppercase tracking-[0.1em] text-[#64748b] dark:text-slate-400">
+      <h3 className="mb-3 px-4 text-[11px] font-bold uppercase tracking-[0.1em] text-on-surface-variant dark:text-slate-400">
         {group.label}
       </h3>
       <div className="space-y-1">
@@ -158,10 +158,10 @@ function PremiumSection({
               to={item.to}
               onClick={onLinkClick}
               className={cn(
-                "relative flex cursor-pointer items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-semibold tracking-wide transition-all dark:text-slate-300",
+                "relative flex cursor-pointer items-center gap-3 rounded-xl px-4 py-2.5 text-label-md transition-all dark:text-slate-300",
                 isActive
                   ? "bg-[#7c3aed]/10 text-[#7c3aed] dark:bg-[#7c3aed]/20 dark:text-[#c4b5fd]"
-                  : "text-[#64748b] hover:bg-slate-50 hover:text-[#0f172a] dark:hover:bg-slate-800/60 dark:hover:text-slate-100",
+                  : "text-on-surface-variant hover:bg-slate-50 hover:text-on-surface dark:hover:bg-slate-800/60 dark:hover:text-slate-100",
               )}
             >
               <Ms name={item.ms} className="!text-[20px]" />
@@ -222,7 +222,7 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
         <NavLink
           to="/agents"
           onClick={onLinkClick}
-          className="shadow-glow mb-6 flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#7c3aed] px-4 py-3 text-sm font-semibold tracking-wide text-white shadow-sm transition-all hover:bg-[#6d28d9] hover:shadow-md dark:bg-[#7c3aed] dark:hover:bg-[#6d28d9]"
+          className="shadow-glow mb-6 flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#7c3aed] px-4 py-3 text-label-md text-white shadow-sm transition-all hover:bg-[#6d28d9] hover:shadow-md dark:bg-[#7c3aed] dark:hover:bg-[#6d28d9]"
         >
           <Ms name="add" className="!text-[20px]" />
           Novo Agente
@@ -320,10 +320,10 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
                     )}
                   </div>
                   <div className="flex min-w-0 flex-col">
-                    <span className="truncate text-[13px] font-bold leading-tight text-[#0f172a] dark:text-slate-100">
+                    <span className="truncate text-[13px] font-bold leading-tight text-on-surface dark:text-slate-100">
                       {footerDisplayName}
                     </span>
-                    <span className="truncate text-[10px] font-medium leading-tight text-[#64748b] dark:text-slate-400">
+                    <span className="truncate text-[10px] font-medium leading-tight text-on-surface-variant dark:text-slate-400">
                       {user?.email ?? "—"}
                     </span>
                   </div>
