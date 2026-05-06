@@ -208,11 +208,20 @@ function getHumanizationConfig(cfg: Record<string, any>): HumanizationConfig {
 }
 
 /**
- * Delay após cada bloco de imagens antes de continuar com o próximo conteúdo (texto ou outro bloco de imagens).
- * Necessário porque o Chatwoot/WhatsApp leva tempo para processar e entregar mídia ao cliente; se enviarmos texto
- * imediatamente após as imagens, o texto chega antes das fotos no WhatsApp do cliente.
+ * Estratégia de delays para entrega ordenada no WhatsApp via Chatwoot:
+ *
+ * Texto → Texto    : blockGapMs (padrão 2 s) com typing indicator — humanização.
+ * Texto → Imagens  : PRE_MEDIA_GAP_MS (2 s) — deixa o texto chegar ao WhatsApp antes
+ *                    de começar o download/upload das imagens.
+ * Texto → Vídeo    : PRE_MEDIA_GAP_MS (2 s) — idem.
+ * Imagens → qualquer: POST_IMAGES_DELAY_MS (15 s) — Chatwoot ainda está entregando as
+ *                    imagens ao WhatsApp; sem esse delay o texto seguinte chegaria antes.
+ * Vídeo → qualquer : POST_VIDEO_DELAY_MS (20 s) — vídeos são maiores e levam mais tempo
+ *                    para o Chatwoot concluir a entrega ao WhatsApp; 15 s não é suficiente.
  */
-const POST_IMAGES_TEXT_DELAY_MS = 15000;
+const PRE_MEDIA_GAP_MS = 2000;
+const POST_IMAGES_DELAY_MS = 15000;
+const POST_VIDEO_DELAY_MS = 20000;
 
 interface ConsolidatedPart {
   type: "text" | "images" | "video";
@@ -313,14 +322,10 @@ async function replyToChatwoot(
     const isLast = i === consolidated.length - 1;
 
     if (block.type === "images" && block.imageUrls?.length) {
-      // Envia TODAS as fotos do bloco em 1 único POST (FormData com múltiplos attachments[]).
-      // Isso garante que o cliente receba o álbum agrupado, não fotos separadas chegando em ordem caótica.
       await sendChatwootImagesBatch(msgUrl, apiToken, block.imageUrls, "");
-
-      // Após imagens, aguarda 15s antes de continuar. Mídia leva mais tempo para ser entregue ao
-      // WhatsApp do cliente do que texto; sem essa espera, o próximo texto chegaria antes das fotos.
+      // Após imagens: aguarda 15 s para Chatwoot concluir entrega ao WhatsApp antes do próximo bloco.
       if (!isLast && hasTimeBudget()) {
-        await safeDelay(POST_IMAGES_TEXT_DELAY_MS);
+        await safeDelay(POST_IMAGES_DELAY_MS);
       }
     } else if (block.type === "text" && block.content) {
       if (humanization.typingDelayMs > 0 && hasTimeBudget()) {
@@ -332,10 +337,17 @@ async function replyToChatwoot(
         setChatwootTyping(chatwootUrl, apiToken, accountId, conversationId, "off").catch(() => {});
       }
 
-      // Gap entre blocos de texto. Não aplicar se o próximo bloco for imagem ou vídeo.
-      if (!isLast && consolidated[i + 1]?.type !== "images" && consolidated[i + 1]?.type !== "video" && hasTimeBudget()) {
-        const gapMs = humanization.blockGapMs > 0 ? applyJitter(humanization.blockGapMs) : 2000;
-        await safeDelay(gapMs);
+      if (!isLast && hasTimeBudget()) {
+        const nextType = consolidated[i + 1]?.type;
+        if (nextType === "images" || nextType === "video") {
+          // Pequeno gap antes de mídia: garante que o texto chegou ao WhatsApp antes
+          // de iniciarmos o download/upload da mídia.
+          await safeDelay(applyJitter(PRE_MEDIA_GAP_MS));
+        } else {
+          // Gap normal entre bolhas de texto.
+          const gapMs = humanization.blockGapMs > 0 ? applyJitter(humanization.blockGapMs) : 2000;
+          await safeDelay(gapMs);
+        }
       }
     } else if (block.type === "video" && block.videoUrl) {
       console.warn(`[Deliver] Sending video: ${block.videoUrl.slice(0, 100)}...`);
@@ -344,8 +356,10 @@ async function replyToChatwoot(
         console.warn("[Deliver] Video send failed, falling back to text URL");
         await sendChatwootTextMessage(msgUrl, apiToken, block.videoUrl);
       }
+      // Após vídeo: aguarda 20 s (mais que imagens — arquivo maior, Chatwoot leva mais
+      // tempo para concluir a entrega ao WhatsApp) antes do próximo bloco.
       if (!isLast && hasTimeBudget()) {
-        await safeDelay(POST_IMAGES_TEXT_DELAY_MS);
+        await safeDelay(POST_VIDEO_DELAY_MS);
       }
     }
   }
