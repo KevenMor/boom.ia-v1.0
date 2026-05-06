@@ -1,3 +1,21 @@
+function extractVideoUrlsFromText(text: string): { textOnly: string; videoUrls: string[] } {
+  const videoUrls: string[] = [];
+  const lines = text.split(/\r?\n/);
+  const remainingLines: string[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^https?:\/\/[^\s]+\.(mp4|webm|mov)(\?[^\s]*)?\s*$/i.test(trimmed)) {
+      videoUrls.push(trimmed);
+    } else {
+      remainingLines.push(line);
+    }
+  }
+  return {
+    textOnly: remainingLines.join("\n").replace(/\n{3,}/g, "\n\n").trim(),
+    videoUrls,
+  };
+}
+
 function extractImagesFromMarkdown(text: string): { textOnly: string; imageUrls: string[] } {
   const imageRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/g;
   const imageUrls: string[] = [];
@@ -197,14 +215,16 @@ function getHumanizationConfig(cfg: Record<string, any>): HumanizationConfig {
 const POST_IMAGES_TEXT_DELAY_MS = 15000;
 
 interface ConsolidatedPart {
-  type: "text" | "images";
+  type: "text" | "images" | "video";
   content?: string;
   imageUrls?: string[];
+  videoUrl?: string;
 }
 
 function consolidateImageParts(parts: string[]): ConsolidatedPart[] {
   const result: ConsolidatedPart[] = [];
   let pendingImages: string[] = [];
+  let videoAdded = false; // Only 1 video per delivery
 
   const flushImages = () => {
     if (pendingImages.length > 0) {
@@ -215,7 +235,8 @@ function consolidateImageParts(parts: string[]): ConsolidatedPart[] {
 
   for (const part of parts) {
     if (!part?.trim()) continue;
-    const { textOnly, imageUrls } = extractImagesFromMarkdown(part);
+    const { textOnly: afterImages, imageUrls } = extractImagesFromMarkdown(part);
+    const { textOnly, videoUrls } = extractVideoUrlsFromText(afterImages);
 
     if (imageUrls.length > 0) {
       if (textOnly.trim()) {
@@ -226,6 +247,15 @@ function consolidateImageParts(parts: string[]): ConsolidatedPart[] {
     } else if (textOnly.trim()) {
       flushImages();
       result.push({ type: "text", content: textOnly.trim() });
+    }
+
+    // Keep only the first video URL across the whole delivery
+    for (const videoUrl of videoUrls) {
+      if (!videoAdded) {
+        flushImages();
+        result.push({ type: "video", videoUrl });
+        videoAdded = true;
+      }
     }
   }
   flushImages();
@@ -302,11 +332,20 @@ async function replyToChatwoot(
         setChatwootTyping(chatwootUrl, apiToken, accountId, conversationId, "off").catch(() => {});
       }
 
-      // Gap entre blocos de texto. Não aplicar se o próximo bloco for imagem — a transição
-      // texto→imagem deve ser rápida para o cliente ver o texto introdutório seguido logo das fotos.
-      if (!isLast && consolidated[i + 1]?.type !== "images" && hasTimeBudget()) {
+      // Gap entre blocos de texto. Não aplicar se o próximo bloco for imagem ou vídeo.
+      if (!isLast && consolidated[i + 1]?.type !== "images" && consolidated[i + 1]?.type !== "video" && hasTimeBudget()) {
         const gapMs = humanization.blockGapMs > 0 ? applyJitter(humanization.blockGapMs) : 2000;
         await safeDelay(gapMs);
+      }
+    } else if (block.type === "video" && block.videoUrl) {
+      console.warn(`[Deliver] Sending video: ${block.videoUrl.slice(0, 100)}...`);
+      const ok = await sendChatwootMediaMessage(msgUrl, apiToken, block.videoUrl, "video/mp4");
+      if (!ok) {
+        console.warn("[Deliver] Video send failed, falling back to text URL");
+        await sendChatwootTextMessage(msgUrl, apiToken, block.videoUrl);
+      }
+      if (!isLast && hasTimeBudget()) {
+        await safeDelay(POST_IMAGES_TEXT_DELAY_MS);
       }
     }
   }
