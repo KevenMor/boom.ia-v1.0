@@ -5,7 +5,6 @@ import { executeTool, type ToolDef } from "../services/tool-executor.js";
 import { filterCommandLinesFromStream, sanitizeLLMOutput, fallbackSanitizeForRetry } from "../utils/sanitize.js";
 import { emitMediaCommandsSseIfNeeded } from "../utils/extract-media-commands.js";
 import { injectSuiteGalleryMarkdownIfMissing } from "../utils/suite-gallery-markdown-inject.js";
-import { getWelcomeConversationImageMarkdown } from "../utils/suite-gallery-welcome-image.js";
 import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification, buildHandoffNotification, extractClientNameFromMessages, toBrasiliaISO } from "../utils/agendaNotification.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
@@ -988,11 +987,6 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       const isAllowed = allowedOrigins.includes(origin) || /\.lovable\.dev$/.test(origin);
       const allowOrigin = isAllowed ? origin : "http://localhost:8080";
 
-      const isFirstContact = messages.filter((m) => m.role === "assistant").length === 0;
-      const welcomeImageMd = isFirstContact
-        ? await getWelcomeConversationImageMarkdown(supabase, tenantId)
-        : "";
-
       reply.raw.writeHead(200, {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
@@ -1000,10 +994,6 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         "Access-Control-Allow-Origin": allowOrigin,
         "Access-Control-Allow-Credentials": "true",
       });
-
-      if (welcomeImageMd) {
-        sendSse({ choices: [{ delta: { content: welcomeImageMd } }] });
-      }
 
       // Dual-provider: OpenAI para tools (dispatcher), Gemini para conversacional
       if (useTools && dispatcherProviderId) {
