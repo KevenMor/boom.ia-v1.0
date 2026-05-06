@@ -1,6 +1,7 @@
+import { useEffect, useMemo, useState } from "react";
 import { Images, Pencil, Play, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { getSuiteGalleryThumbnailUrl } from "@/lib/suite-gallery-display";
+import { getSuiteGalleryThumbnailCandidateUrls } from "@/lib/suite-gallery-display";
 import type { SuiteGallery } from "@/types/database";
 
 type Props = {
@@ -12,10 +13,30 @@ type Props = {
 
 export function SuiteGalleryListRow({ gallery, onOpen, onEdit, onDelete }: Props) {
   const mediaList = Array.isArray(gallery.media_urls) ? gallery.media_urls : [];
-  const photoCount = mediaList.filter((m) => m.type === "photo").length;
-  const videoCount = mediaList.filter((m) => m.type === "video").length;
+  const photoCount = mediaList.filter((m) => (m.type as string)?.toLowerCase() === "photo").length;
+  const videoCount = mediaList.filter((m) => (m.type as string)?.toLowerCase() === "video").length;
   const total = mediaList.length;
-  const thumbnailUrl = getSuiteGalleryThumbnailUrl(gallery);
+
+  const thumbCandidates = useMemo(
+    () => getSuiteGalleryThumbnailCandidateUrls(gallery),
+    [gallery.id, gallery.cover_image_url ?? "", JSON.stringify(gallery.media_urls ?? [])]
+  );
+  const thumbCandidateKey = thumbCandidates.join("|");
+  const [thumbIndex, setThumbIndex] = useState(0);
+  const [thumbExhausted, setThumbExhausted] = useState(false);
+
+  useEffect(() => {
+    setThumbIndex(0);
+    setThumbExhausted(false);
+  }, [gallery.id, thumbCandidateKey]);
+
+  const thumbnailUrl =
+    !thumbExhausted && thumbCandidates.length > 0 ? thumbCandidates[Math.min(thumbIndex, thumbCandidates.length - 1)] : null;
+
+  const onThumbError = () => {
+    if (thumbIndex + 1 < thumbCandidates.length) setThumbIndex((i) => i + 1);
+    else setThumbExhausted(true);
+  };
 
   return (
     <div
@@ -27,7 +48,13 @@ export function SuiteGalleryListRow({ gallery, onOpen, onEdit, onDelete }: Props
     >
       <div className="relative h-14 w-[4.5rem] shrink-0 overflow-hidden rounded-lg bg-muted">
         {thumbnailUrl ? (
-          <img src={thumbnailUrl} alt="" className="h-full w-full object-cover" />
+          <img
+            key={thumbnailUrl}
+            src={thumbnailUrl}
+            alt=""
+            className="h-full w-full object-cover"
+            onError={onThumbError}
+          />
         ) : (
           <div className="flex h-full w-full items-center justify-center">
             <Images className="h-6 w-6 text-muted-foreground/35" />

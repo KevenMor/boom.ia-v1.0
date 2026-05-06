@@ -56,19 +56,48 @@ export function normalizeSuiteGalleryMediaUrl(url: string): string {
   return normalizeSuiteGalleryMediaUrlForOrigin(url, window.location.origin);
 }
 
-/** URL para miniatura do cartão: capa explícita ou primeira foto em media_urls. */
-export function getSuiteGalleryThumbnailUrl(gallery: SuiteGallery): string | null {
-  const explicit = gallery.cover_image_url?.trim();
-  if (explicit) return normalizeSuiteGalleryMediaUrl(explicit);
-  const media = normalizeSuiteGalleryMedia(gallery.media_urls as unknown);
-  const photo = media.find((m) => m.type === "photo" && m.url?.trim());
-  if (photo?.url) return normalizeSuiteGalleryMediaUrl(photo.url.trim());
-  const nonVideo = media.find((m) => m.url?.trim() && m.type !== "video");
-  const u = nonVideo?.url?.trim();
-  return u ? normalizeSuiteGalleryMediaUrl(u) : null;
-}
-
 function normalizeSuiteGalleryMedia(raw: unknown): SuiteGalleryMedia[] {
   if (!Array.isArray(raw)) return [];
   return raw.filter((m): m is SuiteGalleryMedia => !!m && typeof m === "object" && typeof (m as SuiteGalleryMedia).url === "string");
+}
+
+function isGalleryPhoto(m: SuiteGalleryMedia): boolean {
+  const t = (m.type as string | undefined)?.toLowerCase();
+  return t === "photo";
+}
+
+function isGalleryVideo(m: SuiteGalleryMedia): boolean {
+  const t = (m.type as string | undefined)?.toLowerCase();
+  return t === "video";
+}
+
+/**
+ * URLs candidatas à miniatura da lista (ordem de preferência).
+ * Capa primeiro; se estiver 404/expirada, o componente pode tentar as seguintes (fotos em media_urls).
+ */
+export function getSuiteGalleryThumbnailCandidateUrls(gallery: SuiteGallery): string[] {
+  const out: string[] = [];
+  const push = (raw: string | null | undefined) => {
+    const t = raw?.trim();
+    if (!t) return;
+    const norm = normalizeSuiteGalleryMediaUrl(t);
+    if (!out.includes(norm)) out.push(norm);
+  };
+
+  push(gallery.cover_image_url);
+
+  const media = normalizeSuiteGalleryMedia(gallery.media_urls as unknown);
+  for (const m of media) {
+    if (isGalleryPhoto(m) && m.url?.trim()) push(m.url.trim());
+  }
+  for (const m of media) {
+    if (m.url?.trim() && !isGalleryVideo(m)) push(m.url.trim());
+  }
+  return out;
+}
+
+/** Primeiro candidato a miniatura (ver getSuiteGalleryThumbnailCandidateUrls). */
+export function getSuiteGalleryThumbnailUrl(gallery: SuiteGallery): string | null {
+  const urls = getSuiteGalleryThumbnailCandidateUrls(gallery);
+  return urls[0] ?? null;
 }
