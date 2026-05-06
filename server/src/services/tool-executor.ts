@@ -478,6 +478,8 @@ async function executeOmnibeesAvailability(
       success: true,
       result: {
         summaryText: data.summaryText,
+        /** Quantidade de acomodações com tarifa — o assistente deve citar todas ao cliente. */
+        roomCount: data.rooms.length,
         bookingUrl: data.bookingUrl,
         hotelListingUrl: data.hotelListingUrl,
         hotel: data.hotel,
