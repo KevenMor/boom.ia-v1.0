@@ -1,3 +1,4 @@
+import { getSupabaseStorageImgRewriteOrigin } from "@/integrations/supabase/nexus-client";
 import type { SuiteGallery, SuiteGalleryMedia } from "@/types/database";
 
 const SUPABASE_PROXY_MARKER = "/api/supabase-proxy/";
@@ -50,10 +51,12 @@ export function normalizeSuiteGalleryMediaUrlForOrigin(url: string, pageOrigin: 
  * Em produção isso vira 404 / mixed content. Reaplica sempre a origem atual do browser para o mesmo path.
  */
 export function normalizeSuiteGalleryMediaUrl(url: string): string {
+  const fixed = ensureSupabaseStoragePublicObjectPath(url.trim());
   if (typeof window === "undefined") {
-    return ensureSupabaseStoragePublicObjectPath(url.trim());
+    return fixed;
   }
-  return normalizeSuiteGalleryMediaUrlForOrigin(url, window.location.origin);
+  const origin = getSupabaseStorageImgRewriteOrigin() || window.location.origin;
+  return normalizeSuiteGalleryMediaUrlForOrigin(fixed, origin);
 }
 
 function normalizeSuiteGalleryMedia(raw: unknown): SuiteGalleryMedia[] {

@@ -30,3 +30,20 @@ export const nexusDb = createClient(NEXUS_URL, NEXUS_ANON_KEY);
 
 /** Base URL do Supabase (usa proxy no browser para evitar CORS) */
 export const getSupabaseBaseUrl = () => proxyBase;
+
+/**
+ * Origem (scheme + host + porta) onde o proxy `/api/supabase-proxy` do Storage está disponível.
+ * Deve ser a mesma de `getPublicUrl` (NEXUS_URL). Se usarmos só `window.location.origin` ao montar
+ * `<img src>`, o painel em outro domínio que o do build (VITE_API_URL) quebra as miniaturas.
+ */
+export function getSupabaseStorageImgRewriteOrigin(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    if (/^https?:\/\//i.test(proxyBase)) {
+      return new URL(proxyBase).origin;
+    }
+  } catch {
+    /* ignore */
+  }
+  return window.location.origin;
+}
