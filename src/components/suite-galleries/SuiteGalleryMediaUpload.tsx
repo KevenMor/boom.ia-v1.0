@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Camera, Video, Loader2, X } from "lucide-react";
 import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
+import { inferImageContentTypeForUpload, isImageFileByMimeOrExtension } from "@/lib/image-file-guards";
 import { normalizeSuiteGalleryMediaUrl } from "@/lib/suite-gallery-display";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -46,7 +47,10 @@ async function uploadFile(
   const id = crypto.randomUUID();
   const tag = filenameTag ?? type;
   const path = `${tenantId}/${galleryId}/${tag}-${id}.${ext}`;
-  const { error } = await supabase.storage.from("suite-galleries").upload(path, file, { upsert: true });
+  const contentType = type === "photo" ? inferImageContentTypeForUpload(file) : file.type || "video/mp4";
+  const { error } = await supabase.storage
+    .from("suite-galleries")
+    .upload(path, file, { upsert: true, contentType });
   if (error) throw error;
   const { data } = supabase.storage.from("suite-galleries").getPublicUrl(path);
   const base = normalizeSuiteGalleryMediaUrl(data.publicUrl);
@@ -94,7 +98,7 @@ export function SuiteGalleryMediaUpload({
 
     for (let i = 0; i < Math.min(files.length, remaining); i++) {
       const file = files[i];
-      if (!file.type.startsWith("image/")) { toast.error(`Ignorado (não é imagem): ${file.name}`); continue; }
+      if (!isImageFileByMimeOrExtension(file)) { toast.error(`Ignorado (não é imagem): ${file.name}`); continue; }
       if (file.size > MAX_PHOTO_BYTES) { toast.error(`${file.name}: máximo 20 MB.`); continue; }
 
       const tmpId = Date.now() + i;

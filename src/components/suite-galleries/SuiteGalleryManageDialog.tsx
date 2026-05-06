@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { isImageFileByMimeOrExtension } from "@/lib/image-file-guards";
 import { SuiteGalleryMediaUpload, uploadSuiteGalleryCoverImage } from "./SuiteGalleryMediaUpload";
 import { SuiteGalleryFormDialog } from "./SuiteGalleryFormDialog";
 import { useMoveSuiteGalleryMedia, useSuiteGalleries, useUpdateSuiteGallery } from "@/hooks/useSuiteGalleries";
@@ -128,7 +129,7 @@ export function SuiteGalleryManageDialog({ gallery, open, onOpenChange }: Props)
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file || !selectedTenantId) return;
-    if (!file.type.startsWith("image/")) {
+    if (!isImageFileByMimeOrExtension(file)) {
       toast.error("Use um arquivo de imagem (JPG, PNG, WebP…).");
       return;
     }
