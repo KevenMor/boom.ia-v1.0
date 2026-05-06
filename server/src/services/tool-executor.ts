@@ -6,7 +6,7 @@ import { runFindNearestUnit } from "./find-nearest-unit.js";
 import { buildHandoffNotification, containsInstitutionNameToken, isBlockedAsName } from "../utils/agendaNotification.js";
 import { sendNotificationToGroup } from "../utils/sendNotification.js";
 import { addLeadLabelToConversation } from "./chatwoot-labels.js";
-import { ensureSupabaseStoragePublicObjectPath } from "../lib/supabase-storage-public-url.js";
+import { ensureSupabaseStoragePublicObjectPath, normalizeStorageUrlForExternalUse } from "../lib/supabase-storage-public-url.js";
 
 export interface ToolExecutionResult {
   success: boolean;
@@ -1687,13 +1687,13 @@ async function executeSuiteGalleryQuery(
       const mediaArr: MediaItem[] = Array.isArray(g.media_urls) ? (g.media_urls as MediaItem[]) : [];
       const mediaArrFixed = mediaArr.map((m) => ({
         ...m,
-        url: typeof m.url === "string" ? ensureSupabaseStoragePublicObjectPath(m.url) : m.url,
+        url: typeof m.url === "string" ? normalizeStorageUrlForExternalUse(m.url) : m.url,
       }));
       const photos = mediaArrFixed.filter((m) => m.type === "photo");
       const videos = mediaArrFixed.filter((m) => m.type === "video");
 
       const coverRaw = typeof g.cover_image_url === "string" ? g.cover_image_url.trim() : "";
-      const coverFixed = coverRaw ? ensureSupabaseStoragePublicObjectPath(coverRaw) : null;
+      const coverFixed = coverRaw ? normalizeStorageUrlForExternalUse(coverRaw) : null;
 
       const allPhotoUrls = [...(coverFixed ? [coverFixed] : []), ...photos.map((m) => m.url)];
       const uniqueUrls = [...new Set(allPhotoUrls)];
