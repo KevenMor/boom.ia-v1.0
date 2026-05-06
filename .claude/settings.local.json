@@ -18,7 +18,11 @@
       "Bash(npx vitest *)",
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\keven\\\\OneDrive\\\\Área de Trabalho\\\\Boom\\\\boom-agents\" -Recurse -Directory)",
       "Bash(Select-Object -First 30)",
-      "Bash(Format-Table FullName)"
+      "Bash(Format-Table FullName)",
+      "Bash(grep -r supabase-proxy /c/Users/keven/OneDrive/Área de Trabalho/Boom/boom-agents --include=*.ts -l)",
+      "Bash(grep -r video /c/Users/keven/OneDrive/Área de Trabalho/Boom/boom-agents/src --include=*.ts -l)",
+      "Bash(grep -r \"suite-galleries\\\\|suiteGallery\\\\|suite_gallery\\\\|mediaUrl\\\\|media_url\" /c/Users/keven/OneDrive/Área de Trabalho/Boom/boom-agents/src --include=*.ts -l)",
+      "Bash(grep -r \"video\\\\|gallery\\\\|media\" /c/Users/keven/OneDrive/Área de Trabalho/Boom/boom-agents/server/src --include=*.ts -l)"
     ]
   }
 }
