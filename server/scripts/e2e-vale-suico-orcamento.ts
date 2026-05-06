@@ -12,6 +12,7 @@
 
 import "dotenv/config";
 import { createClient } from "@supabase/supabase-js";
+import { extractVideoUrlsFromText } from "../src/services/delivery.js";
 
 const BASE = (process.env.API_BASE_URL || "http://127.0.0.1:3001").replace(/\/+$/, "");
 const CHAT_LOCAL = `${BASE}/api/chat-local`;
@@ -139,9 +140,11 @@ function assertQuoteQuality(text: string, omni: OmnibeesPreview | null): string[
     return failures;
   }
 
-  if (/https?:\/\/[^\s]+\.(?:mp4|webm|mov)\b/i.test(text)) {
+  // Mesma lógica que o envio ao Chatwoot: URL só-URL em linha própria vira anexo; não deve sobrar na bolha de texto.
+  const { textOnly: textAsClientSees } = extractVideoUrlsFromText(text);
+  if (/https?:\/\/[^\s]+\.(?:mp4|webm|mov)\b/i.test(textAsClientSees)) {
     failures.push(
-      "Texto contém URL de vídeo (.mp4/.webm/.mov) — o modelo deve usar o fluxo de mídia como arquivo no WhatsApp; em sandbox isso indica vazamento de URL crua."
+      "Após separar mídia (como no delivery), ainda há URL de vídeo no texto — use linha só-URL ou evite URL no meio da frase."
     );
   }
 

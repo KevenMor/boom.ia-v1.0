@@ -403,6 +403,29 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
     }
     return lines.join("\n") || JSON.stringify(obj).slice(0, 300);
   }
+  // Omnibees / consultar_disponibilidade_vale_suico: o conversacional PRECISA do summaryText inteiro
+  // (todas as suítes, parcelado, horários). Truncar quebrava orçamentos com 2+ acomodações.
+  if (typeof obj.summaryText === "string" && obj.summaryText.trim()) {
+    const hasOmnibeesShape =
+      typeof obj.bookingUrl === "string" ||
+      typeof obj.hotelListingUrl === "string" ||
+      Array.isArray(obj.rooms) ||
+      typeof obj.checkIn === "string";
+    if (hasOmnibeesShape) {
+      const lines: string[] = [];
+      if (typeof obj.roomCount === "number") {
+        lines.push(
+          `ACOMODACOES_COM_TARIFA (roomCount=${obj.roomCount}): cite TODAS as categorias abaixo ao cliente, com à vista e parcelado quando constar em cada linha.`
+        );
+      }
+      lines.push("CONSULTA OMNIBEES — use os dados abaixo por completo (não resuma a uma suíte só):");
+      lines.push(String(obj.summaryText).trim());
+      if (typeof obj.bookingUrl === "string" && obj.bookingUrl.trim()) {
+        lines.push(`bookingUrl (enviar ao cliente somente se ele pedir link/reserva): ${obj.bookingUrl.trim()}`);
+      }
+      return lines.join("\n");
+    }
+  }
   return JSON.stringify(obj).slice(0, 300);
 }
 
