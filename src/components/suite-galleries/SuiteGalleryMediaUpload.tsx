@@ -10,6 +10,22 @@ const MAX_ITEMS = 30;
 const MAX_PHOTO_BYTES = 20 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 200 * 1024 * 1024;
 
+function formatStorageUploadError(err: unknown): string {
+  if (err == null) return "erro desconhecido";
+  if (typeof err === "string") return err;
+  if (typeof err !== "object") return String(err);
+  const o = err as Record<string, unknown>;
+  const msg = typeof o.message === "string" ? o.message : "";
+  const code = typeof o.error === "string" ? o.error : "";
+  const status = o.statusCode != null ? String(o.statusCode) : "";
+  const hint404 =
+    status === "404" || /404|not found|bucket not found/i.test(`${msg} ${code}`)
+      ? " — confira se o bucket suite-galleries existe no Supabase (sql/017_storage_suite_galleries_bucket.sql)."
+      : "";
+  const parts = [msg, code && `(${code})`, status && `HTTP ${status}`].filter(Boolean);
+  return (parts.join(" ").trim() || "erro no Storage") + hint404;
+}
+
 type Props = {
   tenantId: string | undefined;
   galleryId?: string;
@@ -88,7 +104,7 @@ export function SuiteGalleryMediaUpload({
         addItem({ url, type: "photo" });
         toast.success("Foto carregada.");
       } catch (err: unknown) {
-        toast.error("Erro no upload: " + (err instanceof Error ? err.message : ""));
+        toast.error("Erro no upload: " + formatStorageUploadError(err));
       } finally {
         setUploadingSet((s) => { const n = new Set(s); n.delete(tmpId); return n; });
       }
@@ -114,7 +130,7 @@ export function SuiteGalleryMediaUpload({
         addItem({ url, type: "video" });
         toast.success("Vídeo carregado.");
       } catch (err: unknown) {
-        toast.error("Erro no upload: " + (err instanceof Error ? err.message : ""));
+        toast.error("Erro no upload: " + formatStorageUploadError(err));
       } finally {
         setUploadingSet((s) => { const n = new Set(s); n.delete(tmpId); return n; });
       }
