@@ -23,16 +23,27 @@ async function uploadFile(
   tenantId: string,
   galleryId: string,
   file: File,
-  type: "photo" | "video"
+  type: "photo" | "video",
+  filenameTag?: string
 ): Promise<string> {
   const ext = file.name.split(".").pop()?.toLowerCase() || (type === "photo" ? "jpg" : "mp4");
   const id = crypto.randomUUID();
-  const path = `${tenantId}/${galleryId}/${type}-${id}.${ext}`;
+  const tag = filenameTag ?? type;
+  const path = `${tenantId}/${galleryId}/${tag}-${id}.${ext}`;
   const { error } = await supabase.storage.from("suite-galleries").upload(path, file, { upsert: true });
   if (error) throw error;
   const { data } = supabase.storage.from("suite-galleries").getPublicUrl(path);
   const base = normalizeSuiteGalleryMediaUrl(data.publicUrl);
   return `${base}?t=${Date.now()}`;
+}
+
+/** Imagem de capa (miniatura em listas) — não entra em `media_urls`. */
+export async function uploadSuiteGalleryCoverImage(
+  tenantId: string,
+  galleryId: string,
+  file: File
+): Promise<string> {
+  return uploadFile(tenantId, galleryId, file, "photo", "cover");
 }
 
 export function SuiteGalleryMediaUpload({

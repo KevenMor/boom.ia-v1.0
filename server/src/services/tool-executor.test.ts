@@ -91,6 +91,53 @@ function sanitizeIlikeFragment(raw: string): string {
   return raw.replace(/%/g, "").replace(/_/g, "").trim();
 }
 
+/** Réplica de resolveSuiteGallerySearch (tool-executor suite_gallery_query). */
+function resolveSuiteGallerySearch(args: Record<string, unknown>): {
+  listAllCatalog: boolean;
+  nomeSuiteForFilter: string;
+  queryLabelForHint: string;
+} {
+  const contextoRaw = String(
+    args.contexto ?? args.tema ?? args.topico ?? args.sobre ?? args.assunto ?? ""
+  ).trim();
+  const nomeSuiteRaw = String(
+    args.nome ??
+      args.nome_galeria ??
+      args.filtro ??
+      args.q ??
+      args.nome_suite ??
+      args.suite_name ??
+      ""
+  ).trim();
+
+  const contextoSanitized = contextoRaw ? sanitizeIlikeFragment(contextoRaw) : "";
+  const contextoEff =
+    contextoSanitized && !isBroadGallerySearchTerm(contextoRaw) ? contextoSanitized : "";
+
+  const nomeSanitized = nomeSuiteRaw ? sanitizeIlikeFragment(nomeSuiteRaw) : "";
+  const nomeIsBroad = !nomeSuiteRaw || isBroadGallerySearchTerm(nomeSuiteRaw);
+
+  if (!nomeIsBroad && nomeSanitized) {
+    return {
+      listAllCatalog: false,
+      nomeSuiteForFilter: nomeSanitized,
+      queryLabelForHint: nomeSuiteRaw,
+    };
+  }
+  if (contextoEff) {
+    return {
+      listAllCatalog: false,
+      nomeSuiteForFilter: contextoEff,
+      queryLabelForHint: contextoRaw,
+    };
+  }
+  return {
+    listAllCatalog: true,
+    nomeSuiteForFilter: "",
+    queryLabelForHint: nomeSuiteRaw || contextoRaw || "",
+  };
+}
+
 // Fuzzy rule matching isolado de executeChatwootAssign
 function matchChatwootRule(
   reason: string,
@@ -264,6 +311,37 @@ describe("sanitizeIlikeFragment — sanitização de fragmento ILIKE", () => {
 
   it("trim de espaços nas bordas", () => {
     expect(sanitizeIlikeFragment("  loft  ")).toBe("loft");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// resolveSuiteGallerySearch — tema/contexto vs. catálogo amplo
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("resolveSuiteGallerySearch — filtro por tema da conversa", () => {
+  it("nome amplo sem contexto → catálogo completo", () => {
+    const r = resolveSuiteGallerySearch({ nome: "tem fotos?" });
+    expect(r.listAllCatalog).toBe(true);
+    expect(r.nomeSuiteForFilter).toBe("");
+  });
+
+  it("nome amplo + contexto piscina → filtra por piscina", () => {
+    const r = resolveSuiteGallerySearch({ nome: "fotos", contexto: "piscinas" });
+    expect(r.listAllCatalog).toBe(false);
+    expect(r.nomeSuiteForFilter).toBe("piscinas");
+    expect(r.queryLabelForHint).toBe("piscinas");
+  });
+
+  it("nome específico LOFT ignora contexto", () => {
+    const r = resolveSuiteGallerySearch({ nome: "LOFT", contexto: "piscina" });
+    expect(r.nomeSuiteForFilter).toBe("LOFT");
+    expect(r.queryLabelForHint).toBe("LOFT");
+  });
+
+  it("alias tema → mesmo que contexto", () => {
+    const r = resolveSuiteGallerySearch({ tema: "complexo aquático" });
+    expect(r.listAllCatalog).toBe(false);
+    expect(r.nomeSuiteForFilter).toContain("complexo");
   });
 });
 
@@ -548,38 +626,56 @@ describe("inventory_query — parsing de faixa_preco textual", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("suite_gallery_query — hint gerado para 1 galeria", () => {
-  function buildHintSingle(
-    galeria: { nome: string; total_fotos: number; total_videos: number; orientacao_envio_midias: string | null }
-  ): string {
+  function buildHintSingle(galeria: {
+    nome: string;
+    rotulo_para_cliente: string | null;
+    total_videos: number;
+    orientacao_envio_midias: string | null;
+  }): string {
+    const g0 = galeria;
     return (
-      `GALERIA ENCONTRADA: "${galeria.nome}". Fotos disponíveis em photos_markdown. ` +
+      `GALERIA ENCONTRADA. Fotos em photos_markdown. Ao cliente fale de forma natural` +
+      (g0.rotulo_para_cliente ? ` (referência: "${g0.rotulo_para_cliente}")` : "") +
+      `; não repita o nome técnico do painel ("${g0.nome}") na conversa. ` +
       `Se o cliente PEDIU as fotos nesta mensagem (ex.: "pode me mandar foto?", "manda foto", "quero ver", "tem foto?"), inclua AGORA o bloco photos_markdown INTEGRAL (todas as linhas ![rótulo](url)), sem omitir nenhuma foto. ` +
       `Se o cliente ainda NÃO pediu as fotos, descreva o conteúdo em texto primeiro e aguarde ele pedir para então incluir o bloco photos_markdown INTEGRAL.` +
-      (galeria.total_videos > 0
-        ? ` Esta galeria tem ${galeria.total_videos} vídeo(s) — informe e forneça o link ao ser solicitado.`
+      (g0.total_videos > 0
+        ? ` Há vídeo(s) neste cadastro — ao falar com o hóspede use frase natural (ex. tour em vídeo), sem sufixo técnico "(com vídeos)" colado ao nome da pasta.`
         : "") +
-      (galeria.orientacao_envio_midias
-        ? `\n\nORIENTAÇÃO DO PAINEL (quando enviar mídias — prioridade): ${galeria.orientacao_envio_midias}`
+      (g0.orientacao_envio_midias
+        ? `\n\nORIENTAÇÃO DO PAINEL (quando enviar mídias — prioridade): ${g0.orientacao_envio_midias}`
         : "")
     );
   }
 
   it("galeria sem vídeos e sem orientação → hint padrão", () => {
-    const hint = buildHintSingle({ nome: "LOFT", total_fotos: 5, total_videos: 0, orientacao_envio_midias: null });
-    expect(hint).toContain('"LOFT"');
+    const hint = buildHintSingle({
+      nome: "LOFT",
+      rotulo_para_cliente: "LOFT",
+      total_videos: 0,
+      orientacao_envio_midias: null,
+    });
+    expect(hint).toContain("LOFT");
+    expect(hint).toContain("não repita o nome técnico do painel");
     expect(hint).toContain("photos_markdown");
-    expect(hint).not.toContain("vídeo");
+    expect(hint).not.toContain("Há vídeo(s) neste cadastro");
   });
 
-  it("galeria com vídeos → hint menciona total de vídeos", () => {
-    const hint = buildHintSingle({ nome: "Institucional", total_fotos: 3, total_videos: 2, orientacao_envio_midias: null });
-    expect(hint).toContain("2 vídeo(s)");
+  it("galeria com vídeos → hint pede linguagem natural (sem contar vídeos ao modelo)", () => {
+    const hint = buildHintSingle({
+      nome: "Institucional",
+      rotulo_para_cliente: "Apresentação do resort (fotos e vídeo)",
+      total_videos: 2,
+      orientacao_envio_midias: null,
+    });
+    expect(hint).toContain("tour em vídeo");
+    expect(hint).toContain("(com vídeos)");
   });
 
   it("galeria com orientação → hint inclui orientação do painel", () => {
     const hint = buildHintSingle({
       nome: "Suíte Vip",
-      total_fotos: 8,
+      rotulo_para_cliente: "Suíte Vip",
       total_videos: 0,
       orientacao_envio_midias: "Enviar apenas após confirmar valores",
     });

@@ -43,3 +43,19 @@ export function useDeleteSuiteGallery() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["suite_galleries"] }),
   });
 }
+
+/** Transfere um arquivo (foto/vídeo) da galeria origem para outra galeria do mesmo tenant. */
+export function useMoveSuiteGalleryMedia() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { sourceId: string; targetGalleryId: string; mediaUrl: string }) =>
+      callAPI<{ source: SuiteGallery; target: SuiteGallery }>(
+        `/suite-galleries/${args.sourceId}/move-media`,
+        {
+          method: "POST",
+          body: { target_gallery_id: args.targetGalleryId, media_url: args.mediaUrl },
+        }
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["suite_galleries"] }),
+  });
+}

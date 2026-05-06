@@ -7,6 +7,10 @@ import { buildHandoffNotification, containsInstitutionNameToken, isBlockedAsName
 import { sendNotificationToGroup } from "../utils/sendNotification.js";
 import { addLeadLabelToConversation } from "./chatwoot-labels.js";
 import { ensureSupabaseStoragePublicObjectPath, normalizeStorageUrlForExternalUse } from "../lib/supabase-storage-public-url.js";
+import {
+  galleryRotuloParaCliente,
+  isGalleryExcludedFromClientCatalog,
+} from "../utils/suite-gallery-llm-labels.js";
 
 export interface ToolExecutionResult {
   success: boolean;
@@ -1610,6 +1614,56 @@ function sanitizeIlikeFragment(raw: string): string {
   return raw.replace(/%/g, "").replace(/_/g, "").trim();
 }
 
+/**
+ * `nome` genérico ("tem fotos?") lista o catálogo inteiro; com `tema`/`contexto` (ex.: piscinas)
+ * a busca filtra e evita enviar fotos de quarto quando o fio é sobre lazer.
+ */
+function resolveSuiteGallerySearch(args: Record<string, unknown>): {
+  listAllCatalog: boolean;
+  nomeSuiteForFilter: string;
+  queryLabelForHint: string;
+} {
+  const contextoRaw = String(
+    args.contexto ?? args.tema ?? args.topico ?? args.sobre ?? args.assunto ?? ""
+  ).trim();
+  const nomeSuiteRaw = String(
+    args.nome ??
+      args.nome_galeria ??
+      args.filtro ??
+      args.q ??
+      args.nome_suite ??
+      args.suite_name ??
+      ""
+  ).trim();
+
+  const contextoSanitized = contextoRaw ? sanitizeIlikeFragment(contextoRaw) : "";
+  const contextoEff =
+    contextoSanitized && !isBroadGallerySearchTerm(contextoRaw) ? contextoSanitized : "";
+
+  const nomeSanitized = nomeSuiteRaw ? sanitizeIlikeFragment(nomeSuiteRaw) : "";
+  const nomeIsBroad = !nomeSuiteRaw || isBroadGallerySearchTerm(nomeSuiteRaw);
+
+  if (!nomeIsBroad && nomeSanitized) {
+    return {
+      listAllCatalog: false,
+      nomeSuiteForFilter: nomeSanitized,
+      queryLabelForHint: nomeSuiteRaw,
+    };
+  }
+  if (contextoEff) {
+    return {
+      listAllCatalog: false,
+      nomeSuiteForFilter: contextoEff,
+      queryLabelForHint: contextoRaw,
+    };
+  }
+  return {
+    listAllCatalog: true,
+    nomeSuiteForFilter: "",
+    queryLabelForHint: nomeSuiteRaw || contextoRaw || "",
+  };
+}
+
 async function executeSuiteGalleryQuery(
   supabase: ReturnType<typeof createNexusClient>,
   agentId: string,
@@ -1627,18 +1681,7 @@ async function executeSuiteGalleryQuery(
       return { success: false, result: null, error: "Agent tenant not found" };
     }
 
-    const nomeSuiteRaw = String(
-      args.nome ??
-        args.nome_galeria ??
-        args.filtro ??
-        args.q ??
-        args.nome_suite ??
-        args.suite_name ??
-        ""
-    ).trim();
-
-    const listAllCatalog = isBroadGallerySearchTerm(nomeSuiteRaw);
-    const nomeSuiteForFilter = listAllCatalog ? "" : sanitizeIlikeFragment(nomeSuiteRaw);
+    const { listAllCatalog, nomeSuiteForFilter, queryLabelForHint } = resolveSuiteGallerySearch(args);
 
     const baseSelect =
       "id, name, description, cover_image_url, media_urls, display_order, llm_media_guidance" as const;
@@ -1650,14 +1693,15 @@ async function executeSuiteGalleryQuery(
       .order("display_order", { ascending: true });
 
     if (nomeSuiteForFilter) {
-      query = query.ilike("name", `%${nomeSuiteForFilter}%`);
+      query = query.or(`name.ilike.%${nomeSuiteForFilter}%,description.ilike.%${nomeSuiteForFilter}%`);
     }
 
     let { data: galleries, error } = await query.limit(10);
     if (error) return { success: false, result: null, error: error.message };
 
-    let searchMissMessage: string | null = null;
+    let gallerySearchMiss = false;
     if (!listAllCatalog && nomeSuiteForFilter && (galleries ?? []).length === 0) {
+      gallerySearchMiss = true;
       const { data: allGalleries, error: errAll } = await supabase
         .from("suite_galleries")
         .select(baseSelect)
@@ -1666,21 +1710,9 @@ async function executeSuiteGalleryQuery(
         .limit(10);
       if (errAll) return { success: false, result: null, error: errAll.message };
       galleries = allGalleries ?? [];
-      const names = (galleries ?? []).map((g) => g.name).filter(Boolean);
-      searchMissMessage =
-        `A busca "${nomeSuiteRaw}" n├úo encontrou nome cadastrado na galeria (acentos ou termo gen├®rico vs. nome exato do painel). ` +
-        (names.length > 0
-          ? `Galerias dispon├¡veis: ${names.join(", ")}. Liste essas op├º├Áes ao cliente; quando ele escolher uma, chame a ferramenta de novo passando nome/nome_galeria com trecho do nome da galeria.`
-          : "N├úo h├í galerias cadastradas no painel.");
     }
 
-    let broadCatalogMessage: string | null = null;
-    if (listAllCatalog && (galleries ?? []).length > 0) {
-      broadCatalogMessage =
-        "Pedido gen├®rico (fotos de su├¡tes, quartos, acomoda├º├úo, ├ílbum, etc.): use `galleries[].nome` abaixo como cat├ílogo do painel. N├úo diga que n├úo h├í fotos no resort ÔÇö apresente os nomes das galerias e pergunte qual o cliente quer ver; em seguida chame a ferramenta de novo com o nome escolhido para obter o photos_markdown completo dessa galeria.";
-    }
-
-    type MediaItem = { url: string; type: string; caption?: string };
+    type MediaItem = { url: string; type: string; caption?: string; llm_send_when?: string };
 
     const formatted = (galleries ?? []).map((g) => {
       const row = g as typeof g & { llm_media_guidance?: string | null };
@@ -1697,7 +1729,11 @@ async function executeSuiteGalleryQuery(
 
       const allPhotoUrls = [...(coverFixed ? [coverFixed] : []), ...photos.map((m) => m.url)];
       const uniqueUrls = [...new Set(allPhotoUrls)];
-      const photos_markdown = uniqueUrls.map((url) => `![${g.name}](${url})`).join("\n");
+      const excluded = isGalleryExcludedFromClientCatalog(g.name);
+      const rotulo = galleryRotuloParaCliente(g.name, g.description);
+      const exibir_no_catalogo_cliente = !excluded && rotulo != null;
+      const altMd = rotulo ?? "Foto";
+      const photos_markdown = uniqueUrls.map((url) => `![${altMd}](${url})`).join("\n");
 
       const orientacao =
         typeof row.llm_media_guidance === "string" && row.llm_media_guidance.trim()
@@ -1707,15 +1743,51 @@ async function executeSuiteGalleryQuery(
       return {
         id: g.id,
         nome: g.name,
+        rotulo_para_cliente: rotulo,
+        exibir_no_catalogo_cliente,
         descricao: g.description,
         orientacao_envio_midias: orientacao,
         total_fotos: uniqueUrls.length,
         total_videos: videos.length,
         cover_image_url: coverFixed ?? g.cover_image_url,
         photos_markdown,
-        videos: videos.map((v) => ({ url: v.url, caption: v.caption })),
+        videos: videos.map((v) => {
+          const w =
+            typeof (v as MediaItem).llm_send_when === "string"
+              ? (v as MediaItem).llm_send_when!.trim()
+              : "";
+          return {
+            url: v.url,
+            caption: v.caption,
+            ...(w ? { llm_send_when: w } : {}),
+          };
+        }),
       };
     });
+
+    let searchMissMessage: string | null = null;
+    if (gallerySearchMiss) {
+      const rotulos = formatted
+        .filter((x) => x.exibir_no_catalogo_cliente)
+        .map((x) => x.rotulo_para_cliente)
+        .filter((r): r is string => !!r);
+      searchMissMessage =
+        `A busca "${queryLabelForHint || "—"}" não encontrou uma galeria correspondente no painel. ` +
+        (rotulos.length > 0
+          ? `Com o cliente use só linguagem natural (tipos de suíte/ambiente), por exemplo: ${rotulos.join("; ")}. Não liste nomes internos do cadastro. Para chamar a ferramenta de novo use o campo "nome" exato do item desejado no JSON abaixo — esse valor não deve ir na mensagem ao hóspede.`
+          : "Não há galerias cadastradas no painel.");
+    }
+
+    let broadCatalogMessage: string | null = null;
+    if (listAllCatalog && formatted.length > 0) {
+      const nMenu = formatted.filter((x) => x.exibir_no_catalogo_cliente).length;
+      broadCatalogMessage =
+        `Pedido genérico de fotos. Existem ${nMenu} opção(ões) adequadas para citar ao cliente (itens com exibir_no_catalogo_cliente=true e rotulo_para_cliente). ` +
+        `Se no histórico recente o cliente ou você falaram de um tema concreto (piscinas, complexo aquático, spa, eventos, restaurante, etc.) e ele pediu "tem fotos?" em sequência, isso é pedido **desse tema** — faça **nova** chamada com parâmetros \`contexto\`/\`tema\`/\`topico\` (ex.: "piscina", "área molhada") **ou** \`nome\` com palavras desse tema **antes** de enviar fotos de suíte. ` +
+        `Responder com tom de hotel: confirme que tem fotos, ofereça enviar ou pergunte com naturalidade qual acomodação quer ver (use só rotulo_para_cliente). ` +
+        `É proibido listar o campo "nome" do painel, enumerar "áreas" como inventário técnico ou expor nomes operacionais (ex.: capa de conversa). ` +
+        `Para obter photos_markdown de uma galeria específica, chame de novo com nome/nome_galeria igual ao campo "nome" do item no JSON.`;
+    }
 
     const ctxLead = [searchMissMessage, broadCatalogMessage].filter(Boolean).join("\n\n");
     const hintPrefix = ctxLead ? `${ctxLead}\n\n` : "";
@@ -1724,30 +1796,42 @@ async function executeSuiteGalleryQuery(
     if (formatted.length === 0) {
       hint =
         searchMissMessage ??
-        (listAllCatalog || !nomeSuiteRaw
+        (listAllCatalog || !queryLabelForHint
           ? "Nenhuma galeria cadastrada ainda no painel."
-          : `Nenhuma galeria encontrada com o nome "${nomeSuiteRaw}".`);
+          : `Nenhuma galeria encontrada para "${queryLabelForHint}".`);
     } else if (formatted.length === 1) {
-      const g0 = formatted[0] as (typeof formatted)[0] & { orientacao_envio_midias?: string | null };
+      const g0 = formatted[0] as (typeof formatted)[0] & {
+        orientacao_envio_midias?: string | null;
+        rotulo_para_cliente?: string | null;
+      };
       hint =
         hintPrefix +
-        `GALERIA ENCONTRADA: "${g0.nome}". Fotos disponíveis em photos_markdown. ` +
+        `GALERIA ENCONTRADA. Fotos em photos_markdown. Ao cliente fale de forma natural` +
+        (g0.rotulo_para_cliente ? ` (referência: "${g0.rotulo_para_cliente}")` : "") +
+        `; não repita o nome técnico do painel ("${g0.nome}") na conversa. ` +
         `Se o cliente PEDIU as fotos nesta mensagem (ex.: "pode me mandar foto?", "manda foto", "quero ver", "tem foto?"), inclua AGORA o bloco photos_markdown INTEGRAL (todas as linhas ![rótulo](url)), sem omitir nenhuma foto. ` +
         `Se o cliente ainda NÃO pediu as fotos, descreva o conteúdo em texto primeiro e aguarde ele pedir para então incluir o bloco photos_markdown INTEGRAL.` +
         (g0.total_videos > 0
-          ? ` Esta galeria tem ${g0.total_videos} vídeo(s) — informe e forneça o link ao ser solicitado.`
+          ? ` Há vídeo(s) neste cadastro — ao falar com o hóspede use frase natural (ex. tour em vídeo), sem sufixo técnico "(com vídeos)" colado ao nome da pasta.` +
+            (Array.isArray((g0 as { videos?: unknown }).videos) &&
+            ((g0 as { videos: Array<{ llm_send_when?: string }> }).videos).some((x) => x.llm_send_when?.trim())
+              ? " Cada vídeo pode ter \`llm_send_when\`: envie **somente** a(s) URL(s) cujo critério casa com o contexto do cliente — não despeje todos os vídeos de uma vez sem necessidade."
+              : "")
           : "") +
         (g0.orientacao_envio_midias
           ? `\n\nORIENTAÇÃO DO PAINEL (quando enviar mídias — prioridade): ${g0.orientacao_envio_midias}`
           : "");
     } else {
+      const noMenu = formatted.filter((x) => x.exibir_no_catalogo_cliente).length;
       hint =
         hintPrefix +
-        `${formatted.length} GALERIAS ENCONTRADAS. Liste os nomes das galerias em texto primeiro. ` +
-        `Quando o cliente ESCOLHER uma galeria espec├¡fica ou PEDIR as fotos, inclua apenas o photos_markdown DESSA galeria (bloco integral, todas as linhas). ` +
-        `Nunca inclua fotos de todas as galerias de uma vez.` +
+        `${formatted.length} galeria(s) retornadas (${noMenu} com opção para menu ao cliente). ` +
+        `Não misture photos_markdown de galerias diferentes na mesma mensagem. ` +
+        `Se o cliente pediu fotos no encalço de um tema (piscinas, lazer aquático, etc.) e este retorno parece genérico demais, chame de novo com \`contexto\`/\`tema\` alinhado ao que foi dito no chat. ` +
+        `Para desambiguar, use apenas rotulo_para_cliente dos itens com exibir_no_catalogo_cliente=true — proibido listar o campo "nome" do painel ou soar como catálogo de pastas. ` +
+        `Proibido sufixos do tipo "(com vídeos)" colados ao nome. Quando o cliente escolher ou pedir fotos de uma acomodação, inclua só o photos_markdown dessa galeria (bloco integral).` +
         (formatted.some((x) => (x as { orientacao_envio_midias?: string | null }).orientacao_envio_midias)
-          ? " Cada item inclui orientacao_envio_midias quando o painel definiu regras ÔÇö respeite por galeria."
+          ? " Cada item pode ter orientacao_envio_midias — respeite por galeria."
           : "");
     }
 

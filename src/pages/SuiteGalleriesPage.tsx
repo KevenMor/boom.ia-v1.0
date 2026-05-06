@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSuiteGalleries } from "@/hooks/useSuiteGalleries";
 import { useTenantContext } from "@/contexts/TenantContext";
-import { SuiteGalleryCard } from "@/components/suite-galleries/SuiteGalleryCard";
+import { SuiteGalleryListRow } from "@/components/suite-galleries/SuiteGalleryListRow";
 import { SuiteGalleryFormDialog } from "@/components/suite-galleries/SuiteGalleryFormDialog";
 import { SuiteGalleryManageDialog } from "@/components/suite-galleries/SuiteGalleryManageDialog";
 import { DeleteSuiteGalleryDialog } from "@/components/suite-galleries/DeleteSuiteGalleryDialog";
@@ -40,9 +40,9 @@ export default function SuiteGalleriesPage() {
 
       {/* Content */}
       {isLoading ? (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="aspect-[4/3] w-full rounded-2xl" />
+        <div className="flex flex-col gap-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-[4.75rem] w-full rounded-xl" />
           ))}
         </div>
       ) : galleries.length === 0 ? (
@@ -60,18 +60,24 @@ export default function SuiteGalleriesPage() {
           </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="flex flex-col gap-2">
           {galleries.map((gallery, i) => (
             <div
               key={gallery.id}
               className="animate-fade-in"
-              style={{ animationDelay: `${i * 60}ms` }}
+              style={{ animationDelay: `${i * 40}ms` }}
             >
-              <SuiteGalleryCard
+              <SuiteGalleryListRow
                 gallery={gallery}
                 onOpen={() => setManageGallery(gallery)}
-                onEdit={(e) => { e.stopPropagation(); setEditGallery(gallery); }}
-                onDelete={(e) => { e.stopPropagation(); setDeleteGallery(gallery); }}
+                onEdit={(e) => {
+                  e.stopPropagation();
+                  setEditGallery(gallery);
+                }}
+                onDelete={(e) => {
+                  e.stopPropagation();
+                  setDeleteGallery(gallery);
+                }}
               />
             </div>
           ))}

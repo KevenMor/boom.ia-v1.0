@@ -364,19 +364,41 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
   }
   // suite_gallery_query: repassar photos_markdown integralmente para que o conversacional possa incluir as fotos
   if (Array.isArray(obj.galleries)) {
-    const galleries = obj.galleries as Array<{ nome?: string; photos_markdown?: string; videos?: Array<{ url: string }> }>;
+    const galleries = obj.galleries as Array<{
+      nome?: string;
+      rotulo_para_cliente?: string | null;
+      exibir_no_catalogo_cliente?: boolean;
+      photos_markdown?: string;
+      videos?: Array<{ url: string; llm_send_when?: string; caption?: string }>;
+    }>;
     const hint = typeof obj._hint === "string" ? obj._hint : "";
     const lines: string[] = [];
     if (hint) lines.push(hint);
     for (const g of galleries) {
-      if (g.nome) lines.push(`\nGaleria: ${g.nome}`);
+      if (g.rotulo_para_cliente) {
+        lines.push(`\nÁrea (falar assim com o cliente): ${g.rotulo_para_cliente}`);
+      } else if (g.exibir_no_catalogo_cliente === false) {
+        lines.push("\n[Mídia operacional — não oferecer como opção na lista de fotos ao cliente]");
+      } else if (g.nome) {
+        lines.push(`\nGaleria: ${g.nome}`);
+      }
       if (g.photos_markdown && g.photos_markdown.trim()) {
         lines.push("FOTOS (inclua o bloco abaixo integralmente na resposta quando o cliente pediu ver as fotos):");
         lines.push(g.photos_markdown);
       }
       if (g.videos && g.videos.length > 0) {
-        lines.push("VÍDEOS (URLs — uma por linha):");
-        for (const v of g.videos) lines.push(v.url);
+        const anyWhen = g.videos.some((v) => v.llm_send_when?.trim());
+        lines.push(
+          anyWhen
+            ? "VÍDEOS — use o critério llm_send_when de cada item; envie só a(s) URL(s) adequada(s) ao contexto:"
+            : "VÍDEOS (URLs — uma por linha):"
+        );
+        for (const v of g.videos) {
+          if (v.llm_send_when?.trim()) {
+            lines.push(`- Critério: ${v.llm_send_when.trim().replace(/\s+/g, " ")}`);
+          }
+          lines.push(`  ${v.url}`);
+        }
       }
     }
     return lines.join("\n") || JSON.stringify(obj).slice(0, 300);

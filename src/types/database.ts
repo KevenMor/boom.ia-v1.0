@@ -305,6 +305,8 @@ export interface SuiteGalleryMedia {
   url: string;
   type: 'photo' | 'video';
   caption?: string;
+  /** Quando enviar esta mídia (só para o agente / LLM). Ex.: "cliente disse que não conhece o resort". */
+  llm_send_when?: string;
 }
 
 export interface SuiteGallery {

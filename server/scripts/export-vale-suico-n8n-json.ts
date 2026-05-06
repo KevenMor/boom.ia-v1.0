@@ -64,6 +64,13 @@ const openai_functions = [
           nome_galeria: { type: "string" },
           filtro: { type: "string" },
           q: { type: "string" },
+          contexto: {
+            type: "string",
+            description:
+              "Tema do pedido de fotos quando a mensagem é genérica (ex.: após falar de piscinas: 'piscina', 'complexo aquático').",
+          },
+          tema: { type: "string", description: "Alias de contexto." },
+          topico: { type: "string", description: "Alias de contexto." },
         },
       },
     },
