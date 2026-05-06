@@ -43,8 +43,12 @@ async function sendChatwootImagesBatch(
 ): Promise<boolean> {
   if (!imageUrls.length) return true;
   console.warn(`[Deliver] sendChatwootImagesBatch: attempting ${imageUrls.length} image(s)`);
-  const results = await Promise.allSettled(
-    imageUrls.map(async (imageUrl) => {
+  // WhatsApp bridge only forwards the FIRST attachment of a Chatwoot message.
+  // Send each image as a separate POST so all arrive on WhatsApp.
+  let successCount = 0;
+  for (let i = 0; i < imageUrls.length; i++) {
+    const imageUrl = imageUrls[i];
+    try {
       const parsedUrl = new URL(imageUrl);
       const imgResp = await fetch(imageUrl, {
         headers: {
@@ -55,50 +59,35 @@ async function sendChatwootImagesBatch(
       });
       if (!imgResp.ok) {
         console.warn(`[Deliver] Image download failed ${imgResp.status}: ${imageUrl.slice(0, 80)}...`);
-        return null;
+        await sendChatwootTextMessage(url, apiToken, imageUrl);
+        continue;
       }
       const blob = await imgResp.blob();
       const filename = parsedUrl.pathname.split("/").pop() || "image.jpg";
-      return { blob, filename, url: imageUrl };
-    })
-  );
-
-  const successfulDownloads = results
-    .filter((d): d is PromiseFulfilledResult<{ blob: Blob; filename: string; url: string } | null> => d.status === "fulfilled")
-    .map((d) => d.value)
-    .filter((d): d is { blob: Blob; filename: string; url: string } => d !== null);
-
-  if (successfulDownloads.length === 0) {
-    console.warn(`[Deliver] All ${imageUrls.length} image(s) failed to download. Sending URLs as text fallback.`);
-    for (const u of imageUrls) await sendChatwootTextMessage(url, apiToken, u);
-    return false;
+      const formData = new FormData();
+      if (i === 0 && caption && caption.trim()) formData.append("content", caption.trim());
+      formData.append("message_type", "outgoing");
+      formData.append("private", "false");
+      formData.append("attachments[]", blob, filename);
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { api_access_token: apiToken },
+        body: formData,
+      });
+      if (!resp.ok) {
+        console.error(`[Deliver] Image msg error ${resp.status}:`, await resp.text());
+        await sendChatwootTextMessage(url, apiToken, imageUrl);
+      } else {
+        successCount++;
+        console.warn(`[Deliver] Image ${i + 1}/${imageUrls.length} sent OK`);
+      }
+    } catch (e) {
+      console.warn(`[Deliver] Image send exception: ${(e as Error)?.message?.slice(0, 120)}`);
+      await sendChatwootTextMessage(url, apiToken, imageUrl);
+    }
   }
-
-  const failedCount = imageUrls.length - successfulDownloads.length;
-  if (failedCount > 0) {
-    console.warn(`[Deliver] ${failedCount}/${imageUrls.length} image(s) failed to download, skipping those.`);
-  }
-
-  console.warn(`[Deliver] sendChatwootImagesBatch: sending ${successfulDownloads.length}/${imageUrls.length} image(s) in one message`);
-  const formData = new FormData();
-  if (caption && caption.trim()) formData.append("content", caption.trim());
-  formData.append("message_type", "outgoing");
-  formData.append("private", "false");
-  for (const { blob, filename } of successfulDownloads) {
-    formData.append("attachments[]", blob, filename);
-  }
-
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { api_access_token: apiToken },
-    body: formData,
-  });
-
-  if (!resp.ok) {
-    console.error(`[Deliver] Batch image msg error ${resp.status}:`, await resp.text());
-    return false;
-  }
-  return true;
+  console.warn(`[Deliver] sendChatwootImagesBatch: sent ${successCount}/${imageUrls.length} image(s)`);
+  return successCount > 0;
 }
 
 async function sendChatwootMediaMessage(
