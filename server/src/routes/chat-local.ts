@@ -3,6 +3,9 @@ import { createNexusClient } from "../services/supabase.js";
 import { buildSystemPrompt, getDispatcherPrompt } from "../services/prompts/registry.js";
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
 import { filterCommandLinesFromStream, sanitizeLLMOutput, fallbackSanitizeForRetry } from "../utils/sanitize.js";
+import { emitMediaCommandsSseIfNeeded } from "../utils/extract-media-commands.js";
+import { injectSuiteGalleryMarkdownIfMissing } from "../utils/suite-gallery-markdown-inject.js";
+import { getWelcomeConversationImageMarkdown } from "../utils/suite-gallery-welcome-image.js";
 import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification, buildHandoffNotification, extractClientNameFromMessages, toBrasiliaISO } from "../utils/agendaNotification.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
@@ -84,6 +87,143 @@ function toOpenAIMessages(
     }
   }
   return result;
+}
+
+// ── nearest_unit / consultar_unidade guard ─────────────────────────────────
+
+const NEAREST_UNIT_TOOL_NAMES = new Set([
+  "consultar_unidade",
+  "consultar_cep",
+  "nearest_unit",
+]);
+
+function isNearestUnitTool(toolName: string): boolean {
+  return NEAREST_UNIT_TOOL_NAMES.has(toolName);
+}
+
+/** Extrai CEP (8 dígitos) do histórico de mensagens do usuário */
+function extractCepFromMessages(messages: Array<{ role: string; content: string }>): string | null {
+  const CEP_RE = /\b(\d{5})-?(\d{3})\b/;
+  // Percorre mensagens do usuário do mais recente para o mais antigo
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role !== "user") continue;
+    const m = (messages[i].content || "").match(CEP_RE);
+    if (m) return m[1] + m[2];
+  }
+  return null;
+}
+
+// ── Vale Suíço / Omnibees guards ───────────────────────────────────────────
+
+const OMNIBEES_TOOL_NAMES = new Set([
+  "consultar_disponibilidade_vale_suico",
+  "consultar_disponibilidade",
+  "omnibees_availability",
+]);
+
+function isOmnibeesTool(toolName: string): boolean {
+  return OMNIBEES_TOOL_NAMES.has(toolName);
+}
+
+/**
+ * Detecta se o usuário forneceu de forma explícita o número de adultos no histórico.
+ * Trata variações como "2 adultos", "duas pessoas", "casal", "só nós dois", "eu e minha esposa", etc.
+ */
+function userProvidedAdultsCount(messages: Array<{ role: string; content: string }>): boolean {
+  const userMsgs = messages.filter((m) => m?.role === "user").map((m) => (m.content || "").toLowerCase());
+  const joined = userMsgs.join(" \n ").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (/\b(\d+)\s*(adultos?|pessoas?|hospedes?|hóspedes?|adulto)\b/.test(joined)) return true;
+  if (/\b(uma|duas|dois|tres|tr[eê]s|quatro|cinco|seis)\s*(adultos?|pessoas?|hospedes?)\b/.test(joined)) return true;
+  if (/\b(somos|seremos|vamos|estamos|iremos)\s*(em|nos)?\s*(\d+|uma|duas|dois|tr[eê]s|quatro)\b/.test(joined)) return true;
+  if (/\b(s[oó]\s+(n[oó]s|eu|nosso)\s+dois|n[oó]s\s+dois|casal|os\s+dois|s[oó]\s+(eu|n[oó]s))\b/.test(joined)) return true;
+  if (/\b(eu\s+e\s+(meu|minha|a\s+|o\s+))/.test(joined)) return true;
+  if (/\b(viajo\s+sozinho|vou\s+sozinho|vou\s+sozinha|viagem\s+solo)\b/.test(joined)) return true;
+  return false;
+}
+
+/**
+ * Detecta se o usuário forneceu situação de crianças de forma explícita.
+ */
+function userProvidedChildrenStatus(messages: Array<{ role: string; content: string }>): boolean {
+  const userMsgs = messages.filter((m) => m?.role === "user").map((m) => (m.content || "").toLowerCase());
+  const joined = userMsgs.join(" \n ").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (/\b(\d+)\s*(crian[cç]as?|filhos?|bebes?|beb[eê]s?|kids)\b/.test(joined)) return true;
+  if (/\b(uma|duas|dois|tres|tr[eê]s)\s*(crian[cç]as?|filhos?)\b/.test(joined)) return true;
+  if (/\b(sem|n[ãa]o\s+tem|nenhuma|zero)\s*(crian[cç]a|filho)/.test(joined)) return true;
+  if (/\bs[oó]\s*(adulto|nos\s+dois|os\s+dois|n[oó]s\s+dois|eu)\b/.test(joined)) return true;
+  if (/\bcasal\b/.test(joined) && !/crian[cç]a|filho|beb[eê]/.test(joined)) return true;
+  if (/\bsozinh[oa]\b/.test(joined)) return true;
+  if (/\b\d+\s*anos?\b/.test(joined) && /crian[cç]a|filho|beb[eê]/.test(joined)) return true;
+  return false;
+}
+
+/**
+ * Guarda determinístico para Omnibees: bloqueia chamada se ocupação não está explícita
+ * no histórico (proteção contra dispatcher chutar adults=2 / children=0).
+ */
+function validateOmnibeesArgs(
+  args: Record<string, unknown>,
+  messages: Array<{ role: string; content: string }>
+): { ok: true } | { ok: false; error: string } {
+  const checkIn = args.checkIn ?? args.check_in ?? args.CheckIn;
+  const checkOut = args.checkOut ?? args.check_out ?? args.CheckOut;
+  if (!checkIn || !checkOut) {
+    return { ok: false, error: "checkIn e checkOut são obrigatórios. Pergunte ao cliente as datas exatas antes de consultar." };
+  }
+  const adults = args.adults;
+  const hasAdultsInArgs = adults !== undefined && adults !== null && adults !== "";
+  if (!hasAdultsInArgs && !userProvidedAdultsCount(messages)) {
+    return {
+      ok: false,
+      error:
+        "PROIBIDO consultar Omnibees sem número de adultos explícito do cliente. " +
+        "O dispatcher NÃO deve chutar adults=2. Pergunte ao cliente quantos adultos vão no total antes de consultar. " +
+        "PROIBIDO ABSOLUTO citar valores em R$, nomes de quartos com preços ou parcelamento. " +
+        "Responda em texto sem nenhum valor, perguntando quantos adultos vão.",
+    };
+  }
+  const children = args.children;
+  const hasChildrenInArgs = children !== undefined && children !== null && children !== "";
+  if (!hasChildrenInArgs && !userProvidedChildrenStatus(messages)) {
+    return {
+      ok: false,
+      error:
+        "PROIBIDO consultar Omnibees sem situação de crianças explícita. " +
+        "O dispatcher NÃO deve assumir 0 crianças. Pergunte ao cliente se vai criança e, se sim, quantas e idades. " +
+        "PROIBIDO ABSOLUTO citar valores em R$. Responda em texto sem nenhum valor, perguntando sobre crianças.",
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * Guarda anti-alucinação: se a Omnibees falhou ou retornou sem rooms,
+ * monta payload com prohibition explícito para o conversacional.
+ */
+function buildOmnibeesGuardedContent(toolName: string, result: { success: boolean; result: unknown; error?: string }): string {
+  if (!isOmnibeesTool(toolName)) {
+    return JSON.stringify(result.success ? result.result : { error: result.error });
+  }
+  if (!result.success) {
+    return JSON.stringify({
+      error: result.error || "Falha ao consultar Omnibees",
+      _prohibition:
+        "PROIBIDO ABSOLUTO citar qualquer valor em R$, nome de quarto com preço, parcelamento, regime ou qualquer dado tarifário. " +
+        "A consulta de disponibilidade FALHOU neste turno. NÃO invente tarifas. " +
+        "Responda ao cliente em texto consultivo sem nenhum valor — informe que vai verificar a disponibilidade ou peça os dados que faltam (datas exatas, adultos, crianças, idades).",
+    });
+  }
+  const obj = (result.result || {}) as Record<string, unknown>;
+  const rooms = Array.isArray(obj.rooms) ? obj.rooms : [];
+  if (rooms.length === 0) {
+    return JSON.stringify({
+      ...obj,
+      _prohibition:
+        "Resultado SEM disponibilidade (rooms vazio). PROIBIDO ABSOLUTO citar qualquer valor em R$ ou nome de quarto. " +
+        "Diga ao cliente com transparência que para essas datas a consulta não trouxe tarifa, e ofereça uma alternativa (outras datas próximas) sem inventar nenhum valor.",
+    });
+  }
+  return JSON.stringify(obj);
 }
 
 // ── Entity extraction helpers ──────────────────────────────────────────────
@@ -222,6 +362,25 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
       return parts.join(" ");
     });
     return `Encontrados ${items.length} veículo(s): ${preview.join("; ")}${items.length > 5 ? "..." : ""}`;
+  }
+  // suite_gallery_query: repassar photos_markdown integralmente para que o conversacional possa incluir as fotos
+  if (Array.isArray(obj.galleries)) {
+    const galleries = obj.galleries as Array<{ nome?: string; photos_markdown?: string; videos?: Array<{ url: string }> }>;
+    const hint = typeof obj._hint === "string" ? obj._hint : "";
+    const lines: string[] = [];
+    if (hint) lines.push(hint);
+    for (const g of galleries) {
+      if (g.nome) lines.push(`\nGaleria: ${g.nome}`);
+      if (g.photos_markdown && g.photos_markdown.trim()) {
+        lines.push("FOTOS (inclua o bloco abaixo integralmente na resposta quando o cliente pediu ver as fotos):");
+        lines.push(g.photos_markdown);
+      }
+      if (g.videos && g.videos.length > 0) {
+        lines.push("VÍDEOS (URLs — uma por linha):");
+        for (const v of g.videos) lines.push(v.url);
+      }
+    }
+    return lines.join("\n") || JSON.stringify(obj).slice(0, 300);
   }
   return JSON.stringify(obj).slice(0, 300);
 }
@@ -526,6 +685,42 @@ function normalizeParametersSchema(params: unknown): Record<string, unknown> {
   };
 }
 
+/**
+ * Enriquece a descrição de uma tool chatwoot_assign com instruções de roteamento
+ * baseadas no execution_config (regras com labels ou assignee/team padrão).
+ * Exportada para teste unitário.
+ */
+export function enrichChatwootAssignDescription(tool: ToolDef, originalDescription: string): string {
+  if (tool.tool_type !== "chatwoot_assign") return originalDescription;
+
+  const execCfg = (tool.execution_config || {}) as Record<string, unknown>;
+  const rules = Array.isArray(execCfg.rules) ? execCfg.rules as Array<{ label?: string; assignee_id?: number; team_id?: number }> : [];
+  const hasLabels = rules.some((r) => r.label);
+  const hasDefaultAssignee = execCfg.assignee_id != null;
+  const hasDefaultTeam = execCfg.team_id != null;
+
+  const base = originalDescription.trim();
+
+  if (!hasLabels) {
+    // Sem labels: execução sem argumentos (execution_config cuida do roteamento)
+    const noArgsNote = `IMPORTANTE: chame sem argumentos — NÃO envie assignee_id nem team_id. O execution_config já define o destino.`;
+    return base ? `${base}\n${noArgsNote}` : noArgsNote;
+  }
+
+  // Com labels: instrui enviar reason para fuzzy matching
+  const labelList = rules.filter((r) => r.label).map((r) => `"${r.label}"`).join(", ");
+  const hasDefault = hasDefaultAssignee || hasDefaultTeam;
+
+  const firstLabel = rules.find((r) => r.label)?.label ?? "nome da unidade";
+  const routing = [
+    `Sempre envie reason descrevendo a unidade/destino. Opções disponíveis: ${labelList}.`,
+    `NÃO envie assignee_id nem team_id — use apenas reason com o nome da unidade (ex.: reason: "${firstLabel}").`,
+    hasDefault ? `Se nenhuma opção casar, o sistema usa o destino padrão (escalacao geral).` : null,
+  ].filter(Boolean).join(" ");
+
+  return base ? `${base}\n${routing}` : routing;
+}
+
 function buildOpenAITools(
   tools: ToolDef[],
   baseUrl: string
@@ -562,11 +757,16 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           chatwoot_conversation_id?: number | null;
           attachments?: unknown[];
           external_user_id?: string | null;
+          skip_history_persist?: boolean;
         };
       }>,
       reply: FastifyReply
     ) => {
-      const { agent_id, messages, conversation_id, chatwoot_conversation_id, external_user_id } = req.body;
+      const { agent_id, messages, conversation_id, chatwoot_conversation_id, external_user_id, skip_history_persist } = req.body;
+
+      const skipHistoryExplicit =
+        skip_history_persist === true ||
+        String(skip_history_persist ?? "").toLowerCase() === "true";
 
       if (!agent_id || !messages || !Array.isArray(messages)) {
         return reply.status(400).send({ error: "agent_id and messages required" });
@@ -586,11 +786,13 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
 
       const { data: tenant } = await supabase
         .from("tenants")
-        .select("slug, settings")
+        .select("slug, settings, db_name")
         .eq("id", agent.tenant_id)
         .single();
 
       const tenantSlug = tenant?.slug ?? null;
+      const tenantSchema = tenant?.db_name ?? null;
+      const tenantId = agent.tenant_id as string;
       const tenantSettings = (tenant?.settings || {}) as Record<string, unknown>;
       const agentConfig = (agent.config || {}) as Record<string, unknown>;
       const rawDispatcherId = agentConfig.dispatcher_provider_id ?? tenantSettings.dispatcher_provider_id;
@@ -655,7 +857,116 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         })), null, 2));
       }
 
+      const shouldPersistHistory = !skipHistoryExplicit;
+      let resolvedTenantSchema = tenantSchema;
       let responseConvId = conversation_id ?? null;
+      let lastPersistedMessage: { role?: string; content?: string } | null = null;
+
+      async function ensureConversationId(): Promise<void> {
+        if (responseConvId || !shouldPersistHistory) return;
+        try {
+          // Se tenant não tem schema, tenta provisionar automaticamente
+          if (!resolvedTenantSchema) {
+            console.log("[Chat-Local] Tenant sem db_name, tentando provisionar:", tenantId);
+            const { error: provErr } = await supabase.rpc("provision_tenant_schema", {
+              p_tenant_id: tenantId,
+            });
+            if (provErr) {
+              console.warn("[Chat-Local] provision_tenant_schema falhou:", provErr.message, "code:", provErr.code);
+              return;
+            }
+            // Recarrega db_name após provisionamento
+            const { data: refreshedTenant } = await supabase
+              .from("tenants")
+              .select("db_name")
+              .eq("id", tenantId)
+              .single();
+            resolvedTenantSchema = refreshedTenant?.db_name ?? null;
+            if (!resolvedTenantSchema) {
+              console.warn("[Chat-Local] db_name ainda null após provisionamento");
+              return;
+            }
+            console.log("[Chat-Local] Tenant provisionado com schema:", resolvedTenantSchema);
+          }
+          /** Passa todos os parâmetros para evitar ambiguidade PGRST203 entre as duas assinaturas */
+          const { data: createdConvId, error: createErr } = await supabase.rpc("create_conversation", {
+            p_agent_id: agent_id,
+            p_channel: "sandbox",
+            p_external_user_id: external_user_id ?? null,
+            p_contact_name: null,
+            p_contact_avatar_url: null,
+          });
+          if (!createErr && createdConvId) {
+            responseConvId = createdConvId as string;
+            console.log("[Chat-Local] Conversa sandbox (RPC):", String(responseConvId).slice(0, 8) + "…");
+            return;
+          }
+          console.warn("[Chat-Local] create_conversation RPC falhou:", createErr?.message, "code:", createErr?.code, "details:", createErr?.details);
+        } catch (e) {
+          console.warn("[Chat-Local] Falha ao criar conversa:", (e as Error)?.message);
+        }
+      }
+
+      async function loadLastPersistedMessage(): Promise<void> {
+        if (!shouldPersistHistory || !responseConvId) return;
+        try {
+          const { data: history } = await supabase.rpc("load_conversation_messages", {
+            p_agent_id: agent_id,
+            p_conversation_id: responseConvId,
+          });
+          if (Array.isArray(history) && history.length > 0) {
+            const last = history[history.length - 1] as { role?: string; content?: string };
+            lastPersistedMessage = {
+              role: typeof last.role === "string" ? last.role : undefined,
+              content: typeof last.content === "string" ? last.content : undefined,
+            };
+          }
+        } catch (e) {
+          console.warn("[Chat-Local] Falha ao carregar último histórico:", (e as Error)?.message);
+        }
+      }
+
+      async function persistMessage(
+        role: "user" | "assistant",
+        content: string,
+        metadata?: Record<string, unknown>
+      ): Promise<void> {
+        const cleanContent = (content || "").trim();
+        if (!shouldPersistHistory || !responseConvId || !cleanContent) return;
+        if (lastPersistedMessage?.role === role && (lastPersistedMessage?.content || "").trim() === cleanContent) {
+          return;
+        }
+        try {
+          const payload: Record<string, unknown> = {
+            p_agent_id: agent_id,
+            p_conversation_id: responseConvId,
+            p_role: role,
+            p_content: cleanContent,
+            p_model: null,
+            p_tokens_input: 0,
+            p_tokens_output: 0,
+            p_latency_ms: null,
+          };
+          if (metadata) payload.p_metadata = metadata;
+          const { error: saveRpcErr } = await supabase.rpc("save_message", payload);
+          if (saveRpcErr) {
+            console.warn(`[Chat-Local] save_message RPC (${role}):`, saveRpcErr.message, "code:", saveRpcErr.code, "details:", saveRpcErr.details);
+            return;
+          }
+          lastPersistedMessage = { role, content: cleanContent };
+          console.log("[Chat-Local] Histórico persistido:", { conversation_id: responseConvId, role, len: cleanContent.length });
+        } catch (e) {
+          console.warn(`[Chat-Local] Falha ao persistir mensagem (${role}):`, (e as Error)?.message);
+        }
+      }
+
+      await ensureConversationId();
+      await loadLastPersistedMessage();
+      if (shouldPersistHistory && !responseConvId) {
+        console.warn("[Chat-Local] Sem conversation_id — histórico do sandbox não será gravado (RPC/fallback falharam?)");
+      }
+      const latestUserMessage = [...messages].reverse().find((m) => m.role === "user")?.content || "";
+      await persistMessage("user", latestUserMessage);
 
       const sendSse = (data: unknown) => {
         try {
@@ -677,6 +988,11 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       const isAllowed = allowedOrigins.includes(origin) || /\.lovable\.dev$/.test(origin);
       const allowOrigin = isAllowed ? origin : "http://localhost:8080";
 
+      const isFirstContact = messages.filter((m) => m.role === "assistant").length === 0;
+      const welcomeImageMd = isFirstContact
+        ? await getWelcomeConversationImageMarkdown(supabase, tenantId)
+        : "";
+
       reply.raw.writeHead(200, {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
@@ -684,6 +1000,10 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         "Access-Control-Allow-Origin": allowOrigin,
         "Access-Control-Allow-Credentials": "true",
       });
+
+      if (welcomeImageMd) {
+        sendSse({ choices: [{ delta: { content: welcomeImageMd } }] });
+      }
 
       // Dual-provider: OpenAI para tools (dispatcher), Gemini para conversacional
       if (useTools && dispatcherProviderId) {
@@ -926,6 +1246,12 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   continue;
                 }
 
+                // Garantir que args seja sempre um objeto (JSON.parse pode retornar primitivo)
+                if (typeof args !== "object" || args === null || Array.isArray(args)) {
+                  console.warn("[Chat-Local] args não é objeto, resetando para {}. Valor original:", JSON.stringify(args));
+                  args = {};
+                }
+
                 const isEstoqueEmpty = tc.function.name === "consultar_estoque" && Object.keys(args).length === 0;
                 if (isEstoqueEmpty) {
                   const recentText = messages
@@ -952,6 +1278,39 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   }
                 }
 
+                if (isNearestUnitTool(tc.function.name) && !args.cep) {
+                  const fallbackCep = extractCepFromMessages(messages);
+                  if (fallbackCep) {
+                    args = { ...args, cep: fallbackCep };
+                    console.log("[Chat-Local] consultar_unidade sem cep: fallback extraiu do histórico:", fallbackCep);
+                  } else {
+                    console.warn("[Chat-Local] consultar_unidade BLOQUEADO: cep ausente e não encontrado no histórico.");
+                    debugEntries.push({ type: "tool_call", tool: tc.function.name, args, tool_type: "function" });
+                    debugEntries.push({ type: "tool_result", preview: { error: "consultar_unidade rejeitada — cep ausente" } });
+                    conversationalMessages.push({
+                      role: "tool",
+                      tool_call_id: tc.id,
+                      content: JSON.stringify({ error: "consultar_unidade chamada sem o argumento cep. Peça o CEP (8 dígitos) ao cliente antes de chamar esta ferramenta." }),
+                    });
+                    continue;
+                  }
+                }
+
+                if (isOmnibeesTool(tc.function.name)) {
+                  const validation = validateOmnibeesArgs(args, messages);
+                  if (!validation.ok) {
+                    console.warn("[Chat-Local] Omnibees BLOQUEADO (dual):", validation.error);
+                    debugEntries.push({ type: "tool_call", tool: tc.function.name, args, tool_type: "function" });
+                    debugEntries.push({ type: "tool_result", preview: { error: validation.error } });
+                    conversationalMessages.push({
+                      role: "tool",
+                      tool_call_id: tc.id,
+                      content: JSON.stringify({ error: validation.error }),
+                    });
+                    continue;
+                  }
+                }
+
                 console.log("[Chat-Local] Executando tool:", tc.function.name, "| args:", JSON.stringify(args));
                 debugEntries.push({ type: "tool_call", tool: tc.function.name, args, tool_type: "function" });
                 const result = await executeTool(tool, args, agent_id);
@@ -969,7 +1328,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 conversationalMessages.push({
                   role: "tool",
                   tool_call_id: tc.id,
-                  content: JSON.stringify(result.success ? result.result : { error: result.error }),
+                  content: buildOmnibeesGuardedContent(tc.function.name, result),
                 });
                 if (tc.function.name === "consultar_agenda" && result.success && result.result) {
                   sendAgendaNotification(agent_id, agent, result.result, messages, external_user_id, responseConvId, chatwoot_conversation_id).catch(() => {});
@@ -1129,18 +1488,19 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               }
             }
             if (done) {
-              convFullContent += streamFilterBuffer;
+              // convFullContent já inclui todos os delta.content; não somar streamFilterBuffer (duplicava o sufixo).
               if (streamFilterBuffer) {
                 debugSendCount++;
                 debugSendTotalLen += streamFilterBuffer.length;
                 sendSse({ choices: [{ delta: { content: streamFilterBuffer } }] });
               }
-              // Primeiro contato: pergunta do nome só se NÃO tiver vídeo de boas-vindas (quando tem vídeo, o delivery envia texto → vídeo → pergunta do nome, evitando duplicata)
+              // Primeiro contato: pergunta do nome só se NÃO tiver vídeo de boas-vindas E o modelo ainda não perguntou o nome
               const isFirstContact = messages.filter((m) => m.role === "assistant").length === 0;
               const agentCfg = (agent?.config || {}) as Record<string, unknown>;
               const hasWelcomeVideo = !!(agentCfg.welcome_video_url as string)?.trim();
               const nameQuestion = (agentCfg.welcome_name_question as string) || "Como posso te chamar?";
-              if (isFirstContact && nameQuestion && !hasWelcomeVideo) {
+              const modelAlreadyAskedName = /como\s+(prefere\s+ser\s+chamad|posso\s+te\s+chamar|posso\s+chamar|gostaria\s+de\s+ser\s+chamad)|com\s+quem\s+(eu\s+)?tenho\s+o\s+prazer|com\s+quem\s+(eu\s+)?falo|qual\s+(é\s+)?(seu|o)\s+nome|como\s+você\s+prefere\s+ser\s+chamad/i.test(convFullContent);
+              if (isFirstContact && nameQuestion && !hasWelcomeVideo && !modelAlreadyAskedName) {
                 const nqContent = "\n\n" + nameQuestion;
                 debugSendCount++;
                 debugSendTotalLen += nqContent.length;
@@ -1148,6 +1508,18 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               }
               break;
             }
+          }
+
+          const lastUserForGalleryInject = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
+          const galleryInjectDual = injectSuiteGalleryMarkdownIfMissing({
+            assistantText: convFullContent,
+            toolResultStrings: toolResults,
+            lastUserMessage: lastUserForGalleryInject,
+          });
+          if (galleryInjectDual) {
+            console.log("[Chat-Local] Injetando photos_markdown suite_gallery no fluxo dual (omissão do modelo)");
+            convFullContent = galleryInjectDual.fullText;
+            sendSse({ choices: [{ delta: { content: galleryInjectDual.appended } }] });
           }
 
           if (/HANDOFF_COMERCIAL/i.test(convFullContent)) {
@@ -1170,6 +1542,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               );
             }
           }
+          emitMediaCommandsSseIfNeeded(sendSse, convFullContent);
 
           if (debugSendTotalLen === 0) {
             console.warn("[Chat-Local] Resposta vazia do conversacional", {
@@ -1268,6 +1641,12 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }
           }
 
+          const rawConvAssist = (convFullContent || "").trim();
+          const assistantForHistory = sanitizeLLMOutput(convFullContent || "") || rawConvAssist;
+          const assistantMetadata = tokenUsagePayload.dispatcher || tokenUsagePayload.conversational
+            ? { token_usage: tokenUsagePayload }
+            : undefined;
+          await persistMessage("assistant", assistantForHistory, assistantMetadata);
           sendSse({ conversation_id: responseConvId });
           sendSse("[DONE]");
           reply.raw.end();
@@ -1387,7 +1766,8 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             const agentCfgSingle = (agent?.config || {}) as Record<string, unknown>;
             const hasWelcomeVideoSingle = !!(agentCfgSingle.welcome_video_url as string)?.trim();
             const nameQuestionSingle = (agentCfgSingle.welcome_name_question as string) || "Como posso te chamar?";
-            if (isFirstContact && nameQuestionSingle && !hasWelcomeVideoSingle) {
+            const modelAlreadyAskedNameSingle = /como\s+(prefere\s+ser\s+chamad|posso\s+te\s+chamar|posso\s+chamar|gostaria\s+de\s+ser\s+chamad)|com\s+quem\s+(eu\s+)?tenho\s+o\s+prazer|com\s+quem\s+(eu\s+)?falo|qual\s+(é\s+)?(seu|o)\s+nome|como\s+você\s+prefere\s+ser\s+chamad/i.test(content);
+            if (isFirstContact && nameQuestionSingle && !hasWelcomeVideoSingle && !modelAlreadyAskedNameSingle) {
               const nqContentSingle = "\n\n" + nameQuestionSingle;
               content += nqContentSingle;
               sendSse({ choices: [{ delta: { content: nqContentSingle } }] });
@@ -1429,6 +1809,24 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               );
             }
           }
+          const lastUserForGalleryInjectSP = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
+          const toolStringsSP: string[] = [];
+          for (const m of llmMessages) {
+            const role = (m as { role?: string }).role;
+            const c = (m as { content?: unknown }).content;
+            if (role === "tool" && typeof c === "string") toolStringsSP.push(c);
+          }
+          const galleryInjectSP = injectSuiteGalleryMarkdownIfMissing({
+            assistantText: fullContent,
+            toolResultStrings: toolStringsSP,
+            lastUserMessage: lastUserForGalleryInjectSP,
+          });
+          if (galleryInjectSP) {
+            console.log("[Chat-Local] Injetando photos_markdown suite_gallery (single-provider)");
+            fullContent = galleryInjectSP.fullText;
+            sendSse({ choices: [{ delta: { content: galleryInjectSP.appended } }] });
+          }
+          emitMediaCommandsSseIfNeeded(sendSse, fullContent);
           if (singleProviderUsageAccum.total_tokens > 0) {
             sendSse({ token_usage: { single: { ...singleProviderUsageAccum, model } } });
             try {
@@ -1447,6 +1845,13 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               console.warn("[Chat-Local] Failed to save token usage:", (dbErr as Error)?.message);
             }
           }
+          const rawSingleAssist = (fullContent || "").trim();
+          const assistantForHistory = sanitizeLLMOutput(fullContent || "") || rawSingleAssist;
+          const assistantMetadata =
+            singleProviderUsageAccum.total_tokens > 0
+              ? { token_usage: { single: { ...singleProviderUsageAccum, model } } }
+              : undefined;
+          await persistMessage("assistant", assistantForHistory, assistantMetadata);
           sendSse({ conversation_id: responseConvId });
           sendSse("[DONE]");
           reply.raw.end();
@@ -1483,6 +1888,12 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             args = {};
           }
 
+          // Garantir que args seja sempre um objeto (JSON.parse pode retornar primitivo)
+          if (typeof args !== "object" || args === null || Array.isArray(args)) {
+            console.warn("[Chat-Local] args não é objeto (single-provider), resetando para {}. Valor original:", JSON.stringify(args));
+            args = {};
+          }
+
           const isEstoqueEmptySP = tc.function.name === "consultar_estoque" && Object.keys(args).length === 0;
           if (isEstoqueEmptySP) {
             const recentTextSP = messages
@@ -1507,6 +1918,35 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }
           }
 
+          if (isNearestUnitTool(tc.function.name) && !args.cep) {
+            const fallbackCepSP = extractCepFromMessages(messages);
+            if (fallbackCepSP) {
+              args = { ...args, cep: fallbackCepSP };
+              console.log("[Chat-Local] consultar_unidade sem cep (single-provider): fallback extraiu do histórico:", fallbackCepSP);
+            } else {
+              console.warn("[Chat-Local] consultar_unidade BLOQUEADO (single-provider): cep ausente e não encontrado no histórico.");
+              llmMessages.push({
+                role: "tool",
+                tool_call_id: tc.id,
+                content: JSON.stringify({ error: "consultar_unidade chamada sem o argumento cep. Peça o CEP (8 dígitos) ao cliente antes de chamar esta ferramenta." }),
+              });
+              continue;
+            }
+          }
+
+          if (isOmnibeesTool(tc.function.name)) {
+            const validation = validateOmnibeesArgs(args, messages);
+            if (!validation.ok) {
+              console.warn("[Chat-Local] Omnibees BLOQUEADO (single):", validation.error);
+              llmMessages.push({
+                role: "tool",
+                tool_call_id: tc.id,
+                content: JSON.stringify({ error: validation.error }),
+              });
+              continue;
+            }
+          }
+
           console.log("[Chat-Local] Executando tool (single-provider):", tc.function.name, "| args:", JSON.stringify(args));
           const result = await executeTool(tool, args, agent_id);
           const resultPreview = result.success
@@ -1516,7 +1956,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           llmMessages.push({
             role: "tool",
             tool_call_id: tc.id,
-            content: JSON.stringify(result.success ? result.result : { error: result.error }),
+            content: buildOmnibeesGuardedContent(tc.function.name, result),
           });
           if (tc.function.name === "consultar_agenda" && result.success && result.result) {
             sendAgendaNotification(agent_id, agent, result.result, messages, external_user_id, responseConvId, chatwoot_conversation_id).catch(() => {});
@@ -1541,6 +1981,34 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
         } catch (dbErr) {
           console.warn("[Chat-Local] Failed to save token usage:", (dbErr as Error)?.message);
         }
+      }
+      {
+        const lastUserGI = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
+        const toolStrsLoop: string[] = [];
+        for (const m of llmMessages) {
+          const role = (m as { role?: string }).role;
+          const c = (m as { content?: unknown }).content;
+          if (role === "tool" && typeof c === "string") toolStrsLoop.push(c);
+        }
+        const galleryInjLoop = injectSuiteGalleryMarkdownIfMissing({
+          assistantText: fullContent,
+          toolResultStrings: toolStrsLoop,
+          lastUserMessage: lastUserGI,
+        });
+        let finalAssistantRaw = fullContent;
+        if (galleryInjLoop) {
+          finalAssistantRaw = galleryInjLoop.fullText;
+          sendSse({ choices: [{ delta: { content: galleryInjLoop.appended } }] });
+        }
+        emitMediaCommandsSseIfNeeded(sendSse, finalAssistantRaw);
+        const rawLoopAssist = (finalAssistantRaw || "").trim();
+        const assistantForHistory =
+          sanitizeLLMOutput(finalAssistantRaw || "") || rawLoopAssist;
+        const assistantMetadata =
+          singleProviderUsageAccum.total_tokens > 0
+            ? { token_usage: { single: { ...singleProviderUsageAccum, model } } }
+            : undefined;
+        await persistMessage("assistant", assistantForHistory, assistantMetadata);
       }
       sendSse({ conversation_id: responseConvId });
       sendSse("[DONE]");

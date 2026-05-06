@@ -46,7 +46,7 @@ async function build() {
     bodyLimit: 220 * 1024 * 1024,
     logger: isProduction
       ? { level: "warn", serializers: { req: (req) => ({ method: req.method, url: req.url }), res: (res) => ({ statusCode: res.statusCode }) } }
-      : true,
+      : { level: "info", transport: { target: "pino-pretty", options: { colorize: true, translateTime: "HH:MM:ss", ignore: "pid,hostname" } } },
   });
 
   // Aceitar body vazio quando Content-Type for application/json (ex.: DELETE do Supabase, POST /queue/followups)

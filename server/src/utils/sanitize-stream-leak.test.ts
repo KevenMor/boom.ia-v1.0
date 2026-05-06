@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { sanitizeLLMOutput, filterCommandLinesFromStream, stripToolNameLeakage } from "./sanitize.js";
+import {
+  sanitizeLLMOutput,
+  filterCommandLinesFromStream,
+  stripToolNameLeakage,
+  stripThoughtAndReasoningBlocks,
+} from "./sanitize.js";
 
 describe("sanitizeLLMOutput — regressão vazamento para cliente", () => {
   it("remove placeholder [Mídia enviada…] do histórico", () => {
@@ -70,6 +75,19 @@ describe("sanitizeLLMOutput — regressão vazamento para cliente", () => {
   it("stripToolNameLeakage remove token colado após ?", () => {
     expect(stripToolNameLeakage("Como posso te chamar?marcar_lead")).toBe("Como posso te chamar?");
   });
+
+  it("preserva linha só com imagem markdown ![…](https://…) (galeria / Supabase)", () => {
+    const line = "![Suíte](https://xyz.supabase.co/storage/v1/object/public/bucket/foto.jpg)";
+    expect(sanitizeLLMOutput(line).trim()).toContain("https://xyz.supabase.co");
+    expect(sanitizeLLMOutput(line).trim()).toMatch(/!\[/);
+  });
+
+  it("após THOUGHT, linha markdown de imagem não pode ser descartada como raciocínio", () => {
+    const raw = ["THOUGHT:", "![LOFT](https://x.com/a.jpg)", "Boa noite!"].join("\n");
+    const out = stripThoughtAndReasoningBlocks(raw);
+    expect(out).toContain("https://x.com/a.jpg");
+    expect(out).toMatch(/Boa noite/);
+  });
 });
 
 describe("filterCommandLinesFromStream — regressão", () => {
@@ -106,5 +124,13 @@ describe("filterCommandLinesFromStream — regressão", () => {
     expect(acc).not.toMatch(/ENVIAR/);
     push("\n");
     expect(acc).not.toMatch(/ENVIAR/);
+  });
+
+  it("mantém linha markdown de imagem no stream (não pode sumir no sanitize por linha)", () => {
+    const line = "![LOFT](https://xyz.supabase.co/storage/v1/object/public/x/y.webp)\n";
+    const { toSend, newBuffer } = filterCommandLinesFromStream("", line);
+    expect(toSend).toContain("https://xyz.supabase.co");
+    expect(toSend).toMatch(/!\[/);
+    expect(newBuffer).toBe("");
   });
 });

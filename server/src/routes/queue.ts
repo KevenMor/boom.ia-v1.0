@@ -10,6 +10,7 @@ import {
 import { sendViaWaha } from "../services/waha.js";
 import { transcribeAudio, isAudioAttachment } from "../services/transcribe.js";
 import { buildReminderMessage } from "../utils/buildReminderMessage.js";
+import { getWelcomeConversationImageMarkdown } from "../utils/suite-gallery-welcome-image.js";
 
 const API_BASE = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
 
@@ -83,6 +84,7 @@ async function callChatAgent(
         conversation_id: convId,
         attachments,
         external_user_id: externalUserId,
+        skip_history_persist: true,
       };
       if (chatwootConvId != null) body.chatwoot_conversation_id = chatwootConvId;
 
@@ -728,10 +730,23 @@ export async function queueRoutes(fastify: FastifyInstance) {
         response_parts: responseParts,
       };
       if (isFirstReply) {
-        const { data: agentRow } = await supabase.from("agents").select("config").eq("id", agent_id).maybeSingle();
+        const { data: agentRow } = await supabase.from("agents").select("config, tenant_id").eq("id", agent_id).maybeSingle();
         const cfg = (agentRow?.config || {}) as Record<string, unknown>;
         if (cfg.welcome_video_url && typeof cfg.welcome_video_url === "string") {
           deliverBody.welcome_video_url = cfg.welcome_video_url;
+        }
+        const tenantId: string = typeof agentRow?.tenant_id === "string" ? agentRow.tenant_id : "";
+        if (tenantId) {
+          const welcomeImageMd = await getWelcomeConversationImageMarkdown(supabase, tenantId);
+          if (welcomeImageMd) {
+            const parts = deliverBody.response_parts as string[] | undefined;
+            if (Array.isArray(parts) && parts.length > 0) {
+              deliverBody.response_parts = [welcomeImageMd, ...parts];
+            } else {
+              deliverBody.response_parts = [welcomeImageMd, ...(deliverBody.response_text ? [deliverBody.response_text as string] : [])];
+            }
+            deliverBody.response_text = welcomeImageMd + (deliverBody.response_text || "");
+          }
         }
       }
 

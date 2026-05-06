@@ -21,7 +21,16 @@ import {
 import { useAgents } from "@/hooks/useAgents";
 import { nexusDb } from "@/integrations/supabase/nexus-client";
 import { getApiBase, callAPI } from "@/lib/api-client";
-import { collectMarkdownImageSpans, stripMarkdownImageSpans, imageUrlsEquivalent } from "@/lib/chatMessageDisplay";
+import {
+  collectMarkdownImageSpans,
+  stripBrokenMarkdownImageLines,
+  stripMarkdownImageSpans,
+  imageUrlsEquivalent,
+  sanitizeAssistantContent,
+  deduplicateRepeatedContent,
+  stripChatwootHeader,
+} from "@/lib/chatMessageDisplay";
+import { normalizeSuiteGalleryMediaUrl } from "@/lib/suite-gallery-display";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -81,24 +90,32 @@ function formatCaughtError(e: unknown): string {
 
 // Extract image URLs from message content
 function extractImages(content: string): { text: string; images: string[] } {
+  const base = stripBrokenMarkdownImageLines(content);
   const images: string[] = [];
-  const mdSpans = collectMarkdownImageSpans(content);
+  const mdSpans = collectMarkdownImageSpans(base);
   for (const sp of mdSpans) {
     if (sp.url && !images.includes(sp.url) && isValidImageUrl(sp.url)) images.push(sp.url);
   }
-  let text = stripMarkdownImageSpans(content, mdSpans);
+  // Só remover do texto os ![…](url) que entram na grelha. Se isValidImageUrl rejeitar, manter no
+  // markdown para o ReactMarkdown tentar renderizar — antes apagávamos tudo e sumiam fotos na UI.
+  const accepted = new Set(images);
+  const spansToStrip = mdSpans.filter((sp) => sp.url && accepted.has(sp.url));
+  let text = stripMarkdownImageSpans(base, spansToStrip);
   let match;
   const bareImgRegex = /(?<!\()(https?:\/\/[^\s"'<>]+\.(?:jpg|jpeg|png|gif|webp)[^\s"'<>]*)/gi;
-  while ((match = bareImgRegex.exec(content)) !== null) {
+  while ((match = bareImgRegex.exec(base)) !== null) {
     const url = match[1] || match[0];
     if (!images.includes(url) && isValidImageUrl(url)) images.push(url);
   }
   const photoUrlRegex = /https?:\/\/[^\s"'<>]+\/fotos\/[^\s"'<>]+/gi;
-  while ((match = photoUrlRegex.exec(content)) !== null) {
+  while ((match = photoUrlRegex.exec(base)) !== null) {
     if (!images.includes(match[0]) && isValidImageUrl(match[0])) images.push(match[0]);
   }
   text = text.replace(/^.*?ENVIAR_FOTOS?_VEICULOS?.*$/gmi, "");
-  images.forEach((url) => { text = text.split(url).join(""); });
+  // Remover URLs soltas do texto sem corromper URLs mais longas (prefixo comum no path).
+  [...images].sort((a, b) => b.length - a.length).forEach((url) => {
+    text = text.split(url).join("");
+  });
   text = text.replace(/\n{3,}/g, "\n\n").trim();
   return { text, images };
 }
@@ -106,11 +123,9 @@ function extractImages(content: string): { text: string; images: string[] } {
 // Validate that a URL looks like a real image URL (not a markdown artifact or broken link)
 function isValidImageUrl(url: string): boolean {
   try {
-    const u = new URL(url);
-    // Must have a proper hostname (not just a TLD or empty)
+    const u = new URL(url.trim());
     if (!u.hostname || u.hostname.length < 3) return false;
-    // Filter out URLs that are just punctuation artifacts
-    if (/^[)\]}>.,;:!?]+/.test(u.pathname.slice(-5))) return false;
+    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
     return true;
   } catch {
     return false;
@@ -640,12 +655,26 @@ export default function AgentSandbox() {
     let videoUrls: string[] = [];
 
     if (!isUser) {
-      const imgResult = extractImages(msg.content);
+      const assistantRaw = sanitizeAssistantContent(
+        deduplicateRepeatedContent(stripChatwootHeader(msg.content || ""))
+      );
+      const imgResult = extractImages(assistantRaw);
       text = imgResult.text;
-      images = imgResult.images;
+      const seenNorm = new Set<string>();
+      for (const u of imgResult.images) {
+        const n = normalizeSuiteGalleryMediaUrl(u);
+        if (!seenNorm.has(n)) {
+          seenNorm.add(n);
+          images.push(n);
+        }
+      }
       if (msg.inventoryImages && msg.inventoryImages.length > 0) {
         for (const u of msg.inventoryImages) {
-          if (!images.includes(u)) images.push(u);
+          const n = normalizeSuiteGalleryMediaUrl(u);
+          if (!seenNorm.has(n)) {
+            seenNorm.add(n);
+            images.push(n);
+          }
         }
       }
       const vidResult = extractVideos(text);
@@ -690,7 +719,7 @@ export default function AgentSandbox() {
             {/* Vídeo institucional (welcome_video do Chat ao Vivo) */}
             {!isUser && msg.metadata?.type === "welcome_video" && msg.metadata?.video_url && (
               <div className="mb-1 -mx-1 -mt-0.5">
-                <VideoPlayer src={msg.metadata.video_url} />
+                <VideoPlayer src={normalizeSuiteGalleryMediaUrl(msg.metadata.video_url)} />
               </div>
             )}
 
@@ -698,14 +727,18 @@ export default function AgentSandbox() {
             {videoUrls.length > 0 && (
               <div className="space-y-1 mb-1 -mx-1 -mt-0.5">
                 {videoUrls.map((url, j) => (
-                  <VideoPlayer key={j} src={url} />
+                  <VideoPlayer key={j} src={normalizeSuiteGalleryMediaUrl(url)} />
                 ))}
               </div>
             )}
 
             {/* Assistant images - filter and validate */}
             {images.length > 0 && (
-              <div className={`${images.length > 1 ? "grid grid-cols-2 gap-1" : ""} mb-1 -mx-1 -mt-0.5`}>
+              <div
+                className={`${
+                  images.length > 1 ? "grid grid-cols-2 gap-1" : ""
+                } mb-1 -mx-1 -mt-0.5 max-h-[min(70vh,28rem)] overflow-y-auto overscroll-contain`}
+              >
                 {images.map((url, imgIdx) => {
                   // If odd number of images, last one spans full width
                   const isLastOdd = images.length > 1 && images.length % 2 !== 0 && imgIdx === images.length - 1;
@@ -742,12 +775,13 @@ export default function AgentSandbox() {
                     components={{
                       img: ({ src, alt }) => {
                         if (!src) return null;
-                        if (images.some((u) => imageUrlsEquivalent(u, src))) {
+                        const norm = normalizeSuiteGalleryMediaUrl(String(src));
+                        if (images.some((u) => imageUrlsEquivalent(u, norm))) {
                           return null;
                         }
                         return (
                           <img
-                            src={src}
+                            src={norm}
                             alt={typeof alt === "string" ? alt : ""}
                             loading="lazy"
                             className="max-h-48 rounded-md object-cover"

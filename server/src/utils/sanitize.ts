@@ -16,11 +16,12 @@ export function stripThoughtAndReasoningBlocks(text: string): string {
       /^\s*THOUGHT\s+\S/i.test(t)
     );
   };
+  const looksLikeMarkdownImageLine = (l: string) => /^\s*!\[[^\]]*\]\(\s*https?:\/\//.test(l);
   const looksLikePortugueseReplyLine = (l: string) => {
     const s = l.trim();
     if (!s) return false;
     if (/[áãâéêíóôõúçÁÃÂÉÊÍÓÔÕÚÇ]/.test(s)) return true;
-    return /\b(ol[áa]|oi[!,.]?|^oi$|você|obrigad|obrigado|obrigada|não|sim[,!]|certo[!,.]?|perfeito|fico\s+aguardando|pode\s+ser|qual\s|quando\s|onde\s|temos|disponível|horário|agendamento|consulta|valor|preço|reais|r\$)\b/i.test(s);
+    return /\b(bom\s+dia|boa\s+tarde|boa\s+noite|ol[áa]|oi[!,.]?|^oi$|você|obrigad|obrigado|obrigada|não|sim[,!]|certo[!,.]?|perfeito|fico\s+aguardando|pode\s+ser|qual\s|quando\s|onde\s|temos|disponível|horário|agendamento|consulta|valor|preço|reais|r\$)\b/i.test(s);
   };
   const looksLikeEnglishReasoningLine = (l: string) => {
     const s = l.trim();
@@ -43,6 +44,12 @@ export function stripThoughtAndReasoningBlocks(text: string): string {
 
     if (skippingThought) {
       if (trimmedLine === "") continue;
+      // Linhas ![…](https://…) são conteúdo para o chat (fotos da galeria); não descartar como raciocínio.
+      if (looksLikeMarkdownImageLine(line)) {
+        skippingThought = false;
+        out.push(line);
+        continue;
+      }
       if (looksLikePortugueseReplyLine(line)) {
         skippingThought = false;
         out.push(line);

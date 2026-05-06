@@ -81,6 +81,76 @@ function extractVeiculoFromMessages(messages: Array<{ role: string; content: str
   return undefined;
 }
 
+function normalizeNameToken(s: string): string {
+  return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+/** Frases que nunca devem ser usadas como nome do cliente. */
+const BLOCKLIST_NOME = new Set([
+  "aguardar para followup",
+  "aguardar",
+  "followup",
+  "como posso te chamar",
+  "como posso te ajudar",
+  "oi",
+  "olá",
+  "ola",
+  "bom dia",
+  "boa tarde",
+  "boa noite",
+  "ok",
+  "tudo bem",
+  "obrigado",
+  "obrigada",
+  "sim",
+  "não",
+  "nao",
+  "cliente",
+  "quero falar",
+  "quero falar com um atendente",
+  "atendente",
+  "humano",
+]);
+
+/**
+ * Verifica se o candidato não deve ser usado como nome do cliente.
+ * Bloqueia frases de agradecimento/confirmação (ex.: "Ok obrigada", "ah simm obrigada").
+ */
+export function isBlockedAsName(candidate: string): boolean {
+  const norm = candidate.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (BLOCKLIST_NOME.has(norm)) return true;
+  if (/\b(aguardar|followup|follow.?up)\b/i.test(norm)) return true;
+  if (/\b(obrigad[oa]|obrigad[oa]s?)\b/i.test(norm)) return true;
+  if (/^(ok|ah)\s+/i.test(norm) && norm.split(/\s+/).length <= 4) return true;
+  return false;
+}
+
+/**
+ * Bancos, financeiras e marcas frequentes em conversas — não usar como nome da pessoa.
+ */
+const INSTITUTION_NAME_TOKENS = new Set(
+  [
+    "sicred", "sicredi", "bradesco", "itau", "santander", "nubank",
+    "caixa", "cef", "banco", "inter", "c6", "neon", "original", "safra",
+    "pan", "bv", "btg", "mercadopago", "picpay", "bancodobrasil",
+    "financiamento", "financeira", "credsystem", "omni",
+    "yamaha", "honda", "bmw", "fiat", "vw", "volkswagen", "chevrolet",
+    "toyota", "renault", "jeep", "hyundai",
+    "vale", "suico", "suiço", "valesuico", "resort",
+  ].map((t) => normalizeNameToken(t))
+);
+
+export function containsInstitutionNameToken(candidate: string): boolean {
+  const words = candidate.trim().split(/\s+/).filter((w) => w.length > 0);
+  for (const w of words) {
+    const base = w.replace(/^[.,]+|[.,]+$/g, "");
+    if (base.length < 2) continue;
+    const n = normalizeNameToken(base);
+    if (INSTITUTION_NAME_TOKENS.has(n)) return true;
+  }
+  return false;
+}
+
 /**
  * Extrai nome do cliente das ultimas mensagens (ex.: apos pergunta "Como posso te chamar?" ou junto com CPF/dados).
  */
@@ -192,11 +262,13 @@ export function buildHandoffNotification(
   nomeCliente: string,
   telefoneCliente?: string,
   veiculoInteresse?: string,
-  messages?: Array<{ role: string; content: string }>
+  messages?: Array<{ role: string; content: string }>,
+  motivo?: string
 ): string {
   const nome = (nomeCliente || "").trim() || "Cliente";
   const telefone = telefoneCliente?.trim() ? formatPhone(telefoneCliente.trim()) : undefined;
   const veiculo = veiculoInteresse?.trim() || (messages ? extractVeiculoFromMessages(messages) : undefined);
+  const motivoTrim = motivo?.trim();
 
   const lines: string[] = [
     "Cliente aguardando atendimento:",
@@ -204,6 +276,7 @@ export function buildHandoffNotification(
   ];
   if (telefone) lines.push(`📞 ${telefone}`);
   if (veiculo) lines.push(`🚗 Interesse: ${veiculo}`);
+  if (motivoTrim) lines.push(`📝 Motivo: ${motivoTrim}`);
   lines.push("✅ Encaminhado automaticamente pela IA");
   return lines.join("\n");
 }

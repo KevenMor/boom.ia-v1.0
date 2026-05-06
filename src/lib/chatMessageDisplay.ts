@@ -124,7 +124,7 @@ export function sanitizeAssistantContent(content: string): string {
   if (/^\s*(SEND|SKIP)\s*$/im.test(text)) return "";
   // Qualquer trecho a partir de marcador interno (ex.: follow-up automático vazado no assistente)
   text = text.replace(/\[SISTEMA\s+INTERNO[\s\S]*/gi, "").trim();
-  return text;
+  return stripBrokenMarkdownImageLines(text);
 }
 
 export function deduplicateRepeatedContent(text: string): string {
@@ -213,8 +213,28 @@ export function stripMarkdownImageSpans(content: string, spans: MarkdownImageSpa
   return text;
 }
 
+/** Linhas só com `![…](https://…` incompleto (sem `)` de fecho) — ex.: URL truncado no stream. */
+export function stripBrokenMarkdownImageLines(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .filter((line) => {
+      const t = line.trim();
+      if (!t.startsWith("![")) return true;
+      const j = t.indexOf("](", 2);
+      if (j === -1) return false;
+      let urlStart = j + 2;
+      while (urlStart < t.length && /\s/.test(t[urlStart])) urlStart++;
+      if (urlStart >= t.length) return false;
+      if (!t.startsWith("http://", urlStart) && !t.startsWith("https://", urlStart)) return true;
+      return consumeMdImageUrl(t, urlStart) !== null;
+    })
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export function extractImages(content: string): { text: string; images: string[] } {
-  const headerStripped = stripChatwootHeader(content);
+  const headerStripped = stripBrokenMarkdownImageLines(stripChatwootHeader(content));
   const spans = collectMarkdownImageSpans(headerStripped);
   const images: string[] = [];
   for (const sp of spans) {
