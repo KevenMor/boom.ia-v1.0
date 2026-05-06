@@ -225,9 +225,33 @@ const POST_VIDEO_DELAY_MS = 20000;
 
 interface ConsolidatedPart {
   type: "text" | "images" | "video";
+  /** Texto; em blocos `images`, vira legenda no primeiro anexo (WhatsApp/Chatwoot). */
   content?: string;
   imageUrls?: string[];
   videoUrl?: string;
+}
+
+/** Junta bloco só-imagem + bolha de texto seguinte num único envio (legenda na foto). */
+function mergeAdjacentImageAndTextBlocks(blocks: ConsolidatedPart[]): ConsolidatedPart[] {
+  const out: ConsolidatedPart[] = [];
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i];
+    const n = blocks[i + 1];
+    if (
+      b.type === "images" &&
+      b.imageUrls &&
+      b.imageUrls.length > 0 &&
+      n?.type === "text" &&
+      n.content?.trim() &&
+      !b.content
+    ) {
+      out.push({ type: "images", imageUrls: b.imageUrls, content: n.content.trim() });
+      i++;
+    } else {
+      out.push(b);
+    }
+  }
+  return out;
 }
 
 function consolidateImageParts(parts: string[]): ConsolidatedPart[] {
@@ -248,11 +272,12 @@ function consolidateImageParts(parts: string[]): ConsolidatedPart[] {
     const { textOnly, videoUrls } = extractVideoUrlsFromText(afterImages);
 
     if (imageUrls.length > 0) {
+      flushImages();
       if (textOnly.trim()) {
-        flushImages();
-        result.push({ type: "text", content: textOnly.trim() });
+        result.push({ type: "images", imageUrls: [...imageUrls], content: textOnly.trim() });
+      } else {
+        pendingImages.push(...imageUrls);
       }
-      pendingImages.push(...imageUrls);
     } else if (textOnly.trim()) {
       flushImages();
       result.push({ type: "text", content: textOnly.trim() });
@@ -268,7 +293,7 @@ function consolidateImageParts(parts: string[]): ConsolidatedPart[] {
     }
   }
   flushImages();
-  return result;
+  return mergeAdjacentImageAndTextBlocks(result);
 }
 
 async function replyToChatwoot(
@@ -322,7 +347,7 @@ async function replyToChatwoot(
     const isLast = i === consolidated.length - 1;
 
     if (block.type === "images" && block.imageUrls?.length) {
-      await sendChatwootImagesBatch(msgUrl, apiToken, block.imageUrls, "");
+      await sendChatwootImagesBatch(msgUrl, apiToken, block.imageUrls, block.content?.trim() || "");
       // Após imagens: aguarda 15 s para Chatwoot concluir entrega ao WhatsApp antes do próximo bloco.
       if (!isLast && hasTimeBudget()) {
         await safeDelay(POST_IMAGES_DELAY_MS);
