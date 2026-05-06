@@ -17,6 +17,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useState } from "react";
 import { useTheme } from "next-themes";
 import { TenantSwitcher } from "./TenantSwitcher";
+import { BoomIaLogo } from "@/components/brand/BoomIaLogo";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -206,6 +207,12 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
         collapsed ? "px-2 pb-4 pt-3" : "p-6",
       )}
     >
+      <BoomIaLogo
+        collapsed={collapsed}
+        onNavigate={onLinkClick}
+        className={collapsed ? "mb-3 shrink-0" : "mb-5 shrink-0"}
+      />
+
       {/* Workspace */}
       {!collapsed && (
         <div className="mb-6">
