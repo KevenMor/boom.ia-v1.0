@@ -361,7 +361,7 @@ async function build() {
     }
   });
 
-  // GET /api/storage-health — verifica se os buckets de Storage necessários existem.
+  // GET /api/storage-health — verifica se os buckets de Storage necessários existem e suas configurações.
   // Útil para diagnosticar "404 nas fotos da galeria em produção".
   fastify.get("/api/storage-health", async (_req, reply) => {
     const nexusUrl = process.env.NEXUS_DB_URL?.trim();
@@ -378,13 +378,14 @@ async function build() {
       if (!res.ok) {
         return reply.code(502).send({ ok: false, storage_status: res.status, hint: "Storage API inacessível — confirme que o Supabase Storage está rodando." });
       }
-      const buckets = await res.json() as Array<{ id?: string; name?: string; public?: boolean }>;
-      const names = buckets.map((b) => b.id ?? b.name ?? "?");
-      const hasSuiteGalleries = names.some((n) => n === "suite-galleries");
+      const buckets = await res.json() as Array<{ id?: string; name?: string; public?: boolean; allowed_mime_types?: string[] | null; file_size_limit?: number | null }>;
+      const hasSuiteGalleries = buckets.some((b) => (b.id ?? b.name) === "suite-galleries");
+      const suiteGalleriesBucket = buckets.find((b) => (b.id ?? b.name) === "suite-galleries");
       return {
         ok: true,
-        buckets: names,
+        buckets: buckets.map((b) => ({ id: b.id ?? b.name, public: b.public, allowed_mime_types: b.allowed_mime_types ?? "all", file_size_limit: b.file_size_limit })),
         suite_galleries_bucket: hasSuiteGalleries ? "exists" : "MISSING — run sql/017_storage_suite_galleries_bucket.sql in Supabase",
+        suite_galleries_allowed_mime_types: suiteGalleriesBucket?.allowed_mime_types ?? "all (unrestricted)",
         nexus_host: nexusUrl.replace(/^https?:\/\//, "").split("/")[0],
       };
     } catch (err) {
@@ -398,7 +399,14 @@ async function build() {
 /** Exportado para testes (inject) sem abrir porta. */
 export { build };
 
-/** Garante que os buckets de Storage necessários existem no Supabase (criados se ausentes). */
+/** Tipos MIME aceitos pela galeria (fotos e vídeos). Explícito para evitar restrições do Supabase self-hosted. */
+const SUITE_GALLERY_ALLOWED_MIME_TYPES = [
+  "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif",
+  "image/heic", "image/heif", "image/bmp", "image/avif", "image/tiff",
+  "video/mp4", "video/webm", "video/quicktime", "video/x-msvideo",
+];
+
+/** Garante que os buckets de Storage necessários existem e estão com as configurações corretas. */
 async function ensureStorageBuckets(): Promise<void> {
   try {
     const { createNexusClient } = await import("./services/supabase.js");
@@ -409,14 +417,29 @@ async function ensureStorageBuckets(): Promise<void> {
     for (const b of BUCKETS) {
       const { data: existing, error: getErr } = await sb.storage.getBucket(b.id);
       if (existing) {
-        console.log(`[Storage] Bucket '${b.id}' OK.`);
+        // Mesmo existindo, garante que JPEG e outros tipos estão na lista de permitidos.
+        // O bucket pode ter sido criado com restrições que bloqueiam JPEG.
+        const { error: updateErr } = await sb.storage.updateBucket(b.id, {
+          public: b.public,
+          fileSizeLimit: b.fileSizeLimit,
+          allowedMimeTypes: SUITE_GALLERY_ALLOWED_MIME_TYPES,
+        });
+        if (updateErr) {
+          console.warn(`[Storage] Não foi possível actualizar allowed_mime_types do bucket '${b.id}':`, updateErr.message);
+        } else {
+          console.log(`[Storage] Bucket '${b.id}' actualizado (allowed_mime_types, limite ${b.fileSizeLimit / 1024 / 1024} MB).`);
+        }
         continue;
       }
       if (getErr && !getErr.message?.toLowerCase().includes("not found") && !getErr.message?.toLowerCase().includes("does not exist")) {
         console.warn(`[Storage] Não foi possível verificar bucket '${b.id}':`, getErr.message);
         continue;
       }
-      const { error: createErr } = await sb.storage.createBucket(b.id, { public: b.public, fileSizeLimit: b.fileSizeLimit });
+      const { error: createErr } = await sb.storage.createBucket(b.id, {
+        public: b.public,
+        fileSizeLimit: b.fileSizeLimit,
+        allowedMimeTypes: SUITE_GALLERY_ALLOWED_MIME_TYPES,
+      });
       if (createErr && !createErr.message?.toLowerCase().includes("already exists") && !createErr.message?.toLowerCase().includes("duplicate")) {
         console.error(`[Storage] Falha ao criar bucket '${b.id}':`, createErr.message);
       } else {
