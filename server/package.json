@@ -12,6 +12,9 @@
     "e2e": "tsx scripts/e2e-validation.ts"
   },
   "dependencies": {
+    "bullmq": "^5.34.5",
+    "cheerio": "^1.0.0",
+    "domhandler": "^5.0.3",
     "@fastify/cors": "^10.0.1",
     "undici": "^7.0.0",
     "@fastify/env": "^5.0.1",

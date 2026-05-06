@@ -2,6 +2,7 @@
  * Consulta read-only de disponibilidade/preços na página Omnibees (HTML).
  */
 import { load } from "cheerio";
+import type { AnyNode } from "domhandler";
 
 const DEFAULT_BASE_URL = "https://book.omnibees.com/hotelresults";
 const CACHE_TTL_MS = 10 * 60 * 1000;
@@ -309,7 +310,7 @@ function parseAvailability(
   const { checkInTime, checkOutTime } = extractHotelCheckTimes($);
   const rooms: OmnibeesRoomRow[] = [];
 
-  $(".roomrate").each((_, roomEl) => {
+  $(".roomrate").each((_: number, roomEl: AnyNode) => {
     const el = $(roomEl);
     const roomId = el.attr("data-roomid") ?? null;
     let roomName = el.find(".hotel_name.room-popup-modal").first().text().trim();
@@ -321,7 +322,7 @@ function parseAvailability(
 
     const rates: OmnibeesRateRow[] = [];
 
-    el.find(".rate_plan").each((__, rateEl) => {
+    el.find(".rate_plan").each((__: number, rateEl: AnyNode) => {
       const re = $(rateEl);
       let rateName = re.find(".rate_name").attr("data-rate-name") || "";
       if (!rateName.trim()) {
@@ -344,7 +345,7 @@ function parseAvailability(
       const paymentText = re.find(".payment_methods_bar").text().replace(/\s+/g, " ").trim();
 
       const dailyPrices: { date: string; price: string }[] = [];
-      re.find(".price-date-container").each((___, dayEl) => {
+      re.find(".price-date-container").each((___: number, dayEl: AnyNode) => {
         const de = $(dayEl);
         const date = de.find("span").first().text().trim();
         const price = de.find(".t-tip__text__price").text().trim();
@@ -374,7 +375,7 @@ function parseAvailability(
       const view = el.find(".view-bed-type .room-bed-name").first().text().trim();
       const size = el
         .find(".room-bed-name")
-        .filter((_, bed) => $(bed).text().includes("m2"))
+        .filter((_: number, bed: AnyNode) => $(bed).text().includes("m2"))
         .text()
         .trim();
 

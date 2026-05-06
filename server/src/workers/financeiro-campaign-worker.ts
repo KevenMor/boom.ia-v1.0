@@ -1,7 +1,7 @@
 /**
  * Worker BullMQ: processa campanhas financeiras com delays entre mensagens.
  */
-import { Worker } from "bullmq";
+import { Worker, type Job } from "bullmq";
 import { createNexusClient } from "../services/supabase.js";
 import { runFinanceiroCampaign } from "../services/financeiro-campaign-runner.js";
 import { FINANCEIRO_CAMPAIGN_QUEUE_NAME } from "../services/financeiro-campaign-queue.js";
@@ -22,7 +22,7 @@ export function startFinanceiroCampaignWorker(): Worker | null {
 
   const worker = new Worker(
     FINANCEIRO_CAMPAIGN_QUEUE_NAME,
-    async (job) => {
+    async (job: Job<FinanceiroCampaignJobPayload>) => {
       const data = job.data as FinanceiroCampaignJobPayload;
       const supabase = createNexusClient(data.authorization);
 
@@ -83,11 +83,11 @@ export function startFinanceiroCampaignWorker(): Worker | null {
     }
   );
 
-  worker.on("completed", (job) => {
+  worker.on("completed", (job: Job<FinanceiroCampaignJobPayload>) => {
     console.log("[FinanceiroCampaign-Worker] Job completed:", job.id);
   });
 
-  worker.on("failed", (job, err) => {
+  worker.on("failed", (job: Job<FinanceiroCampaignJobPayload> | undefined, err: Error) => {
     console.warn("[FinanceiroCampaign-Worker] Job failed:", job?.id, err.message);
   });
 

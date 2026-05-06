@@ -2,12 +2,14 @@
  * Worker BullMQ para processar follow-ups no horário exato.
  * Concurrency 1 para evitar overlap.
  */
-import { Worker } from "bullmq";
+import { Worker, type Job } from "bullmq";
 import { createNexusClient } from "../services/supabase.js";
 import { processFollowUpItem } from "../routes/queue.js";
 import { addFollowUpJob } from "../services/followup-queue.js";
 
 const QUEUE_NAME = "followup";
+
+type FollowUpJobData = { itemId: string };
 
 export function startFollowUpWorker(): Worker | null {
   const url = process.env.REDIS_URL;
@@ -30,8 +32,8 @@ export function startFollowUpWorker(): Worker | null {
 
   const worker = new Worker(
     QUEUE_NAME,
-    async (job) => {
-      const { itemId } = job.data as { itemId: string };
+    async (job: Job<FollowUpJobData>) => {
+      const { itemId } = job.data;
       const supabase = createNexusClient();
 
       const { data: item, error } = await supabase
@@ -64,11 +66,11 @@ export function startFollowUpWorker(): Worker | null {
     }
   );
 
-  worker.on("completed", (job) => {
+  worker.on("completed", (job: Job<FollowUpJobData>) => {
     console.log("[FollowUp-Worker] Job completed:", job.id);
   });
 
-  worker.on("failed", (job, err) => {
+  worker.on("failed", (job: Job<FollowUpJobData> | undefined, err: Error) => {
     console.warn("[FollowUp-Worker] Job failed:", job?.id, err.message);
   });
 

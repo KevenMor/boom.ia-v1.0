@@ -5,6 +5,7 @@
  */
 
 import * as cheerio from "cheerio";
+import type { AnyNode } from "domhandler";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const BASE_URL = "https://drajulianavicentim.com.br";
@@ -73,13 +74,13 @@ async function scrapeOnePage(pagePath: string): Promise<PageContent | null> {
       (pagePath === "/" ? "Instituto Vicentim Maekawa - Início" : "Página");
 
     const bodyParts: string[] = [];
-    $("main#content .elementor-widget-heading .elementor-heading-title").each((_, el) => {
+    $("main#content .elementor-widget-heading .elementor-heading-title").each((_: number, el: AnyNode) => {
       const text = $(el).text().trim();
       if (text && !isAgendarLink(text) && text.length > 10) bodyParts.push(text);
     });
 
     const faqs: { pergunta: string; resposta: string }[] = [];
-    $(".elementor-toggle-item").each((_, item) => {
+    $(".elementor-toggle-item").each((_: number, item: AnyNode) => {
       const $item = $(item);
       const pergunta = $item.find(".elementor-toggle-title").text().trim();
       const resposta = $item.find(".elementor-tab-content p").text().trim();
