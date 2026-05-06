@@ -1,4 +1,3 @@
-import { getSupabaseStorageImgRewriteOrigin } from "@/integrations/supabase/nexus-client";
 import type { SuiteGallery, SuiteGalleryMedia } from "@/types/database";
 
 const SUPABASE_PROXY_MARKER = "/api/supabase-proxy/";
@@ -48,20 +47,61 @@ export function normalizeSuiteGalleryMediaUrlForOrigin(url: string, pageOrigin: 
 
 /**
  * URLs de Storage via proxy são gravadas com a origem do momento (ex.: http://localhost:8080 em dev).
- * Em produção isso vira 404 / mixed content. Reaplica sempre a origem atual do browser para o mesmo path.
+ * Em produção isso vira 404 / mixed content. Reaplica sempre a origem da **página** (igual ao `callAPI` em
+ * browser), para `/api/supabase-proxy` bater no mesmo host que serve o painel — não use a origem do
+ * `proxyBase` do nexus-client quando o build cai no fallback de outro host.
  */
 export function normalizeSuiteGalleryMediaUrl(url: string): string {
   const fixed = ensureSupabaseStoragePublicObjectPath(url.trim());
   if (typeof window === "undefined") {
     return fixed;
   }
-  const origin = getSupabaseStorageImgRewriteOrigin() || window.location.origin;
-  return normalizeSuiteGalleryMediaUrlForOrigin(fixed, origin);
+  return normalizeSuiteGalleryMediaUrlForOrigin(fixed, window.location.origin);
+}
+
+/** Normaliza linhas de mídia vindas da API (JSON string, type ausente, chave URL alternativa). */
+export function normalizeSuiteGalleryMediaRows(raw: unknown): SuiteGalleryMedia[] {
+  let arr: unknown[] = [];
+  if (typeof raw === "string") {
+    try {
+      const p = JSON.parse(raw) as unknown;
+      arr = Array.isArray(p) ? p : [];
+    } catch {
+      arr = [];
+    }
+  } else if (Array.isArray(raw)) {
+    arr = raw;
+  }
+  const out: SuiteGalleryMedia[] = [];
+  for (const m of arr) {
+    if (!m || typeof m !== "object") continue;
+    const r = m as Record<string, unknown>;
+    const urlRaw = typeof r.url === "string" ? r.url : typeof r.URL === "string" ? (r.URL as string) : "";
+    const url = urlRaw.trim();
+    if (!url) continue;
+    const t = String(r.type ?? "").toLowerCase();
+    let type: "photo" | "video";
+    if (t === "video") type = "video";
+    else if (t === "photo") type = "photo";
+    else type = /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url) ? "video" : "photo";
+    const row: SuiteGalleryMedia = { url, type };
+    if (typeof r.caption === "string" && r.caption.trim()) row.caption = r.caption.trim();
+    if (typeof r.llm_send_when === "string" && r.llm_send_when.trim()) row.llm_send_when = r.llm_send_when.trim();
+    out.push(row);
+  }
+  return out;
 }
 
 function normalizeSuiteGalleryMedia(raw: unknown): SuiteGalleryMedia[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.filter((m): m is SuiteGalleryMedia => !!m && typeof m === "object" && typeof (m as SuiteGalleryMedia).url === "string");
+  return normalizeSuiteGalleryMediaRows(raw);
+}
+
+/** Garante `media_urls` como array após GET/API legada. */
+export function coerceSuiteGalleryFromApi(row: SuiteGallery): SuiteGallery {
+  return {
+    ...row,
+    media_urls: normalizeSuiteGalleryMediaRows(row.media_urls as unknown),
+  };
 }
 
 function isGalleryPhoto(m: SuiteGalleryMedia): boolean {

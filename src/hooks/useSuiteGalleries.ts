@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { callAPI } from "@/lib/api-client";
+import { coerceSuiteGalleryFromApi } from "@/lib/suite-gallery-display";
 import type { SuiteGallery } from "@/types/database";
 
 export function useSuiteGalleries(tenantId?: string | null) {
@@ -8,11 +9,16 @@ export function useSuiteGalleries(tenantId?: string | null) {
 
   return useQuery({
     queryKey: ["suite_galleries", tenantId],
-    queryFn: () =>
-      callAPI<{ data: SuiteGallery[]; total: number }>(
+    queryFn: async () => {
+      const res = await callAPI<{ data: SuiteGallery[]; total: number }>(
         `/suite-galleries?${params.toString()}`,
         { method: "GET" }
-      ),
+      );
+      return {
+        ...res,
+        data: (res.data ?? []).map((row) => coerceSuiteGalleryFromApi(row)),
+      };
+    },
     enabled: !!tenantId,
   });
 }

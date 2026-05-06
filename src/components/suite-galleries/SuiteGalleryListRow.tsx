@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Images, Pencil, Play, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { getSuiteGalleryThumbnailCandidateUrls } from "@/lib/suite-gallery-display";
+import {
+  getSuiteGalleryThumbnailCandidateUrls,
+  normalizeSuiteGalleryMediaRows,
+} from "@/lib/suite-gallery-display";
 import type { SuiteGallery } from "@/types/database";
 
 type Props = {
@@ -12,7 +15,7 @@ type Props = {
 };
 
 export function SuiteGalleryListRow({ gallery, onOpen, onEdit, onDelete }: Props) {
-  const mediaList = Array.isArray(gallery.media_urls) ? gallery.media_urls : [];
+  const mediaList = normalizeSuiteGalleryMediaRows(gallery.media_urls as unknown);
   const photoCount = mediaList.filter((m) => (m.type as string)?.toLowerCase() === "photo").length;
   const videoCount = mediaList.filter((m) => (m.type as string)?.toLowerCase() === "video").length;
   const total = mediaList.length;

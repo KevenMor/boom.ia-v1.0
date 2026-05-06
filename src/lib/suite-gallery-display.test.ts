@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  coerceSuiteGalleryFromApi,
   ensureSupabaseStoragePublicObjectPath,
   getSuiteGalleryThumbnailCandidateUrls,
+  normalizeSuiteGalleryMediaRows,
   normalizeSuiteGalleryMediaUrlForOrigin,
 } from "./suite-gallery-display";
 import type { SuiteGallery } from "@/types/database";
@@ -99,5 +101,29 @@ describe("getSuiteGalleryThumbnailCandidateUrls", () => {
     };
     const c = getSuiteGalleryThumbnailCandidateUrls(g);
     expect(c[0]).toMatch(/legacy\.jpg/);
+  });
+
+  it("aceita media_urls como string JSON (legado / export)", () => {
+    const g: SuiteGallery = {
+      ...galleryBase,
+      cover_image_url: null,
+      media_urls: JSON.stringify([{ url: "https://cdn.example/json-string.jpg" }]) as unknown as SuiteGallery["media_urls"],
+    };
+    const c = getSuiteGalleryThumbnailCandidateUrls(g);
+    expect(c[0]).toMatch(/json-string\.jpg/);
+  });
+
+  it("infere vídeo por extensão quando type falta", () => {
+    const rows = normalizeSuiteGalleryMediaRows([{ url: "https://x.test/a.mp4" }]);
+    expect(rows[0]?.type).toBe("video");
+  });
+
+  it("coerceSuiteGalleryFromApi expande media_urls string JSON", () => {
+    const g = coerceSuiteGalleryFromApi({
+      ...galleryBase,
+      media_urls: JSON.stringify([{ url: "https://cdn.example/coerced.jpg", type: "photo" }]) as unknown as SuiteGallery["media_urls"],
+    });
+    expect(g.media_urls).toHaveLength(1);
+    expect(g.media_urls[0].url).toContain("coerced.jpg");
   });
 });

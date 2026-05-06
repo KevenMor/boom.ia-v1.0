@@ -26,7 +26,7 @@ import { SuiteGalleryMediaUpload, uploadSuiteGalleryCoverImage } from "./SuiteGa
 import { SuiteGalleryFormDialog } from "./SuiteGalleryFormDialog";
 import { useMoveSuiteGalleryMedia, useSuiteGalleries, useUpdateSuiteGallery } from "@/hooks/useSuiteGalleries";
 import { useTenantContext } from "@/contexts/TenantContext";
-import { normalizeSuiteGalleryMediaUrl } from "@/lib/suite-gallery-display";
+import { normalizeSuiteGalleryMediaUrl, normalizeSuiteGalleryMediaRows } from "@/lib/suite-gallery-display";
 import type { SuiteGallery, SuiteGalleryMedia } from "@/types/database";
 import {
   Select,
@@ -69,7 +69,7 @@ export function SuiteGalleryManageDialog({ gallery, open, onOpenChange }: Props)
   const { data: galleriesRes } = useSuiteGalleries(open ? selectedTenantId : null);
   const otherGalleries = (galleriesRes?.data ?? []).filter((g) => g.id !== gallery.id);
 
-  const [media, setMedia] = useState<SuiteGalleryMedia[]>(gallery.media_urls);
+  const [media, setMedia] = useState<SuiteGalleryMedia[]>(() => normalizeSuiteGalleryMediaRows(gallery.media_urls as unknown));
   const [coverDraft, setCoverDraft] = useState<string | null>(gallery.cover_image_url?.trim() || null);
   const [lightbox, setLightbox] = useState<SuiteGalleryMedia | null>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -82,7 +82,7 @@ export function SuiteGalleryManageDialog({ gallery, open, onOpenChange }: Props)
 
   useEffect(() => {
     if (!open) return;
-    setMedia(Array.isArray(gallery.media_urls) ? [...gallery.media_urls] : []);
+    setMedia(normalizeSuiteGalleryMediaRows(gallery.media_urls as unknown));
     setCoverDraft(gallery.cover_image_url?.trim() || null);
     setDirty(false);
   }, [open, gallery.id]);
