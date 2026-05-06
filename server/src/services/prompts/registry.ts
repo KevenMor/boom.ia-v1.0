@@ -151,7 +151,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: VS_DISPATCHER,
     followupPrompt: VS_FOLLOWUP,
     alwaysInjectCommRules: true,
-    version: "v1.2.42",
+    version: "v1.2.43",
     description: "Vitória — Consultora de reservas Vale Suíço Resort",
   },
   "vale-suico-resort": {
@@ -160,7 +160,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: VS_DISPATCHER,
     followupPrompt: VS_FOLLOWUP,
     alwaysInjectCommRules: true,
-    version: "v1.2.42",
+    version: "v1.2.43",
     description: "Vitória — Consultora de reservas Vale Suíço Resort",
   },
   /** Slugs alinhados ao cabeçalho de durce-vita.ts */
