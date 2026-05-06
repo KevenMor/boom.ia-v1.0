@@ -179,6 +179,24 @@ async function build() {
 
   type ReqLog = { warn: (obj: Record<string, unknown>, msg: string) => void };
 
+  /** Sufixo após /api/supabase-proxy/ vem sem barra inicial (ex.: `storage/v1/...`). */
+  function storageV1SuffixRe(s: string): RegExp {
+    return new RegExp(`(^|/)storage/v1/${s}`);
+  }
+
+  /**
+   * GET/HEAD em bucket público: o Storage exige …/object/public/{bucket}/…
+   * URLs sem `public` (…/object/suite-galleries/…) devolvem 404.
+   * Só GET/HEAD — POST de upload mantém …/object/{bucket}/…
+   */
+  function insertPublicStorageObjectPathForRead(method: string, suffix: string): string {
+    if (method !== "GET" && method !== "HEAD") return suffix;
+    return suffix.replace(
+      /(^|\/)storage\/v1\/object\/(?!public\/|sign\/|authenticated\/|upload\/|info\/|list-v2\/|list\/|move|copy)/,
+      "$1storage/v1/object/public/"
+    );
+  }
+
   /** Corpo a repassar ao Supabase: uploads de Storage têm de ir como bytes, nunca JSON.stringify(Buffer). */
   function buildSupabaseProxyForwardBody(
     log: ReqLog,
@@ -192,7 +210,7 @@ async function build() {
     if (raw instanceof Uint8Array) return raw;
     if (raw instanceof ArrayBuffer) return new Uint8Array(raw);
     if (typeof raw === "string") return raw;
-    const storageObjectWrite = /\/storage\/v1\/object\//.test(suffix);
+    const storageObjectWrite = storageV1SuffixRe("object/").test(suffix);
     if (storageObjectWrite) {
       // Se não é Buffer, o parser pode ter errado — JSON quebra upload e o Storage costuma responder 4xx
       log.warn(
@@ -217,9 +235,10 @@ async function build() {
     }
 
     const base = nexusUrl.replace(/\/$/, "");
-    const suffix =
+    let suffix =
       (request.url.split("?")[0].replace(/^\/api\/supabase-proxy\/?/, "") || "") +
       (request.url.includes("?") ? "?" + request.url.split("?")[1] : "");
+    suffix = insertPublicStorageObjectPathForRead(request.method, suffix);
     const targetUrl = `${base}/${suffix}`.replace(/([^:]\/)\/+/g, "$1");
     const headers: Record<string, string> = {};
     for (const [k, v] of Object.entries(request.headers)) {
@@ -229,7 +248,7 @@ async function build() {
     // Storage: sempre substituir apikey pelo real — o browser pode enviar o demo key (fallback do nexus-client)
     // que o Supabase real rejeita. Para writes (POST/PUT) preserva o Bearer JWT do usuário; para reads força anon.
     const nexusAnon = process.env.NEXUS_DB_ANON_KEY?.trim();
-    if (nexusAnon && /\/storage\/v1\//.test(suffix)) {
+    if (nexusAnon && storageV1SuffixRe("").test(suffix)) {
       headers.apikey = nexusAnon;
       const lower = new Set(Object.keys(headers).map((k) => k.toLowerCase()));
       if (!lower.has("authorization")) headers.Authorization = `Bearer ${nexusAnon}`;
@@ -251,7 +270,7 @@ async function build() {
       if (body instanceof Uint8Array) headers["content-length"] = String(body.byteLength);
       const res = await fetch(targetUrl, { method: request.method, headers, body: body as RequestInit["body"] });
       const contentType = (res.headers.get("content-type") || "").toLowerCase();
-      const storageObjectPath = /\/storage\/v1\/object\//.test(suffix);
+      const storageObjectPath = storageV1SuffixRe("object/").test(suffix);
       const binaryByMime =
         contentType.startsWith("image/") ||
         contentType.startsWith("video/") ||
@@ -288,7 +307,7 @@ async function build() {
         );
       }
       // Supabase auth client espera JSON; corpo vazio ou HTML causa "Unexpected end of JSON input"
-      const isAuthPath = /\/auth\/v1\//.test(suffix);
+      const isAuthPath = /(^|\/)auth\/v1\//.test(suffix);
       const isEmpty = !text || !text.trim();
       const looksLikeHtml = text.trim().toLowerCase().startsWith("<!");
       if (isAuthPath && (isEmpty || looksLikeHtml)) {
