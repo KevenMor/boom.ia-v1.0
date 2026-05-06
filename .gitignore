@@ -3,7 +3,13 @@
 .env.local
 .env.stack
 .env.*.local
+.env.*
+!.env.*.example
+!.env.example
 server/.env
+server/.env.*
+!server/.env.*.example
+!server/.env.example
 
 # Logs
 logs
