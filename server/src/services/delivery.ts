@@ -68,20 +68,15 @@ async function sendChatwootImagesBatch(
     .map((d) => d.value)
     .filter((d): d is { blob: Blob; filename: string; url: string } => d !== null);
 
-  const failedUrls = imageUrls.filter(
-    (u) => !successfulDownloads.some((d) => d.url === u)
-  );
-  if (failedUrls.length > 0) {
-    console.warn(`[Deliver] ${failedUrls.length}/${imageUrls.length} image(s) failed to download. Trying one-by-one.`);
-    for (const imageUrl of failedUrls) {
-      const ok = await sendChatwootImageMessage(url, apiToken, imageUrl, "");
-      if (!ok) console.warn(`[Deliver] Single-image send failed for: ${imageUrl.slice(0, 80)}...`);
-    }
-  }
-
   if (successfulDownloads.length === 0) {
+    console.warn(`[Deliver] All ${imageUrls.length} image(s) failed to download. Sending URLs as text fallback.`);
     for (const u of imageUrls) await sendChatwootTextMessage(url, apiToken, u);
     return false;
+  }
+
+  const failedCount = imageUrls.length - successfulDownloads.length;
+  if (failedCount > 0) {
+    console.warn(`[Deliver] ${failedCount}/${imageUrls.length} image(s) failed to download, skipping those.`);
   }
 
   console.warn(`[Deliver] sendChatwootImagesBatch: sending ${successfulDownloads.length}/${imageUrls.length} image(s) in one message`);
@@ -233,11 +228,11 @@ function consolidateImageParts(parts: string[]): ConsolidatedPart[] {
     if (!part?.trim()) continue;
     const { textOnly, imageUrls } = extractImagesFromMarkdown(part);
 
-    if (textOnly.trim().length > 60 && imageUrls.length > 0) {
-      flushImages();
-      result.push({ type: "text", content: textOnly.trim() });
-      pendingImages.push(...imageUrls);
-    } else if (imageUrls.length > 0) {
+    if (imageUrls.length > 0) {
+      if (textOnly.trim()) {
+        flushImages();
+        result.push({ type: "text", content: textOnly.trim() });
+      }
       pendingImages.push(...imageUrls);
     } else if (textOnly.trim()) {
       flushImages();

@@ -122,7 +122,7 @@ function userLikelyAskedForPhotos(text: string): boolean {
 
 function assistantClaimsPhotoDelivery(text: string): boolean {
   const head = (text || "").slice(0, 800);
-  return /\b(aqui est[aã]o|aqui estao|seguem as fotos|segue(?:m)?\s+(?:uma\s+)?foto|fotos das acomoda[cç][oõ]es|algumas fotos da)\b/i.test(
+  return /\b(aqui est[aã]o|aqui estao|seguem as fotos|segue(?:m)?\s+(?:uma\s+)?foto|fotos das acomoda[cç][oõ]es|algumas fotos da|segue(?:m)?\s+o\s+material|segue(?:m)?\s+as\s+imagens?|as\s+fotos?\s+(da|das|do)\s+su[ií]te)\b/i.test(
     head
   );
 }
