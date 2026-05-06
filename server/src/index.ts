@@ -361,16 +361,78 @@ async function build() {
     }
   });
 
+  // GET /api/storage-health — verifica se os buckets de Storage necessários existem.
+  // Útil para diagnosticar "404 nas fotos da galeria em produção".
+  fastify.get("/api/storage-health", async (_req, reply) => {
+    const nexusUrl = process.env.NEXUS_DB_URL?.trim();
+    if (!nexusUrl) {
+      return reply.code(503).send({ ok: false, error: "NEXUS_DB_URL not set" });
+    }
+    const serviceKey = process.env.NEXUS_SERVICE_ROLE_KEY?.trim() || process.env.NEXUS_DB_ANON_KEY?.trim();
+    if (!serviceKey) {
+      return reply.code(503).send({ ok: false, error: "No storage key configured" });
+    }
+    try {
+      const url = `${nexusUrl.replace(/\/$/, "")}/storage/v1/bucket`;
+      const res = await fetch(url, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
+      if (!res.ok) {
+        return reply.code(502).send({ ok: false, storage_status: res.status, hint: "Storage API inacessível — confirme que o Supabase Storage está rodando." });
+      }
+      const buckets = await res.json() as Array<{ id?: string; name?: string; public?: boolean }>;
+      const names = buckets.map((b) => b.id ?? b.name ?? "?");
+      const hasSuiteGalleries = names.some((n) => n === "suite-galleries");
+      return {
+        ok: true,
+        buckets: names,
+        suite_galleries_bucket: hasSuiteGalleries ? "exists" : "MISSING — run sql/017_storage_suite_galleries_bucket.sql in Supabase",
+        nexus_host: nexusUrl.replace(/^https?:\/\//, "").split("/")[0],
+      };
+    } catch (err) {
+      return reply.code(503).send({ ok: false, error: (err as Error)?.message ?? String(err) });
+    }
+  });
+
   return fastify;
 }
 
 /** Exportado para testes (inject) sem abrir porta. */
 export { build };
 
+/** Garante que os buckets de Storage necessários existem no Supabase (criados se ausentes). */
+async function ensureStorageBuckets(): Promise<void> {
+  try {
+    const { createNexusClient } = await import("./services/supabase.js");
+    const sb = createNexusClient();
+    const BUCKETS: Array<{ id: string; public: boolean; fileSizeLimit: number }> = [
+      { id: "suite-galleries", public: true, fileSizeLimit: 209_715_200 }, // 200 MB
+    ];
+    for (const b of BUCKETS) {
+      const { data: existing, error: getErr } = await sb.storage.getBucket(b.id);
+      if (existing) {
+        console.log(`[Storage] Bucket '${b.id}' OK.`);
+        continue;
+      }
+      if (getErr && !getErr.message?.toLowerCase().includes("not found") && !getErr.message?.toLowerCase().includes("does not exist")) {
+        console.warn(`[Storage] Não foi possível verificar bucket '${b.id}':`, getErr.message);
+        continue;
+      }
+      const { error: createErr } = await sb.storage.createBucket(b.id, { public: b.public, fileSizeLimit: b.fileSizeLimit });
+      if (createErr && !createErr.message?.toLowerCase().includes("already exists") && !createErr.message?.toLowerCase().includes("duplicate")) {
+        console.error(`[Storage] Falha ao criar bucket '${b.id}':`, createErr.message);
+      } else {
+        console.log(`[Storage] Bucket '${b.id}' criado (público, limite ${b.fileSizeLimit / 1024 / 1024} MB).`);
+      }
+    }
+  } catch (err) {
+    console.warn("[Storage] ensureStorageBuckets falhou (não crítico):", (err as Error)?.message ?? err);
+  }
+}
+
 build()
   .then((app) => app.listen({ port: PORT, host: "0.0.0.0" }))
   .then(async () => {
     console.log(`[Server] Listening on http://0.0.0.0:${PORT}`);
+    void ensureStorageBuckets();
 
     const { isRedisEnabled, addFollowUpJob } = await import("./services/followup-queue.js");
     const { startFollowUpWorker } = await import("./workers/followup-worker.js");

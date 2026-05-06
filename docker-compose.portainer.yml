@@ -65,3 +65,6 @@ services:
         - "traefik.http.routers.boom-ia.tls=true"
         - "traefik.http.routers.boom-ia.tls.certresolver=letsencrypt"
         - "traefik.http.services.boom-ia.loadbalancer.server.port=80"
+        # Aumenta body limit para uploads de galeria (fotos 20 MB, vídeos 200 MB)
+        - "traefik.http.middlewares.boom-ia-body.buffering.maxRequestBodyBytes=220000000"
+        - "traefik.http.routers.boom-ia.middlewares=boom-ia-body"
