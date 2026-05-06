@@ -75,6 +75,9 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
         const baseUrl = cfg.chatwoot_url.replace(/\/+$/, "");
         const msgUrl = `${baseUrl}/api/v1/accounts/${cfg.chatwoot_account_id}/conversations/${chatwoot_conversation_id}/messages`;
         const humanization = getHumanizationConfig(cfg);
+        const WELCOME_PRE_VIDEO_GAP_MS = 350;
+        const WELCOME_POST_VIDEO_DELAY_MS = 15000;
+        const WELCOME_TEXT_GAP_MS = 2000;
 
         if (welcome_video_url) {
           const greetingParts: string[] =
@@ -84,30 +87,31 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
                 ? [response_text.trim()]
                 : [];
 
-          if (greetingParts.length > 0) {
-            for (let i = 0; i < greetingParts.length; i++) {
-              const part = greetingParts[i].trim();
-              if (!part) continue;
+          const [firstGreetingPart, ...postVideoGreetingParts] = greetingParts;
+          const sendGreetingPart = async (part: string) => {
+            const trimmed = part.trim();
+            if (!trimmed) return;
 
-              const imageRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/g;
-              const imageUrls: string[] = [];
-              let match: RegExpExecArray | null;
-              while ((match = imageRegex.exec(part)) !== null) {
-                if (match[1]) imageUrls.push(match[1].trim());
-              }
-              const textOnly = part.replace(imageRegex, "").replace(/\n{3,}/g, "\n\n").trim();
-
-              if (textOnly.trim()) {
-                await sendChatwootTextMessage(msgUrl, cfg.chatwoot_api_token, textOnly.trim());
-              }
-              for (const imageUrl of imageUrls) {
-                await sendChatwootImageMessage(msgUrl, cfg.chatwoot_api_token, imageUrl, "");
-              }
-              if (i < greetingParts.length - 1) {
-                await new Promise((r) => setTimeout(r, applyJitter(2000)));
-              }
+            const imageRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/g;
+            const imageUrls: string[] = [];
+            let match: RegExpExecArray | null;
+            while ((match = imageRegex.exec(trimmed)) !== null) {
+              if (match[1]) imageUrls.push(match[1].trim());
             }
-            await new Promise((r) => setTimeout(r, 2000));
+            const textOnly = trimmed.replace(imageRegex, "").replace(/\n{3,}/g, "\n\n").trim();
+
+            if (textOnly.trim()) {
+              await sendChatwootTextMessage(msgUrl, cfg.chatwoot_api_token, textOnly.trim());
+            }
+            for (const imageUrl of imageUrls) {
+              await sendChatwootImageMessage(msgUrl, cfg.chatwoot_api_token, imageUrl, "");
+            }
+          };
+
+          // Envia somente a primeira mensagem antes do vídeo (ordem correta no WhatsApp).
+          if (firstGreetingPart?.trim()) {
+            await sendGreetingPart(firstGreetingPart);
+            await new Promise((r) => setTimeout(r, applyJitter(WELCOME_PRE_VIDEO_GAP_MS)));
           }
 
           await sendChatwootMediaMessage(
@@ -117,7 +121,16 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
             "video/mp4",
             ""
           );
-          await new Promise((r) => setTimeout(r, 8000));
+
+          // Após o vídeo, aguarda mais tempo para Chatwoot/WhatsApp concluir envio de mídia.
+          await new Promise((r) => setTimeout(r, WELCOME_POST_VIDEO_DELAY_MS));
+
+          for (let i = 0; i < postVideoGreetingParts.length; i++) {
+            await sendGreetingPart(postVideoGreetingParts[i]);
+            if (i < postVideoGreetingParts.length - 1) {
+              await new Promise((r) => setTimeout(r, applyJitter(WELCOME_TEXT_GAP_MS)));
+            }
+          }
 
           const nameQuestion = cfg.welcome_name_question || "Como posso te chamar?";
           await sendChatwootTextMessage(msgUrl, cfg.chatwoot_api_token, nameQuestion);
