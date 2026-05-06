@@ -1,19 +1,56 @@
+import { normalizeStorageUrlForExternalUse } from "../lib/supabase-storage-public-url.js";
+
+/** Mensagem quando download/upload de mídia falha — nunca enviar URL crua ao cliente. */
+const MEDIA_DELIVERY_FAILED_PT =
+  "Não consegui enviar o arquivo de mídia agora. Quer que eu tente de novo em instantes?";
+
+const VIDEO_IN_URL_RE = /\.(mp4|webm|mov)(\?|#|$)/i;
+
+function stripOuterWrappers(url: string): string {
+  let t = url.trim();
+  if ((t.startsWith("<") && t.endsWith(">")) || (t.startsWith("(") && t.endsWith(")"))) {
+    t = t.slice(1, -1).trim();
+  }
+  return t;
+}
+
+/**
+ * Remove URLs de vídeo do texto e devolve como anexos (nunca como link na bolha).
+ * Cobre: markdown [legenda](url.mp4), ![…](url.mp4), linha só com URL, <url>, (url).
+ */
 function extractVideoUrlsFromText(text: string): { textOnly: string; videoUrls: string[] } {
   const videoUrls: string[] = [];
-  const lines = text.split(/\r?\n/);
+  let t = text;
+
+  const mdVideo =
+    /!?\[([^\]]*)\]\((https?:\/\/[^)\s]+\.(?:mp4|webm|mov)(?:\?[^)\s]*)?)\)/gi;
+  t = t.replace(mdVideo, (_full, _label, url: string) => {
+    if (url) videoUrls.push(url.trim());
+    return "";
+  });
+
+  const lines = t.split(/\r?\n/);
   const remainingLines: string[] = [];
+  const bareVideoLine = /^https?:\/\/[^\s<>"']+\.(?:mp4|webm|mov)(?:\?[^\s<>"']*)?\s*$/i;
+
   for (const line of lines) {
     const trimmed = line.trim();
-    if (/^https?:\/\/[^\s]+\.(mp4|webm|mov)(\?[^\s]*)?\s*$/i.test(trimmed)) {
-      videoUrls.push(trimmed);
-    } else {
+    if (!trimmed) {
       remainingLines.push(line);
+      continue;
     }
+    const inner = stripOuterWrappers(trimmed);
+    if (bareVideoLine.test(inner)) {
+      videoUrls.push(inner);
+      continue;
+    }
+    remainingLines.push(line);
   }
-  return {
-    textOnly: remainingLines.join("\n").replace(/\n{3,}/g, "\n\n").trim(),
-    videoUrls,
-  };
+
+  t = remainingLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+
+  const deduped = [...new Set(videoUrls.map((u) => u.trim()).filter(Boolean))];
+  return { textOnly: t, videoUrls: deduped };
 }
 
 function extractImagesFromMarkdown(text: string): { textOnly: string; imageUrls: string[] } {
@@ -67,8 +104,9 @@ async function sendChatwootImagesBatch(
   for (let i = 0; i < imageUrls.length; i++) {
     const imageUrl = imageUrls[i];
     try {
-      const parsedUrl = new URL(imageUrl);
-      const imgResp = await fetch(imageUrl, {
+      const fetchUrl = normalizeStorageUrlForExternalUse(imageUrl);
+      const parsedUrl = new URL(fetchUrl);
+      const imgResp = await fetch(fetchUrl, {
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
           Referer: `${parsedUrl.protocol}//${parsedUrl.host}/`,
@@ -76,8 +114,8 @@ async function sendChatwootImagesBatch(
         },
       });
       if (!imgResp.ok) {
-        console.warn(`[Deliver] Image download failed ${imgResp.status}: ${imageUrl.slice(0, 80)}...`);
-        await sendChatwootTextMessage(url, apiToken, imageUrl);
+        console.warn(`[Deliver] Image download failed ${imgResp.status}: ${fetchUrl.slice(0, 80)}...`);
+        await sendChatwootTextMessage(url, apiToken, MEDIA_DELIVERY_FAILED_PT);
         continue;
       }
       const blob = await imgResp.blob();
@@ -94,14 +132,14 @@ async function sendChatwootImagesBatch(
       });
       if (!resp.ok) {
         console.error(`[Deliver] Image msg error ${resp.status}:`, await resp.text());
-        await sendChatwootTextMessage(url, apiToken, imageUrl);
+        await sendChatwootTextMessage(url, apiToken, MEDIA_DELIVERY_FAILED_PT);
       } else {
         successCount++;
         console.warn(`[Deliver] Image ${i + 1}/${imageUrls.length} sent OK`);
       }
     } catch (e) {
       console.warn(`[Deliver] Image send exception: ${(e as Error)?.message?.slice(0, 120)}`);
-      await sendChatwootTextMessage(url, apiToken, imageUrl);
+      await sendChatwootTextMessage(url, apiToken, MEDIA_DELIVERY_FAILED_PT);
     }
   }
   console.warn(`[Deliver] sendChatwootImagesBatch: sent ${successCount}/${imageUrls.length} image(s)`);
@@ -116,24 +154,40 @@ async function sendChatwootMediaMessage(
   caption?: string
 ): Promise<boolean> {
   try {
-    const mediaResp = await fetch(mediaUrl);
-    if (!mediaResp.ok) return false;
+    const fetchUrl = normalizeStorageUrlForExternalUse(mediaUrl);
+    const parsedUrl = new URL(fetchUrl);
+    const mediaResp = await fetch(fetchUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        Referer: `${parsedUrl.protocol}//${parsedUrl.host}/`,
+        Accept: "video/*,*/*;q=0.8",
+      },
+    });
+    if (!mediaResp.ok) {
+      console.warn(`[Deliver] Video download failed ${mediaResp.status}: ${fetchUrl.slice(0, 96)}…`);
+      return false;
+    }
     const mediaBlob = await mediaResp.blob();
-    const parsedUrl = new URL(mediaUrl);
-    const filename = parsedUrl.pathname.split("/").pop() || "media.mp4";
+    const headerCt = mediaResp.headers.get("content-type")?.split(";")[0]?.trim();
+    const blobType = headerCt && headerCt !== "application/octet-stream" ? headerCt : contentType;
+    const filename = parsedUrl.pathname.split("/").pop()?.replace(/[?#].*$/, "") || "media.mp4";
     const formData = new FormData();
     if (caption && caption.trim()) formData.append("content", caption.trim());
     formData.append("message_type", "outgoing");
     formData.append("private", "false");
-    formData.append("attachments[]", new Blob([await mediaBlob.arrayBuffer()], { type: contentType }), filename);
+    formData.append("attachments[]", new Blob([await mediaBlob.arrayBuffer()], { type: blobType }), filename);
 
     const resp = await fetch(url, {
       method: "POST",
       headers: { api_access_token: apiToken },
       body: formData,
     });
+    if (!resp.ok) {
+      console.warn(`[Deliver] Video Chatwoot upload failed ${resp.status}:`, (await resp.text()).slice(0, 200));
+    }
     return resp.ok;
-  } catch {
+  } catch (e) {
+    console.warn(`[Deliver] Video send exception: ${(e as Error)?.message?.slice(0, 120)}`);
     return false;
   }
 }
@@ -268,8 +322,11 @@ function consolidateImageParts(parts: string[]): ConsolidatedPart[] {
 
   for (const part of parts) {
     if (!part?.trim()) continue;
-    const { textOnly: afterImages, imageUrls } = extractImagesFromMarkdown(part);
+    const { textOnly: afterImages, imageUrls: rawMdUrls } = extractImagesFromMarkdown(part);
+    const fromMdVideo = rawMdUrls.filter((u) => VIDEO_IN_URL_RE.test(u));
+    const imageUrls = rawMdUrls.filter((u) => !VIDEO_IN_URL_RE.test(u));
     const { textOnly, videoUrls } = extractVideoUrlsFromText(afterImages);
+    const mergedVideoUrls = [...new Set([...fromMdVideo, ...videoUrls])];
 
     if (imageUrls.length > 0) {
       flushImages();
@@ -284,7 +341,7 @@ function consolidateImageParts(parts: string[]): ConsolidatedPart[] {
     }
 
     // Keep only the first video URL across the whole delivery
-    for (const videoUrl of videoUrls) {
+    for (const videoUrl of mergedVideoUrls) {
       if (!videoAdded) {
         flushImages();
         result.push({ type: "video", videoUrl });
@@ -378,8 +435,8 @@ async function replyToChatwoot(
       console.warn(`[Deliver] Sending video: ${block.videoUrl.slice(0, 100)}...`);
       const ok = await sendChatwootMediaMessage(msgUrl, apiToken, block.videoUrl, "video/mp4");
       if (!ok) {
-        console.warn("[Deliver] Video send failed, falling back to text URL");
-        await sendChatwootTextMessage(msgUrl, apiToken, block.videoUrl);
+        console.warn("[Deliver] Video send failed — not sending raw URL to customer");
+        await sendChatwootTextMessage(msgUrl, apiToken, MEDIA_DELIVERY_FAILED_PT);
       }
       // Após vídeo: aguarda 20 s (mais que imagens — arquivo maior, Chatwoot leva mais
       // tempo para concluir a entrega ao WhatsApp) antes do próximo bloco.
@@ -401,6 +458,8 @@ export function getChatwootAuthHeaders(apiToken: string, cfg?: Record<string, un
 }
 
 export {
+  MEDIA_DELIVERY_FAILED_PT,
+  extractVideoUrlsFromText,
   extractImagesFromMarkdown,
   sendChatwootTextMessage,
   sendChatwootImageMessage,

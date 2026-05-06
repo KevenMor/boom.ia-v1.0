@@ -7,6 +7,7 @@ import {
   getHumanizationConfig,
   replyToChatwoot,
   applyJitter,
+  MEDIA_DELIVERY_FAILED_PT,
 } from "../services/delivery.js";
 
 export async function deliveryRoutes(fastify: FastifyInstance) {
@@ -114,13 +115,16 @@ export async function deliveryRoutes(fastify: FastifyInstance) {
             await new Promise((r) => setTimeout(r, applyJitter(WELCOME_PRE_VIDEO_GAP_MS)));
           }
 
-          await sendChatwootMediaMessage(
+          const welcomeVideoSent = await sendChatwootMediaMessage(
             msgUrl,
             cfg.chatwoot_api_token,
             welcome_video_url,
             "video/mp4",
             ""
           );
+          if (!welcomeVideoSent) {
+            await sendChatwootTextMessage(msgUrl, cfg.chatwoot_api_token, MEDIA_DELIVERY_FAILED_PT);
+          }
 
           // Após o vídeo, aguarda mais tempo para Chatwoot/WhatsApp concluir envio de mídia.
           await new Promise((r) => setTimeout(r, WELCOME_POST_VIDEO_DELAY_MS));
