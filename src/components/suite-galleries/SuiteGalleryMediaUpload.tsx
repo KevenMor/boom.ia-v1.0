@@ -21,7 +21,7 @@ function formatStorageUploadError(err: unknown): string {
   const status = o.statusCode != null ? String(o.statusCode) : "";
   const hint404 =
     status === "404" || /404|not found|bucket not found/i.test(`${msg} ${code}`)
-      ? " — confira se o bucket suite-galleries existe no Supabase (sql/017_storage_suite_galleries_bucket.sql)."
+      ? " — confira o bucket suite-galleries (sql/017_storage_suite_galleries_bucket.sql) ou reenvie (URLs antigas com .jpg/.jpeg podem ser bloqueadas pelo nginx do host)."
       : "";
   const parts = [msg, code && `(${code})`, status && `HTTP ${status}`].filter(Boolean);
   return (parts.join(" ").trim() || "erro no Storage") + hint404;
@@ -43,10 +43,10 @@ async function uploadFile(
   type: "photo" | "video",
   filenameTag?: string
 ): Promise<string> {
-  const ext = file.name.split(".").pop()?.toLowerCase() || (type === "photo" ? "jpg" : "mp4");
   const id = crypto.randomUUID();
   const tag = filenameTag ?? type;
-  const path = `${tenantId}/${galleryId}/${tag}-${id}.${ext}`;
+  // Sem extensão no path: nginx do Easypanel em frente ao Supabase intercepta URLs que terminam em .jpg/.jpeg/.png (404 HTML).
+  const path = `${tenantId}/${galleryId}/${tag}-${id}`;
   const contentType = type === "photo" ? inferImageContentTypeForUpload(file) : file.type || "video/mp4";
   const { error } = await supabase.storage
     .from("suite-galleries")
