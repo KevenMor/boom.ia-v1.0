@@ -792,6 +792,39 @@ function buildOpenAITools(
   return { openaiTools, nameToTool };
 }
 
+/** Evita duas chamadas idênticas à mesma galeria no mesmo turno (dispatcher às vezes duplica). */
+function dedupeParallelSuiteGalleryToolCalls(
+  toolCalls: Array<{ id: string; function: { name: string; arguments: string } }>,
+  nameToTool: Map<string, ToolDef>
+): Array<{ id: string; function: { name: string; arguments: string } }> {
+  const seen = new Set<string>();
+  const out: typeof toolCalls = [];
+  for (const tc of toolCalls) {
+    const def = nameToTool.get(tc.function.name);
+    if (def?.tool_type !== "suite_gallery_query") {
+      out.push(tc);
+      continue;
+    }
+    let args: Record<string, unknown> = {};
+    try {
+      args = JSON.parse(tc.function.arguments || "{}") as Record<string, unknown>;
+    } catch {
+      args = {};
+    }
+    const s = (v: unknown) => (typeof v === "string" ? v.trim().toLowerCase() : "");
+    const nome = s(args.nome) || s(args.nome_galeria) || s(args.nomeGaleria);
+    const tema = s(args.tema) || s(args.contexto) || s(args.topico);
+    const key = `${tc.function.name}::${nome}|${tema}|${s(args.query)}|${s(args.q)}`;
+    if (seen.has(key)) {
+      console.warn("[Chat-Local] suite_gallery_query duplicada no mesmo turno — ignorando:", key);
+      continue;
+    }
+    seen.add(key);
+    out.push(tc);
+  }
+  return out;
+}
+
 export async function chatLocalRoutes(fastify: FastifyInstance) {
   fastify.post(
     "/chat-local",
@@ -1212,9 +1245,10 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             if (done) break;
           }
 
-          const phase1ToolCalls = Object.values(toolCallsAccum)
+          const phase1ToolCallsRaw = Object.values(toolCallsAccum)
             .filter((tc) => tc.name)
             .map((tc) => ({ id: tc.id, function: { name: tc.name, arguments: tc.args } }));
+          const phase1ToolCalls = dedupeParallelSuiteGalleryToolCalls(phase1ToolCallsRaw, dispatcherNameToTool);
 
           if (phase1ToolCalls.length > 0) {
             console.log("[Chat-Local] Dispatcher decidiu chamar tools:", phase1ToolCalls.map((tc) => ({

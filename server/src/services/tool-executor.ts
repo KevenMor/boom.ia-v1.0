@@ -1806,22 +1806,35 @@ async function executeSuiteGalleryQuery(
         orientacao_envio_midias?: string | null;
         rotulo_para_cliente?: string | null;
       };
+      const isVideoOnlyGallery =
+        g0.total_videos > 0 && g0.total_fotos === 0;
+      const sendWhenClause =
+        g0.total_videos > 0 &&
+        Array.isArray((g0 as { videos?: unknown }).videos) &&
+        ((g0 as { videos: Array<{ llm_send_when?: string }> }).videos).some((x) => x.llm_send_when?.trim())
+          ? " Cada vídeo pode ter \`llm_send_when\`: envie **somente** a(s) URL(s) cujo critério casa com o contexto do cliente — não despeje clipes que o painel reservou para outro momento."
+          : "";
+      const photoMarkdownRules =
+        `Se o cliente PEDIU as fotos nesta mensagem (ex.: "pode me mandar foto?", "manda foto", "quero ver", "tem foto?"), inclua AGORA o bloco photos_markdown INTEGRAL (todas as linhas ![rótulo](url)), sem omitir nenhuma foto. ` +
+        `Se o cliente ainda NÃO pediu as fotos, descreva o conteúdo em texto primeiro e aguarde ele pedir para então incluir o bloco photos_markdown INTEGRAL.`;
+      const videoOnlyRules =
+        `Esta galeria tem **só vídeo(s)** (sem fotos em photos_markdown). ` +
+        `**Ordem de precedência:** as regras do **system prompt** do agente (Vale Suíço: primeira visita / não conhece / vídeo antes do primeiro R$) **prevalecem** sobre qualquer instrução genérica de "só descrever e esperar o cliente pedir foto". ` +
+        `Se o cliente disse **primeira vez**, **não conhece** o resort, ou o fluxo exige apresentação institucional **antes** de insistir só em datas/preço, inclua nesta resposta (ou na imediatamente seguinte, se \`orientacao_envio_midias\` mandar uma confirmação curta primeiro) **cada URL pertinente** do campo \`vídeos\`, **uma por linha** (HTTPS; **não** use \`![…](…)\` de imagem). **Proibido** ignorar o retorno da ferramenta e pular direto para datas/orçamento. ` +
+        `Se o cliente **pediu** ver vídeo/foto/material **deste tema** ("sim" após você oferecer, "manda", "quero ver as piscinas", etc.), inclua **agora** todas as URLs de \`vídeos\` que se aplicam (uma por linha), sem omitir.${sendWhenClause ? sendWhenClause : ""} ` +
+        `Ao falar com o hóspede use frase natural (ex. tour em vídeo), sem sufixo técnico "(com vídeos)" colado ao nome da pasta.`;
+
       hint =
         hintPrefix +
-        `GALERIA ENCONTRADA. Fotos em photos_markdown. Ao cliente fale de forma natural` +
+        `GALERIA ENCONTRADA. Fotos em photos_markdown (quando houver). Ao cliente fale de forma natural` +
         (g0.rotulo_para_cliente ? ` (referência: "${g0.rotulo_para_cliente}")` : "") +
         `; não repita o nome técnico do painel ("${g0.nome}") na conversa. ` +
-        `Se o cliente PEDIU as fotos nesta mensagem (ex.: "pode me mandar foto?", "manda foto", "quero ver", "tem foto?"), inclua AGORA o bloco photos_markdown INTEGRAL (todas as linhas ![rótulo](url)), sem omitir nenhuma foto. ` +
-        `Se o cliente ainda NÃO pediu as fotos, descreva o conteúdo em texto primeiro e aguarde ele pedir para então incluir o bloco photos_markdown INTEGRAL.` +
-        (g0.total_videos > 0
-          ? ` Há vídeo(s) neste cadastro — ao falar com o hóspede use frase natural (ex. tour em vídeo), sem sufixo técnico "(com vídeos)" colado ao nome da pasta.` +
-            (Array.isArray((g0 as { videos?: unknown }).videos) &&
-            ((g0 as { videos: Array<{ llm_send_when?: string }> }).videos).some((x) => x.llm_send_when?.trim())
-              ? " Cada vídeo pode ter \`llm_send_when\`: envie **somente** a(s) URL(s) cujo critério casa com o contexto do cliente — não despeje todos os vídeos de uma vez sem necessidade."
-              : "")
+        (isVideoOnlyGallery ? videoOnlyRules : photoMarkdownRules) +
+        (g0.total_videos > 0 && !isVideoOnlyGallery
+          ? ` Há vídeo(s) neste cadastro — ao falar com o hóspede use frase natural (ex. tour em vídeo), sem sufixo técnico "(com vídeos)" colado ao nome da pasta.${sendWhenClause}`
           : "") +
         (g0.orientacao_envio_midias
-          ? `\n\nORIENTAÇÃO DO PAINEL (quando enviar mídias — prioridade): ${g0.orientacao_envio_midias}`
+          ? `\n\nORIENTAÇÃO DO PAINEL (matiza tom/ordem — não pode anular o system prompt nem deixar de enviar vídeo de boas-vindas quando ele for obrigatório): ${g0.orientacao_envio_midias}`
           : "");
     } else {
       const noMenu = formatted.filter((x) => x.exibir_no_catalogo_cliente).length;

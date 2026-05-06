@@ -311,7 +311,8 @@ function mergeAdjacentImageAndTextBlocks(blocks: ConsolidatedPart[]): Consolidat
 function consolidateImageParts(parts: string[]): ConsolidatedPart[] {
   const result: ConsolidatedPart[] = [];
   let pendingImages: string[] = [];
-  let videoAdded = false; // Only 1 video per delivery
+  /** WhatsApp via Chatwoot: um anexo por mensagem — cada URL vira um POST separado (igual imagens). */
+  const seenVideoUrls = new Set<string>();
 
   const flushImages = () => {
     if (pendingImages.length > 0) {
@@ -340,13 +341,12 @@ function consolidateImageParts(parts: string[]): ConsolidatedPart[] {
       result.push({ type: "text", content: textOnly.trim() });
     }
 
-    // Keep only the first video URL across the whole delivery
-    for (const videoUrl of mergedVideoUrls) {
-      if (!videoAdded) {
-        flushImages();
-        result.push({ type: "video", videoUrl });
-        videoAdded = true;
-      }
+    for (const raw of mergedVideoUrls) {
+      const videoUrl = raw.trim();
+      if (!videoUrl || seenVideoUrls.has(videoUrl)) continue;
+      seenVideoUrls.add(videoUrl);
+      flushImages();
+      result.push({ type: "video", videoUrl });
     }
   }
   flushImages();
@@ -461,6 +461,7 @@ export {
   MEDIA_DELIVERY_FAILED_PT,
   extractVideoUrlsFromText,
   extractImagesFromMarkdown,
+  consolidateImageParts,
   sendChatwootTextMessage,
   sendChatwootImageMessage,
   sendChatwootMediaMessage,

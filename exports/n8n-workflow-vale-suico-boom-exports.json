@@ -14,7 +14,7 @@
         -60,
         -280
       ],
-      "id": "a94445d8-db62-4386-acfd-186f27988abd",
+      "id": "ebe0d900-0b10-47ae-ba45-4104cfc44132",
       "name": "Instruções"
     },
     {
@@ -25,12 +25,12 @@
         0,
         0
       ],
-      "id": "95b0e28b-d78e-4148-89bb-7f27f68ae0f6",
+      "id": "9ac33ffd-42c1-41cb-85a7-64aa417c82e8",
       "name": "Quando clicar em Test workflow"
     },
     {
       "parameters": {
-        "jsCode": "// Tools OpenAI (Boom / Vale Suíço). Regen: cd server && npm run export:n8n:vale-suico\nconst openai_functions = [{\"type\":\"function\",\"function\":{\"name\":\"consultar_disponibilidade_vale_suico\",\"description\":\"Consulta Omnibees (read-only): preços e disponibilidade. Só cite valores em R$ após resultado neste turno com rooms e summaryText válidos. No Boom: tool_type omnibees_availability.\",\"parameters\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"checkIn\",\"checkOut\"],\"properties\":{\"checkIn\":{\"type\":\"string\",\"description\":\"DDMMYYYY ou YYYY-MM-DD (aliases: check_in, CheckIn)\"},\"checkOut\":{\"type\":\"string\",\"description\":\"DDMMYYYY ou YYYY-MM-DD (aliases: check_out, CheckOut)\"},\"adults\":{\"type\":\"integer\",\"minimum\":1},\"children\":{\"type\":\"integer\",\"minimum\":0},\"childAges\":{\"type\":\"string\",\"description\":\"Idades separadas por vírgula (aliases: child_ages, ag)\"},\"rooms\":{\"type\":\"integer\",\"minimum\":1,\"description\":\"Alias: NRooms\"}}}}},{\"type\":\"function\",\"function\":{\"name\":\"suite_gallery_query\",\"description\":\"Galerias do tenant (fotos Markdown, URLs de vídeo). Vídeo institucional: galeria Institucional. No Boom: tool_type suite_gallery_query.\",\"parameters\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"nome\":{\"type\":\"string\"},\"nome_galeria\":{\"type\":\"string\"},\"filtro\":{\"type\":\"string\"},\"q\":{\"type\":\"string\"}}}}},{\"type\":\"function\",\"function\":{\"name\":\"rag_search\",\"description\":\"Busca semântica na base de conhecimento do tenant (se configurada). No Boom: tool_type rag_search; parâmetro típico: query.\",\"parameters\":{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\"}}}}}];\nreturn [{\n  json: {\n    openai_functions,\n    arquivos_prompt_txt: [\n      'exports/vale-suico-system-combined.txt',\n      'exports/vale-suico-dispatcher.txt',\n      'exports/vale-suico-followup.txt',\n    ],\n  },\n}];"
+        "jsCode": "// Tools OpenAI (Boom / Vale Suíço). Regen: cd server && npm run export:n8n:vale-suico\nconst openai_functions = [{\"type\":\"function\",\"function\":{\"name\":\"consultar_disponibilidade_vale_suico\",\"description\":\"Consulta Omnibees (read-only): preços e disponibilidade. Só cite valores em R$ após resultado neste turno com rooms e summaryText válidos. No Boom: tool_type omnibees_availability.\",\"parameters\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"checkIn\",\"checkOut\"],\"properties\":{\"checkIn\":{\"type\":\"string\",\"description\":\"DDMMYYYY ou YYYY-MM-DD (aliases: check_in, CheckIn)\"},\"checkOut\":{\"type\":\"string\",\"description\":\"DDMMYYYY ou YYYY-MM-DD (aliases: check_out, CheckOut)\"},\"adults\":{\"type\":\"integer\",\"minimum\":1},\"children\":{\"type\":\"integer\",\"minimum\":0},\"childAges\":{\"type\":\"string\",\"description\":\"Idades separadas por vírgula (aliases: child_ages, ag)\"},\"rooms\":{\"type\":\"integer\",\"minimum\":1,\"description\":\"Alias: NRooms\"}}}}},{\"type\":\"function\",\"function\":{\"name\":\"suite_gallery_query\",\"description\":\"Galerias do tenant (fotos Markdown, URLs de vídeo). Vídeo institucional: galeria Institucional. No Boom: tool_type suite_gallery_query.\",\"parameters\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"nome\":{\"type\":\"string\"},\"nome_galeria\":{\"type\":\"string\"},\"filtro\":{\"type\":\"string\"},\"q\":{\"type\":\"string\"},\"contexto\":{\"type\":\"string\",\"description\":\"Tema do pedido de fotos quando a mensagem é genérica (ex.: após falar de piscinas: 'piscina', 'complexo aquático').\"},\"tema\":{\"type\":\"string\",\"description\":\"Alias de contexto.\"},\"topico\":{\"type\":\"string\",\"description\":\"Alias de contexto.\"}}}}},{\"type\":\"function\",\"function\":{\"name\":\"rag_search\",\"description\":\"Busca semântica na base de conhecimento do tenant (se configurada). No Boom: tool_type rag_search; parâmetro típico: query.\",\"parameters\":{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\"}}}}}];\nreturn [{\n  json: {\n    openai_functions,\n    arquivos_prompt_txt: [\n      'exports/vale-suico-system-combined.txt',\n      'exports/vale-suico-dispatcher.txt',\n      'exports/vale-suico-followup.txt',\n    ],\n  },\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -38,7 +38,7 @@
         260,
         0
       ],
-      "id": "6383da54-98ed-425b-ac53-b66188b5b450",
+      "id": "0ca1bb4b-7f7f-49a8-89ef-45a0681decd1",
       "name": "Carregar tools"
     }
   ],

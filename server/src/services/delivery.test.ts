@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractVideoUrlsFromText } from "./delivery.js";
+import { extractVideoUrlsFromText, consolidateImageParts } from "./delivery.js";
 
 describe("extractVideoUrlsFromText", () => {
   it("remove linha só com URL .mp4 e query string", () => {
@@ -33,5 +33,21 @@ describe("extractVideoUrlsFromText", () => {
     );
     expect(videoUrls).toEqual(["https://files.test/clipe.mov"]);
     expect(textOnly).toContain("Ok?");
+  });
+});
+
+describe("consolidateImageParts — múltiplos vídeos", () => {
+  it("emite um bloco video por URL (WhatsApp um anexo por mensagem)", () => {
+    const parts = ["Veja:\n\nhttps://a.example.com/1.mp4\n\nhttps://b.example.com/2.mp4"];
+    const blocks = consolidateImageParts(parts);
+    const vids = blocks.filter((b) => b.type === "video");
+    expect(vids.length).toBe(2);
+    expect(vids[0].videoUrl).toContain("1.mp4");
+    expect(vids[1].videoUrl).toContain("2.mp4");
+  });
+
+  it("deduplica a mesma URL de vídeo", () => {
+    const parts = ["https://x.com/a.mp4\n\nhttps://x.com/a.mp4"];
+    expect(consolidateImageParts(parts).filter((b) => b.type === "video").length).toBe(1);
   });
 });
