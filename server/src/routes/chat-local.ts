@@ -149,6 +149,9 @@ function userProvidedChildrenStatus(messages: Array<{ role: string; content: str
   if (/\b(\d+)\s*(crian[cç]as?|filhos?|bebes?|beb[eê]s?|kids)\b/.test(joined)) return true;
   if (/\b(uma|duas|dois|tres|tr[eê]s)\s*(crian[cç]as?|filhos?)\b/.test(joined)) return true;
   if (/\b(sem|n[ãa]o\s+tem|nenhuma|zero)\s*(crian[cç]a|filho)/.test(joined)) return true;
+  // Grupo só de adultos (equivale a 0 crianças): "somente 2 adultos", "só nós dois", "apenas adultos"
+  if (/\b(somente|apenas)\s+(\d+\s+)?adultos?\b/.test(joined)) return true;
+  if (/\bs[oó]\s+(\d+\s+)?adultos?\b/.test(joined)) return true;
   if (/\bs[oó]\s*(adulto|nos\s+dois|os\s+dois|n[oó]s\s+dois|eu)\b/.test(joined)) return true;
   if (/\bcasal\b/.test(joined) && !/crian[cç]a|filho|beb[eê]/.test(joined)) return true;
   if (/\bsozinh[oa]\b/.test(joined)) return true;
@@ -2051,3 +2054,6 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
     }
   );
 }
+
+/** Exportados para testes (guardas Omnibees). */
+export { validateOmnibeesArgs, userProvidedChildrenStatus };

@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { enrichChatwootAssignDescription } from "./chat-local.js";
+import {
+  enrichChatwootAssignDescription,
+  validateOmnibeesArgs,
+  userProvidedChildrenStatus,
+} from "./chat-local.js";
 import type { ToolDef } from "../services/tool-executor.js";
 
 function makeTool(overrides: Partial<ToolDef> = {}): ToolDef {
@@ -174,5 +178,33 @@ describe("IDEAL_UNITS_MAP — expansão de abreviações", () => {
 
   it("texto sem alias não é alterado", () => {
     expect(expand("me transfira para um atendente")).toBe("me transfira para um atendente");
+  });
+});
+
+describe("validateOmnibeesArgs — crianças explícitas via ‘somente/apenas/só N adultos’", () => {
+  const msgsSomenteAdultos = [
+    { role: "user", content: "quero orcamento dia 15 a 18 de maio 2 adultos" },
+    { role: "user", content: "keven" },
+    { role: "user", content: "somente 2 adultos" },
+  ];
+
+  it("‘somente 2 adultos’ conta como situação de crianças informada (0 crianças)", () => {
+    expect(userProvidedChildrenStatus(msgsSomenteAdultos)).toBe(true);
+    const r = validateOmnibeesArgs(
+      { checkIn: "2026-05-15", checkOut: "2026-05-18", adults: 2 },
+      msgsSomenteAdultos
+    );
+    expect(r).toEqual({ ok: true });
+  });
+
+  it("‘só 2 adultos’ também libera a validação sem children nos args", () => {
+    const msgs = [
+      { role: "user", content: "15 a 18 maio" },
+      { role: "user", content: "só 2 adultos" },
+    ];
+    expect(userProvidedChildrenStatus(msgs)).toBe(true);
+    expect(
+      validateOmnibeesArgs({ checkIn: "2026-05-15", checkOut: "2026-05-18", adults: 2 }, msgs)
+    ).toEqual({ ok: true });
   });
 });
