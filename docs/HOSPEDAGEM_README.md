@@ -106,11 +106,13 @@ Julia: [usa tool] "Ótimo! Encontramos 3 opções. Sua filha entra em cortesia..
 
 ### Cortesia para Crianças
 
-| Caso | Tarifação | Explicação |
-|------|-----------|-----------|
-| 2 ad + 1 criança ≤12 | 2 pessoas | 1 criança = cortesia |
-| 2 ad + 2 crianças ≤12 | **3 pessoas** | 2+ crianças = +1 na tarifação |
-| 2 ad + 1 criança ≤12 + 1 adolescente | 3 pessoas | 1 criança cortesia + 1 adolescente paga |
+| Caso | Soma Idades | Tarifação | Explicação |
+|------|-----------|-----------|-----------|
+| 2 ad + 1 criança (3y) | 3 ≤ 12 | 2 pessoas | Criança = cortesia |
+| 2 ad + 2 crianças (4,6y) | **10 ≤ 12** | **2 pessoas** | **Ambas cortesias** ✓ |
+| 2 ad + 2 crianças (6,7y) | **13 > 12** | **3 pessoas** | 1 cortesia + 1 paga |
+| 2 ad + 3 crianças (3,4,5y) | **12 ≤ 12** | **2 pessoas** | **Todas cortesias** ✓ |
+| 2 ad + 3 crianças (5,5,5y) | **15 > 12** | **3 pessoas** | 1 cortesia + 2 pagam |
 
 ### Acomodações & Filtros
 

@@ -27,19 +27,23 @@ A tabela `lodging_park_days` contém o calendário com:
 
 Crianças até 12 anos NÃO PAGAM — entram como cortesia (colchão adicional).
 
-**Lógica**:
-- Contar quantas crianças menores de 12 anos estão na hospedagem
-- **Se houver 1 criança**: considerar apenas **adultos** na tarifação
-- **Se houver 2+ crianças**: considerar **adultos + 1 criança** na tarifação
+**Lógica (CORRIGIDA)**:
+- Contar todas as crianças com idade individual ≤ 12 anos
+- Calcular o **somatório das idades**
+- **Se somatório ≤ 12 anos**: TODAS as crianças são cortesia → tarifar apenas **adultos**
+- **Se somatório > 12 anos**: Apenas **1 criança é cortesia** → tarifar **adultos + 1 criança**
 
 **Exemplos**:
 
-| Composição | Tarifação | Motivo |
-|-----------|-----------|--------|
-| 2 adultos + 1 criança (3 anos) | 2 hóspedes | 1 criança = cortesia |
-| 2 adultos + 1 criança (10 anos) | 2 hóspedes | 1 criança = cortesia |
-| 2 adultos + 2 crianças (4, 6 anos) | 3 hóspedes | Ambas cortesias, mas 2+ crianças = +1 na tarifação |
-| 2 adultos + 2 crianças (3, 13 anos) | 4 hóspedes | 1 criança até 12 anos (cortesia) + 1 adolescente (paga) + 2 adultos |
+| Composição | Soma Idades | Tarifação | Motivo |
+|-----------|-----------|-----------|--------|
+| 2 adultos + 1 criança (3 anos) | 3 ≤ 12 | 2 hóspedes | 1 criança = cortesia |
+| 2 adultos + 1 criança (10 anos) | 10 ≤ 12 | 2 hóspedes | 1 criança = cortesia |
+| 2 adultos + 2 crianças (4, 6 anos) | 10 ≤ 12 | **2 hóspedes** | **Ambas cortesias** ✓ |
+| 2 adultos + 2 crianças (6, 7 anos) | 13 > 12 | 3 hóspedes | 1 cortesia + 1 paga |
+| 2 adultos + 2 crianças (3, 13 anos) | 3 ≤ 12 mas 13 > 12 | 3 hóspedes | 1 criança (3y) cortesia + 1 adolescente (13y) paga |
+| 2 adultos + 3 crianças (3, 4, 5 anos) | 12 ≤ 12 | **2 hóspedes** | **Todas cortesias** ✓ |
+| 2 adultos + 3 crianças (5, 5, 5 anos) | 15 > 12 | 3 hóspedes | 1 cortesia + 2 pagam |
 
 ---
 
@@ -428,20 +432,30 @@ function calculateGuestsForPricing(guests: Array<{ type: string; age?: number }>
   total_children_under_12: number;
   guests_for_pricing: number;
   kids_under_12: Array<{ age: number }>;
+  all_children_courtesy: boolean;
 } {
   const adults = guests.filter(g => g.type === 'adult').length;
   const children_under_12 = guests.filter(g => g.type === 'child' && (g.age ?? 0) <= 12).map(g => ({ age: g.age! }));
   
+  // Calcular somatório das idades das crianças
+  const childrenAgesSum = children_under_12.reduce((sum, c) => sum + c.age, 0);
+  
+  // Se todas as crianças têm soma ≤ 12: todas são cortesia
+  const all_children_courtesy = childrenAgesSum <= 12 && children_under_12.length > 0;
+  
   let guests_for_pricing = adults;
-  if (children_under_12.length >= 2) {
+  if (!all_children_courtesy && children_under_12.length > 0) {
+    // Se nem todas são cortesias, conta 1 criança na tarifação
     guests_for_pricing += 1;
   }
+  // Se todas forem cortesias, não adiciona nada
   
   return {
     total_adults: adults,
     total_children_under_12: children_under_12.length,
     guests_for_pricing,
-    kids_under_12: children_under_12
+    kids_under_12: children_under_12,
+    all_children_courtesy
   };
 }
 ```

@@ -906,10 +906,16 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
           .filter((g) => g.type === "child" && (g.age ?? 0) <= 12)
           .map((g) => ({ age: g.age! }));
 
+        // Calcular se todas as crianças são cortesias (somatorio de idades <= 12)
+        const childrenAgesSum = childrenUnder12.reduce((sum, c) => sum + c.age, 0);
+        const allChildrenCourtesy = childrenAgesSum <= 12 && childrenUnder12.length > 0;
+
         let guestsForPricing = adults;
-        if (childrenUnder12.length >= 2) {
+        if (!allChildrenCourtesy && childrenUnder12.length > 0) {
+          // Se nem todas são cortesias, conta apenas 1 criança na tarifação
           guestsForPricing += 1;
         }
+        // Se todas forem cortesias, não adiciona nada (guestsForPricing = adults)
 
         const guestsFamilyTotal = guests.length;
 
