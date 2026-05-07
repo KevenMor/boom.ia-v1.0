@@ -381,3 +381,82 @@ export function useDeleteLodgingReservation() {
     },
   });
 }
+
+// --- Rates (Valores) ---
+
+export interface LodgingRateItem {
+  id: string;
+  tenant_id: string;
+  accommodation_type_id: string;
+  guests: number;
+  nights: number;
+  price: number;
+  currency: string;
+  valid_from: string | null;
+  valid_to: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  lodging_accommodation_types?: { id: string; name: string } | null;
+}
+
+export const hospedagemRateKeys = {
+  list: (tenantId: string | null, typeId?: string) => ["hospedagem", "rates", tenantId, typeId ?? "all"] as const,
+};
+
+export function useLodgingRates(tenantId: string | undefined, accommodationTypeId?: string) {
+  return useQuery({
+    queryKey: hospedagemRateKeys.list(tenantId ?? null, accommodationTypeId),
+    enabled: !!tenantId,
+    queryFn: () =>
+      callAPI<{ data: LodgingRateItem[] }>(
+        `/hospedagem/rates?tenant_id=${encodeURIComponent(tenantId!)}${accommodationTypeId ? `&accommodation_type_id=${encodeURIComponent(accommodationTypeId)}` : ""}`,
+        { method: "GET" }
+      ),
+  });
+}
+
+export function useCreateLodgingRate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      tenant_id: string;
+      accommodation_type_id: string;
+      guests: number;
+      nights: number;
+      price: number;
+      currency?: string;
+      valid_from?: string | null;
+      valid_to?: string | null;
+      notes?: string | null;
+    }) => callAPI<LodgingRateItem>("/hospedagem/rates", { method: "POST", body }),
+    onSuccess: (_d, vars) => {
+      void qc.invalidateQueries({ queryKey: ["hospedagem", "rates", vars.tenant_id] });
+    },
+  });
+}
+
+export function useUpdateLodgingRate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: {
+      id: string;
+      tenant_id: string;
+      patch: Partial<Pick<LodgingRateItem, "price" | "currency" | "valid_from" | "valid_to" | "notes">>;
+    }) => callAPI<LodgingRateItem>(`/hospedagem/rates/${vars.id}`, { method: "PATCH", body: vars.patch }),
+    onSuccess: (_d, vars) => {
+      void qc.invalidateQueries({ queryKey: ["hospedagem", "rates", vars.tenant_id] });
+    },
+  });
+}
+
+export function useDeleteLodgingRate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { id: string; tenant_id: string }) =>
+      callAPI<{ ok: boolean }>(`/hospedagem/rates/${vars.id}`, { method: "DELETE" }),
+    onSuccess: (_d, vars) => {
+      void qc.invalidateQueries({ queryKey: ["hospedagem", "rates", vars.tenant_id] });
+    },
+  });
+}
