@@ -6,6 +6,7 @@ import {
   canManageTenant,
   requireAuthenticated,
 } from "../services/authorization.js";
+import { runLodgingConsulta } from "../services/lodging-consulta.js";
 
 const MODULE_KEY = "hospedagem";
 
@@ -899,152 +900,11 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ error: "invalid_date_format", detail: "YYYY-MM-DD required" });
       }
 
-      try {
-        // Calcular hóspedes para tarifação
-        const adults = guests.filter((g) => g.type === "adult").length;
-        const childrenUnder12 = guests
-          .filter((g) => g.type === "child" && (g.age ?? 0) <= 12)
-          .map((g) => ({ age: g.age! }));
-
-        // Calcular se todas as crianças são cortesias (somatorio de idades <= 12)
-        const childrenAgesSum = childrenUnder12.reduce((sum, c) => sum + c.age, 0);
-        const allChildrenCourtesy = childrenAgesSum <= 12 && childrenUnder12.length > 0;
-
-        let guestsForPricing = adults;
-        if (!allChildrenCourtesy && childrenUnder12.length > 0) {
-          // Se nem todas são cortesias, conta apenas 1 criança na tarifação
-          guestsForPricing += 1;
-        }
-        // Se todas forem cortesias, não adiciona nada (guestsForPricing = adults)
-
-        const guestsFamilyTotal = guests.length;
-
-        // Calcular número de noites
-        const checkInDate = new Date(check_in + "T00:00:00Z");
-        const checkOutDate = new Date(check_out + "T00:00:00Z");
-        const nights = Math.floor((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
-
-        // Verificar disponibilidade do parque
-        const { data: parkDays, error: parkError } = await supabase
-          .from("lodging_park_days")
-          .select("calendar_date, day_kind")
-          .eq("tenant_id", tenant_id)
-          .gte("calendar_date", check_in)
-          .lt("calendar_date", check_out)
-          .order("calendar_date", { ascending: true });
-
-        if (parkError) throw parkError;
-
-        const closedDates = (parkDays ?? []).filter((d: any) => d.day_kind !== "aberto").map((d: any) => d.calendar_date);
-
-        // Se parque fechado, retornar sugestões
-        if (closedDates.length > 0) {
-          const suggestions: string[] = [];
-
-          // Encontrar próximas datas abertas
-          const { data: allDays } = await supabase
-            .from("lodging_park_days")
-            .select("calendar_date, day_kind")
-            .eq("tenant_id", tenant_id)
-            .gte("calendar_date", check_out)
-            .order("calendar_date", { ascending: true })
-            .limit(30);
-
-          if (allDays && allDays.length > 0) {
-            let lastOpen = null;
-            for (const d of allDays) {
-              if (d.day_kind === "aberto") {
-                if (!lastOpen) {
-                  lastOpen = d.calendar_date;
-                }
-              } else {
-                if (lastOpen) {
-                  suggestions.push(`Parque aberto: ${lastOpen} a ${d.calendar_date}`);
-                  lastOpen = null;
-                }
-              }
-            }
-            if (lastOpen) {
-              suggestions.push(`Parque aberto a partir de: ${lastOpen}`);
-            }
-          }
-
-          return reply.send({
-            status: "park_closed",
-            check_in,
-            check_out,
-            message: `O parque estará fechado em ${closedDates.join(", ")}. Não conseguimos confirmar hospedagem nessas datas.`,
-            suggestions,
-          });
-        }
-
-        // Buscar tarifas
-        const { data: rates, error: ratesError } = await supabase
-          .from("lodging_rate_items")
-          .select("*, lodging_accommodation_types (id, name)")
-          .eq("tenant_id", tenant_id)
-          .eq("guests", guestsForPricing)
-          .eq("nights", nights)
-          .order("accommodation_type_id", { ascending: true });
-
-        if (ratesError) throw ratesError;
-
-        // Filtrar acomodações conforme regra (remover indisponíveis para pax)
-        const availableRates = (rates ?? []).filter((rate: any) => {
-          const typeName = rate.lodging_accommodation_types?.name ?? "";
-          const minGuestsMap: Record<string, number> = {
-            "LUXO VISTA PISCINA": 3,
-            "LUXO COM VARANDA": 2,
-            "LUXO DUPLO": 2,
-            "MASTER COM VARANDA": 4,
-            STANDART: 2,
-            LOFT: 6,
-          };
-
-          const minGuests = minGuestsMap[typeName] ?? 2;
-
-          // Mostrar se guestsForPricing >= minGuests
-          return guestsForPricing >= minGuests;
-        });
-
-        // Montar resposta
-        const accommodations = availableRates.map((rate: any) => ({
-          id: rate.id,
-          name: rate.lodging_accommodation_types?.name ?? "Acomodação",
-          guests: rate.guests,
-          nights: rate.nights,
-          price_per_night: rate.guests === 1 ? rate.price / nights : rate.price / nights,
-          total_price: parseFloat(rate.price),
-          currency: rate.currency,
-          notes: rate.notes,
-        }));
-
-        const messageKids =
-          childrenUnder12.length > 0
-            ? `${childrenUnder12.length === 1 ? "1 criança até 12 anos em cortesia" : `${childrenUnder12.length} crianças até 12 anos em cortesia`} (colchão${childrenUnder12.length > 1 ? "ões" : ""} adicional${childrenUnder12.length > 1 ? "is" : ""} inclusos).`
-            : "";
-
-        const message =
-          `Encontramos ${availableRates.length} opção${availableRates.length === 1 ? "" : "ões"} de hospedagem para ${guestsForPricing} pessoa${guestsForPricing === 1 ? "" : "s"}` +
-          (guestsFamilyTotal > guestsForPricing ? ` (sua família tem ${guestsFamilyTotal} pessoa${guestsFamilyTotal === 1 ? "" : "s"}), ` : `, `) +
-          `de ${new Date(check_in).toLocaleDateString("pt-BR")} a ${new Date(check_out).toLocaleDateString("pt-BR")} (${nights} noite${nights === 1 ? "" : "s"}). ` +
-          (messageKids ? messageKids : "");
-
-        return reply.send({
-          status: "success",
-          check_in,
-          check_out,
-          nights,
-          guests_in_family: guestsFamilyTotal,
-          guests_for_pricing: guestsForPricing,
-          kids_under_12: childrenUnder12,
-          available_accommodations: accommodations,
-          message,
-        });
-      } catch (e) {
-        console.error("Error in consultar-sunset:", e);
-        return reply.status(500).send({ error: "internal_error", detail: String(e) });
+      const out = await runLodgingConsulta(supabase, { tenant_id, check_in, check_out, guests });
+      if (!out.ok) {
+        return reply.status(out.status).send(out.body);
       }
+      return reply.send(out.data);
     }
   );
 }

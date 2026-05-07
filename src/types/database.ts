@@ -44,7 +44,7 @@ export interface Agent {
   providers?: Provider;
 }
 
-export type ToolType = 'sql_query' | 'web_scraper' | 'api_rest' | 'rag_search' | 'inventory_query' | 'nearest_unit' | 'fipe_query' | 'calendar_query' | 'chatwoot_assign' | 'send_notification' | 'omnibees_availability' | 'suite_gallery_query';
+export type ToolType = 'sql_query' | 'web_scraper' | 'api_rest' | 'rag_search' | 'inventory_query' | 'nearest_unit' | 'fipe_query' | 'calendar_query' | 'chatwoot_assign' | 'send_notification' | 'omnibees_availability' | 'suite_gallery_query' | 'lodging_consulta';
 
 export interface Tool {
   id: string;

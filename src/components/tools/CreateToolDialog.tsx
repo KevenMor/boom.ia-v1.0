@@ -18,7 +18,7 @@ import { useTenants } from "@/hooks/useTenants";
 import { useAgents } from "@/hooks/useAgents";
 import { nexusDb } from "@/integrations/supabase/nexus-client";
 import { toast } from "sonner";
-import { Database, Globe, Server, Search, Car, MapPin, DollarSign, CalendarDays, Link, UserCheck, Bell, Building2, Images } from "lucide-react";
+import { Database, Globe, Server, Search, Car, MapPin, DollarSign, CalendarDays, Link, UserCheck, Bell, Building2, Images, BedDouble } from "lucide-react";
 import type { ToolType } from "@/types/database";
 
 const TOOL_TYPE_META: Record<ToolType, { label: string; icon: any; description: string }> = {
@@ -34,12 +34,17 @@ const TOOL_TYPE_META: Record<ToolType, { label: string; icon: any; description: 
   send_notification: { label: "Notificação", icon: Bell, description: "Envia notificação (mensagem, webhook) em eventos" },
   omnibees_availability: { label: "Omnibees (hotel)", icon: Building2, description: "Disponibilidade e tarifas via motor Omnibees (HTML)" },
   suite_gallery_query: { label: "Galeria", icon: Images, description: "Fotos e vídeos do painel Galeria do tenant (qualquer vertical)" },
+  lodging_consulta: {
+    label: "Hospedagem (parque)",
+    icon: BedDouble,
+    description: "Calendário do parque + tarifas internas (sem URL; tenant obrigatório)",
+  },
 };
 
 const schema = z.object({
   name: z.string().min(2, "Nome obrigatório (snake_case)"),
   description: z.string().min(3, "Descrição obrigatória para o LLM"),
-  tool_type: z.enum(["sql_query", "web_scraper", "api_rest", "rag_search", "inventory_query", "nearest_unit", "fipe_query", "calendar_query", "chatwoot_assign", "send_notification", "omnibees_availability", "suite_gallery_query"]),
+  tool_type: z.enum(["sql_query", "web_scraper", "api_rest", "rag_search", "inventory_query", "nearest_unit", "fipe_query", "calendar_query", "chatwoot_assign", "send_notification", "omnibees_availability", "suite_gallery_query", "lodging_consulta"]),
   tenant_id: z.string().optional(),
   endpoint: z.string().optional(),
   parameters_json: z.string().optional(),
@@ -158,7 +163,42 @@ export function CreateToolDialog({ open, onOpenChange }: Props) {
       case "send_notification": return '{\n  "channel": "chatwoot_message",\n  "conversation_id": 123\n}';
       case "omnibees_availability": return '{\n  "chain_id": "4486",\n  "hotel_id": "8164",\n  "currency_id": "16",\n  "lang": "pt-BR"\n}';
       case "suite_gallery_query": return "{}";
+      case "lodging_consulta": return "{}";
     }
+  };
+
+  const applyLodgingConsultaTemplate = () => {
+    setValue("name", "consultar_hospedagem_parque");
+    setValue(
+      "description",
+      "Consulta o calendário do parque (dias abertos/fechados) e as tarifas de hospedagem do tenant. Use antes de passar orçamento. Cortesia para crianças: se a soma das idades das crianças até 12 anos for ≤12, todas entram em cortesia (colchão adicional); senão, tarifar adultos + 1 criança entre as ≤12. Parâmetros: check_in, check_out (YYYY-MM-DD) e guests (type adult|child; age obrigatório para criança). O tenant da ferramenta deve ser o do parque (não usar Global)."
+    );
+    setValue(
+      "parameters_json",
+      [
+        "{",
+        '  "type": "object",',
+        '  "properties": {',
+        '    "check_in": { "type": "string", "description": "Check-in YYYY-MM-DD" },',
+        '    "check_out": { "type": "string", "description": "Check-out YYYY-MM-DD" },',
+        '    "guests": {',
+        '      "type": "array",',
+        '      "description": "Lista de hóspedes (adult/child; age para crianças)",',
+        '      "items": {',
+        '        "type": "object",',
+        '        "properties": {',
+        '          "type": { "type": "string", "enum": ["adult", "child"] },',
+        '          "age": { "type": "number", "description": "Idade (obrigatório se child)" }',
+        "        },",
+        '        "required": ["type"]',
+        "      }",
+        "    }",
+        "  },",
+        '  "required": ["check_in", "check_out", "guests"]',
+        "}",
+      ].join("\n")
+    );
+    setValue("execution_json", "{}");
   };
 
   return (
@@ -174,7 +214,11 @@ export function CreateToolDialog({ open, onOpenChange }: Props) {
                 <button
                   key={key}
                   type="button"
-                  onClick={() => { setToolType(key); setValue("tool_type", key); }}
+                  onClick={() => {
+                    setToolType(key);
+                    setValue("tool_type", key);
+                    if (key === "lodging_consulta") applyLodgingConsultaTemplate();
+                  }}
                   className={`flex items-center gap-2 rounded-lg border p-3 text-left text-xs transition-colors ${
                     toolType === key ? "border-primary bg-primary/5" : "border-border hover:border-primary/30"
                   }`}
@@ -255,6 +299,15 @@ export function CreateToolDialog({ open, onOpenChange }: Props) {
             {errors.description && <p className="text-xs text-destructive">{errors.description.message}</p>}
           </div>
 
+          {toolType === "lodging_consulta" && (
+            <div className="rounded-lg border border-primary/25 bg-primary/5 p-3 text-[11px] leading-relaxed text-foreground">
+              <p className="font-medium text-primary">Template interno</p>
+              <p className="mt-1 text-muted-foreground">
+                Sem endpoint HTTP. Escolha o <strong>tenant</strong> do parque (ex.: Sunset Thermas) e vincule ao agente. O módulo <strong>hospedagem</strong> precisa estar ativo no tenant.
+              </p>
+            </div>
+          )}
+
           {toolType === "api_rest" && (
             <div className="space-y-2">
               <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Endpoint</Label>
@@ -333,7 +386,9 @@ export function CreateToolDialog({ open, onOpenChange }: Props) {
                 placeholder={
                   toolType === "chatwoot_assign"
                     ? '{ "type": "object", "required": ["reason"], "properties": { "reason": { "type": "string", "description": "Unidade ou escalacao" } } }'
-                    : '{ "type": "object", "properties": { "email": { "type": "string" } } }'
+                    : toolType === "lodging_consulta"
+                      ? "Preenchido automaticamente ao escolher Hospedagem (parque) — check_in, check_out, guests"
+                      : '{ "type": "object", "properties": { "email": { "type": "string" } } }'
                 }
                 className="min-h-[120px] font-mono text-xs bg-background"
               />

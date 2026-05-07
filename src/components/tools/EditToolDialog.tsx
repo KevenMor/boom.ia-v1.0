@@ -16,7 +16,7 @@ import { useUpdateTool } from "@/hooks/useTools";
 import { useTenants } from "@/hooks/useTenants";
 import { toast } from "sonner";
 import type { Tool, ToolType } from "@/types/database";
-import { Database, Globe, Server, Search, Car, MapPin, DollarSign, CalendarDays, UserCheck, Bell, Building2, Images } from "lucide-react";
+import { Database, Globe, Server, Search, Car, MapPin, DollarSign, CalendarDays, UserCheck, Bell, Building2, Images, BedDouble } from "lucide-react";
 
 const TOOL_TYPE_META: Record<ToolType, { label: string; icon: any }> = {
   sql_query: { label: "Consulta SQL", icon: Database },
@@ -31,12 +31,13 @@ const TOOL_TYPE_META: Record<ToolType, { label: string; icon: any }> = {
   send_notification: { label: "Notificação", icon: Bell },
   omnibees_availability: { label: "Omnibees (hotel)", icon: Building2 },
   suite_gallery_query: { label: "Galeria", icon: Images },
+  lodging_consulta: { label: "Hospedagem (parque)", icon: BedDouble },
 };
 
 const schema = z.object({
   name: z.string().min(2),
   description: z.string().min(3),
-  tool_type: z.enum(["sql_query", "web_scraper", "api_rest", "rag_search", "inventory_query", "nearest_unit", "fipe_query", "calendar_query", "chatwoot_assign", "send_notification", "omnibees_availability", "suite_gallery_query"]),
+  tool_type: z.enum(["sql_query", "web_scraper", "api_rest", "rag_search", "inventory_query", "nearest_unit", "fipe_query", "calendar_query", "chatwoot_assign", "send_notification", "omnibees_availability", "suite_gallery_query", "lodging_consulta"]),
   tenant_id: z.string().optional(),
   endpoint: z.string().optional(),
   parameters_json: z.string().optional(),
@@ -171,6 +172,12 @@ export function EditToolDialog({ tool, open, onOpenChange }: Props) {
                 className="h-9 bg-background font-mono text-sm"
               />
             </div>
+          )}
+
+          {toolType === "lodging_consulta" && (
+            <p className="text-[11px] text-muted-foreground rounded-md border border-border bg-muted/30 p-2">
+              Consulta interna (calendário + tarifas). Defina o <strong>tenant</strong> do parque; não é necessário endpoint.
+            </p>
           )}
 
           {toolType === "api_rest" && (

@@ -3,6 +3,7 @@ import { createNexusClient } from "../services/supabase.js";
 import { runFipeQuery } from "../services/fipe.js";
 import { runFindNearestUnit } from "../services/find-nearest-unit.js";
 import { formatDateBR } from "../utils/agendaNotification.js";
+import { runLodgingConsulta } from "../services/lodging-consulta.js";
 
 export async function toolsRoutes(fastify: FastifyInstance) {
   fastify.post("/tools/fipe", async (req: FastifyRequest, reply: FastifyReply) => {
@@ -590,6 +591,31 @@ export async function toolsRoutes(fastify: FastifyInstance) {
             };
           } else {
             result = { error: `Canal desconhecido: ${channel}` };
+          }
+          break;
+        }
+
+        case "lodging_consulta": {
+          let tenantId = (tool.tenant_id as string | null)?.trim() || "";
+          const check_in = String(args?.check_in ?? "").trim();
+          const check_out = String(args?.check_out ?? "").trim();
+          const guests = Array.isArray(args?.guests) ? (args!.guests as Array<{ type: string; age?: number }>) : [];
+          if (!tenantId) {
+            result = {
+              error: "tenant_id obrigatório na ferramenta (não use Global para hospedagem interna)",
+            };
+            break;
+          }
+          const out = await runLodgingConsulta(supabase, {
+            tenant_id: tenantId,
+            check_in,
+            check_out,
+            guests,
+          });
+          if (!out.ok) {
+            result = { status: out.status, ...out.body };
+          } else {
+            result = out.data;
           }
           break;
         }

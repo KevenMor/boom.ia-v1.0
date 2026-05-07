@@ -11,6 +11,7 @@ import {
   galleryRotuloParaCliente,
   isGalleryExcludedFromClientCatalog,
 } from "../utils/suite-gallery-llm-labels.js";
+import { runLodgingConsulta, type LodgingGuestInput } from "./lodging-consulta.js";
 
 export interface ToolExecutionResult {
   success: boolean;
@@ -1419,6 +1420,57 @@ async function executeChatwootAssign(
   }
 }
 
+function normalizeLodgingGuests(raw: unknown): LodgingGuestInput[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((g) => {
+    if (!g || typeof g !== "object") return { type: "adult" };
+    const o = g as Record<string, unknown>;
+    const typeRaw = String(o.type ?? "adult").toLowerCase();
+    const type = typeRaw === "child" ? "child" : "adult";
+    const ageNum =
+      typeof o.age === "number"
+        ? o.age
+        : typeof o.age === "string"
+          ? parseInt(o.age, 10)
+          : NaN;
+    if (type === "child") {
+      return { type: "child", age: Number.isFinite(ageNum) ? ageNum : 0 };
+    }
+    return { type: "adult" };
+  });
+}
+
+async function executeLodgingConsulta(
+  supabase: ReturnType<typeof createNexusClient>,
+  tool: { tenant_id?: string },
+  args: Record<string, unknown>,
+  agentId: string
+): Promise<ToolExecutionResult> {
+  let tenantId = tool.tenant_id?.trim() || "";
+  if (!tenantId && agentId) {
+    const { data: agent } = await supabase.from("agents").select("tenant_id").eq("id", agentId).single();
+    tenantId = (agent?.tenant_id as string)?.trim() || "";
+  }
+  if (!tenantId) {
+    return {
+      success: false,
+      result: null,
+      error:
+        "tenant_id não disponível: associe esta ferramenta ao tenant Sunset (não use Global) ou garanta que o agente tenha tenant_id",
+    };
+  }
+
+  const check_in = String(args?.check_in ?? "").trim();
+  const check_out = String(args?.check_out ?? "").trim();
+  const guests = normalizeLodgingGuests(args?.guests);
+
+  const out = await runLodgingConsulta(supabase, { tenant_id: tenantId, check_in, check_out, guests });
+  if (!out.ok) {
+    return { success: false, result: null, error: JSON.stringify(out.body) };
+  }
+  return { success: true, result: out.data };
+}
+
 export interface ToolDef {
   id: string;
   name: string;
@@ -1469,6 +1521,9 @@ export async function executeTool(
 
     case "suite_gallery_query":
       return executeSuiteGalleryQuery(supabase, agentId, args);
+
+    case "lodging_consulta":
+      return executeLodgingConsulta(supabase, tool, args, agentId);
 
     case "web_scraper":
     case "api_rest":

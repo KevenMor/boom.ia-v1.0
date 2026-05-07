@@ -1,7 +1,8 @@
 -- Boom IA — Registro da Tool de Hospedagem para Agente Julia (Sunset Thermas Park)
--- Executar no Supabase SQL Editor após a migration de rates estar pronta.
--- Esta tool implementa a lógica complexa de consulta de hospedagem com verificação de calendário
--- e cálculo correto de hóspedes (cortesia para crianças até 12 anos).
+-- Executar no Supabase SQL Editor após:
+--   1) sql/026_lodging_consulta_tool_type.sql (ou migration 20260507190000) — libera tool_type lodging_consulta
+--   2) dados de calendário e tarifas
+-- Tool interna: tool_type lodging_consulta (sem URL; executor no servidor).
 
 DO $register_tool$
 DECLARE
@@ -32,37 +33,33 @@ BEGIN
   VALUES (
     'consultar_hospedagem_sunset',
     'Consulta disponibilidade e tarifas de hospedagem no Sunset Thermas Park com verificação de calendário, cálculo de cortesia para crianças e tarifação correta',
-    'api_rest',
+    'lodging_consulta',
     v_tenant,
     '{
       "name": "consultar_hospedagem_sunset",
-      "description": "Consulta hospedagem com verificação de disponibilidade do parque, cálculo de hóspedes considerando cortesias, e apresentação de tarifas",
+      "description": "Consulta hospedagem: calendário do parque (dias abertos) e tarifas. Cortesia crianças: se a soma das idades das crianças até 12 anos for ≤12, todas cortesia (colchão adicional); senão tarifar adultos + 1 criança. Parâmetros: check_in, check_out (YYYY-MM-DD), guests (type adult|child, age para criança). O tenant vem da ferramenta.",
       "parameters": {
         "type": "object",
         "properties": {
-          "tenant_id": { "type": "string", "description": "ID do tenant (Sunset Thermas Park)" },
-          "check_in": { "type": "string", "description": "Data de entrada em formato YYYY-MM-DD" },
-          "check_out": { "type": "string", "description": "Data de saída em formato YYYY-MM-DD" },
+          "check_in": { "type": "string", "description": "Data de entrada YYYY-MM-DD" },
+          "check_out": { "type": "string", "description": "Data de saída YYYY-MM-DD" },
           "guests": {
             "type": "array",
-            "description": "Lista de hóspedes: adultos e crianças com suas idades",
+            "description": "Lista de hóspedes: adultos e crianças com idades",
             "items": {
               "type": "object",
               "properties": {
-                "type": { "type": "string", "enum": ["adult", "child"], "description": "Tipo de hóspede: adulto ou criança" },
-                "age": { "type": "number", "description": "Idade do hóspede (obrigatório para crianças)" }
+                "type": { "type": "string", "enum": ["adult", "child"], "description": "adult ou child" },
+                "age": { "type": "number", "description": "Idade (obrigatório para child)" }
               },
               "required": ["type"]
             }
           }
         },
-        "required": ["tenant_id", "check_in", "check_out", "guests"]
+        "required": ["check_in", "check_out", "guests"]
       }
     }'::JSONB,
-    '{
-      "endpoint": "POST /hospedagem/consultar-sunset",
-      "timeout_ms": 10000
-    }'::JSONB
+    '{}'::JSONB
   )
   ON CONFLICT DO NOTHING;
 

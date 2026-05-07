@@ -1,4 +1,4 @@
-import { Wrench, Plus, Search, MoreHorizontal, Pencil, Trash2, Database, Globe, Server, Play } from "lucide-react";
+import { Wrench, Plus, Search, MoreHorizontal, Pencil, Trash2, Database, Globe, Server, Play, BedDouble } from "lucide-react";
 import { Search as SearchIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +23,7 @@ const TOOL_TYPE_ICON: Record<string, any> = {
   web_scraper: Globe,
   api_rest: Server,
   rag_search: SearchIcon,
+  lodging_consulta: BedDouble,
 };
 
 const TOOL_TYPE_LABEL: Record<string, string> = {
@@ -30,6 +31,7 @@ const TOOL_TYPE_LABEL: Record<string, string> = {
   web_scraper: "Web Scraper",
   api_rest: "API REST",
   rag_search: "RAG Search",
+  lodging_consulta: "Hospedagem (parque)",
 };
 
 export default function Tools() {
