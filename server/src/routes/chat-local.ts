@@ -10,12 +10,21 @@ import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification,
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 const MAX_TOOL_ITERATIONS = 5;
 
+/** Quando modelos Gemini 2.5 / *-lite devolvem 503 (alta demanda na API), tentar este modelo na mesma chave. */
+const GEMINI_CONVERSATIONAL_FALLBACK_MODEL = "gemini-2.0-flash";
+
 /** Mensagem amigável quando a API do provedor (OpenAI/Gemini) retorna erro HTTP */
 function providerErrorMessage(status: number, errText: string): string {
   const preview = errText.slice(0, 200).replace(/\s+/g, " ").trim();
   if (status === 401) return "API key inválida ou expirada (401). Verifique o provedor em Provedores e atualize a chave.";
   if (status === 403) return "Acesso negado pelo provedor de IA (403). Verifique a API key e permissões em Provedores.";
   if (status === 429) return "Limite de uso do provedor excedido (429). Tente mais tarde ou verifique o plano/créditos.";
+  if (status === 503) {
+    if (/high demand|UNAVAILABLE|overloaded/i.test(errText)) {
+      return "O provedor de IA está temporariamente sobrecarregado (503). Tente de novo em instantes ou, no agente, use o modelo gemini-2.0-flash (costuma ser mais estável na API do que 2.5 / *-lite).";
+    }
+    return `Serviço temporariamente indisponível (503). Tente novamente em alguns minutos. ${preview ? `Detalhe: ${preview}` : ""}`;
+  }
   if (status >= 500) return `Erro interno do provedor (${status}). Tente novamente em alguns minutos.`;
   return preview || `Erro do provedor (${status}). Verifique a API key em Provedores.`;
 }
@@ -885,7 +894,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       const hasInventoryTool = tools.some((t) => t.tool_type === "inventory_query");
 
       const systemPrompt = buildSystemPrompt(
-        agent.system_prompt || "",
+        agent.system_prompt || "", // ignorado quando o tenant tem entrada em TENANT_PROMPTS (prompt vem só do projeto)
         tenantSlug,
         hasInventoryTool
       );
@@ -1474,31 +1483,67 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             console.log("[Chat-Local] Tool results sendo enviados ao LLM conversacional:", toolResults.length, "results");
           }
 
-          let convResp: Response;
+          let convResp!: Response;
+          let convBodyAttempt: Record<string, unknown> = { ...convBody };
+          const convMaxAttempts = convIsGemini ? 3 : 1;
           try {
-            convResp = await fetch(convApiUrl, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${providerConfig.apiKey}`,
-              },
-              body: JSON.stringify(convBody),
-              signal: AbortSignal.timeout(60000),
-            });
+            let lastErrText = "";
+            let lastStatus = 0;
+            for (let convAttempt = 0; convAttempt < convMaxAttempts; convAttempt++) {
+              if (convAttempt > 0) {
+                const delayMs = 700 * convAttempt;
+                console.warn(
+                  `[Chat-Local] Conversational retry ${convAttempt + 1}/${convMaxAttempts} após ${lastStatus} (aguardando ${delayMs}ms)`
+                );
+                await new Promise((r) => setTimeout(r, delayMs));
+                if (
+                  convIsGemini &&
+                  convAttempt >= 1 &&
+                  typeof convBodyAttempt.model === "string" &&
+                  !/^gemini-2\.0-flash/i.test(convBodyAttempt.model)
+                ) {
+                  convBodyAttempt = { ...convBodyAttempt, model: GEMINI_CONVERSATIONAL_FALLBACK_MODEL };
+                  console.warn(
+                    "[Chat-Local] Conversational usando modelo fallback:",
+                    GEMINI_CONVERSATIONAL_FALLBACK_MODEL
+                  );
+                }
+              }
+              convResp = await fetch(convApiUrl, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${providerConfig.apiKey}`,
+                },
+                body: JSON.stringify(convBodyAttempt),
+                signal: AbortSignal.timeout(60000),
+              });
+              if (convResp.ok) {
+                break;
+              }
+              lastErrText = await convResp.text();
+              lastStatus = convResp.status;
+              console.error(
+                "[Chat-Local] Conversational LLM error:",
+                convResp.status,
+                lastErrText.slice(0, 200)
+              );
+              const retryable =
+                convIsGemini &&
+                (convResp.status === 503 || convResp.status === 429) &&
+                convAttempt < convMaxAttempts - 1;
+              if (!retryable) {
+                sendSse({ error: providerErrorMessage(convResp.status, lastErrText) });
+                sendSse("[DONE]");
+                reply.raw.end();
+                return;
+              }
+            }
           } catch (fetchErr: unknown) {
             const e = fetchErr as { code?: string; message?: string };
             const isNetworkError = e?.code === "ECONNRESET" || /ECONNRESET|ETIMEDOUT|ENOTFOUND|ECONNREFUSED/i.test(String(e?.message || ""));
             console.error("[Chat-Local] Conversational fetch failed:", e?.message || fetchErr);
             sendSse({ error: isNetworkError ? "Conexão com LLM interrompida. Tente novamente." : (e?.message || "Falha ao conectar com LLM conversacional") });
-            sendSse("[DONE]");
-            reply.raw.end();
-            return;
-          }
-
-          if (!convResp.ok) {
-            const errText = await convResp.text();
-            console.error("[Chat-Local] Conversational LLM error:", convResp.status, errText.slice(0, 200));
-            sendSse({ error: providerErrorMessage(convResp.status, errText) });
             sendSse("[DONE]");
             reply.raw.end();
             return;

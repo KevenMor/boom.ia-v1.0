@@ -266,7 +266,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: AI_DISPATCHER,
     followupPrompt: AI_FOLLOWUP,
     alwaysInjectCommRules: true,
-    version: "v8.6",
+    version: "v8.8",
     description: "Bia — SDR Autoescola Ideal (Sorocaba/SP)",
   },
   "autoescola-ideal": {
@@ -275,7 +275,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: AI_DISPATCHER,
     followupPrompt: AI_FOLLOWUP,
     alwaysInjectCommRules: true,
-    version: "v8.6",
+    version: "v8.8",
     description: "Bia — SDR Autoescola Ideal (Sorocaba/SP)",
   },
   "dr-iuri": {
@@ -290,18 +290,40 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
 };
 
 /**
+ * Normaliza slug só para resolver alias (hífen, underscore, espaço, case).
+ * Ex.: "auto-escola-ideal" e "autoescola-ideal" → mesma chave de lookup.
+ */
+export function normalizeTenantSlugForLookup(slug: string): string {
+  return slug.toLowerCase().replace(/[\s_-]+/g, "");
+}
+
+function resolveTenantPromptConfig(tenantSlug: string | null): TenantPromptConfig | undefined {
+  if (!tenantSlug) return undefined;
+  const direct = TENANT_PROMPTS[tenantSlug];
+  if (direct) return direct;
+  const n = normalizeTenantSlugForLookup(tenantSlug);
+  for (const [key, cfg] of Object.entries(TENANT_PROMPTS)) {
+    if (normalizeTenantSlugForLookup(key) === n) return cfg;
+  }
+  return undefined;
+}
+
+/**
  * Retorna o prompt system completo para um agente, compondo:
- * 1. System prompt do tenant (se registrado) OU system_prompt do agente (do banco)
- * 2. Regras de comunica?�?�o do tenant (se existir e agente tem inventory tool)
- * 3. Instru?�?�es base de sauda?�?�o (sempre)
+ * 1. **Se o tenant estiver no registry (projeto):** usa somente `systemPrompt` do código; o `system_prompt` do banco é ignorado.
+ * 2. **Se não houver registry:** usa `system_prompt` do agente no banco (ou fallback genérico).
+ * 3. Regras de comunicação do tenant (se existir e condições de injeção)
+ * 4. Instruções base de saudação (sempre)
  */
 export function buildSystemPrompt(
   agentSystemPrompt: string,
   tenantSlug: string | null,
   hasInventoryTool: boolean,
 ): string {
-  const config = tenantSlug ? TENANT_PROMPTS[tenantSlug] : undefined;
-  const base = config?.systemPrompt || agentSystemPrompt || "You are a helpful AI assistant.";
+  const config = resolveTenantPromptConfig(tenantSlug);
+  const base = config
+    ? (config.systemPrompt?.trim() || "You are a helpful AI assistant.")
+    : (agentSystemPrompt.trim() || "You are a helpful AI assistant.");
   const shouldInjectComm = (hasInventoryTool && config?.communicationRules) || config?.alwaysInjectCommRules;
   const commRules = (shouldInjectComm && config?.communicationRules) ? "\n\n" + config.communicationRules : "";
   const greeting = "\n\n" + BASE_GREETING;
@@ -320,7 +342,7 @@ export function buildSystemPrompt(
  * Retorna o dispatcher prompt para um tenant.
  */
 export function getDispatcherPrompt(tenantSlug: string | null): string {
-  const config = tenantSlug ? TENANT_PROMPTS[tenantSlug] : undefined;
+  const config = resolveTenantPromptConfig(tenantSlug);
   return config?.dispatcherPrompt || DEFAULT_DISPATCHER_PROMPT;
 }
 
@@ -329,7 +351,7 @@ export function getDispatcherPrompt(tenantSlug: string | null): string {
  * Se n?�o houver configura?�?�o espec?�fica, retorna null (usa o default do process-followups).
  */
 export function getFollowupPrompt(tenantSlug: string | null): string | null {
-  const config = tenantSlug ? TENANT_PROMPTS[tenantSlug] : undefined;
+  const config = resolveTenantPromptConfig(tenantSlug);
   return config?.followupPrompt || null;
 }
 
@@ -351,7 +373,7 @@ export function getAllPromptConfigs(): Record<string, TenantPromptConfig & { slu
  * Retorna a configura?�?�o de prompt de um tenant espec?�fico.
  */
 export function getPromptConfig(tenantSlug: string): (TenantPromptConfig & { slug: string }) | null {
-  const config = TENANT_PROMPTS[tenantSlug];
+  const config = resolveTenantPromptConfig(tenantSlug);
   if (!config) return null;
   return { ...config, slug: tenantSlug };
 }

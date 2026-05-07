@@ -20,12 +20,19 @@ describe("Autoescola Ideal — SYSTEM_PROMPT (contratos de negócio)", () => {
   });
 
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v8\.6/);
+    expect(SYSTEM_PROMPT).toMatch(/v8\.8/);
   });
 
   it("define carro só manual (sem automático) em frota, qualificação e resumo", () => {
     expect(SYSTEM_PROMPT).toMatch(/n[aã]o.*autom[aá]tico|somente manual|câmbio manual/i);
     expect(SYSTEM_PROMPT).toMatch(/carro manual|Fiat Mobi/i);
+  });
+
+  it("contém tabela de valores fixos com R$ 90,00 para médico e psicotécnico", () => {
+    expect(SYSTEM_PROMPT).toMatch(/VALORES FIXOS/i);
+    expect(SYSTEM_PROMPT).toMatch(/Exame m[eé]dico.*R\$ 90,00/);
+    expect(SYSTEM_PROMPT).toMatch(/Exame psicot[eé]cnico.*R\$ 90,00/);
+    expect(SYSTEM_PROMPT).toMatch(/INADMISS[IÍ]VEL.*160,00/i);
   });
 
   it("proíbe conselho sobre RG/polícia e exige encaminhar dúvida regulatória à unidade", () => {
