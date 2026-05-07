@@ -39,6 +39,8 @@ interface NavGroup {
   label: string;
   collapsible?: boolean;
   defaultOpen?: boolean;
+  /** Ícone da seção colapsável (Material Symbol). Sem colapsável é ignorado. */
+  groupMs?: string;
   items: NavItem[];
 }
 
@@ -61,6 +63,17 @@ export const navGroups: NavGroup[] = [
     ],
   },
   {
+    label: "Gestão de reservas",
+    collapsible: true,
+    defaultOpen: false,
+    groupMs: "holiday_village",
+    items: [
+      { to: "/hospedagem/calendario-parque", ms: "calendar_month", label: "Calendário do parque", moduleKey: "hospedagem" },
+      { to: "/hospedagem/cadastro", ms: "bedroom_parent", label: "Estoque de quartos", moduleKey: "hospedagem" },
+      { to: "/hospedagem/valores", ms: "request_quote", label: "Valores", moduleKey: "hospedagem" },
+    ],
+  },
+  {
     label: "Infraestrutura",
     items: [
       { to: "/tenants", ms: "domain", label: "Tenants", moduleKey: "tenants" },
@@ -74,6 +87,7 @@ export const navGroups: NavGroup[] = [
     label: "Sistema",
     collapsible: true,
     defaultOpen: false,
+    groupMs: "settings",
     items: [
       { to: "/analytics/tokens", ms: "bar_chart", label: "Analytics Tokens", moduleKey: "analytics_tokens" },
       { to: "/prompts", ms: "description", label: "Prompts", moduleKey: "prompts" },
@@ -106,7 +120,7 @@ function PremiumSection({
         >
           <div className="flex items-center gap-3">
             <Ms
-              name="settings"
+              name={group.groupMs ?? "settings"}
               className="!text-[20px] text-on-surface-variant transition-colors group-hover:text-on-surface dark:text-slate-400 dark:group-hover:text-slate-100"
             />
             <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-on-surface-variant transition-colors group-hover:text-on-surface dark:text-slate-400 dark:group-hover:text-slate-100">

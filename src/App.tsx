@@ -44,6 +44,9 @@ import TokenAnalytics from "@/pages/TokenAnalytics";
 import PublicSandbox from "@/pages/PublicSandbox";
 import NotFound from "@/pages/NotFound";
 import SuiteGalleriesPage from "@/pages/SuiteGalleriesPage";
+import ParkCalendarManagementPage from "@/pages/hospedagem/ParkCalendarManagementPage";
+import LodgingRegistryPage from "@/pages/hospedagem/LodgingRegistryPage";
+import LodgingPricingPage from "@/pages/hospedagem/LodgingPricingPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -248,6 +251,38 @@ const App = () => (
                 element={
                   <ModuleRoute moduleKey="clients">
                     <ContactProfilePage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/hospedagem"
+                element={
+                  <ModuleRoute moduleKey="hospedagem">
+                    <Navigate to="/hospedagem/calendario-parque" replace />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/hospedagem/calendario-parque"
+                element={
+                  <ModuleRoute moduleKey="hospedagem">
+                    <ParkCalendarManagementPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/hospedagem/cadastro"
+                element={
+                  <ModuleRoute moduleKey="hospedagem">
+                    <LodgingRegistryPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/hospedagem/valores"
+                element={
+                  <ModuleRoute moduleKey="hospedagem">
+                    <LodgingPricingPage />
                   </ModuleRoute>
                 }
               />

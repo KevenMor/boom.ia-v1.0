@@ -20,6 +20,7 @@ import { suiteGalleriesRoutes } from "./routes/suite-galleries.js";
 import { auditRoutes } from "./routes/audit.js";
 import { tenantAiToggleRoutes } from "./routes/tenant-ai-toggle.js";
 import { financeiroRoutes } from "./routes/financeiro.js";
+import { hospedagemRoutes } from "./routes/hospedagem.js";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 
@@ -171,6 +172,7 @@ async function build() {
   fastify.register(occurrencesRoutes, { prefix: "/api" });
   fastify.register(financeiroRoutes, { prefix: "/api" });
   fastify.register(suiteGalleriesRoutes, { prefix: "/api" });
+  fastify.register(hospedagemRoutes, { prefix: "/api" });
   fastify.register(auditRoutes, { prefix: "/api" });
   fastify.register(tenantAiToggleRoutes, { prefix: "/api" });
   fastify.register(demoRoutes, { prefix: "/api" });

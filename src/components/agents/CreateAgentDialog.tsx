@@ -7,7 +7,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { useCreateAgent } from "@/hooks/useAgents";
@@ -24,7 +23,6 @@ const schema = z.object({
   tenant_id: z.string().min(1, "Selecione um tenant"),
   provider_id: z.string().optional(),
   model: z.string().optional(),
-  system_prompt: z.string().optional(),
   temperature: z.number().min(0).max(2).default(0.7),
   top_p: z.number().min(0).max(1).default(0.8),
   top_k: z.number().min(1).max(100).default(40),
@@ -46,13 +44,13 @@ export function CreateAgentDialog({ open, onOpenChange, defaultTenantId }: Props
   const [temp, setTemp] = useState(0.7);
   const [topP, setTopP] = useState(0.8);
   const [topK, setTopK] = useState(40);
-  const [readDelay, setReadDelay] = useState(1.5);
-  const [typingDelay, setTypingDelay] = useState(0.8);
-  const [blockGap, setBlockGap] = useState(1.2);
+  const [readDelay, setReadDelay] = useState(3);
+  const [typingDelay, setTypingDelay] = useState(1);
+  const [blockGap, setBlockGap] = useState(2);
 
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { name: "", description: "", tenant_id: defaultTenantId ?? "", provider_id: "", model: "", system_prompt: "", temperature: 0.7, top_p: 0.8, top_k: 40 },
+    defaultValues: { name: "", description: "", tenant_id: defaultTenantId ?? "", provider_id: "", model: "", temperature: 0.7, top_p: 0.8, top_k: 40 },
   });
 
   const onSubmit = async (data: FormData) => {
@@ -67,7 +65,7 @@ export function CreateAgentDialog({ open, onOpenChange, defaultTenantId }: Props
         tenant_id: data.tenant_id,
         provider_id: data.provider_id || null,
         model: data.model || null,
-        system_prompt: data.system_prompt || null,
+        system_prompt: null,
         temperature: data.temperature,
         avatar_url: avatarUrl,
         webhook_token: webhookToken,
@@ -76,7 +74,7 @@ export function CreateAgentDialog({ open, onOpenChange, defaultTenantId }: Props
       toast.success(`Agente "${data.name}" criado`);
       reset();
       setTemp(0.7); setTopP(0.8); setTopK(40);
-      setReadDelay(1.5); setTypingDelay(0.8); setBlockGap(1.2);
+      setReadDelay(3); setTypingDelay(1); setBlockGap(2);
       setAvatarUrl(null);
       onOpenChange(false);
     } catch (err: any) {
@@ -174,15 +172,12 @@ export function CreateAgentDialog({ open, onOpenChange, defaultTenantId }: Props
             </div>
           </div>
 
-          {/* System Prompt */}
-          <div className="space-y-3">
-            <Label className="text-sm font-medium text-muted-foreground">System Prompt</Label>
-            <Textarea
-              {...register("system_prompt")}
-              placeholder="Você é um assistente virtual da empresa X. Responda de forma clara e objetiva..."
-              rows={5}
-              className="rounded-lg bg-background border-border text-sm resize-none"
-            />
+          <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+            <p className="font-medium text-foreground/90">Instruções do modelo</p>
+            <p className="mt-1.5 leading-relaxed">
+              O <span className="text-foreground/80">system prompt</span> deste produto vem dos arquivos do projeto (por tenant registrado no servidor), não do banco.
+              Na criação o agente fica sem prompt em banco; o runtime usa o prompt injetado no código. Para um override pontual, use a página de edição do agente.
+            </p>
           </div>
 
           {/* LLM Params */}
@@ -224,15 +219,15 @@ export function CreateAgentDialog({ open, onOpenChange, defaultTenantId }: Props
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label className="text-xs text-muted-foreground">Leitura</Label>
-                <Input type="number" min={0} step={0.5} value={readDelay} onChange={(e) => setReadDelay(Number(e.target.value))} className="h-10 rounded-lg bg-background border-border font-mono text-sm" />
+                <Input type="number" min={0} step={1} value={readDelay} onChange={(e) => setReadDelay(Number(e.target.value))} className="h-10 rounded-lg bg-background border-border font-mono text-sm" />
               </div>
               <div className="space-y-2">
                 <Label className="text-xs text-muted-foreground">Digitando</Label>
-                <Input type="number" min={0} step={0.5} value={typingDelay} onChange={(e) => setTypingDelay(Number(e.target.value))} className="h-10 rounded-lg bg-background border-border font-mono text-sm" />
+                <Input type="number" min={0} step={1} value={typingDelay} onChange={(e) => setTypingDelay(Number(e.target.value))} className="h-10 rounded-lg bg-background border-border font-mono text-sm" />
               </div>
               <div className="space-y-2">
                 <Label className="text-xs text-muted-foreground">Entre blocos</Label>
-                <Input type="number" min={0} step={0.5} value={blockGap} onChange={(e) => setBlockGap(Number(e.target.value))} className="h-10 rounded-lg bg-background border-border font-mono text-sm" />
+                <Input type="number" min={0} step={1} value={blockGap} onChange={(e) => setBlockGap(Number(e.target.value))} className="h-10 rounded-lg bg-background border-border font-mono text-sm" />
               </div>
             </div>
             <p className="text-xs text-muted-foreground">Variação automática de ±30% aplicada para simular comportamento humano</p>

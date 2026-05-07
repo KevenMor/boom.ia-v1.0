@@ -30,6 +30,12 @@ import {
   FOLLOWUP_PROMPT as VS_FOLLOWUP,
 } from "./vale-suico.js";
 import {
+  SYSTEM_PROMPT as ST_SYSTEM,
+  COMMUNICATION_RULES as ST_COMM_RULES,
+  DISPATCHER_PROMPT as ST_DISPATCHER,
+  FOLLOWUP_PROMPT as ST_FOLLOWUP,
+} from "./sunset-thermas.js";
+import {
   SYSTEM_PROMPT as DV_SYSTEM,
   COMMUNICATION_RULES as DV_COMM_RULES,
   DISPATCHER_PROMPT as DV_DISPATCHER,
@@ -162,6 +168,24 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     alwaysInjectCommRules: true,
     version: "v1.2.46",
     description: "Vitória — Consultora de reservas Vale Suíço Resort",
+  },
+  "sunset-thermas-park": {
+    systemPrompt: ST_SYSTEM,
+    communicationRules: ST_COMM_RULES,
+    dispatcherPrompt: ST_DISPATCHER,
+    followupPrompt: ST_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.0.0",
+    description: "Julia — Consultora de reservas Sunset Thermas Park",
+  },
+  "sunset-thermas": {
+    systemPrompt: ST_SYSTEM,
+    communicationRules: ST_COMM_RULES,
+    dispatcherPrompt: ST_DISPATCHER,
+    followupPrompt: ST_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.0.0",
+    description: "Julia — Consultora de reservas Sunset Thermas Park",
   },
   /** Slugs alinhados ao cabeçalho de durce-vita.ts */
   "durce-vita": {

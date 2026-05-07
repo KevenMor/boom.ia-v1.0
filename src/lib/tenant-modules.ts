@@ -20,7 +20,8 @@ export type ModuleKey =
   | "monitoring"
   | "audit"
   | "settings"
-  | "suite_galleries";
+  | "suite_galleries"
+  | "hospedagem";
 
 export type ModuleAction = "view" | "create" | "edit" | "delete" | "export" | "reply" | "cancel" | "register";
 
@@ -109,6 +110,13 @@ export const TENANT_MODULES: TenantModuleDef[] = [
     description: "Fotos e vídeos por galeria.",
     group: "overview",
     actions: [A("view", "Visualizar"), A("create", "Fazer upload"), A("edit", "Editar"), A("delete", "Deletar")],
+  },
+  {
+    key: "hospedagem",
+    label: "Gestão de reservas",
+    description: "Calendário do parque e cadastro de hospedagens.",
+    group: "overview",
+    actions: [A("view", "Visualizar"), A("create", "Criar"), A("edit", "Editar"), A("delete", "Deletar")],
   },
   {
     key: "contacts",
