@@ -168,8 +168,37 @@ export async function runLodgingConsulta(
       return guestsForPricing >= minGuests;
     });
 
-    const accommodations = availableRates.map(
-      (rate: {
+    /** Uma linha por categoria de acomodação: evita duplicatas (ex.: BRL + USD ou seeds repetidos). */
+    function dedupeRatesByAccommodationType<
+      T extends {
+        accommodation_type_id: string;
+        price: string | number;
+        currency: string;
+      },
+    >(rows: T[]): T[] {
+      const byType = new Map<string, T>();
+      const brlScore = (c: string) => (String(c).toUpperCase() === "BRL" ? 1 : 0);
+      for (const row of rows) {
+        const key = row.accommodation_type_id;
+        const existing = byType.get(key);
+        if (!existing) {
+          byType.set(key, row);
+          continue;
+        }
+        const sNew = brlScore(row.currency);
+        const sOld = brlScore(existing.currency);
+        if (sNew > sOld) {
+          byType.set(key, row);
+        } else if (sNew === sOld && Number(row.price) < Number(existing.price)) {
+          byType.set(key, row);
+        }
+      }
+      return Array.from(byType.values());
+    }
+
+    const uniqueRates = dedupeRatesByAccommodationType(
+      availableRates as Array<{
+        accommodation_type_id: string;
         id: string;
         guests: number;
         nights: number;
@@ -177,25 +206,28 @@ export async function runLodgingConsulta(
         currency: string;
         notes: string | null;
         lodging_accommodation_types?: { name?: string } | null;
-      }) => ({
-        id: rate.id,
-        name: rate.lodging_accommodation_types?.name ?? "Acomodação",
-        guests: rate.guests,
-        nights: rate.nights,
-        price_per_night: Number(rate.price) / nights,
-        total_price: parseFloat(String(rate.price)),
-        currency: rate.currency,
-        notes: rate.notes,
-      })
+      }>
     );
+
+    const accommodations = uniqueRates.map((rate) => ({
+      id: rate.id,
+      name: rate.lodging_accommodation_types?.name ?? "Acomodação",
+      guests: rate.guests,
+      nights: rate.nights,
+      price_per_night: Number(rate.price) / nights,
+      total_price: parseFloat(String(rate.price)),
+      currency: rate.currency,
+      notes: rate.notes,
+    }));
 
     const messageKids =
       childrenUnder12.length > 0
         ? `${childrenUnder12.length === 1 ? "1 criança até 12 anos em cortesia" : `${childrenUnder12.length} crianças até 12 anos em cortesia`} (colchão${childrenUnder12.length > 1 ? "ões" : ""} adicional${childrenUnder12.length > 1 ? "is" : ""} inclusos).`
         : "";
 
+    const optWord = uniqueRates.length === 1 ? "opção" : "opções";
     const message =
-      `Encontramos ${availableRates.length} opção${availableRates.length === 1 ? "" : "ões"} de hospedagem para ${guestsForPricing} pessoa${guestsForPricing === 1 ? "" : "s"}` +
+      `Encontramos ${uniqueRates.length} ${optWord} de hospedagem para ${guestsForPricing} pessoa${guestsForPricing === 1 ? "" : "s"}` +
       (guestsFamilyTotal > guestsForPricing
         ? ` (sua família tem ${guestsFamilyTotal} pessoa${guestsFamilyTotal === 1 ? "" : "s"}), `
         : `, `) +
