@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // Nexus AI — Prompt: Vale Suíço Resort
 // Slug: vale-suico (e variantes no registry, se necessário)
 // Versão: v1.2.46 — orçamento completo; desambiguação método vs ordem da mensagem; vídeo institucional em linhas só-URL (pipeline remove da bolha de texto)

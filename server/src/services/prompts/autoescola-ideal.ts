@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // Nexus AI — Prompt: Autoescola Ideal (Sorocaba/SP)
 // Slug: ideal / autoescola-ideal
 // Versão: v8.8 — Bia | SDR (sem conselho jurídico/trânsito fora do prompt; RG/PPD/polícia → unidade + atendente)

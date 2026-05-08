@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // Nexus AI — Prompt: Instituto Vicentim Maekawa (Clínica Odontológica)
 // Slug: instituto-vicentim-maekawa
 // Versão: v1.2.0 — Mariana | Recepcionista / Qualificadora de Leads

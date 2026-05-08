@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import { FOLLOWUP_PROMPT, SYSTEM_PROMPT } from "./autoescola-ideal.js";
 
 describe("Autoescola Ideal — SYSTEM_PROMPT (contratos de negócio)", () => {

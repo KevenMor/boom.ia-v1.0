@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // Nexus AI — Prompt: Sunset Thermas Park
 // Slug: sunset-thermas-park (variante: sunset-thermas)
 // Versão: v1.1.2 — valor de ingresso por dia pode aparecer quando o sistema integrar o calendário interno Boom ao contexto.

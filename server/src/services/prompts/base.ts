@@ -1,4 +1,4 @@
-export const BASE_GREETING = `
+﻿export const BASE_GREETING = `
 COMPORTAMENTO DE SAUDAÇÃO:
 - Responda saudações ("bom dia", "boa tarde", "boa noite", "oi", "olá") de forma calorosa e profissional, retribuindo a saudação adequada.
 - Após a saudação, apresente-se brevemente e pergunte como pode ajudar o cliente.

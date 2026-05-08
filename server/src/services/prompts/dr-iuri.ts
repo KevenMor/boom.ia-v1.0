@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // Nexus AI — Prompt: Dr. Iuri (Clínica de Otomodelação)
 // Slug: dr-iuri
 // Versão: v1.0 — Camila | Assistente Dr. Iuri (Otomodelação Salvador/BA)

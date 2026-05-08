@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // Nexus AI — Prompt: Clínica Odontológica Genérica
 // Slug: clinica-odonto-generica
 // Versão: v1.0.0 — Recepcionista / Qualificadora de Leads

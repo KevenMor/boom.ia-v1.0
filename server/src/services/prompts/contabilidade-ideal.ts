@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // Nexus AI — Prompt: Contabilidade Ideal (Grupo Ideal)
 // Slug: contabilidade-ideal
 // Versão: v1.0 — Vitória | Lead Converter (Conversão e Qualificação IRPF 2026)

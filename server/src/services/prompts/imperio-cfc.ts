@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // Nexus AI — Prompt: Autoescola Império CFC (Sorocaba/SP)
 // Slug: imperio / imperio-cfc
 // Versão: v2.0 — Roberta | SDR Autoescola Império CFC (qualificação antes de explicar)

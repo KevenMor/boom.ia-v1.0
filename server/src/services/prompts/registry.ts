@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // Nexus AI ��� Prompt Registry
 // Maps tenant slugs to their prompt configurations.
 // To add a new tenant: create a file and register it here.

@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // Nexus AI — Prompt: Pet Home (Hotel e Creche para Cachorros)
 // Slug: pet-home
 // Versão: v1.2.0 — Tia Ana | Atendente Pet Home

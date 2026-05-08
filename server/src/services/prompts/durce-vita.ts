@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // Nexus AI — Prompt: Clínica Odontológica Durce Vita
 // Slug: durce-vita / durce-vitta / eliane-durce / eliane-durce-vitta
 // Versão: v1.2.1 — Juliana | Recepcionista / Qualificadora de Leads
