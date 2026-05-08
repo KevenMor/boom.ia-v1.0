@@ -28,8 +28,8 @@ function normalizeForSearch(str: string): string {
 }
 
 /**
- * Remove fragmentos de frase que o LLM ├ás vezes inclui ao extrair marca/modelo.
- * Ex: "Cruze e queria", "Cruze e ", "Accord e" ÔåÆ "Cruze"/"Accord" (conjun├º├úo "e" + resto ├® removida).
+ * Remove fragmentos de frase que o LLM às vezes inclui ao extrair marca/modelo.
+ * Ex: "Cruze e queria", "Cruze e ", "Accord e" → "Cruze"/"Accord" (conjunção "e" + resto ® removida).
  */
 function sanitizeVehicleParam(val: string | undefined): string | undefined {
   if (val == null || typeof val !== "string") return val;
@@ -40,7 +40,7 @@ function sanitizeVehicleParam(val: string | undefined): string | undefined {
   return cleaned || undefined;
 }
 
-/** Decodifica entidades HTML para exibi├º├úo limpa (&#225; ÔåÆ ├í, &copy; ÔåÆ ┬®) */
+/** Decodifica entidades HTML para exibição limpa (&#225; → á, &copy; → ®) */
 function decodeHtmlEntities(s: string): string {
   return s
     .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)))
@@ -49,7 +49,7 @@ function decodeHtmlEntities(s: string): string {
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
-    .replace(/&copy;/g, "┬®");
+    .replace(/&copy;/g, "®");
 }
 
 const COLOR_SYNONYM_GROUPS: string[][] = [
@@ -142,14 +142,14 @@ async function executeInventoryQuery(
       }),
     }).catch(() => {});
     // #endregion
-    // Normaliza pickup/picape/pikup ÔåÆ camionete (termo em portugu├¬s)
+    // Normaliza pickup/picape/pikup → camionete (termo em português)
     const PICKUP_TO_CAMIONETE = ["pickup", "picape", "pikup"];
     const tipo =
       tipoRaw && PICKUP_TO_CAMIONETE.includes(normalizeForSearch(tipoRaw))
         ? "camionete"
         : tipoRaw;
 
-    // Normaliza valor num├®rico: se for n├║mero pequeno (< 1000) e o texto tiver "mil", trata como milhares
+    // Normaliza valor numérico: se for número pequeno (< 1000) e o texto tiver "mil", trata como milhares
     function parsePriceValue(val: number | string, strContext?: string): number {
       const n = typeof val === "string" ? parseInt(val.replace(/\D/g, ""), 10) : Number(val);
       if (Number.isNaN(n)) return 0;
@@ -157,7 +157,7 @@ async function executeInventoryQuery(
       return asThousands ? n * 1000 : n;
     }
 
-    // Parse faixa de pre├ºo ANTES da query para aplicar filtro no banco
+    // Parse faixa de preço ANTES da query para aplicar filtro no banco
     let minPrice: number | null = null;
     let maxPrice: number | null = null;
     if (precoMin != null && precoMin !== "") {
@@ -170,11 +170,11 @@ async function executeInventoryQuery(
     }
     if (faixaPreco && minPrice == null && maxPrice == null) {
       const s = String(faixaPreco).trim();
-      const ateMatch = s.match(/(?:ate|at├®)\s*(\d+)\s*(mil)?/i);
+      const ateMatch = s.match(/(?:ate|até)\s*(\d+)\s*(mil)?/i);
       if (ateMatch) {
         maxPrice = parsePriceValue(ateMatch[1], ateMatch[2] || "");
       } else {
-        const rangeMatch = s.match(/(?:entre\s+)?(\d+)\s*(?:a|e|at├®)\s*(\d+)\s*(mil)?/i) || s.match(/(\d+)\s*[-ÔÇô]\s*(\d+)\s*(mil)?/i);
+        const rangeMatch = s.match(/(?:entre\s+)?(\d+)\s*(?:a|e|até)\s*(\d+)\s*(mil)?/i) || s.match(/(\d+)\s*[-–]\s*(\d+)\s*(mil)?/i);
         if (rangeMatch) {
           minPrice = parsePriceValue(rangeMatch[1], rangeMatch[3] || "");
           maxPrice = parsePriceValue(rangeMatch[2], rangeMatch[3] || "");
@@ -193,10 +193,10 @@ async function executeInventoryQuery(
     const hasMarca = Boolean(marca?.trim());
     const hasModelo = Boolean(modelo?.trim() && !skipModelFilter.some((k) => normalizeForSearch(modelo!).includes(k)));
 
-    // Quando h├í apenas um termo (marca OU modelo), buscar em brand E model (OR) para cobrir casos como Haval,
-    // que pode estar em brand ou em model no invent├írio. Assim "tem haval?" encontra em qualquer coluna.
-    // Quando h├í marca E modelo: buscar ambos em brand OU model, pois marcas como Haval (sub-marca da GWM)
-    // podem estar em model (ex: brand=GWM, model=Haval H6). Exige que AMBOS os termos apare├ºam em brand+model.
+    // Quando há apenas um termo (marca OU modelo), buscar em brand E model (OR) para cobrir casos como Haval,
+    // que pode estar em brand ou em model no inventário. Assim "tem haval?" encontra em qualquer coluna.
+    // Quando há marca E modelo: buscar ambos em brand OU model, pois marcas como Haval (sub-marca da GWM)
+    // podem estar em model (ex: brand=GWM, model=Haval H6). Exige que AMBOS os termos apareçam em brand+model.
     if (hasMarca && !hasModelo) {
       const term = marca!.trim();
       const orParts = [`brand.ilike.*${term}*`, `model.ilike.*${term}*`];
@@ -221,7 +221,7 @@ async function executeInventoryQuery(
       query = query.ilike("transmission", `%${cambio}%`);
     }
 
-    // Tipo de carro: busca na coluna description (onde o tipo est├í) + model e version
+    // Tipo de carro: busca na coluna description (onde o tipo está) + model e version
     // PostgREST usa * como wildcard (alias de %)
     if (tipo && String(tipo).trim()) {
       const tipoNorm = normalizeForSearch(tipo);
@@ -237,7 +237,7 @@ async function executeInventoryQuery(
       query = query.or(orParts.join(","));
     }
 
-    // Motoriza├º├úo (turbo, TSI, etc.): filtro na query via model/version
+    // Motorização (turbo, TSI, etc.): filtro na query via model/version
     // Para "turbo": expandir para TSI, TFSI, TDI (motores turbo comuns)
     if (motorizacaoFinal) {
       const motNorm = normalizeForSearch(motorizacaoFinal);
@@ -250,7 +250,7 @@ async function executeInventoryQuery(
       query = query.or(orParts.join(","));
     }
 
-    // Faixa de pre├ºo na query
+    // Faixa de preço na query
     if (maxPrice != null && maxPrice > 0) {
       query = query.lte("price", maxPrice);
     }
@@ -360,7 +360,7 @@ async function executeInventoryQuery(
         photos_markdown: vehiclePhotosMarkdown || undefined,
         descricao: (() => {
           const d = v.description ? decodeHtmlEntities(v.description) : "";
-          if (!d || /^(&copy;|┬®)\s*PPL Motors|pplmotors\.(co|com\.br)\s*$/i.test(d) || /^EMPTY$/i.test(d)) return undefined;
+          if (!d || /^(&copy;|®)\s*PPL Motors|pplmotors\.(co|com\.br)\s*$/i.test(d) || /^EMPTY$/i.test(d)) return undefined;
           return d;
         })(),
         caracteristicas: features,
@@ -369,7 +369,7 @@ async function executeInventoryQuery(
       };
     });
 
-    // Um ├║nico blob s├│ quando h├í 1 ve├¡culo; com 2+ ve├¡culos n├úo enviamos blob global para evitar enviar fotos de todos
+    // Um único blob só quando há 1 veículo; com 2+ veículos não enviamos blob global para evitar enviar fotos de todos
     const photosMarkdown =
       formatted.length === 1 && formatted[0].photos_markdown
         ? formatted[0].photos_markdown
@@ -386,19 +386,19 @@ async function executeInventoryQuery(
     if (formatted.length > 0) {
       let baseHint =
         formatted.length > 1
-          ? `ESTOQUE ATUAL (${formatted.length} ve├¡culo(s)). Cada ve├¡culo tem seu pr├│prio bloco "Fotos do ve├¡culo ... (id: ...)" abaixo. N├âO inclua fotos agora. Liste APENAS dados em texto (modelo, ano, km, pre├ºo, cor) e pergunte se o cliente quer ver fotos. Quando o cliente PEDIR ou ACEITAR ver fotos de UM ve├¡culo, inclua na sua resposta APENAS o bloco de fotos DESSE ve├¡culo (o que tiver o id indicado em ENVIAR_FOTOS_VEICULO: nome | id: uuid) e a linha ENVIAR_FOTOS_VEICULO. Nunca inclua fotos de outros ve├¡culos.`
-          : `ESTOQUE ATUAL (${formatted.length} ve├¡culo(s)). Fotos dispon├¡veis em photos_markdown ÔÇö N├âO inclua fotos agora. Liste APENAS dados em texto (modelo, ano, km, pre├ºo, cor) e pergunte se o cliente quer ver fotos. Quando o cliente PEDIR ou ACEITAR ver fotos, a├¡ sim inclua o conte├║do de photos_markdown na resposta junto com ENVIAR_FOTOS_VEICULO.`;
+          ? `ESTOQUE ATUAL (${formatted.length} veículo(s)). Cada veículo tem seu próprio bloco "Fotos do veículo ... (id: ...)" abaixo. NÃO inclua fotos agora. Liste APENAS dados em texto (modelo, ano, km, preço, cor) e pergunte se o cliente quer ver fotos. Quando o cliente PEDIR ou ACEITAR ver fotos de UM veículo, inclua na sua resposta APENAS o bloco de fotos DESSE veículo (o que tiver o id indicado em ENVIAR_FOTOS_VEICULO: nome | id: uuid) e a linha ENVIAR_FOTOS_VEICULO. Nunca inclua fotos de outros veículos.`
+          : `ESTOQUE ATUAL (${formatted.length} veículo(s)). Fotos disponíveis em photos_markdown — NÃO inclua fotos agora. Liste APENAS dados em texto (modelo, ano, km, preço, cor) e pergunte se o cliente quer ver fotos. Quando o cliente PEDIR ou ACEITAR ver fotos, aí sim inclua o conteúdo de photos_markdown na resposta junto com ENVIAR_FOTOS_VEICULO.`;
       if (hasVideoDetails) {
-        baseHint += ` Alguns ve├¡culos t├¬m v├¡deo detalhado. Quando o cliente pedir "v├¡deo do carro", "tour virtual" ou similar, use ENVIAR_VIDEO_DETALHES: nome do ve├¡culo | id: uuid (apenas para ve├¡culos que tenham video_details).`;
+        baseHint += ` Alguns veículos têm vídeo detalhado. Quando o cliente pedir "vídeo do carro", "tour virtual" ou similar, use ENVIAR_VIDEO_DETALHES: nome do veículo | id: uuid (apenas para veículos que tenham video_details).`;
       }
       if (corFallbackUsed && corOriginal) {
         const availableColors = [...new Set(formatted.map((v) => v.cor).filter(Boolean))];
-        hint = `${baseHint}\nNOTA: O cliente pediu na cor "${corOriginal}", mas n├úo temos nessa cor exata. Temos o mesmo modelo nas cores: ${availableColors.join(", ")}. Informe o cliente que n├úo h├í na cor "${corOriginal}" mas apresente as op├º├Áes dispon├¡veis com entusiasmo.`;
+        hint = `${baseHint}\nNOTA: O cliente pediu na cor "${corOriginal}", mas não temos nessa cor exata. Temos o mesmo modelo nas cores: ${availableColors.join(", ")}. Informe o cliente que não há na cor "${corOriginal}" mas apresente as opções disponíveis com entusiasmo.`;
       } else {
         hint = baseHint;
       }
     } else {
-      hint = "Nenhum ve├¡culo encontrado com os filtros informados.";
+      hint = "Nenhum veículo encontrado com os filtros informados.";
     }
 
     // #region agent log
@@ -454,14 +454,14 @@ async function executeOmnibeesAvailability(
         return {
           success: false,
           result: null,
-          error: "Ferramenta n├úo autorizada para o tenant deste agente.",
+          error: "Ferramenta não autorizada para o tenant deste agente.",
         };
       }
     }
     const checkIn = args.checkIn ?? args.check_in ?? args.CheckIn;
     const checkOut = args.checkOut ?? args.check_out ?? args.CheckOut;
     if (checkIn == null || checkOut == null || String(checkIn).trim() === "" || String(checkOut).trim() === "") {
-      return { success: false, result: null, error: "Par├ómetros checkIn e checkOut s├úo obrigat├│rios." };
+      return { success: false, result: null, error: "Parâmetros checkIn e checkOut são obrigatórios." };
     }
     const childAgesRaw = args.childAges ?? args.child_ages ?? args.ag;
     const data = await runOmnibeesAvailabilityQuery(
@@ -502,8 +502,8 @@ async function executeOmnibeesAvailability(
 
 
 /**
- * Preserva o hor├írio local ao salvar no banco.
- * Se vem "2026-03-09T09:00:00-03:00", salva "2026-03-09T09:00:00" (sem offset) ÔÇö o calend├írio exibe 09:00.
+ * Preserva o horário local ao salvar no banco.
+ * Se vem "2026-03-09T09:00:00-03:00", salva "2026-03-09T09:00:00" (sem offset) — o calendário exibe 09:00.
  * Evita que toISOString() converta para UTC (+3h no caso de BRT).
  */
 function toLocalIso(startAt: string, durationMin: number): { start: string; end: string } {
@@ -577,7 +577,7 @@ async function executeCalendarQuery(
       tenantId = agent?.tenant_id ?? undefined;
     }
     if (!tenantId) {
-      return { success: false, result: null, error: "tenant_id n├úo dispon├¡vel (configure na ferramenta ou no agente)" };
+      return { success: false, result: null, error: "tenant_id não disponível (configure na ferramenta ou no agente)" };
     }
 
     const calendarArgs: Record<string, unknown> = { ...args, tenant_id: tenantId };
@@ -613,7 +613,7 @@ async function executeCalendarQuery(
       endDate.setDate(endDate.getDate() + daysAhead);
 
       const calendarIds = calendars.map((c: { id: string }) => c.id);
-      // Busca eventos que INTERSECTAM o per├¡odo (n├úo apenas os que come├ºam dentro)
+      // Busca eventos que INTERSECTAM o período (não apenas os que começam dentro)
       const { data: events, error: evErr } = await supabase
         .from("calendar_events")
         .select("*")
@@ -637,7 +637,7 @@ async function executeCalendarQuery(
         const businessStart = workingHours.startH;
         const businessEnd = workingHours.endH;
 
-        // dayStr em BRT: subtrai 3h para obter a data local do neg├│cio
+        // dayStr em BRT: subtrai 3h para obter a data local do negócio
         const brtDate = new Date(current.getTime() - BRT_OFFSET_MS);
         const dayStr = brtDate.toISOString().slice(0, 10);
 
@@ -652,7 +652,7 @@ async function executeCalendarQuery(
         for (let h = businessStart; h < businessEnd; h++) {
           for (let m = 0; m < 60; m += slotDuration) {
             if (h + m / 60 >= businessEnd) break;
-            // Cria slotStart com offset BRT expl├¡cito para comparar corretamente com eventos UTC
+            // Cria slotStart com offset BRT explícito para comparar corretamente com eventos UTC
             const slotStart = new Date(
               `${dayStr}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00-03:00`
             );
@@ -693,26 +693,26 @@ async function executeCalendarQuery(
 
       if (!title) {
         console.warn("[Tool] consultar_agenda criar: falta title/titulo. Recebido:", Object.keys(calendarArgs).filter((k) => k !== "tenant_id").join(", "));
-        return { success: false, result: null, error: "Falta o t├¡tulo do agendamento (title ou titulo). Ex.: title=\"Visita - Nome do cliente\"." };
+        return { success: false, result: null, error: "Falta o título do agendamento (title ou titulo). Ex.: title=\"Visita - Nome do cliente\"." };
       }
       if (!startAt) {
         console.warn("[Tool] consultar_agenda criar: falta start_at. Recebido:", Object.keys(calendarArgs).filter((k) => k !== "tenant_id").join(", "));
-        return { success: false, result: null, error: "Falta data/hora de in├¡cio (start_at). Use formato ISO: YYYY-MM-DDTHH:mm:ss ou YYYY-MM-DDTHH:mm:ss-03:00. Ex.: start_at=\"2026-03-09T13:00:00-03:00\"." };
+        return { success: false, result: null, error: "Falta data/hora de início (start_at). Use formato ISO: YYYY-MM-DDTHH:mm:ss ou YYYY-MM-DDTHH:mm:ss-03:00. Ex.: start_at=\"2026-03-09T13:00:00-03:00\"." };
       }
 
       const normalized = startAt.includes("T") ? startAt : `${startAt}T09:00:00`;
       const startDt = new Date(normalized);
       if (Number.isNaN(startDt.getTime())) {
-        return { success: false, result: null, error: `Data/hora inv├ílida: "${startAt.slice(0, 30)}...". Use formato: YYYY-MM-DDTHH:mm:ss ou YYYY-MM-DDTHH:mm:ss-03:00.` };
+        return { success: false, result: null, error: `Data/hora inválida: "${startAt.slice(0, 30)}...". Use formato: YYYY-MM-DDTHH:mm:ss ou YYYY-MM-DDTHH:mm:ss-03:00.` };
       }
       const now = new Date();
       if (startDt.getTime() < now.getTime() - 60000) {
-        return { success: false, result: null, error: `Data/hora no passado (${startDt.toISOString().slice(0, 16)}). Use uma data e hor├írio futuros no formato YYYY-MM-DDTHH:mm:ss-03:00.` };
+        return { success: false, result: null, error: `Data/hora no passado (${startDt.toISOString().slice(0, 16)}). Use uma data e horário futuros no formato YYYY-MM-DDTHH:mm:ss-03:00.` };
       }
 
       let durationMin = (calendarArgs.duration_minutes as number) || 0;
 
-      // Fallback: buscar dura├º├úo do banco pelo nome do servi├ºo quando n├úo informado pelo agente
+      // Fallback: buscar duração do banco pelo nome do serviço quando não informado pelo agente
       if (!durationMin && calendarArgs.tenant_id) {
         const serviceName = (calendarArgs.procedure_type as string) || title;
         const { data: svcMatch } = await supabase
@@ -720,7 +720,7 @@ async function executeCalendarQuery(
           .select("duration_minutes")
           .eq("tenant_id", calendarArgs.tenant_id)
           .eq("active", true)
-          .ilike("name", `%${serviceName.split("ÔÇö")[0].split("-")[0].trim()}%`)
+          .ilike("name", `%${serviceName.split("—")[0].split("-")[0].trim()}%`)
           .limit(1)
           .maybeSingle();
         durationMin = svcMatch?.duration_minutes || 60;
@@ -877,7 +877,7 @@ async function executeCalendarQuery(
         return {
           success: false,
           result: null,
-          error: "Evento n├úo encontrado na agenda. Informe start_at (data/hora do agendamento atual) ou event_id para remarcar.",
+          error: "Evento não encontrado na agenda. Informe start_at (data/hora do agendamento atual) ou event_id para remarcar.",
         };
       }
 
@@ -888,7 +888,7 @@ async function executeCalendarQuery(
         return {
           success: false,
           result: null,
-          error: `Nova data/hora inv├ílida: "${newStartAt.slice(0, 30)}...". Use formato: YYYY-MM-DDTHH:mm:ss ou YYYY-MM-DDTHH:mm:ss-03:00.`,
+          error: `Nova data/hora inválida: "${newStartAt.slice(0, 30)}...". Use formato: YYYY-MM-DDTHH:mm:ss ou YYYY-MM-DDTHH:mm:ss-03:00.`,
         };
       }
       const now = new Date();
@@ -896,7 +896,7 @@ async function executeCalendarQuery(
         return {
           success: false,
           result: null,
-          error: `Nova data/hora no passado (${newStartDt.toISOString().slice(0, 16)}). Use uma data e hor├írio futuros.`,
+          error: `Nova data/hora no passado (${newStartDt.toISOString().slice(0, 16)}). Use uma data e horário futuros.`,
         };
       }
 
@@ -923,7 +923,7 @@ async function executeCalendarQuery(
         return {
           success: false,
           result: null,
-          error: "Novo hor├írio j├í est├í ocupado. Use check_availability para ver slots livres.",
+          error: "Novo horário j├í est├í ocupado. Use check_availability para ver slots livres.",
         };
       }
 
@@ -1146,8 +1146,8 @@ async function executeCalendarQuery(
       }
 
       if (!matchedEvent) {
-        console.warn("[Tool] consultar_agenda cancelar: evento n├úo encontrado. Args:", JSON.stringify({ startAtRaw, clientName, eventId }));
-        return { success: false, result: null, error: "Evento n├úo encontrado na agenda. Informe start_at (data/hora exata do agendamento) ou event_id para cancelar." };
+        console.warn("[Tool] consultar_agenda cancelar: evento não encontrado. Args:", JSON.stringify({ startAtRaw, clientName, eventId }));
+        return { success: false, result: null, error: "Evento não encontrado na agenda. Informe start_at (data/hora exata do agendamento) ou event_id para cancelar." };
       }
 
       const { error: delErr } = await supabase
@@ -1213,7 +1213,7 @@ async function executeMarcarLead(
       return {
         success: false,
         result: null,
-        error: "Etiquetagem de lead n├úo est├í habilitada neste agente",
+        error: "Etiquetagem de lead não est├í habilitada neste agente",
       };
     }
 
@@ -1225,7 +1225,7 @@ async function executeMarcarLead(
       return {
         success: false,
         result: null,
-        error: "Chatwoot n├úo configurado neste agente",
+        error: "Chatwoot não configurado neste agente",
       };
     }
 
@@ -1313,7 +1313,7 @@ async function executeChatwootAssign(
     let teamId = (args?.team_id != null ? Number(args.team_id) : null) ?? (execCfg.team_id != null ? Number(execCfg.team_id) : null);
     let matchedRule = "";
 
-    // Sempre tentar casar regras quando existirem ÔÇö permite reconhecer unidade espec├¡fica (ex: "unidade aparecidinha") mesmo com assignee padr├úo
+    // Sempre tentar casar regras quando existirem — permite reconhecer unidade espec├¡fica (ex: "unidade aparecidinha") mesmo com assignee padr├úo
     if (rules.length > 0) {
       const reasonNorm = reason
         .toLowerCase()
@@ -1341,7 +1341,7 @@ async function executeChatwootAssign(
       }
     }
 
-    // Quando n├úo h├í assignee_id, team_id ├® essencial para atribuir ao time (Chatwoot aceita s├│ team_id)
+    // Quando não h├í assignee_id, team_id ├® essencial para atribuir ao time (Chatwoot aceita s├│ team_id)
     if (assigneeId == null && teamId == null) {
       return {
         success: false,
@@ -1365,7 +1365,7 @@ async function executeChatwootAssign(
       return {
         success: false,
         result: null,
-        error: "Chatwoot n├úo configurado neste agente",
+        error: "Chatwoot não configurado neste agente",
       };
     }
 
@@ -1563,7 +1563,7 @@ async function executeSendNotification(
 async function getEmbedding(text: string): Promise<number[]> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    throw new Error("OPENAI_API_KEY n├úo configurado para RAG");
+    throw new Error("OPENAI_API_KEY não configurado para RAG");
   }
   const res = await fetch("https://api.openai.com/v1/embeddings", {
     method: "POST",
