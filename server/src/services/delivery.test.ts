@@ -34,6 +34,57 @@ describe("extractVideoUrlsFromText", () => {
     expect(videoUrls).toEqual(["https://files.test/clipe.mov"]);
     expect(textOnly).toContain("Ok?");
   });
+
+  // Regressão — bug Vale Suíço (Vitória) 2026-05:
+  // LLM escreveu intro + URL na mesma linha. Antes do fix, a URL vazava como texto cru
+  // ao cliente porque a regex de linha inteira (/^...$/) não casava.
+  it("extrai URL de vídeo inline com texto antes (caso Vale Suíço)", () => {
+    const raw =
+      "Que legal, Gabriella! Esse vídeo mostra um pouco da estrutura do resort. " +
+      "https://boomsolution-supabase.kgn6uc.easypanel.host/storage/v1/object/public/" +
+      "suite-galleries/a0a818f4-af11-49fa-b3e1-9c898b9e3578/ad6dcf8e-344c-47f3-8dc1-caffdafcfdec/" +
+      "video-6dee9daf-41b6-4a2d-aa86-0c7d1b8011cc.mp4?t=1777316782678";
+    const { textOnly, videoUrls } = extractVideoUrlsFromText(raw);
+    expect(videoUrls).toHaveLength(1);
+    expect(videoUrls[0]).toBe(
+      "https://boomsolution-supabase.kgn6uc.easypanel.host/storage/v1/object/public/" +
+        "suite-galleries/a0a818f4-af11-49fa-b3e1-9c898b9e3578/ad6dcf8e-344c-47f3-8dc1-caffdafcfdec/" +
+        "video-6dee9daf-41b6-4a2d-aa86-0c7d1b8011cc.mp4?t=1777316782678"
+    );
+    expect(textOnly).toContain("Que legal, Gabriella!");
+    expect(textOnly).toContain("estrutura do resort");
+    expect(textOnly).not.toMatch(/https?:\/\//);
+  });
+
+  it("extrai URL de vídeo inline com texto antes E depois", () => {
+    const raw = "Olha: https://cdn.example.com/clip.mp4 vale ver antes de falarmos de datas.";
+    const { textOnly, videoUrls } = extractVideoUrlsFromText(raw);
+    expect(videoUrls).toEqual(["https://cdn.example.com/clip.mp4"]);
+    expect(textOnly).toContain("Olha:");
+    expect(textOnly).toContain("vale ver antes de falarmos de datas.");
+    expect(textOnly).not.toMatch(/https?:\/\//);
+  });
+
+  it("strip de pontuação final que pertence à prosa", () => {
+    const raw = "Vídeo aqui: https://x.com/v.mp4.";
+    const { textOnly, videoUrls } = extractVideoUrlsFromText(raw);
+    expect(videoUrls).toEqual(["https://x.com/v.mp4"]);
+    expect(textOnly).toContain("Vídeo aqui:");
+    expect(textOnly).not.toMatch(/https?:\/\//);
+  });
+
+  it("captura URL com fragmento #t=0", () => {
+    const raw = "Assista: https://x.com/tour.mp4#t=10 :)";
+    const { videoUrls } = extractVideoUrlsFromText(raw);
+    expect(videoUrls).toEqual(["https://x.com/tour.mp4#t=10"]);
+  });
+
+  it("captura múltiplas URLs inline na mesma linha", () => {
+    const raw = "Dois clipes: https://a.com/1.mp4 e https://b.com/2.mp4 — escolha!";
+    const { textOnly, videoUrls } = extractVideoUrlsFromText(raw);
+    expect(videoUrls).toEqual(["https://a.com/1.mp4", "https://b.com/2.mp4"]);
+    expect(textOnly).not.toMatch(/https?:\/\//);
+  });
 });
 
 describe("consolidateImageParts — múltiplos vídeos", () => {

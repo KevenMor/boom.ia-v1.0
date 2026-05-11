@@ -16,7 +16,8 @@ function stripOuterWrappers(url: string): string {
 
 /**
  * Remove URLs de vídeo do texto e devolve como anexos (nunca como link na bolha).
- * Cobre: markdown [legenda](url.mp4), ![…](url.mp4), linha só com URL, <url>, (url).
+ * Cobre: markdown [legenda](url.mp4), ![…](url.mp4), linha só com URL, <url>, (url)
+ * e URL inline no meio de texto (ex.: "Esse vídeo mostra o resort. https://.../video.mp4?t=123").
  */
 function extractVideoUrlsFromText(text: string): { textOnly: string; videoUrls: string[] } {
   const videoUrls: string[] = [];
@@ -29,9 +30,11 @@ function extractVideoUrlsFromText(text: string): { textOnly: string; videoUrls: 
     return "";
   });
 
+  const inlineVideoUrl =
+    /https?:\/\/[^\s<>"']+\.(?:mp4|webm|mov)(?:\?[^\s<>"']*)?(?:#[^\s<>"']*)?/gi;
+
   const lines = t.split(/\r?\n/);
   const remainingLines: string[] = [];
-  const bareVideoLine = /^https?:\/\/[^\s<>"']+\.(?:mp4|webm|mov)(?:\?[^\s<>"']*)?\s*$/i;
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -40,8 +43,21 @@ function extractVideoUrlsFromText(text: string): { textOnly: string; videoUrls: 
       continue;
     }
     const inner = stripOuterWrappers(trimmed);
-    if (bareVideoLine.test(inner)) {
-      videoUrls.push(inner);
+    let lineRemainder = inner;
+    let inlineMatch: RegExpExecArray | null;
+    inlineVideoUrl.lastIndex = 0;
+    const lineVideoUrls: string[] = [];
+    while ((inlineMatch = inlineVideoUrl.exec(inner)) !== null) {
+      const url = inlineMatch[0].trim();
+      if (url && !lineVideoUrls.includes(url)) lineVideoUrls.push(url);
+    }
+    if (lineVideoUrls.length > 0) {
+      for (const url of lineVideoUrls) {
+        videoUrls.push(url);
+        lineRemainder = lineRemainder.replace(url, "");
+      }
+      lineRemainder = lineRemainder.trim();
+      if (lineRemainder) remainingLines.push(lineRemainder);
       continue;
     }
     remainingLines.push(line);
@@ -69,6 +85,12 @@ async function sendChatwootTextMessage(
   apiToken: string,
   content: string
 ): Promise<boolean> {
+  if (VIDEO_IN_URL_RE.test(content)) {
+    console.warn(
+      `[Deliver][LEAK] URL de vídeo escapou para mensagem de texto — verificar extractVideoUrlsFromText. ` +
+        `Trecho: ${content.slice(0, 240).replace(/\s+/g, " ")}`
+    );
+  }
   const resp = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", api_access_token: apiToken },
