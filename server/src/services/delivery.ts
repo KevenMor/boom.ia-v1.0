@@ -77,6 +77,12 @@ function extractImagesFromMarkdown(text: string): { textOnly: string; imageUrls:
     if (match[1]) imageUrls.push(match[1].trim());
   }
   const textOnly = text.replace(imageRegex, "").replace(/\n{3,}/g, "\n\n").trim();
+
+  // Debug: log quando encontrar imagens
+  if (imageUrls.length > 0) {
+    console.log("[Delivery][extractImagesFromMarkdown] Encontradas", imageUrls.length, "imagens:", imageUrls.map(u => u.substring(0, 60)));
+  }
+
   return { textOnly, imageUrls };
 }
 

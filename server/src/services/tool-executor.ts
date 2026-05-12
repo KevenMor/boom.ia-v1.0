@@ -546,6 +546,13 @@ async function executeOmnibeesAvailability(
       coverByRoomName.size > 0 ? coverByRoomName : undefined
     );
 
+    // Debug: verificar se o markdown está presente
+    if (enrichedSummaryText.includes("![Foto")) {
+      console.log("[Omnibees][COVER] summaryText contém markdown de foto:", enrichedSummaryText.substring(0, 200));
+    } else {
+      console.warn("[Omnibees][NO_MARKDOWN] summaryText NÃO contém markdown de foto. coverByRoomName.size:", coverByRoomName.size);
+    }
+
     return {
       success: true,
       result: {
