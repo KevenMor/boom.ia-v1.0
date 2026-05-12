@@ -23,6 +23,7 @@ const schema = z.object({
   description: z.string().optional(),
   llm_media_guidance: z.string().max(8000).optional(),
   display_order: z.coerce.number().int().min(0).default(0),
+  omnibees_room: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -43,7 +44,7 @@ export function SuiteGalleryFormDialog({ open, onOpenChange, gallery }: Props) {
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: "", description: "", llm_media_guidance: "", display_order: 0 },
+    defaultValues: { name: "", description: "", llm_media_guidance: "", display_order: 0, omnibees_room: "" },
   });
 
   useEffect(() => {
@@ -53,12 +54,17 @@ export function SuiteGalleryFormDialog({ open, onOpenChange, gallery }: Props) {
         description: gallery?.description ?? "",
         llm_media_guidance: gallery?.llm_media_guidance ?? "",
         display_order: gallery?.display_order ?? 0,
+        omnibees_room: gallery?.omnibees_room?.join(", ") ?? "",
       });
     }
   }, [open, gallery, reset]);
 
   const onSubmit = async (values: FormValues) => {
     try {
+      const omnibeesRoomArray = values.omnibees_room
+        ? values.omnibees_room.split(",").map(s => s.trim()).filter(Boolean)
+        : [];
+
       if (isEdit && gallery) {
         await update.mutateAsync({
           id: gallery.id,
@@ -66,6 +72,7 @@ export function SuiteGalleryFormDialog({ open, onOpenChange, gallery }: Props) {
           description: values.description || null,
           llm_media_guidance: values.llm_media_guidance?.trim() || null,
           display_order: values.display_order,
+          omnibees_room: omnibeesRoomArray,
         });
         toast.success("Galeria atualizada.");
       } else {
@@ -76,6 +83,7 @@ export function SuiteGalleryFormDialog({ open, onOpenChange, gallery }: Props) {
           llm_media_guidance: values.llm_media_guidance?.trim() || null,
           display_order: values.display_order,
           media_urls: [],
+          omnibees_room: omnibeesRoomArray,
         });
         toast.success("Galeria criada.");
       }
@@ -129,6 +137,19 @@ export function SuiteGalleryFormDialog({ open, onOpenChange, gallery }: Props) {
             />
             <p className="text-[11px] text-muted-foreground">
               Incluído no resultado da tool de Galeria para a LLM (campo <span className="font-mono">orientacao_envio_midias</span>). Opcional.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="sg-omnibees">Nomes na Omnibees</Label>
+            <Input
+              id="sg-omnibees"
+              placeholder="Ex.: Suíte Vip, Suite Vip Premium"
+              {...register("omnibees_room")}
+              disabled={isPending}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Separe por vírgula. Use o nome exato como aparece no resultado da cotação. Vincula esta galeria às acomodações retornadas pela Omnibees para anexar foto cover automaticamente.
             </p>
           </div>
 
