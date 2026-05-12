@@ -17,24 +17,19 @@ Roadmap de melhorias incrementais. **Nenhum item exige refatoração arquitetura
 
 Itens de alto impacto e baixo esforço. Recomendado começar por aqui.
 
-### 1.1 README real 🔥 · S
-- **Problema:** `README.md` é template Lovable, não reflete o projeto.
-- **Ação:** reescrever com: descrição do produto, stack, setup local em 5 passos, link para `CLAUDE.md`, link para `docs/`, comando `npm run dev:all`.
-- **Critério de pronto:** dev novo clona o repo e sobe ambiente local em < 15 min só seguindo o README.
-
-### 1.2 Consolidar lockfiles ⚡ · S
+### 1.1 Consolidar lockfiles ⚡ · S
 - **Problema:** `bun.lock`, `bun.lockb`, `package-lock.json`, `deno.lock` convivem; risco de instalar deps diferentes dependendo do dev.
 - **Ação:** decidir gerenciador por superfície:
   - **Raiz + `server/`:** npm (já é o usado nos `npm run` scripts). Apagar `bun.lock` e `bun.lockb`.
   - **`supabase/functions/`:** deno (manter `deno.lock`).
 - **Critério de pronto:** apenas `package-lock.json` na raiz e em `server/`; `deno.lock` só em supabase functions.
 
-### 1.3 Remover `.env` do git ⚡ · S
+### 1.2 Remover `.env` do git ⚡ · S
 - **Problema:** `.env` (395B) está commitado na raiz. Mesmo sendo placeholder, é mau hábito e cria risco se alguém colocar segredo real e commitar.
 - **Ação:** `git rm --cached .env`, garantir `.env` no `.gitignore`, manter só `.env.example`.
 - **Critério de pronto:** `git ls-files | grep '^\.env$'` retorna vazio.
 
-### 1.4 `.gitattributes` forçando UTF-8 🔥 · S
+### 1.3 `.gitattributes` forçando UTF-8 🔥 · S
 - **Problema:** prompts pt-BR já tiveram corrupção em 3+ commits (cb51a1a, 31b6e85, dd954fe). `registry.ts` ainda mostra `���` em comentário.
 - **Ação:** criar/expandir `.gitattributes`:
   ```
@@ -46,7 +41,7 @@ Itens de alto impacto e baixo esforço. Recomendado começar por aqui.
 - Renormalizar com `git add --renormalize .`.
 - **Critério de pronto:** novo commit com caractere especial pt-BR não corrompe em outra máquina.
 
-### 1.5 Limpar comentário corrompido em `registry.ts` 💡 · S
+### 1.4 Limpar comentário corrompido em `registry.ts` 💡 · S
 - **Problema:** `server/src/services/prompts/registry.ts` linha 2 tem `���` (resíduo de corrupção UTF-8 antiga).
 - **Ação:** substituir por `—` ou texto correto.
 - **Critério de pronto:** `grep -r '���' server/src` retorna vazio.
@@ -178,4 +173,7 @@ Mantidos aqui para registrar que **foram considerados e rejeitados**:
 
 _(mover itens para cá conforme forem entregando, com data e link de PR/commit)_
 
-- _ainda nada_
+### ✅ 1.1 README real 🔥 · S — Concluído em 2026-05-12
+- **Problema:** `README.md` era template Lovable, não refletia o projeto.
+- **Ação:** Reescrito com descrição do produto, stack completa, setup local em 5 passos, troubleshooting, links para `CLAUDE.md` e `docs/`, comando `npm run dev:all`.
+- **Resultado:** README profissional com 400+ linhas cobrindo arquitetura, instalação, deploy, tools, prompts por tenant, scripts úteis e troubleshooting comum.
