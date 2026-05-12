@@ -475,10 +475,72 @@ async function executeOmnibeesAvailability(
       },
       (tool.execution_config || null) as Record<string, unknown> | null
     );
+
+    // Enriquecer com fotos cover das galerias
+    const tenantId = tool.tenant_id;
+    let coverByRoomName: Map<string, string> | undefined;
+
+    if (tenantId && data.rooms.length > 0) {
+      const roomNames = data.rooms.map(r => r.roomName);
+      const { data: galleries } = await supabase
+        .from("suite_galleries")
+        .select("name, cover_image_url, omnibees_room, media_urls")
+        .eq("tenant_id", tenantId)
+        .overlaps("omnibees_room", roomNames);
+
+      if (galleries && galleries.length > 0) {
+        coverByRoomName = new Map();
+        for (const gallery of galleries) {
+          const omnibeesRooms = (gallery as { omnibees_room?: string[] }).omnibees_room ?? [];
+          let coverUrl = (gallery as { cover_image_url?: string | null }).cover_image_url;
+
+          // Fallback: primeira foto em media_urls se cover_image_url for null
+          if (!coverUrl) {
+            const mediaUrls = (gallery as { media_urls?: Array<{ type: string; url: string }> }).media_urls ?? [];
+            const firstPhoto = mediaUrls.find(m => m.type === "photo");
+            coverUrl = firstPhoto?.url ?? null;
+          }
+
+          if (coverUrl) {
+            for (const roomName of omnibeesRooms) {
+              const key = roomName.toLowerCase();
+              if (!coverByRoomName.has(key)) {
+                coverByRoomName.set(key, coverUrl);
+              }
+            }
+          }
+        }
+
+        // Log de acomodações sem galeria
+        for (const roomName of roomNames) {
+          if (!coverByRoomName.has(roomName.toLowerCase())) {
+            console.warn("[Omnibees][NO_GALLERY] tenant=%s room=%s", tenantId, roomName);
+          }
+        }
+      }
+    }
+
+    // Reconstruir summaryText com fotos cover
+    const { buildSummaryText } = await import("./omnibees-availability.js");
+    const enrichedSummaryText = buildSummaryText(
+      {
+        hotel: data.hotel,
+        checkIn: data.checkIn,
+        checkOut: data.checkOut,
+        checkInTime: data.checkInTime,
+        checkOutTime: data.checkOutTime,
+        nights: data.nights,
+        adults: data.adults,
+        children: data.children,
+        rooms: data.rooms,
+      },
+      coverByRoomName
+    );
+
     return {
       success: true,
       result: {
-        summaryText: data.summaryText,
+        summaryText: enrichedSummaryText,
         /** Quantidade de acomodações com tarifa — o assistente deve citar todas ao cliente. */
         roomCount: data.rooms.length,
         bookingUrl: data.bookingUrl,

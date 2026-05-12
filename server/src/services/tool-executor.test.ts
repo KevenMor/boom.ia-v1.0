@@ -785,3 +785,152 @@ describe("fipe_query — presença de parâmetros mínimos", () => {
     expect(validateFipeArgs({})).toMatchObject({ ok: false });
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// omnibees_availability — enriquecimento com fotos cover
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("omnibees_availability — fotos cover de galerias", async () => {
+  const { buildSummaryText } = await import("./omnibees-availability.js");
+
+  it("buildSummaryText com mapa de covers injeta markdown antes do preço", () => {
+    const coverMap = new Map<string, string>();
+    coverMap.set("suíte vip", "https://example.com/suite-vip.jpg");
+    coverMap.set("loft", "https://example.com/loft.jpg");
+
+    const data = {
+      hotel: "Vale Suíço",
+      checkIn: "2026-05-29",
+      checkOut: "2026-05-31",
+      checkInTime: "14:00",
+      checkOutTime: "12:00",
+      nights: 2,
+      adults: 2,
+      children: 0,
+      rooms: [
+        {
+          roomName: "Suíte Vip",
+          cheapestRate: {
+            rateName: "Melhor Tarifa",
+            currency: "R$",
+            price: 1200.00,
+            totalPrice: 1200.00,
+            hasRestrictions: false,
+            minimumNights: null,
+            restrictions: null,
+            dailyPrices: [],
+          },
+          rates: [],
+        },
+        {
+          roomName: "LOFT",
+          cheapestRate: {
+            rateName: "Melhor Tarifa",
+            currency: "R$",
+            price: 1500.00,
+            totalPrice: 1500.00,
+            hasRestrictions: false,
+            minimumNights: null,
+            restrictions: null,
+            dailyPrices: [],
+          },
+          rates: [],
+        },
+      ],
+    };
+
+    const result = buildSummaryText(data, coverMap);
+
+    expect(result).toContain("![Foto - Suíte Vip](https://example.com/suite-vip.jpg)");
+    expect(result).toContain("![Foto - LOFT](https://example.com/loft.jpg)");
+    expect(result).toContain("Suíte Vip: TOTAL para 2 noite(s): R$ 1.200,00");
+    expect(result).toContain("LOFT: TOTAL para 2 noite(s): R$ 1.500,00");
+  });
+
+  it("buildSummaryText sem mapa → comportamento idêntico ao atual (sem fotos)", () => {
+    const data = {
+      hotel: "Vale Suíço",
+      checkIn: "2026-05-29",
+      checkOut: "2026-05-31",
+      checkInTime: "14:00",
+      checkOutTime: "12:00",
+      nights: 2,
+      adults: 2,
+      children: 0,
+      rooms: [
+        {
+          roomName: "Suíte Vip",
+          cheapestRate: {
+            rateName: "Melhor Tarifa",
+            currency: "R$",
+            price: 1200.00,
+            totalPrice: 1200.00,
+            hasRestrictions: false,
+            minimumNights: null,
+            restrictions: null,
+            dailyPrices: [],
+          },
+          rates: [],
+        },
+      ],
+    };
+
+    const result = buildSummaryText(data);
+
+    expect(result).not.toContain("![Foto");
+    expect(result).toContain("Suíte Vip: TOTAL para 2 noite(s): R$ 1.200,00");
+  });
+
+  it("room sem match no mapa → summaryText sem markdown de foto", () => {
+    const coverMap = new Map<string, string>();
+    coverMap.set("suíte vip", "https://example.com/suite-vip.jpg");
+    // LOFT não tem mapeamento
+
+    const data = {
+      hotel: "Vale Suíço",
+      checkIn: "2026-05-29",
+      checkOut: "2026-05-31",
+      checkInTime: "14:00",
+      checkOutTime: "12:00",
+      nights: 2,
+      adults: 2,
+      children: 0,
+      rooms: [
+        {
+          roomName: "Suíte Vip",
+          cheapestRate: {
+            rateName: "Melhor Tarifa",
+            currency: "R$",
+            price: 1200.00,
+            totalPrice: 1200.00,
+            hasRestrictions: false,
+            minimumNights: null,
+            restrictions: null,
+            dailyPrices: [],
+          },
+          rates: [],
+        },
+        {
+          roomName: "LOFT",
+          cheapestRate: {
+            rateName: "Melhor Tarifa",
+            currency: "R$",
+            price: 1500.00,
+            totalPrice: 1500.00,
+            hasRestrictions: false,
+            minimumNights: null,
+            restrictions: null,
+            dailyPrices: [],
+          },
+          rates: [],
+        },
+      ],
+    };
+
+    const result = buildSummaryText(data, coverMap);
+
+    expect(result).toContain("![Foto - Suíte Vip](https://example.com/suite-vip.jpg)");
+    expect(result).not.toContain("![Foto - LOFT]");
+    expect(result).toContain("LOFT: TOTAL para 2 noite(s): R$ 1.500,00");
+  });
+});

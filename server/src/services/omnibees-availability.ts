@@ -264,7 +264,10 @@ function resolveRealTotal(rate: OmnibeesRateRow, nights: number): number {
   return rate.totalPrice;
 }
 
-function buildSummaryText(data: Omit<OmnibeesAvailabilityResult, "summaryText" | "bookingUrl" | "hotelListingUrl">): string {
+export function buildSummaryText(
+  data: Omit<OmnibeesAvailabilityResult, "summaryText" | "bookingUrl" | "hotelListingUrl">,
+  coverByRoomName?: Map<string, string>
+): string {
   if (data.rooms.length === 0) {
     return `Nenhuma acomodação com tarifa encontrada para ${data.checkIn} a ${data.checkOut} (${data.nights} noites, ${data.adults} adultos${data.children ? `, ${data.children} crianças` : ""}).`;
   }
@@ -292,7 +295,12 @@ function buildSummaryText(data: Omit<OmnibeesAvailabilityResult, "summaryText" |
     const instPart = inst && instTotal
       ? ` Opção parcelada no cartão: ${inst.currency} ${fmt(instTotal)} total para ${nights} noite(s) (${inst.rateName}).`
       : "";
-    return `${r.roomName}: TOTAL para ${nights} noite(s): ${c.currency} ${priceStr}${dailyStr} (${c.rateName}).${instPart}${restMsg}`;
+
+    // Prefixar com foto cover se disponível
+    const coverUrl = coverByRoomName?.get(r.roomName.toLowerCase());
+    const photoPrefix = coverUrl ? `![Foto - ${r.roomName}](${coverUrl})\n` : "";
+
+    return `${photoPrefix}${r.roomName}: TOTAL para ${nights} noite(s): ${c.currency} ${priceStr}${dailyStr} (${c.rateName}).${instPart}${restMsg}`;
   });
   if (data.checkInTime && data.checkOutTime) {
     lines.push(
