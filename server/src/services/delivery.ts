@@ -292,11 +292,14 @@ function getHumanizationConfig(cfg: Record<string, any>): HumanizationConfig {
  * Texto → Vídeo    : PRE_MEDIA_GAP_MS (2 s) — idem.
  * Imagens → qualquer: POST_IMAGES_DELAY_MS (15 s) — Chatwoot ainda está entregando as
  *                    imagens ao WhatsApp; sem esse delay o texto seguinte chegaria antes.
+ *                    EXCEÇÃO: quando ambos os blocos (atual e próximo) são `images` com
+ *                    `content` (legenda integrada), usa POST_IMAGES_WITH_CAPTION_DELAY_MS (5 s).
  * Vídeo → qualquer : POST_VIDEO_DELAY_MS (20 s) — vídeos são maiores e levam mais tempo
  *                    para o Chatwoot concluir a entrega ao WhatsApp; 15 s não é suficiente.
  */
 const PRE_MEDIA_GAP_MS = 2000;
 const POST_IMAGES_DELAY_MS = 15000;
+const POST_IMAGES_WITH_CAPTION_DELAY_MS = 5000;
 const POST_VIDEO_DELAY_MS = 20000;
 
 interface ConsolidatedPart {
@@ -428,8 +431,16 @@ async function replyToChatwoot(
     if (block.type === "images" && block.imageUrls?.length) {
       await sendChatwootImagesBatch(msgUrl, apiToken, block.imageUrls, block.content?.trim() || "");
       // Após imagens: aguarda 15 s para Chatwoot concluir entrega ao WhatsApp antes do próximo bloco.
+      // EXCEÇÃO: se o próximo bloco também é `images` com `content` (legenda integrada),
+      // usa 5 s em vez de 15 s (fotos com legenda entregam mais rápido).
       if (!isLast && hasTimeBudget()) {
-        await safeDelay(POST_IMAGES_DELAY_MS);
+        const next = consolidated[i + 1];
+        const useShortDelay =
+          block.content?.trim() &&
+          next?.type === "images" &&
+          next.content?.trim();
+        const delayMs = useShortDelay ? POST_IMAGES_WITH_CAPTION_DELAY_MS : POST_IMAGES_DELAY_MS;
+        await safeDelay(delayMs);
       }
     } else if (block.type === "text" && block.content) {
       if (humanization.typingDelayMs > 0 && hasTimeBudget()) {

@@ -102,3 +102,54 @@ describe("consolidateImageParts — múltiplos vídeos", () => {
     expect(consolidateImageParts(parts).filter((b) => b.type === "video").length).toBe(1);
   });
 });
+
+describe("POST_IMAGES delay otimizado — fotos com legenda", () => {
+  // Testa a lógica de delay reduzido (5s) quando ambos os blocos são `images` com `content`.
+  // A implementação real está em replyToChatwoot, mas testamos a lógica de decisão aqui.
+
+  function pickPostImagesDelay(
+    currentBlock: { type: string; content?: string },
+    nextBlock?: { type: string; content?: string }
+  ): number {
+    const POST_IMAGES_DELAY_MS = 15000;
+    const POST_IMAGES_WITH_CAPTION_DELAY_MS = 5000;
+
+    if (!nextBlock) return POST_IMAGES_DELAY_MS;
+
+    const useShortDelay =
+      currentBlock.content?.trim() &&
+      nextBlock.type === "images" &&
+      nextBlock.content?.trim();
+
+    return useShortDelay ? POST_IMAGES_WITH_CAPTION_DELAY_MS : POST_IMAGES_DELAY_MS;
+  }
+
+  it("2 blocos images consecutivos com content → 5s", () => {
+    const current = { type: "images", content: "Suíte Vip: R$ 1.200,00" };
+    const next = { type: "images", content: "LOFT: R$ 1.500,00" };
+    expect(pickPostImagesDelay(current, next)).toBe(5000);
+  });
+
+  it("bloco images com content seguido de text → 15s", () => {
+    const current = { type: "images", content: "Suíte Vip: R$ 1.200,00" };
+    const next = { type: "text", content: "Qual você prefere?" };
+    expect(pickPostImagesDelay(current, next)).toBe(15000);
+  });
+
+  it("bloco images sem content seguido de images com content → 15s", () => {
+    const current = { type: "images" }; // sem legenda
+    const next = { type: "images", content: "LOFT: R$ 1.500,00" };
+    expect(pickPostImagesDelay(current, next)).toBe(15000);
+  });
+
+  it("bloco images com content seguido de images sem content → 15s", () => {
+    const current = { type: "images", content: "Suíte Vip: R$ 1.200,00" };
+    const next = { type: "images" }; // sem legenda
+    expect(pickPostImagesDelay(current, next)).toBe(15000);
+  });
+
+  it("último bloco (sem next) → 15s (não importa, mas retorna padrão)", () => {
+    const current = { type: "images", content: "Suíte Vip: R$ 1.200,00" };
+    expect(pickPostImagesDelay(current, undefined)).toBe(15000);
+  });
+});
