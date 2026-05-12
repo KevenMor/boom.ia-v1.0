@@ -322,4 +322,6 @@ export interface SuiteGallery {
   created_at: string;
   updated_at: string;
   tenants?: { name: string } | null;
+  /** Nomes retornados pela Omnibees que mapeiam para esta galeria. */
+  omnibees_room?: string[] | null;
 }
