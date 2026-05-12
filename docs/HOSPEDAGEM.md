@@ -291,3 +291,69 @@ Consulte a documentação:
 **Implementação finalizada com sucesso!** 🎉
 
 Para começar, abra: [`HOSPEDAGEM_INDEX.md`](HOSPEDAGEM_INDEX.md)
+
+---
+
+## 📸 Fotos Cover Automáticas — Omnibees (Vale Suíço)
+
+### O que é
+
+Funcionalidade que anexa **automaticamente** uma foto cover por acomodação nas cotações Omnibees, entregando ao cliente **foto + preço** na mesma mensagem (sem precisar pedir fotos separadamente).
+
+### Como funciona
+
+1. **Cadastro no painel:** ao editar uma galeria de suíte, preencha o campo **"Nomes na Omnibees"** com os nomes exatos retornados pela Omnibees (ex.: `Suíte Vip, Suite Vip Premium`).
+2. **Vinculação automática:** quando a tool `omnibees_availability` retornar acomodações, o backend busca galerias com `omnibees_room` correspondente.
+3. **Foto cover:** usa `cover_image_url` da galeria (ou primeira foto em `media_urls` se cover for null).
+4. **Entrega:** injeta markdown `![Foto - Nome](url)` no `summaryText` antes do preço de cada acomodação.
+5. **Pipeline:** o `delivery.ts` converte markdown em imagem binária no WhatsApp (via Chatwoot).
+
+### Cadastro operacional
+
+**Painel Admin → Hospedagem → Galerias de Suítes → Editar galeria:**
+
+- **Campo:** "Nomes na Omnibees"
+- **Formato:** CSV (ex.: `Suíte Vip, Suite Vip Premium`)
+- **Importante:** use o nome **exato** como aparece no resultado da cotação Omnibees
+- **Cover:** escolha uma foto representativa como `cover_image_url` (é a que vai na cotação)
+
+**Exemplo:**
+```
+Nome da galeria: Suíte Vip
+Nomes na Omnibees: Suíte Vip, Suite Vip Premium
+Cover: https://storage.../suite-vip-cover.jpg
+```
+
+### Comportamento
+
+- **Com mapeamento:** cotação vem com foto cover antes do preço de cada acomodação
+- **Sem mapeamento:** cotação vem só com texto (comportamento anterior); log `[Omnibees][NO_GALLERY]` no servidor
+- **Galeria completa:** cliente pode pedir "quero ver mais fotos da Suíte Vip" → envia galeria completa via `suite_gallery_query`
+
+### Delay otimizado
+
+Quando múltiplas acomodações têm foto cover (ex.: 3 suítes), o delay entre fotos consecutivas com legenda é **5s** (vs 15s antes), reduzindo tempo total de entrega de ~45s para ~15s.
+
+### Logs operacionais
+
+Monitorar por 24h após cadastro:
+```bash
+grep "[Omnibees][NO_GALLERY]" server.log
+```
+Indica acomodações retornadas pela Omnibees que ainda não têm galeria mapeada.
+
+### Arquivos relacionados
+
+- **Migration:** `sql/027_suite_galleries_omnibees_room.sql`
+- **Backend:** `server/src/services/tool-executor.ts` (enriquecimento)
+- **Backend:** `server/src/services/omnibees-availability.ts` (buildSummaryText)
+- **Frontend:** `src/components/suite-galleries/SuiteGalleryFormDialog.tsx` (form)
+- **Prompt:** `server/src/services/prompts/vale-suico.ts` (regras 9, 12, 12c)
+- **Delivery:** `server/src/services/delivery.ts` (delay otimizado)
+
+### Tenants suportados
+
+- ✅ **Vale Suíço** (Vitória) — usa Omnibees
+- ⏳ **Sunset Thermas** (Julia) — não usa Omnibees (tabela fixa), não aplicável
+
+---
