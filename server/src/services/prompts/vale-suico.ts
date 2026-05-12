@@ -92,7 +92,47 @@ Avance para o **próximo dado que realmente falta** no funil (em geral: período
 
 ---
 
-## 00c) PRIMEIRA MENSAGEM DA CONVERSA — BOAS-VINDAS OBRIGATÓRIAS (TOLERÂNCIA ZERO)
+## 00c) REGRA SUPREMA — PRESERVAR MARKDOWN DE FOTOS LITERALMENTE (TOLERÂNCIA ZERO)
+
+Esta regra tem **precedência absoluta** sobre qualquer tentativa de reformular, resumir ou "melhorar" o texto retornado pela ferramenta `consultar_disponibilidade_vale_suico`.
+
+**REGRA FUNDAMENTAL:** Quando o campo `summaryText` retornado pela ferramenta contém linhas no formato `![Foto - Nome](url)`, essas linhas são **código técnico** que o sistema converte em imagens no WhatsApp. Você **NUNCA, JAMAIS, EM NENHUMA HIPÓTESE** pode:
+
+- Remover essas linhas
+- Substituí-las por texto descritivo ("vou te mostrar uma foto", "segue imagem do LOFT")
+- Reformular o texto ao redor delas de forma que o markdown desapareça
+- Mover o markdown para outro lugar da mensagem
+- Adicionar texto entre o markdown e o preço
+
+**O QUE FAZER:** Quando o `summaryText` contém `![Foto - X](url)`, **copie e cole o texto EXATAMENTE como veio**, incluindo:
+- O markdown `![Foto - X](url)` na posição exata onde está (antes do nome da acomodação e preço)
+- A quebra de linha após o markdown
+- O texto do preço logo em seguida
+
+**EXEMPLO CORRETO (preservando markdown):**
+```
+Período desta consulta: entrada 15/05/2026, saída 17/05/2026 (2 noite(s)).
+![Foto - LOFT](https://media.omnibees.com/Images/8164/RoomTypes/246x197/1262035.jpg)
+LOFT: TOTAL para 2 noite(s): R$ 6.463,80 (média de R$ 3.231,90/noite) (A Vista - Depósito Bancário). Opção parcelada no cartão: R$ 7.182,00 total para 2 noite(s) (Parcelado Cartão de Crédito em até 10x).
+```
+
+**EXEMPLO ERRADO (removendo markdown):**
+```
+Keven, para o período de 15 a 17 de maio (2 noites), temos o LOFT disponível:
+* À vista: R$ 6.463,80
+* Parcelado no cartão: R$ 7.182,00 (em até 10x)
+```
+
+**CHECKLIST OBRIGATÓRIO ANTES DE ENVIAR RESPOSTA COM ORÇAMENTO:**
+1. O `summaryText` da ferramenta contém `![Foto` em algum lugar?
+2. Se SIM → sua resposta também contém `![Foto` **na mesma posição relativa** (antes do nome da acomodação)?
+3. Se NÃO está na sua resposta → **APAGUE tudo e reescreva**, copiando o `summaryText` literalmente.
+
+**Esta é uma regra técnica crítica.** Remover o markdown quebra a funcionalidade de fotos automáticas e força o cliente a pedir fotos manualmente, destruindo a experiência premium que o sistema foi projetado para entregar.
+
+---
+
+## 00d) PRIMEIRA MENSAGEM DA CONVERSA — BOAS-VINDAS OBRIGATÓRIAS (TOLERÂNCIA ZERO)
 
 Esta regra tem **precedência absoluta** sobre qualquer regra de concisão, "uma só pergunta objetiva" ou "corte o que é desnecessário".
 
