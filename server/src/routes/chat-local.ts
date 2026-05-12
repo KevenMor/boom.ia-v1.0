@@ -6,6 +6,7 @@ import { filterCommandLinesFromStream, sanitizeLLMOutput, fallbackSanitizeForRet
 import { emitMediaCommandsSseIfNeeded } from "../utils/extract-media-commands.js";
 import { injectSuiteGalleryMarkdownIfMissing, injectSuiteGalleryVideosIfMissing } from "../utils/suite-gallery-markdown-inject.js";
 import { injectOmnibeesQuotePhotosIfMissing } from "../utils/omnibees-photo-markdown.js";
+import { formatOmnibeesQuoteForDelivery } from "../utils/omnibees-quote-format.js";
 import { getWelcomeConversationImageMarkdown } from "../utils/suite-gallery-welcome-image.js";
 import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification, buildHandoffNotification, extractClientNameFromMessages, toBrasiliaISO } from "../utils/agendaNotification.js";
 
@@ -1137,6 +1138,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           console.log("[Chat-Local] Injetando fotos cover Omnibees no orçamento (omissão do modelo)");
           text = omnibeesPhotoInject.fullText;
         }
+        text = formatOmnibeesQuoteForDelivery(text, toolResultStrings);
         return text;
       };
 
