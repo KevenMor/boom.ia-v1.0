@@ -933,4 +933,43 @@ describe("omnibees_availability — fotos cover de galerias", async () => {
     expect(result).not.toContain("![Foto - LOFT]");
     expect(result).toContain("LOFT: TOTAL para 2 noite(s): R$ 1.500,00");
   });
+
+  it("prioridade imageUrl da Omnibees sobre galeria do painel", () => {
+    // Simula cenário onde Omnibees retorna imageUrl E existe galeria mapeada
+    // Deve usar imageUrl da Omnibees (prioridade)
+    const coverMap = new Map<string, string>();
+    coverMap.set("loft", "https://media.omnibees.com/Images/8164/RoomTypes/246x197/1262035.jpg");
+
+    const data = {
+      hotel: "Vale Suíço",
+      checkIn: "2026-05-15",
+      checkOut: "2026-05-17",
+      checkInTime: "17h",
+      checkOutTime: "14h",
+      nights: 2,
+      adults: 2,
+      children: 1,
+      rooms: [
+        {
+          roomName: "LOFT",
+          cheapestRate: {
+            rateName: "A Vista - Depósito Bancário",
+            currency: "R$",
+            price: 6463.8,
+            totalPrice: 6463.8,
+            hasRestrictions: false,
+            minimumNights: null,
+            restrictions: null,
+            dailyPrices: [],
+          },
+          rates: [],
+        },
+      ],
+    };
+
+    const result = buildSummaryText(data, coverMap);
+
+    expect(result).toContain("![Foto - LOFT](https://media.omnibees.com/Images/8164/RoomTypes/246x197/1262035.jpg)");
+    expect(result).toContain("LOFT: TOTAL para 2 noite(s): R$ 6.463,80");
+  });
 });

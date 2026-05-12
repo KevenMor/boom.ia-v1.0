@@ -476,10 +476,19 @@ async function executeOmnibeesAvailability(
       (tool.execution_config || null) as Record<string, unknown> | null
     );
 
-    // Enriquecer com fotos cover das galerias
+    // Enriquecer com fotos cover: prioridade imageUrl da Omnibees, fallback galerias do painel
     const tenantId = tool.tenant_id;
-    let coverByRoomName: Map<string, string> | undefined;
+    const coverByRoomName = new Map<string, string>();
 
+    // PASSO 1: Usar imageUrl que já vem da Omnibees (prioridade)
+    for (const room of data.rooms) {
+      const imageUrl = (room as { imageUrl?: string }).imageUrl;
+      if (imageUrl && imageUrl.trim()) {
+        coverByRoomName.set(room.roomName.toLowerCase(), imageUrl.trim());
+      }
+    }
+
+    // PASSO 2: Fallback para galerias do painel (omnibees_room) quando Omnibees não retornar imageUrl
     if (tenantId && data.rooms.length > 0) {
       const roomNames = data.rooms.map(r => r.roomName);
       const { data: galleries } = await supabase
@@ -489,7 +498,6 @@ async function executeOmnibeesAvailability(
         .overlaps("omnibees_room", roomNames);
 
       if (galleries && galleries.length > 0) {
-        coverByRoomName = new Map();
         for (const gallery of galleries) {
           const omnibeesRooms = (gallery as { omnibees_room?: string[] }).omnibees_room ?? [];
           let coverUrl = (gallery as { cover_image_url?: string | null }).cover_image_url;
@@ -504,18 +512,19 @@ async function executeOmnibeesAvailability(
           if (coverUrl) {
             for (const roomName of omnibeesRooms) {
               const key = roomName.toLowerCase();
+              // Só sobrescreve se ainda não tiver imageUrl da Omnibees
               if (!coverByRoomName.has(key)) {
                 coverByRoomName.set(key, coverUrl);
               }
             }
           }
         }
+      }
 
-        // Log de acomodações sem galeria
-        for (const roomName of roomNames) {
-          if (!coverByRoomName.has(roomName.toLowerCase())) {
-            console.warn("[Omnibees][NO_GALLERY] tenant=%s room=%s", tenantId, roomName);
-          }
+      // Log de acomodações sem foto (nem Omnibees nem galeria)
+      for (const roomName of roomNames) {
+        if (!coverByRoomName.has(roomName.toLowerCase())) {
+          console.warn("[Omnibees][NO_COVER] tenant=%s room=%s (sem imageUrl da Omnibees e sem galeria mapeada)", tenantId, roomName);
         }
       }
     }
@@ -534,7 +543,7 @@ async function executeOmnibeesAvailability(
         children: data.children,
         rooms: data.rooms,
       },
-      coverByRoomName
+      coverByRoomName.size > 0 ? coverByRoomName : undefined
     );
 
     return {
