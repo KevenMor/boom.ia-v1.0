@@ -10,7 +10,7 @@ import {
 import { sendViaWaha } from "../services/waha.js";
 import { transcribeAudio, isAudioAttachment } from "../services/transcribe.js";
 import { buildReminderMessage } from "../utils/buildReminderMessage.js";
-import { getWelcomeConversationImageMarkdown } from "../utils/suite-gallery-welcome-image.js";
+import { getWelcomeConversationImageMarkdown, responseAlreadyIncludesWelcomeImage } from "../utils/suite-gallery-welcome-image.js";
 
 const API_BASE = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
 
@@ -762,13 +762,25 @@ export async function queueRoutes(fastify: FastifyInstance) {
         if (tenantId) {
           const welcomeImageMd = await getWelcomeConversationImageMarkdown(supabase, tenantId);
           if (welcomeImageMd) {
+            const responseText =
+              typeof deliverBody.response_text === "string" ? deliverBody.response_text : "";
             const parts = deliverBody.response_parts as string[] | undefined;
-            if (Array.isArray(parts) && parts.length > 0) {
-              deliverBody.response_parts = [welcomeImageMd, ...parts];
-            } else {
-              deliverBody.response_parts = [welcomeImageMd, ...(deliverBody.response_text ? [deliverBody.response_text as string] : [])];
+            const partsHaveWelcome =
+              Array.isArray(parts) &&
+              parts.some(
+                (p) => typeof p === "string" && responseAlreadyIncludesWelcomeImage(p, welcomeImageMd)
+              );
+            if (!responseAlreadyIncludesWelcomeImage(responseText, welcomeImageMd) && !partsHaveWelcome) {
+              if (Array.isArray(parts) && parts.length > 0) {
+                deliverBody.response_parts = [welcomeImageMd, ...parts];
+              } else {
+                deliverBody.response_parts = [
+                  welcomeImageMd,
+                  ...(responseText ? [responseText] : []),
+                ];
+              }
+              deliverBody.response_text = welcomeImageMd + responseText;
             }
-            deliverBody.response_text = welcomeImageMd + (deliverBody.response_text || "");
           }
         }
       }

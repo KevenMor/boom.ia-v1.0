@@ -68,3 +68,18 @@ export async function getWelcomeConversationImageMarkdown(
 
   return `![${label}](${imageUrl})\n\n`;
 }
+
+/** URL em `![...](url)` do markdown de abertura. */
+export function welcomeConversationImageUrlFromMarkdown(markdown: string): string | null {
+  const match = markdown.match(/!\[.*?\]\((https?:\/\/[^)\s]+)\)/);
+  return match?.[1]?.trim() ?? null;
+}
+
+/** Evita segunda capa quando chat-local/repaired já injetaram a mesma URL. */
+export function responseAlreadyIncludesWelcomeImage(content: string, welcomeMarkdown: string): boolean {
+  const welcomeTrimmed = welcomeMarkdown.trim();
+  if (!welcomeTrimmed || !content?.trim()) return false;
+  if (content.startsWith(welcomeTrimmed)) return true;
+  const url = welcomeConversationImageUrlFromMarkdown(welcomeTrimmed);
+  return !!url && content.includes(url);
+}
