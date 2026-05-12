@@ -4,7 +4,9 @@ import { buildSystemPrompt, getDispatcherPrompt } from "../services/prompts/regi
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
 import { filterCommandLinesFromStream, sanitizeLLMOutput, fallbackSanitizeForRetry } from "../utils/sanitize.js";
 import { emitMediaCommandsSseIfNeeded } from "../utils/extract-media-commands.js";
-import { injectSuiteGalleryMarkdownIfMissing } from "../utils/suite-gallery-markdown-inject.js";
+import { injectSuiteGalleryMarkdownIfMissing, injectSuiteGalleryVideosIfMissing } from "../utils/suite-gallery-markdown-inject.js";
+import { injectOmnibeesQuotePhotosIfMissing } from "../utils/omnibees-photo-markdown.js";
+import { getWelcomeConversationImageMarkdown } from "../utils/suite-gallery-welcome-image.js";
 import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification, buildHandoffNotification, extractClientNameFromMessages, toBrasiliaISO } from "../utils/agendaNotification.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
@@ -1085,6 +1087,57 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         "Access-Control-Allow-Credentials": "true",
       });
 
+      const isFirstAssistantTurn = messages.filter((m) => m.role === "assistant").length === 0;
+      let welcomeImagePrefix = "";
+      if (isFirstAssistantTurn && tenantId) {
+        welcomeImagePrefix = await getWelcomeConversationImageMarkdown(supabase, tenantId);
+      }
+      let welcomeImageEmitted = !welcomeImagePrefix;
+      const emitWelcomeImagePrefix = () => {
+        if (welcomeImageEmitted || !welcomeImagePrefix) return;
+        welcomeImageEmitted = true;
+        sendSse({ choices: [{ delta: { content: welcomeImagePrefix } }] });
+      };
+      const prependWelcomeToAssistantText = (text: string): string => {
+        if (!welcomeImagePrefix || !isFirstAssistantTurn) return text;
+        if (text.startsWith(welcomeImagePrefix)) return text;
+        return welcomeImagePrefix + text;
+      };
+      const applySuiteGalleryRepairs = (
+        assistantText: string,
+        toolResultStrings: string[],
+        lastUserMessage: string
+      ): string => {
+        let text = assistantText;
+        const galleryInject = injectSuiteGalleryMarkdownIfMissing({
+          assistantText: text,
+          toolResultStrings,
+          lastUserMessage,
+        });
+        if (galleryInject) {
+          console.log("[Chat-Local] Injetando photos_markdown suite_gallery (omissão do modelo)");
+          text = galleryInject.fullText;
+          sendSse({ choices: [{ delta: { content: galleryInject.appended } }] });
+        }
+        const videoInject = injectSuiteGalleryVideosIfMissing({
+          assistantText: text,
+          toolResultStrings,
+          lastUserMessage,
+        });
+        if (videoInject) {
+          console.log("[Chat-Local] Injetando vídeo suite_gallery (omissão do modelo)");
+          text = videoInject.fullText;
+          sendSse({ choices: [{ delta: { content: videoInject.appended } }] });
+        }
+        const omnibeesPhotoInject = injectOmnibeesQuotePhotosIfMissing(text, toolResultStrings);
+        if (omnibeesPhotoInject) {
+          console.log("[Chat-Local] Injetando fotos cover Omnibees no orçamento (omissão do modelo)");
+          text = omnibeesPhotoInject.fullText;
+          sendSse({ choices: [{ delta: { content: omnibeesPhotoInject.appended } }] });
+        }
+        return text;
+      };
+
       // Dual-provider: OpenAI para tools (dispatcher), Gemini para conversacional
       if (useTools && dispatcherProviderId) {
         const dispatcherConfig = await getProviderApiKey(dispatcherProviderId, supabase);
@@ -1555,11 +1608,12 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           let debugSendCount = 0;
           let debugSendTotalLen = 0;
 
+          emitWelcomeImagePrefix();
           const convReader = convResp.body!.getReader();
           const convDecoder = new TextDecoder();
           let convBuf = "";
           let streamFilterBuffer = "";
-          let convFullContent = "";
+          let convFullContent = welcomeImagePrefix;
           let conversationalUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null = null;
 
           while (true) {
@@ -1628,16 +1682,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
 
           const lastUserForGalleryInject = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
-          const galleryInjectDual = injectSuiteGalleryMarkdownIfMissing({
-            assistantText: convFullContent,
-            toolResultStrings: toolResults,
-            lastUserMessage: lastUserForGalleryInject,
-          });
-          if (galleryInjectDual) {
-            console.log("[Chat-Local] Injetando photos_markdown suite_gallery no fluxo dual (omissão do modelo)");
-            convFullContent = galleryInjectDual.fullText;
-            sendSse({ choices: [{ delta: { content: galleryInjectDual.appended } }] });
-          }
+          convFullContent = applySuiteGalleryRepairs(convFullContent, toolResults, lastUserForGalleryInject);
 
           if (/HANDOFF_COMERCIAL/i.test(convFullContent)) {
             sendHandoffNotification(agent_id, agent, messages, external_user_id).catch((e) => {
@@ -1758,8 +1803,8 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }
           }
 
-          const rawConvAssist = (convFullContent || "").trim();
-          const assistantForHistory = sanitizeLLMOutput(convFullContent || "") || rawConvAssist;
+          const rawConvAssist = prependWelcomeToAssistantText((convFullContent || "").trim());
+          const assistantForHistory = sanitizeLLMOutput(rawConvAssist) || rawConvAssist;
           const assistantMetadata = tokenUsagePayload.dispatcher || tokenUsagePayload.conversational
             ? { token_usage: tokenUsagePayload }
             : undefined;
@@ -1853,7 +1898,10 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   content += delta.content;
                   const { toSend, newBuffer } = filterCommandLinesFromStream(streamFilterBuffer, delta.content);
                   streamFilterBuffer = newBuffer;
-                  if (toSend) sendSse({ choices: [{ delta: { content: toSend } }] });
+                  if (toSend) {
+                    emitWelcomeImagePrefix();
+                    sendSse({ choices: [{ delta: { content: toSend } }] });
+                  }
                 }
 
                 if (delta?.tool_calls) {
@@ -1878,7 +1926,10 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }
           }
           if (done) {
-            if (streamFilterBuffer) sendSse({ choices: [{ delta: { content: streamFilterBuffer } }] });
+            if (streamFilterBuffer) {
+              emitWelcomeImagePrefix();
+              sendSse({ choices: [{ delta: { content: streamFilterBuffer } }] });
+            }
             const isFirstContact = messages.filter((m) => m.role === "assistant").length === 0;
             const agentCfgSingle = (agent?.config || {}) as Record<string, unknown>;
             const hasWelcomeVideoSingle = !!(agentCfgSingle.welcome_video_url as string)?.trim();
@@ -1933,16 +1984,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             const c = (m as { content?: unknown }).content;
             if (role === "tool" && typeof c === "string") toolStringsSP.push(c);
           }
-          const galleryInjectSP = injectSuiteGalleryMarkdownIfMissing({
-            assistantText: fullContent,
-            toolResultStrings: toolStringsSP,
-            lastUserMessage: lastUserForGalleryInjectSP,
-          });
-          if (galleryInjectSP) {
-            console.log("[Chat-Local] Injetando photos_markdown suite_gallery (single-provider)");
-            fullContent = galleryInjectSP.fullText;
-            sendSse({ choices: [{ delta: { content: galleryInjectSP.appended } }] });
-          }
+          fullContent = applySuiteGalleryRepairs(fullContent, toolStringsSP, lastUserForGalleryInjectSP);
           emitMediaCommandsSseIfNeeded(sendSse, fullContent);
           if (singleProviderUsageAccum.total_tokens > 0) {
             sendSse({ token_usage: { single: { ...singleProviderUsageAccum, model } } });
@@ -1962,8 +2004,8 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               console.warn("[Chat-Local] Failed to save token usage:", (dbErr as Error)?.message);
             }
           }
-          const rawSingleAssist = (fullContent || "").trim();
-          const assistantForHistory = sanitizeLLMOutput(fullContent || "") || rawSingleAssist;
+          const rawSingleAssist = prependWelcomeToAssistantText((fullContent || "").trim());
+          const assistantForHistory = sanitizeLLMOutput(rawSingleAssist) || rawSingleAssist;
           const assistantMetadata =
             singleProviderUsageAccum.total_tokens > 0
               ? { token_usage: { single: { ...singleProviderUsageAccum, model } } }
@@ -2107,20 +2149,10 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           const c = (m as { content?: unknown }).content;
           if (role === "tool" && typeof c === "string") toolStrsLoop.push(c);
         }
-        const galleryInjLoop = injectSuiteGalleryMarkdownIfMissing({
-          assistantText: fullContent,
-          toolResultStrings: toolStrsLoop,
-          lastUserMessage: lastUserGI,
-        });
-        let finalAssistantRaw = fullContent;
-        if (galleryInjLoop) {
-          finalAssistantRaw = galleryInjLoop.fullText;
-          sendSse({ choices: [{ delta: { content: galleryInjLoop.appended } }] });
-        }
+        let finalAssistantRaw = applySuiteGalleryRepairs(fullContent, toolStrsLoop, lastUserGI);
         emitMediaCommandsSseIfNeeded(sendSse, finalAssistantRaw);
-        const rawLoopAssist = (finalAssistantRaw || "").trim();
-        const assistantForHistory =
-          sanitizeLLMOutput(finalAssistantRaw || "") || rawLoopAssist;
+        const rawLoopAssist = prependWelcomeToAssistantText((finalAssistantRaw || "").trim());
+        const assistantForHistory = sanitizeLLMOutput(rawLoopAssist) || rawLoopAssist;
         const assistantMetadata =
           singleProviderUsageAccum.total_tokens > 0
             ? { token_usage: { single: { ...singleProviderUsageAccum, model } } }

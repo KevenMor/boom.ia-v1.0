@@ -105,6 +105,122 @@ export function collectSuiteGalleryMarkdownFromToolResults(toolResultStrings: st
   return chunks.join("\n\n").trim();
 }
 
+type SuiteGalleryVideoItem = { url?: string; llm_send_when?: string };
+
+function parseSuiteGalleryVideoUrls(jsonStr: string): string[] {
+  try {
+    const obj = JSON.parse(jsonStr) as {
+      galleries?: Array<{ videos?: SuiteGalleryVideoItem[] }>;
+    };
+    if (!obj?.galleries || !Array.isArray(obj.galleries)) return [];
+    const urls: string[] = [];
+    const seen = new Set<string>();
+    for (const g of obj.galleries) {
+      const videos = Array.isArray(g.videos) ? g.videos : [];
+      for (const v of videos) {
+        const raw = typeof v?.url === "string" ? v.url.trim() : "";
+        if (!raw || seen.has(raw)) continue;
+        if (!/^https?:\/\//i.test(raw)) continue;
+        seen.add(raw);
+        urls.push(raw);
+      }
+    }
+    return urls;
+  } catch {
+    return [];
+  }
+}
+
+export function collectSuiteGalleryVideoUrlsFromToolResults(toolResultStrings: string[]): string[] {
+  const urls: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of toolResultStrings) {
+    for (const url of parseSuiteGalleryVideoUrls(raw)) {
+      if (!seen.has(url)) {
+        seen.add(url);
+        urls.push(url);
+      }
+    }
+  }
+  return urls;
+}
+
+export function extractVideoUrlsFromText(text: string): string[] {
+  const videoUrls: string[] = [];
+  const videoRegex = /(?:!\[.*?\]\()?(https?:\/\/[^\s)"]+\.(?:mp4|webm|mov)(?:[^\s)"]*)?)\)?/gi;
+  let match: RegExpExecArray | null;
+  while ((match = videoRegex.exec(text || "")) !== null) {
+    const url = (match[1] || "").trim();
+    if (url && !videoUrls.includes(url)) videoUrls.push(url);
+  }
+  return videoUrls;
+}
+
+function userLikelyAskedForVideo(text: string): boolean {
+  const t = (text || "").toLowerCase();
+  if (/\b(tem|mostra|mostrar|manda|mandar|mande|envia|enviar|quero|queria|ver)\b/.test(t) && /\bv[ií]deos?\b/.test(t)) {
+    return true;
+  }
+  return /\b(v[ií]deo|vídeo)\b/.test(t) && /\?/.test(t);
+}
+
+function userIndicatedFirstVisitOrNoKnowledge(text: string): boolean {
+  const t = (text || "").trim().toLowerCase();
+  if (!t) return false;
+  if (/^(n[aã]o|nao|nunca|ainda n[aã]o)\b/.test(t)) return true;
+  if (/\bprimeira\s+vez\b/.test(t)) return true;
+  if (/\bn[aã]o\s+conhe[cç]o\b/.test(t)) return true;
+  if (/\bnunca\s+fui\b/.test(t)) return true;
+  if (/\bainda\s+n[aã]o\b/.test(t)) return true;
+  return false;
+}
+
+function assistantClaimsVideoDelivery(text: string): boolean {
+  const head = (text || "").slice(0, 800);
+  return /\b(esse\s+v[ií]deo|este\s+v[ií]deo|segue(?:m)?\s+o\s+v[ií]deo|v[ií]deo\s+mostra|apresenta[cç][aã]o\s+do\s+resort|estrutura\s+do\s+resort|tour\s+em\s+v[ií]deo)\b/i.test(
+    head
+  );
+}
+
+export function shouldInjectSuiteGalleryVideos(params: {
+  assistantText: string;
+  videoUrls: string[];
+  lastUserMessage: string;
+}): boolean {
+  const { assistantText, videoUrls, lastUserMessage } = params;
+  if (videoUrls.length === 0) return false;
+  if (extractVideoUrlsFromText(assistantText || "").length > 0) return false;
+  if (userLikelyAskedForVideo(lastUserMessage)) return true;
+  if (userIndicatedFirstVisitOrNoKnowledge(lastUserMessage)) return true;
+  if (assistantClaimsVideoDelivery(assistantText || "")) return true;
+  return false;
+}
+
+export function injectSuiteGalleryVideosIfMissing(params: {
+  assistantText: string;
+  toolResultStrings: string[];
+  lastUserMessage: string;
+}): { appended: string; fullText: string } | null {
+  const videoUrls = collectSuiteGalleryVideoUrlsFromToolResults(params.toolResultStrings);
+  const assistantStripped = stripBrokenMarkdownImageLines(params.assistantText || "");
+  if (
+    !shouldInjectSuiteGalleryVideos({
+      assistantText: assistantStripped,
+      videoUrls,
+      lastUserMessage: params.lastUserMessage,
+    })
+  ) {
+    return null;
+  }
+  const block = videoUrls.join("\n");
+  const sep = assistantStripped.trim() ? "\n\n" : "";
+  const appended = `${sep}${block}`;
+  return {
+    appended,
+    fullText: `${assistantStripped}${appended}`,
+  };
+}
+
 function userLikelyAskedForPhotos(text: string): boolean {
   const t = (text || "").toLowerCase();
   if (/\b(todas|todos|cada\s+uma|todas\s+as|as\s+3|as\s+tr[êe]s)\b/.test(t)) return true;

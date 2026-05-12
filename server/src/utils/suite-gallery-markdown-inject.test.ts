@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
   collectSuiteGalleryMarkdownFromToolResults,
+  collectSuiteGalleryVideoUrlsFromToolResults,
   hasAtLeastOneCompleteMarkdownHttpImage,
   injectSuiteGalleryMarkdownIfMissing,
+  injectSuiteGalleryVideosIfMissing,
   shouldInjectSuiteGalleryMarkdown,
   stripBrokenMarkdownImageLines,
 } from "./suite-gallery-markdown-inject.js";
@@ -16,6 +18,15 @@ const SAMPLE_TOOL = JSON.stringify({
     {
       nome: "VIP",
       photos_markdown: "![VIP](https://cdn.example/2.jpg)",
+    },
+  ],
+});
+
+const VIDEO_TOOL = JSON.stringify({
+  galleries: [
+    {
+      nome: "Institucional",
+      videos: [{ url: "https://cdn.example/institucional.mp4" }],
     },
   ],
 });
@@ -95,5 +106,30 @@ describe("suite-gallery-markdown-inject", () => {
         lastUserMessage: "ok",
       })
     ).toBe(true);
+  });
+
+  it("coalesce URLs de vídeo da galeria", () => {
+    expect(collectSuiteGalleryVideoUrlsFromToolResults([VIDEO_TOOL])).toEqual([
+      "https://cdn.example/institucional.mp4",
+    ]);
+  });
+
+  it("injeta vídeo quando o assistente fala do vídeo mas omite a URL", () => {
+    const r = injectSuiteGalleryVideosIfMissing({
+      assistantText: "Esse vídeo mostra a estrutura do resort. Vale cada segundo antes de falarmos de datas.",
+      toolResultStrings: [VIDEO_TOOL],
+      lastUserMessage: "nao",
+    });
+    expect(r).not.toBeNull();
+    expect(r!.fullText).toContain("https://cdn.example/institucional.mp4");
+  });
+
+  it("não injeta vídeo se a URL já estiver na resposta", () => {
+    const r = injectSuiteGalleryVideosIfMissing({
+      assistantText: "Segue o tour.\n\nhttps://cdn.example/institucional.mp4",
+      toolResultStrings: [VIDEO_TOOL],
+      lastUserMessage: "nao",
+    });
+    expect(r).toBeNull();
   });
 });
