@@ -128,6 +128,19 @@ async function callChatAgent(
       let capturedDebug: any[] | undefined;
       let capturedTokenUsage: Record<string, unknown> | undefined;
 
+      const splitAssistantParts = (content: string): string[] => {
+        const parts: string[] = [];
+        let remainder = content;
+        while (remainder.includes(MSG_SPLIT)) {
+          const idx = remainder.indexOf(MSG_SPLIT);
+          const part = remainder.slice(0, idx).trim();
+          if (part) parts.push(part);
+          remainder = remainder.slice(idx + MSG_SPLIT.length);
+        }
+        if (remainder.trim()) parts.push(remainder.trim());
+        return parts;
+      };
+
       const processSseLine = (rawLine: string) => {
         const line = rawLine.trim();
         if (!line.startsWith("data: ")) return;
@@ -145,6 +158,16 @@ async function callChatAgent(
           }
           if (ev.token_usage) {
             capturedTokenUsage = ev.token_usage as Record<string, unknown>;
+            return;
+          }
+          if (typeof ev.repaired_assistant === "string" && ev.repaired_assistant.trim()) {
+            fullContent = ev.repaired_assistant.trim();
+            responseParts.length = 0;
+            currentPart = "";
+            const repairedParts = splitAssistantParts(fullContent);
+            if (repairedParts.length > 0) {
+              responseParts.push(...repairedParts);
+            }
             return;
           }
           const delta = ev.choices?.[0]?.delta?.content;

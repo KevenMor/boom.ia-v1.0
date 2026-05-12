@@ -4,7 +4,8 @@
  */
 
 const MARKDOWN_HTTPS_IMG = /!\[[^\]]*\]\(https?:\/\//i;
-const OMNIBEES_QUOTE_RE = /\bR\$\s*[\d.]|\bTOTAL para \d+ noite/i;
+const OMNIBEES_QUOTE_RE =
+  /\bR\$\s*[\d.]|\bTOTAL para \d+ noite|parcelad|à vista|a vista|dep[oó]sito|pens[aã]o completa/i;
 
 function stripDiacritics(s: string): string {
   return s.normalize("NFD").replace(/\p{M}/gu, "");
@@ -95,11 +96,17 @@ function roomMarkdownPresent(text: string, roomName: string, imageUrl: string): 
   return re.test(text);
 }
 
+function roomMentionedInText(text: string, roomName: string): boolean {
+  const key = normalizeRoomNameKey(roomName);
+  if (!key) return false;
+  return normalizeRoomNameKey(text).includes(key);
+}
+
 function lineLooksLikeRoomQuote(line: string, roomName: string): boolean {
   const normLine = normalizeRoomNameKey(line);
   const normRoom = normalizeRoomNameKey(roomName);
   if (!normLine.includes(normRoom)) return false;
-  return OMNIBEES_QUOTE_RE.test(line) || /à vista|parcelad/i.test(line);
+  return OMNIBEES_QUOTE_RE.test(line) || /à vista|parcelad|dep[oó]sito/i.test(line);
 }
 
 /**
@@ -115,11 +122,16 @@ export function injectOmnibeesQuotePhotosIfMissing(
   const base = (assistantText ?? "").trimEnd();
   if (!base || !assistantDeliversOmnibeesQuote(base)) return null;
 
-  const missing = rooms.filter((room) => !roomMarkdownPresent(base, room.roomName, room.imageUrl));
+  const missing = rooms.filter(
+    (room) =>
+      roomMentionedInText(base, room.roomName) &&
+      !roomMarkdownPresent(base, room.roomName, room.imageUrl)
+  );
   if (missing.length === 0) return null;
 
   const lines = base.split(/\r?\n/);
   const used = new Set<string>();
+  const inserted: string[] = [];
 
   for (const room of missing) {
     const key = normalizeRoomNameKey(room.roomName);
@@ -139,11 +151,12 @@ export function injectOmnibeesQuotePhotosIfMissing(
     }
 
     lines.splice(idx, 0, prefix);
+    inserted.push(prefix);
     used.add(key);
   }
 
   const fullText = lines.join("\n");
-  if (fullText === base) {
+  if (inserted.length === 0) {
     const tail = missing
       .filter((room) => !used.has(normalizeRoomNameKey(room.roomName)))
       .map((room) => buildRoomPhotoMarkdown(room.roomName, room.imageUrl));
@@ -153,7 +166,7 @@ export function injectOmnibeesQuotePhotosIfMissing(
   }
 
   return {
-    appended: fullText.slice(base.length),
+    appended: inserted.map((line) => `\n${line}`).join(""),
     fullText,
   };
 }

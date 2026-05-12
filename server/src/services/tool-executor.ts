@@ -541,6 +541,7 @@ async function executeOmnibeesAvailability(
         nights: data.nights,
         adults: data.adults,
         children: data.children,
+        currency: data.currency,
         rooms: data.rooms,
       },
       coverByRoomName.size > 0 ? coverByRoomName : undefined

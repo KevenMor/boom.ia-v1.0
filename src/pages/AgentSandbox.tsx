@@ -491,6 +491,14 @@ export default function AgentSandbox() {
               continue;
             }
 
+            if (typeof parsed.repaired_assistant === "string" && parsed.repaired_assistant.trim()) {
+              hasAssistantContent = true;
+              streamAccum = parsed.repaired_assistant;
+              applyAccumulatedWithSplit();
+              updateStreamingMessage();
+              continue;
+            }
+
             if (parsed.error) {
               const errMsg = typeof parsed.error === "string" ? parsed.error : JSON.stringify(parsed.error);
               hasAssistantContent = true;

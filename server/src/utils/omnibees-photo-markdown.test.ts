@@ -27,6 +27,19 @@ describe("omnibees-photo-markdown", () => {
 
   it("injeta markdown antes de cada linha de orçamento sem foto", () => {
     const assistantText =
+      "Período de 15 a 18 de maio.\n" +
+      "LOFT:\n" +
+      "* Total à vista/depósito: R$ 8.762,04\n" +
+      "* Parcelado no cartão: R$ 9.735,60 (em até 10x)";
+
+    const result = injectOmnibeesQuotePhotosIfMissing(assistantText, [OMNIBEES_TOOL]);
+    expect(result).not.toBeNull();
+    expect(result!.fullText).toContain("![Foto - LOFT](https://cdn.example/loft.jpg)");
+    expect(result!.fullText.indexOf("![Foto - LOFT]")).toBeLessThan(result!.fullText.indexOf("LOFT:"));
+  });
+
+  it("injeta markdown antes de cada linha de orçamento sem foto (formato TOTAL)", () => {
+    const assistantText =
       "Período de 15 a 17 de maio.\n" +
       "LOFT: TOTAL para 2 noite(s): R$ 6.463,80 (à vista).\n" +
       "Suíte Vip: TOTAL para 2 noite(s): R$ 5.200,00 (à vista).";

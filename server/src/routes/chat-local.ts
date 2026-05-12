@@ -1103,6 +1103,11 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         if (text.startsWith(welcomeImagePrefix)) return text;
         return welcomeImagePrefix + text;
       };
+      const emitRepairedAssistant = (text: string) => {
+        const trimmed = (text || "").trim();
+        if (!trimmed) return;
+        sendSse({ repaired_assistant: trimmed });
+      };
       const applySuiteGalleryRepairs = (
         assistantText: string,
         toolResultStrings: string[],
@@ -1117,7 +1122,6 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         if (galleryInject) {
           console.log("[Chat-Local] Injetando photos_markdown suite_gallery (omissão do modelo)");
           text = galleryInject.fullText;
-          sendSse({ choices: [{ delta: { content: galleryInject.appended } }] });
         }
         const videoInject = injectSuiteGalleryVideosIfMissing({
           assistantText: text,
@@ -1127,13 +1131,11 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         if (videoInject) {
           console.log("[Chat-Local] Injetando vídeo suite_gallery (omissão do modelo)");
           text = videoInject.fullText;
-          sendSse({ choices: [{ delta: { content: videoInject.appended } }] });
         }
         const omnibeesPhotoInject = injectOmnibeesQuotePhotosIfMissing(text, toolResultStrings);
         if (omnibeesPhotoInject) {
           console.log("[Chat-Local] Injetando fotos cover Omnibees no orçamento (omissão do modelo)");
           text = omnibeesPhotoInject.fullText;
-          sendSse({ choices: [{ delta: { content: omnibeesPhotoInject.appended } }] });
         }
         return text;
       };
@@ -1804,6 +1806,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
 
           const rawConvAssist = prependWelcomeToAssistantText((convFullContent || "").trim());
+          emitRepairedAssistant(rawConvAssist);
           const assistantForHistory = sanitizeLLMOutput(rawConvAssist) || rawConvAssist;
           const assistantMetadata = tokenUsagePayload.dispatcher || tokenUsagePayload.conversational
             ? { token_usage: tokenUsagePayload }
@@ -2005,6 +2008,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }
           }
           const rawSingleAssist = prependWelcomeToAssistantText((fullContent || "").trim());
+          emitRepairedAssistant(rawSingleAssist);
           const assistantForHistory = sanitizeLLMOutput(rawSingleAssist) || rawSingleAssist;
           const assistantMetadata =
             singleProviderUsageAccum.total_tokens > 0
@@ -2152,6 +2156,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
         let finalAssistantRaw = applySuiteGalleryRepairs(fullContent, toolStrsLoop, lastUserGI);
         emitMediaCommandsSseIfNeeded(sendSse, finalAssistantRaw);
         const rawLoopAssist = prependWelcomeToAssistantText((finalAssistantRaw || "").trim());
+        emitRepairedAssistant(rawLoopAssist);
         const assistantForHistory = sanitizeLLMOutput(rawLoopAssist) || rawLoopAssist;
         const assistantMetadata =
           singleProviderUsageAccum.total_tokens > 0
