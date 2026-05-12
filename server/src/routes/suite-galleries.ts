@@ -15,6 +15,7 @@ interface SuiteGalleryBody {
   cover_image_url?: string | null;
   media_urls?: unknown;
   display_order?: number;
+  omnibees_room?: string[] | null;
 }
 
 function parseMediaUrls(raw: unknown): object[] {
@@ -66,6 +67,24 @@ function isSuiteGalleryMediaRow(row: unknown): row is Record<string, unknown> {
   if (!row || typeof row !== "object") return false;
   const r = row as Record<string, unknown>;
   return typeof r.url === "string" && (r.type === "photo" || r.type === "video");
+}
+
+/** Sanitiza array de nomes Omnibees: trim, deduplicar case-insensitive, max 10 itens. */
+function sanitizeOmnibeesRoom(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const trimmed = item.trim();
+    if (!trimmed) continue;
+    const lower = trimmed.toLowerCase();
+    if (seen.has(lower)) continue;
+    seen.add(lower);
+    result.push(trimmed);
+    if (result.length >= 10) break;
+  }
+  return result;
 }
 
 export async function suiteGalleriesRoutes(fastify: FastifyInstance) {
@@ -146,6 +165,7 @@ export async function suiteGalleriesRoutes(fastify: FastifyInstance) {
         body.cover_image_url !== undefined ? body.cover_image_url : firstPhotoUrlFromMedia(parsedMedia) ?? null,
       media_urls: parsedMedia,
       display_order: body.display_order ?? 0,
+      omnibees_room: body.omnibees_room !== undefined ? sanitizeOmnibeesRoom(body.omnibees_room) : [],
     };
 
     const { data, error } = await supabase
@@ -196,6 +216,7 @@ export async function suiteGalleriesRoutes(fastify: FastifyInstance) {
       updates.cover_image_url = body.cover_image_url;
     }
     if (body.display_order !== undefined) updates.display_order = body.display_order;
+    if (body.omnibees_room !== undefined) updates.omnibees_room = sanitizeOmnibeesRoom(body.omnibees_room);
 
     const { data, error } = await supabase
       .from("suite_galleries")
