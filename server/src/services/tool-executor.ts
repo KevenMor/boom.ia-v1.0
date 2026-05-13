@@ -1321,22 +1321,13 @@ async function executeMarcarLead(
         .single();
       cwConvId = convRow?.chatwoot_conversation_id != null ? Number(convRow.chatwoot_conversation_id) : null;
     }
-    if (cwConvId == null) {
-      const { data: cwConvRows } = await supabase
-        .from("conversations")
-        .select("chatwoot_conversation_id")
-        .eq("agent_id", agentId)
-        .not("chatwoot_conversation_id", "is", null)
-        .order("started_at", { ascending: false })
-        .limit(1);
-      cwConvId = cwConvRows?.[0]?.chatwoot_conversation_id != null ? Number(cwConvRows[0].chatwoot_conversation_id) : null;
-    }
 
     if (cwConvId == null) {
       return {
         success: false,
         result: null,
-        error: "chatwoot_conversation_id ├® obrigat├│rio. A conversa precisa estar vinculada ao Chatwoot.",
+        error:
+          "Esta conversa não está vinculada ao Chatwoot (sem chatwoot_conversation_id). Etiquetar lead no Chatwoot só funciona quando o atendimento vem pela inbox do Chatwoot (ex.: WhatsApp integrado). Em teste no painel ou em canal sem essa integração, não é possível aplicar a etiqueta automaticamente — oriente o cliente com empatia e siga o fluxo manual na inbox, se aplicável.",
       };
     }
 
@@ -1461,22 +1452,13 @@ async function executeChatwootAssign(
         .single();
       cwConvId = convRow?.chatwoot_conversation_id != null ? Number(convRow.chatwoot_conversation_id) : null;
     }
-    if (cwConvId == null) {
-      const { data: cwConvRows } = await supabase
-        .from("conversations")
-        .select("chatwoot_conversation_id")
-        .eq("agent_id", agentId)
-        .not("chatwoot_conversation_id", "is", null)
-        .order("started_at", { ascending: false })
-        .limit(1);
-      cwConvId = cwConvRows?.[0]?.chatwoot_conversation_id != null ? Number(cwConvRows[0].chatwoot_conversation_id) : null;
-    }
 
     if (cwConvId == null) {
       return {
         success: false,
         result: null,
-        error: "chatwoot_conversation_id ├® obrigat├│rio. A conversa precisa estar vinculada ao Chatwoot.",
+        error:
+          "Esta conversa não está vinculada ao Chatwoot (sem chatwoot_conversation_id). A atribuição de time no Chatwoot só funciona quando o atendimento vem pela inbox do Chatwoot (ex.: WhatsApp integrado). Em teste no painel ou em canal sem essa integração, não é possível transferir automaticamente — oriente o cliente que a equipe dará continuidade pelo canal habitual ou peça para falar pelo WhatsApp oficial.",
       };
     }
 

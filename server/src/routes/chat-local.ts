@@ -13,6 +13,28 @@ import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification,
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 const MAX_TOOL_ITERATIONS = 5;
 
+/**
+ * O dispatcher costuma chamar `atribuir_time` / marcar lead só com `reason`.
+ * Repassa conversation_id e chatwoot_conversation_id do POST /chat-local para o tool-executor.
+ */
+function injectChatwootToolContext(
+  tool: ToolDef,
+  args: Record<string, unknown>,
+  conversationId: string | null | undefined,
+  chatwootConversationId: number | null | undefined
+): Record<string, unknown> {
+  const t = tool.tool_type;
+  if (t !== "chatwoot_assign" && t !== "marcar_lead") return args;
+  const next = { ...args };
+  if (conversationId && next.conversation_id == null) {
+    next.conversation_id = conversationId;
+  }
+  if (chatwootConversationId != null && next.chatwoot_conversation_id == null) {
+    next.chatwoot_conversation_id = chatwootConversationId;
+  }
+  return next;
+}
+
 /** Quando modelos Gemini 2.5 / *-lite devolvem 503 (alta demanda na API), tentar este modelo na mesma chave. */
 const GEMINI_CONVERSATIONAL_FALLBACK_MODEL = "gemini-2.0-flash";
 
@@ -1449,9 +1471,10 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   }
                 }
 
-                console.log("[Chat-Local] Executando tool:", tc.function.name, "| args:", JSON.stringify(args));
-                debugEntries.push({ type: "tool_call", tool: tc.function.name, args, tool_type: "function" });
-                const result = await executeTool(tool, args, agent_id);
+                const argsForExec = injectChatwootToolContext(tool, args, responseConvId, chatwoot_conversation_id);
+                console.log("[Chat-Local] Executando tool:", tc.function.name, "| args:", JSON.stringify(argsForExec));
+                debugEntries.push({ type: "tool_call", tool: tc.function.name, args: argsForExec, tool_type: "function" });
+                const result = await executeTool(tool, argsForExec, agent_id);
                 const resultPreview = result.success
                   ? (typeof result.result === "object" ? JSON.stringify(result.result).slice(0, 200) : String(result.result).slice(0, 200))
                   : result.error;
@@ -2112,8 +2135,9 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }
           }
 
-          console.log("[Chat-Local] Executando tool (single-provider):", tc.function.name, "| args:", JSON.stringify(args));
-          const result = await executeTool(tool, args, agent_id);
+          const argsForExecSp = injectChatwootToolContext(tool, args, responseConvId, chatwoot_conversation_id);
+          console.log("[Chat-Local] Executando tool (single-provider):", tc.function.name, "| args:", JSON.stringify(argsForExecSp));
+          const result = await executeTool(tool, argsForExecSp, agent_id);
           const resultPreview = result.success
             ? (typeof result.result === "object" ? JSON.stringify(result.result).slice(0, 200) : String(result.result).slice(0, 200))
             : result.error;

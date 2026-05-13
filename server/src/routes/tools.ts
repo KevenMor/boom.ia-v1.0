@@ -354,7 +354,6 @@ export async function toolsRoutes(fastify: FastifyInstance) {
         }
 
         case "chatwoot_assign": {
-          const conversationId = args?.conversation_id;
           const reason = String(args?.reason || "escalation");
 
           const execCfg = (tool.execution_config || {}) as Record<string, any>;
@@ -427,20 +426,35 @@ export async function toolsRoutes(fastify: FastifyInstance) {
             break;
           }
 
-          let cwConvId = conversationId;
-          if (!cwConvId) {
-            const { data: cwConvRows } = await supabase
-              .from("conversations")
-              .select("chatwoot_conversation_id")
-              .eq("agent_id", agentId)
-              .not("chatwoot_conversation_id", "is", null)
-              .order("started_at", { ascending: false })
-              .limit(1);
-            cwConvId = cwConvRows?.[0]?.chatwoot_conversation_id;
+          let cwConvId: number | null = null;
+          if (args?.chatwoot_conversation_id != null) {
+            const n = Number(args.chatwoot_conversation_id);
+            cwConvId = Number.isFinite(n) ? n : null;
+          }
+          if (cwConvId == null && args?.conversation_id != null) {
+            const raw = args.conversation_id;
+            const rawStr = String(raw).trim();
+            // UUID da conversa no Nexus → buscar chatwoot_conversation_id na linha
+            if (rawStr.includes("-") && rawStr.length >= 32) {
+              const { data: convRow } = await supabase
+                .from("conversations")
+                .select("chatwoot_conversation_id")
+                .eq("agent_id", agentId)
+                .eq("id", rawStr)
+                .maybeSingle();
+              cwConvId =
+                convRow?.chatwoot_conversation_id != null ? Number(convRow.chatwoot_conversation_id) : null;
+            } else if (/^\d+$/.test(rawStr)) {
+              // Retrocompat: só dígitos em conversation_id = ID da conversa no Chatwoot
+              cwConvId = Number(rawStr);
+            }
           }
 
-          if (!cwConvId) {
-            result = { error: "conversation_id é obrigatório" };
+          if (cwConvId == null) {
+            result = {
+              error:
+                "Informe chatwoot_conversation_id (número da conversa no Chatwoot) ou conversation_id com o UUID da conversa no Nexus (para resolver o vínculo).",
+            };
             break;
           }
 

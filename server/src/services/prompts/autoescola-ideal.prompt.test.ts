@@ -20,7 +20,14 @@ describe("Autoescola Ideal — SYSTEM_PROMPT (contratos de negócio)", () => {
   });
 
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v8\.8/);
+    expect(SYSTEM_PROMPT).toMatch(/v8\.11/);
+  });
+
+  it("adição de categoria: médico obrigatório; teórico e psicotécnico não necessários", () => {
+    expect(SYSTEM_PROMPT).toMatch(/adi[cç][aã]o de categoria/i);
+    expect(SYSTEM_PROMPT).toMatch(/exame m[eé]dico.*OBRIGAT[ÓO]RIO|m[eé]dico.*obrigat[óo]rio/i);
+    expect(SYSTEM_PROMPT).toMatch(/te[óo]rico.*N[AÃ]O|N[AÃ]O.*te[óo]rico/i);
+    expect(SYSTEM_PROMPT).toMatch(/psicot[eé]cnico.*N[AÃ]O|N[AÃ]O.*necess[aá]r/i);
   });
 
   it("define carro só manual (sem automático) em frota, qualificação e resumo", () => {
