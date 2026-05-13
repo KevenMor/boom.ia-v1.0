@@ -175,7 +175,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: ST_DISPATCHER,
     followupPrompt: ST_FOLLOWUP,
     alwaysInjectCommRules: true,
-    version: "v1.0.0",
+    version: "v1.3.1",
     description: "Julia — Consultora de reservas Sunset Thermas Park",
   },
   "sunset-thermas": {
@@ -184,7 +184,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: ST_DISPATCHER,
     followupPrompt: ST_FOLLOWUP,
     alwaysInjectCommRules: true,
-    version: "v1.0.0",
+    version: "v1.3.1",
     description: "Julia — Consultora de reservas Sunset Thermas Park",
   },
   /** Slugs alinhados ao cabeçalho de durce-vita.ts */
