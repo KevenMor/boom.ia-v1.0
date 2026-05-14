@@ -71,6 +71,12 @@ import {
   DISPATCHER_PROMPT as DI_DISPATCHER,
   FOLLOWUP_PROMPT as DI_FOLLOWUP,
 } from "./dr-iuri.js";
+import {
+  SYSTEM_PROMPT as BZ_SYSTEM,
+  COMMUNICATION_RULES as BZ_COMM_RULES,
+  DISPATCHER_PROMPT as BZ_DISPATCHER,
+  FOLLOWUP_PROMPT as BZ_FOLLOWUP,
+} from "./biazini.js";
 
 /**
  * Configura?�?�o de prompt por tenant.
@@ -175,7 +181,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: ST_DISPATCHER,
     followupPrompt: ST_FOLLOWUP,
     alwaysInjectCommRules: true,
-    version: "v1.3.1",
+    version: "v1.4.0",
     description: "Julia — Consultora de reservas Sunset Thermas Park",
   },
   "sunset-thermas": {
@@ -184,7 +190,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: ST_DISPATCHER,
     followupPrompt: ST_FOLLOWUP,
     alwaysInjectCommRules: true,
-    version: "v1.3.1",
+    version: "v1.4.0",
     description: "Julia — Consultora de reservas Sunset Thermas Park",
   },
   /** Slugs alinhados ao cabeçalho de durce-vita.ts */
@@ -286,6 +292,15 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     alwaysInjectCommRules: true,
     version: "v1.0",
     description: "Camila — Assistente Dr. Iuri (Otomodelação Salvador/BA)",
+  },
+  "biazini": {
+    systemPrompt: BZ_SYSTEM,
+    communicationRules: BZ_COMM_RULES,
+    dispatcherPrompt: BZ_DISPATCHER,
+    followupPrompt: BZ_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    version: "v1.0.0",
+    description: "Bia — Secretária Equipe Dr. Biazini (Atendimento Veterinário Domiciliar)",
   },
 };
 

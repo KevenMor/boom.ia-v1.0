@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { COMMUNICATION_RULES, SYSTEM_PROMPT } from "./sunset-thermas.js";
+import { COMMUNICATION_RULES, DISPATCHER_PROMPT, SYSTEM_PROMPT } from "./sunset-thermas.js";
 
 describe("Sunset Thermas Park — SYSTEM_PROMPT (contratos de negócio)", () => {
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.3\.1/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.4\.0/);
   });
 
   it("mantém regra suprema de valores e vaga (tolerância zero)", () => {
@@ -209,5 +209,110 @@ describe("Sunset Thermas Park — COMMUNICATION_RULES (regras de WhatsApp)", () 
     expect(COMMUNICATION_RULES).toMatch(/Calend[aá]rio do parque[^.\n]*interno/i);
     expect(COMMUNICATION_RULES).toMatch(/N[aã]o envie[^\n]*index\.php|N[aã]o[^\n]*link[^\n]*cliente|N[aã]o pe[cç]a[^\n]*olhada no funcionamento/i);
     expect(COMMUNICATION_RULES).toMatch(/fonte registrada/i);
+  });
+});
+
+describe("Sunset Thermas Park — §00e TOOL DE HOSPEDAGEM (v1.4.0 — fonte primária)", () => {
+  it("declara a seção 00e com a tool consultar_hospedagem_sunset como fonte primária", () => {
+    expect(SYSTEM_PROMPT).toMatch(/00e\)/);
+    expect(SYSTEM_PROMPT).toMatch(/consultar_hospedagem_sunset/);
+    expect(SYSTEM_PROMPT).toMatch(/FONTE PRIM[AÁ]RIA|fonte primária/i);
+  });
+
+  it("documenta os 3 retornos possíveis da tool (success / park_closed / erro)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/status:\s*"success"/i);
+    expect(SYSTEM_PROMPT).toMatch(/status:\s*"park_closed"/i);
+    expect(SYSTEM_PROMPT).toMatch(/Erro\s*\/\s*m[oó]dulo desabilitado|sem tarifa para a combina[cç][aã]o/i);
+  });
+
+  it("ensina a converter datas de dd/mm/aaaa para YYYY-MM-DD antes de chamar a tool", () => {
+    expect(SYSTEM_PROMPT).toMatch(/YYYY-MM-DD/);
+    expect(SYSTEM_PROMPT).toMatch(/16\/05\/2026.*2026-05-16|dd\/mm\/aaaa.*YYYY-MM-DD/i);
+  });
+
+  it("documenta o array guests com type adult e child+age", () => {
+    expect(SYSTEM_PROMPT).toMatch(/"type":\s*"adult"/);
+    expect(SYSTEM_PROMPT).toMatch(/"type":\s*"child"[^\n]*"age"/);
+  });
+
+  it("explica que a tool cuida da cortesia de crianças (regra oficial pode diferir da intuição)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/soma das idades.*crian[cç]as.*≤\s*12|todas[^\n]*cortesia/i);
+    expect(SYSTEM_PROMPT).toMatch(/n[aã]o.*calcule pagantes na m[aã]o|n[aã]o precisa calcular pagantes/i);
+  });
+
+  it("manda chamar a tool silenciosamente no Turno 1 quando a §00d traz todos os dados", () => {
+    expect(SYSTEM_PROMPT).toMatch(/silenciosamente no Turno 1|chamada.*silenciosa/i);
+    expect(SYSTEM_PROMPT).toMatch(/N[aã]o diga[^\n]*"vou consultar nosso sistema"|sem fazer roleplay|n[aã]o[^\n]*roleplay/i);
+  });
+
+  it("proíbe expor IDs, JSON ou nomes de campos da resposta da tool ao cliente", () => {
+    expect(SYSTEM_PROMPT).toMatch(/N[aã]o[^\n]*mostre[^\n]*IDs?|N[aã]o[^\n]*JSON|n[aã]o[^\n]*nomes de campos/i);
+  });
+
+  it("proíbe ignorar park_closed e proíbe check_in == check_out (mínimo 1 noite)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/N[aã]o[^\n]*ignore[^\n]*park_closed|se a tool disse fechado.*[eé] fechado/i);
+    expect(SYSTEM_PROMPT).toMatch(/check_in\s*==\s*check_out|m[ií]nimo 1 noite/i);
+  });
+});
+
+describe("Sunset Thermas Park — Tabela do §2 como FALLBACK (v1.4.0)", () => {
+  it("rotula a tabela do §2 como FALLBACK explícito (só usar quando a tool falhar)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/FALLBACK[^\n]*tool da §00e|FALLBACK[^\n]*tool[^\n]*indispon[ií]vel|tabela[^\n]*fallback/i);
+  });
+
+  it("Turno 3 separa caminho feliz (tool success) de caminho fallback (tool erro/ausente)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/caminho feliz[^\n]*tool retornou success|tool retornou success/i);
+    expect(SYSTEM_PROMPT).toMatch(/tool n[aã]o foi chamada[^\n]*ou retornou erro|fallback da tabela §2|fallback[^\n]*tabela §2/i);
+  });
+
+  it("Turno 3 inclui park_closed no roteamento de exceção (encaminha humano + oferece suggestions)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/park_closed/);
+    expect(SYSTEM_PROMPT).toMatch(/suggestions/);
+  });
+
+  it("§00a cita a tool como fonte canônica do park_closed (calendário)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/00a\)/);
+    expect(SYSTEM_PROMPT).toMatch(/consultar_hospedagem_sunset/);
+    expect(SYSTEM_PROMPT).toMatch(/lodging_park_days|sinal[^\n]*autoritativ/i);
+  });
+});
+
+describe("Sunset Thermas Park — DISPATCHER_PROMPT (v1.4.0)", () => {
+  it("rota a tool consultar_hospedagem_sunset (não só suite_gallery_query)", () => {
+    expect(DISPATCHER_PROMPT).toMatch(/consultar_hospedagem_sunset/);
+    expect(DISPATCHER_PROMPT).toMatch(/suite_gallery_query/);
+  });
+
+  it("documenta gatilhos de preço/disponibilidade que disparam a tool", () => {
+    expect(DISPATCHER_PROMPT).toMatch(/valor|pre[cç]o|quanto custa|tarifa|pacote/i);
+    expect(DISPATCHER_PROMPT).toMatch(/disponibilidade|tem vaga|est[aá] aberto/i);
+  });
+
+  it("manda chamar a tool imediatamente quando recebe a mensagem padrão do site", () => {
+    expect(DISPATCHER_PROMPT).toMatch(/standard form|mensagem padr[aã]o do site|"Gostaria de verificar disponibilidade"/i);
+    expect(DISPATCHER_PROMPT).toMatch(/immediately|silently|first dispatcher turn/i);
+  });
+
+  it("documenta YYYY-MM-DD e conversão de dd/mm/aaaa", () => {
+    expect(DISPATCHER_PROMPT).toMatch(/YYYY-MM-DD/);
+    expect(DISPATCHER_PROMPT).toMatch(/16\/05\/2026.*2026-05-16|dd\/mm\/aaaa/i);
+  });
+
+  it("documenta o array guests com adult e child+age", () => {
+    expect(DISPATCHER_PROMPT).toMatch(/"type":\s*"adult"/);
+    expect(DISPATCHER_PROMPT).toMatch(/"type":\s*"child"[^\n]*"age"/);
+  });
+
+  it("NÃO chama a tool quando faltam datas concretas (só intenção genérica)", () => {
+    expect(DISPATCHER_PROMPT).toMatch(/has not provided concrete check-in.*check-out|n[aã]o.*datas concretas/i);
+  });
+
+  it("permite chamada paralela quando o cliente pede valor + foto na mesma mensagem", () => {
+    expect(DISPATCHER_PROMPT).toMatch(/Parallel calls|simultaneously|both tools in the same turn/i);
+  });
+
+  it("mantém NO_TOOLS_NEEDED para small talk e proíbe gerar texto conversacional", () => {
+    expect(DISPATCHER_PROMPT).toMatch(/NO_TOOLS_NEEDED/);
+    expect(DISPATCHER_PROMPT).toMatch(/NEVER generate conversational text/i);
   });
 });
