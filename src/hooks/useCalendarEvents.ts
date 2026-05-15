@@ -6,6 +6,10 @@ export function useCalendarEvents(tenantId: string | undefined, calendarIds: str
   return useQuery({
     queryKey: ["calendar-events", tenantId, calendarIds],
     enabled: !!tenantId && calendarIds.length > 0,
+    /** Eventos podem ser criados pela IA / webhooks fora do painel — não segurar cache 10min do app. */
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("calendar_events")

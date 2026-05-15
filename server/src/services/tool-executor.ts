@@ -670,14 +670,28 @@ async function executeCalendarQuery(
       const daysAhead = (calendarArgs.days_ahead as number) || 3;
       const slotDuration = (calendarArgs.slot_duration_minutes as number) || 60;
 
-      const { data: calendars, error: calErr } = await supabase
+      // Alinhar ao painel (CalendarPage): "Todas as agendas" só inclui is_active=true
+      let { data: calendars, error: calErr } = await supabase
         .from("calendars")
         .select("*")
         .eq("tenant_id", tenantId)
-        .limit(10);
-
+        .eq("is_active", true)
+        .order("name", { ascending: true })
+        .limit(20);
       if (calErr) {
         return { success: false, result: null, error: calErr.message };
+      }
+      if (!calendars?.length) {
+        const { data: anyCals, error: anyErr } = await supabase
+          .from("calendars")
+          .select("*")
+          .eq("tenant_id", tenantId)
+          .order("name", { ascending: true })
+          .limit(20);
+        if (anyErr) {
+          return { success: false, result: null, error: anyErr.message };
+        }
+        calendars = anyCals ?? [];
       }
       if (!calendars || calendars.length === 0) {
         return {
@@ -805,11 +819,23 @@ async function executeCalendarQuery(
         durationMin = svcMatch?.duration_minutes || 60;
       }
 
-      const { data: cals } = await supabase
+      // Mesma regra do check_availability: preferir agenda ativa (visível em "Todas" no painel)
+      let { data: cals } = await supabase
         .from("calendars")
         .select("id")
         .eq("tenant_id", calendarArgs.tenant_id)
+        .eq("is_active", true)
+        .order("name", { ascending: true })
         .limit(1);
+      if (!cals?.length) {
+        const { data: fallback } = await supabase
+          .from("calendars")
+          .select("id")
+          .eq("tenant_id", calendarArgs.tenant_id)
+          .order("name", { ascending: true })
+          .limit(1);
+        cals = fallback ?? [];
+      }
 
       const calendarId = (calendarArgs.calendar_id as string) || cals?.[0]?.id;
       if (!calendarId) {

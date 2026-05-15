@@ -299,7 +299,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: BZ_DISPATCHER,
     followupPrompt: BZ_FOLLOWUP,
     alwaysInjectCommRules: true,
-    version: "v1.0.0",
+    version: "v1.0.1",
     description: "Bia — Secretária Equipe Dr. Biazini (Atendimento Veterinário Domiciliar)",
   },
 };

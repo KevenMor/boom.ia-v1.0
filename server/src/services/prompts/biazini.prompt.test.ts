@@ -71,9 +71,10 @@ describe("Biazini — SYSTEM_PROMPT (contratos de negócio)", () => {
     expect(SYSTEM_PROMPT).toMatch(/anotado|Que nome lindo/i);
   });
 
-  it("integra calendário com tool calling (busca e criação)", () => {
+  it("integra calendário com consultar_agenda (check_availability e criar)", () => {
     expect(SYSTEM_PROMPT).toMatch(/INTEGRACAO DE CALENDARIO|PASSO 5A.*BUSCA|PASSO 5B.*CRIAR/i);
-    expect(SYSTEM_PROMPT).toMatch(/busca_disponibilidade_calendario|criar_evento_calendario/i);
+    expect(SYSTEM_PROMPT).toMatch(/consultar_agenda/i);
+    expect(SYSTEM_PROMPT).toMatch(/check_availability|action.*criar/i);
     expect(SYSTEM_PROMPT).toMatch(/Tenho um horário livre.*10h|ofereça 2 opcoes REAIS/i);
   });
 
@@ -96,7 +97,7 @@ describe("Biazini — SYSTEM_PROMPT (contratos de negócio)", () => {
   });
 
   it("versão do prompt registrada", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.0\.0/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.0\.1/);
   });
 });
 
@@ -124,15 +125,17 @@ describe("Biazini — COMMUNICATION_RULES (tom e estilo)", () => {
 });
 
 describe("Biazini — DISPATCHER_PROMPT (decisão de tools)", () => {
-  it("menciona ferramentas de calendário (busca e criação)", () => {
-    expect(DISPATCHER_PROMPT).toMatch(/busca_disponibilidade_calendario|criar_evento_calendario/i);
+  it("menciona consultar_agenda (check_availability e criar)", () => {
+    expect(DISPATCHER_PROMPT).toMatch(/consultar_agenda/i);
+    expect(DISPATCHER_PROMPT).toMatch(/check_availability|action=criar/i);
   });
 
-  it("aciona busca_disponibilidade_calendario quando cliente menciona dia/turno", () => {
+  it("aciona consultar_agenda check_availability quando cliente menciona dia/turno (após endereço)", () => {
     expect(DISPATCHER_PROMPT).toMatch(/CALENDAR TOOL DETECTION|próxima segunda|terça|quarta|quinta|sexta|sábado|manhã|tarde/i);
+    expect(DISPATCHER_PROMPT).toMatch(/address|endereco|neighborhood/i);
   });
 
-  it("aciona criar_evento_calendario após confirmação final", () => {
+  it("aciona consultar_agenda criar após confirmação final", () => {
     expect(DISPATCHER_PROMPT).toMatch(/CALENDAR EVENT CREATION|pode ser|perfeito|ok|tá bom|confirma|EXPLICIT confirmation/i);
   });
 
@@ -153,7 +156,9 @@ describe("Biazini — DISPATCHER_PROMPT (decisão de tools)", () => {
   });
 
   it("nunca chama ferramentas antes de address confirmado", () => {
-    expect(DISPATCHER_PROMPT).toMatch(/NEVER call.*before address is confirmed|NEVER call during triaging/i);
+    expect(DISPATCHER_PROMPT).toMatch(
+      /NEVER call check_availability before address is known|Do NOT call calendar tools until neighborhood/i
+    );
   });
 });
 
