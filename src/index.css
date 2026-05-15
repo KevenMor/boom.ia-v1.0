@@ -4,122 +4,107 @@
 
 @layer base {
   :root {
-    --background: 210 20% 98%;
-    --foreground: 215 28% 17%;
+    --background: 0 0% 98%;
+    --foreground: 0 0% 4%;
 
     --card: 0 0% 100%;
-    --card-foreground: 215 28% 17%;
+    --card-foreground: 0 0% 4%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 215 28% 17%;
+    --popover-foreground: 0 0% 4%;
 
-    --primary: 174 99% 32%;
+    --primary: 178 91% 36%;
     --primary-foreground: 0 0% 100%;
 
-    --primary-tint1: 296 68% 61%;
-    --primary-tint2: 340 100% 68%;
-    --primary-tint3: 16 100% 72%;
+    --secondary: 0 0% 93%;
+    --secondary-foreground: 0 0% 20%;
 
-    --secondary: 268 90% 66%;
-    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 42%;
 
-    --muted: 220 20% 96%;
-    --muted-foreground: 218 15% 50%;
+    --accent: 178 91% 36%;
+    --accent-foreground: 0 0% 100%;
 
-    --accent: 236 80% 95%;
-    --accent-foreground: 236 80% 40%;
-
-    --destructive: 0 84% 62%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 162 72% 47%;
+    --success: 142 71% 45%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 40 100% 67%;
-    --warning-foreground: 30 60% 20%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 10%;
 
-    --info: 199 89% 48%;
+    --info: 217 91% 60%;
     --info-foreground: 0 0% 100%;
 
-    --amber: 40 96% 53%;
-    --amber-foreground: 30 60% 20%;
+    --border: 0 0% 90%;
+    --input: 0 0% 88%;
+    --ring: 178 91% 36%;
 
-    --border: 216 30% 93%;
-    --input: 214 32% 91%;
-    --ring: 174 99% 32%;
+    --radius: 5px;
 
-    --radius: 0.5rem;
-
-    --sidebar-background: 222 47% 12%;
-    --sidebar-foreground: 220 20% 72%;
-    --sidebar-primary: 174 99% 42%;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 0 0% 42%;
+    --sidebar-primary: 18 100% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 40% 18%;
-    --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 222 40% 16%;
-    --sidebar-ring: 174 99% 42%;
+    --sidebar-accent: 0 0% 95%;
+    --sidebar-accent-foreground: 0 0% 4%;
+    --sidebar-border: 0 0% 90%;
+    --sidebar-ring: 18 100% 50%;
 
-    /* Corpo = mock Stitch: Plus Jakarta Sans + ~15px / peso médio (body-md) */
-    font-family: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
-    font-size: 15px;
-    font-weight: 500;
+    font-family: "Inter", system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    font-weight: 400;
   }
 
   .dark {
-    --background: 222 25% 8%;
-    --foreground: 220 20% 93%;
+    --background: 0 0% 4%;
+    --foreground: 0 0% 96%;
 
-    --card: 222 22% 11%;
-    --card-foreground: 220 20% 93%;
+    --card: 240 4% 7%;
+    --card-foreground: 0 0% 96%;
 
-    --popover: 222 22% 13%;
-    --popover-foreground: 220 20% 93%;
+    --popover: 240 4% 7%;
+    --popover-foreground: 0 0% 96%;
 
-    --primary: 174 80% 40%;
+    --primary: 178 91% 36%;
     --primary-foreground: 0 0% 100%;
 
-    --primary-tint1: 296 68% 61%;
-    --primary-tint2: 340 100% 68%;
-    --primary-tint3: 16 100% 72%;
+    --secondary: 240 3% 12%;
+    --secondary-foreground: 0 0% 80%;
 
-    --secondary: 268 90% 66%;
-    --secondary-foreground: 0 0% 100%;
+    --muted: 240 3% 11%;
+    --muted-foreground: 0 0% 45%;
 
-    --muted: 222 18% 16%;
-    --muted-foreground: 218 12% 50%;
+    --accent: 178 91% 36%;
+    --accent-foreground: 0 0% 100%;
 
-    --accent: 222 18% 16%;
-    --accent-foreground: 220 20% 93%;
-
-    --destructive: 0 84% 62%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 162 72% 47%;
+    --success: 142 71% 45%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 40 100% 67%;
-    --warning-foreground: 30 60% 20%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 10%;
 
-    --info: 199 89% 48%;
+    --info: 217 91% 60%;
     --info-foreground: 0 0% 100%;
 
-    --amber: 40 96% 53%;
-    --amber-foreground: 30 60% 20%;
+    --border: 240 4% 13%;
+    --input: 240 4% 14%;
+    --ring: 178 91% 36%;
 
-    --border: 222 18% 16%;
-    --input: 222 18% 18%;
-    --ring: 174 80% 40%;
+    --radius: 5px;
 
-    --radius: 0.5rem;
-
-    --sidebar-background: 222 45% 5%;
-    --sidebar-foreground: 218 12% 55%;
-    --sidebar-primary: 174 80% 45%;
+    --sidebar-background: 0 0% 4%;
+    --sidebar-foreground: 0 0% 45%;
+    --sidebar-primary: 18 100% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 35% 10%;
-    --sidebar-accent-foreground: 220 20% 93%;
-    --sidebar-border: 222 35% 8%;
-    --sidebar-ring: 174 80% 40%;
+    --sidebar-accent: 240 3% 11%;
+    --sidebar-accent-foreground: 0 0% 96%;
+    --sidebar-border: 240 4% 13%;
+    --sidebar-ring: 18 100% 50%;
   }
 }
 
@@ -129,36 +114,9 @@
   }
 
   body {
-    @apply bg-background text-foreground antialiased font-sans text-body-md;
+    @apply bg-background text-foreground antialiased font-sans;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    position: relative;
-  }
-
-  body > #root {
-    position: relative;
-    z-index: 1;
-  }
-
-  /* Material Symbols — intervalo de peso como no HTML de referência */
-  .material-symbols-outlined {
-    font-family: "Material Symbols Outlined", system-ui, sans-serif;
-    font-weight: normal;
-    font-style: normal;
-    font-size: 1.5rem;
-    line-height: 1;
-    letter-spacing: normal;
-    text-transform: none;
-    display: inline-block;
-    white-space: nowrap;
-    word-wrap: normal;
-    direction: ltr;
-    -webkit-font-smoothing: antialiased;
-    font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
-  }
-
-  code, pre, .font-mono {
-    font-family: 'Sora', 'DM Sans', system-ui, sans-serif;
   }
 
   ::-webkit-scrollbar {
@@ -177,36 +135,7 @@
   }
 }
 
-/* Mesh gradient animation for hero card */
-@keyframes mesh-shift {
-  0%, 100% {
-    background-position: 0% 50%;
-  }
-  25% {
-    background-position: 100% 0%;
-  }
-  50% {
-    background-position: 100% 100%;
-  }
-  75% {
-    background-position: 0% 100%;
-  }
-}
-
-.mesh-gradient {
-  background: linear-gradient(
-    -45deg,
-    hsl(var(--primary)),
-    hsl(var(--primary-tint1)),
-    hsl(var(--secondary)),
-    hsl(var(--primary-tint2))
-  );
-  background-size: 400% 400%;
-  animation: mesh-shift 12s ease infinite;
-}
-
 @layer utilities {
-  /* Hide scrollbar but keep scroll functionality */
   .scrollbar-none {
     -ms-overflow-style: none;
     scrollbar-width: none;
@@ -215,447 +144,23 @@
     display: none;
   }
 
-  /* Box card — clean Xintra style */
   .box {
-    @apply bg-card border border-border shadow-[0_1px_3px_rgba(0,0,0,0.04)] mb-0;
-    border-radius: 0.75rem;
+    @apply rounded-lg border border-border bg-card;
   }
   .box-header {
-    @apply flex items-center px-5 py-3.5 border-b border-border/50;
+    @apply flex items-center px-5 py-3 border-b border-border;
   }
   .box-title {
-    @apply text-[0.9375rem] font-semibold text-foreground;
+    @apply text-sm font-medium text-foreground;
   }
   .box-body {
     @apply p-5;
   }
   .box-footer {
-    @apply px-5 py-3 border-t border-border/50;
+    @apply px-5 py-3 border-t border-border;
   }
 
-  /* Legacy dash-card */
-  .dash-card {
-    @apply box p-6 relative overflow-hidden;
-  }
-
-  /* Accent left bar */
-  .accent-bar {
-    @apply absolute left-0 top-3 bottom-3 w-[3px] rounded-full;
-  }
-
-  /* Métricas — mesma família do shell Stitch */
   .metric-value {
-    font-family: "Plus Jakarta Sans", system-ui, sans-serif;
-    letter-spacing: -0.01em;
     font-variant-numeric: tabular-nums;
-  }
-
-  /* Título legacy — Jakarta em vez de Poppins para não “duas personalidades” */
-  .heading-serif {
-    font-family: "Plus Jakarta Sans", system-ui, sans-serif;
-  }
-
-  /* Trend pill — translucent colored background */
-  .trend-pill {
-    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
-  }
-  .trend-pill-positive {
-    @apply trend-pill;
-    background: hsl(var(--success) / 0.15);
-    color: hsl(var(--success));
-  }
-  .trend-pill-negative {
-    @apply trend-pill;
-    background: hsl(var(--destructive) / 0.15);
-    color: hsl(var(--destructive));
-  }
-  .trend-pill-neutral {
-    @apply trend-pill;
-    background: hsl(var(--muted));
-    color: hsl(var(--muted-foreground));
-  }
-  .trend-pill-amber {
-    @apply trend-pill;
-    background: hsl(var(--amber) / 0.15);
-    color: hsl(var(--amber));
-  }
-
-  /* Live dot */
-  .live-dot {
-    @apply relative;
-  }
-  .live-dot::after {
-    content: '';
-    @apply absolute inset-0 rounded-full animate-ping;
-    animation-duration: 2s;
-    background: inherit;
-    opacity: 0.4;
-  }
-
-  /* Gradient text */
-  .gradient-text {
-    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-tint1)));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  .glass {
-    @apply bg-card border border-border;
-    border-radius: 0.75rem;
-  }
-}
-
-/* Shell premium Stitch — sidebar + tipografia Jakarta */
-.app-sidebar-premium {
-  font-family: "Plus Jakarta Sans", Poppins, system-ui, sans-serif;
-}
-
-.app-sidebar-premium .shadow-glow {
-  box-shadow: 0 8px 30px rgba(124, 58, 237, 0.2);
-}
-
-.app-sidebar-premium .custom-scrollbar::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-}
-
-.app-sidebar-premium .custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.app-sidebar-premium .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgb(148 163 184 / 0.5);
-  border-radius: 4px;
-}
-
-.app-sidebar-premium .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgb(148 163 184 / 0.75);
-}
-
-/* Stitch-inspired shell — apenas envolve o conteúdo do /dashboard */
-.dashboard-premium {
-  --dash-violet: #7c3aed;
-  --dash-teal-accent: #0d9488;
-  font-family: "Plus Jakarta Sans", Poppins, system-ui, sans-serif;
-  color: #0f172a;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-.dark .dashboard-premium {
-  color: hsl(var(--foreground));
-}
-
-.dashboard-premium ::selection {
-  background: rgb(124 58 237 / 0.2);
-  color: #0f172a;
-}
-
-.dark .dashboard-premium ::selection {
-  background: rgb(196 181 253 / 0.35);
-  color: hsl(var(--foreground));
-}
-
-/* shadcn/theme usa `font-sans` (= Poppins); no painel Stitch forçamos Jakarta sobre esses utilitários. */
-.dashboard-premium .font-sans {
-  font-family: "Plus Jakarta Sans", Poppins, system-ui, sans-serif !important;
-}
-
-.dashboard-premium .glass-card {
-  background: rgba(255, 255, 255, 0.78);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(226, 232, 240, 0.9);
-}
-
-.dark .dashboard-premium .glass-card {
-  background: rgb(22 26 41 / 0.78);
-  border: 1px solid rgb(255 255 255 / 0.08);
-}
-
-.dashboard-premium .shadow-glow {
-  box-shadow: 0 8px 30px rgba(124, 58, 237, 0.2);
-}
-
-.dashboard-premium .shadow-soft {
-  box-shadow:
-    0 4px 20px -2px rgb(15 23 42 / 0.05),
-    0 0 3px rgb(15 23 42 / 0.02);
-}
-
-.dashboard-premium .custom-scrollbar::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-}
-
-.dashboard-premium .custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.dashboard-premium .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgb(148 163 184 / 0.5);
-  border-radius: 4px;
-}
-
-.dashboard-premium .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgb(148 163 184 / 0.75);
-}
-
-/* Cabeçalho do Stitch no /dashboard (AppHeader) */
-.app-header-dash-stitch {
-  font-family: "Plus Jakarta Sans", Poppins, system-ui, sans-serif;
-}
-
-.dashboard-premium .box {
-  border-radius: 0.75rem;
-  border-color: hsl(var(--border) / 0.72);
-  background: hsl(var(--card) / 0.92);
-  box-shadow: 0 4px 20px -2px rgb(15 23 42 / 0.05), 0 0 3px rgb(15 23 42 / 0.02);
-  backdrop-filter: blur(10px);
-}
-
-.dark .dashboard-premium .box {
-  border-color: hsl(var(--border) / 0.85);
-  background: hsl(var(--card) / 0.82);
-}
-
-.dashboard-premium .dashboard-premium-scrollbar::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-}
-
-.dashboard-premium .dashboard-premium-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.dashboard-premium .dashboard-premium-scrollbar::-webkit-scrollbar-thumb {
-  background: rgb(148 163 184 / 0.45);
-  border-radius: 4px;
-}
-
-.dashboard-premium .dashboard-premium-scrollbar:hover::-webkit-scrollbar-thumb {
-  background: rgb(148 163 184 / 0.75);
-}
-
-.dash-glass-card {
-  box-shadow:
-    0 4px 20px -2px rgb(15 23 42 / 0.05),
-    0 0 3px rgb(15 23 42 / 0.02);
-  backdrop-filter: blur(12px);
-}
-
-/* Chat ao Vivo — paleta alinhada ao sistema (primary teal + neutros) */
-.chat-app-style {
-  background: hsl(var(--background));
-  color: hsl(var(--foreground));
-}
-.chat-app-style .chat-sidebar {
-  background: hsl(var(--card));
-  border-right: 1px solid hsl(var(--border));
-}
-.chat-app-style .chat-contact-item {
-  border-radius: 10px;
-  transition: all 0.15s;
-}
-.chat-app-style .chat-contact-item:hover {
-  background: hsl(var(--muted));
-}
-.chat-app-style .chat-contact-item.active {
-  background: hsl(var(--primary) / 0.08);
-  border-left: 3px solid hsl(var(--primary));
-}
-.chat-app-style .chat-messages-area {
-  background: linear-gradient(180deg, hsl(var(--muted)) 0%, hsl(var(--background)) 100%);
-}
-.chat-app-style .chat-input-area {
-  background: hsl(var(--card));
-  border-top: 1px solid hsl(var(--border));
-}
-.chat-app-style .chat-bubble-user {
-  background: hsl(var(--card));
-  border: 1px solid hsl(var(--border));
-  border-radius: 18px 18px 18px 4px;
-  box-shadow: 0 1px 3px hsl(var(--border) / 0.5);
-}
-.chat-app-style .chat-bubble-assistant {
-  background: linear-gradient(135deg, hsl(var(--primary)), hsl(174 99% 28%));
-  color: hsl(var(--primary-foreground));
-  border-radius: 18px 18px 4px 18px;
-  box-shadow: 0 2px 12px hsl(var(--primary) / 0.25);
-}
-
-/* Painel estilo Chatwoot — apenas dentro de .ds-chatwoot (harmonia: fundo clarinho, azul de acento, bordas leves) */
-.ds-chatwoot {
-  --cw-brand: #2563eb;
-  --cw-brand-hover: #1d4ed8;
-  --cw-ruby-8: #dc2626;
-  --cw-ruby-9: #991b1b;
-  --cw-slate-10: #6b7280;
-  --cw-slate-11: #4b5563;
-  --cw-slate-12: #1e293b;
-  --cw-weak: #e8eaef;
-  --cw-solid-2: #f1f3f5;
-  --cw-surface: #f8f9fa;
-  --cw-elevated: #ffffff;
-  --cw-alpha: rgba(37, 99, 235, 0.08);
-  /* Séries de gráficos — paleta alinhada ao produto Chatwoot (azul + neutros + acentos) */
-  --cw-series-1: #2563eb;
-  --cw-series-2: #64748b;
-  --cw-series-3: #3b82f6;
-  --cw-series-4: #94a3b8;
-  --cw-series-5: #0ea5e9;
-  --cw-series-6: #dc2626;
-}
-
-/* Dark alinhado a referência DS_IMPROVEMENTS (fundo/cartão/borda tipo Chatwoot app) */
-.dark .ds-chatwoot {
-  --cw-brand: #60a5fa;
-  --cw-brand-hover: #93c5fd;
-  --cw-ruby-8: #f87171;
-  --cw-ruby-9: #ef4444;
-  --cw-slate-10: #9ca3af;
-  --cw-slate-11: #d1d5db;
-  --cw-slate-12: #edeef0;
-  --cw-weak: rgb(49 49 55);
-  --cw-solid-2: rgb(44 45 54);
-  --cw-surface: rgb(28 29 32);
-  --cw-elevated: rgb(28 30 34);
-  --cw-alpha: rgba(96, 165, 250, 0.12);
-  --cw-series-1: #93c5fd;
-  --cw-series-2: #94a3b8;
-  --cw-series-3: #38bdf8;
-  --cw-series-4: #a5b4fc;
-  --cw-series-5: #2dd4bf;
-  --cw-series-6: #f87171;
-}
-
-.ds-chatwoot .text-cw-h1 {
-  @apply text-2xl font-medium leading-snug tracking-tight text-cw-slate-12;
-}
-
-.ds-chatwoot .text-cw-h2 {
-  @apply text-xl font-medium leading-relaxed text-cw-slate-12;
-}
-
-.ds-chatwoot .text-cw-body {
-  @apply text-sm font-normal leading-relaxed text-cw-slate-11;
-}
-
-.ds-chatwoot .text-cw-label {
-  @apply text-sm font-medium text-cw-slate-12;
-}
-
-.ds-chatwoot .box {
-  @apply mb-0 rounded-[14px] border border-cw-weak bg-cw-elevated shadow-none;
-  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04);
-}
-
-/* Seções tipo DS_IMPROVEMENTS.html — rótulo uppercase + descrição */
-.ds-chatwoot .cw-section-kicker {
-  @apply text-[11px] font-semibold uppercase tracking-[0.06em] text-cw-slate-10;
-}
-
-.ds-chatwoot .cw-section-desc {
-  @apply mt-1 max-w-xl text-[13px] leading-relaxed text-cw-slate-11;
-}
-
-.dark .ds-chatwoot .box {
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-.ds-chatwoot .box-header {
-  @apply flex items-center border-b border-cw-weak px-6 py-4;
-}
-
-.ds-chatwoot .box-title {
-  @apply text-[0.9375rem] font-semibold tracking-tight text-cw-slate-12;
-}
-
-.ds-chatwoot .box-body {
-  @apply px-6 py-5 text-cw-slate-11;
-}
-
-.ds-chatwoot .box-footer {
-  @apply flex border-t border-cw-weak px-6 py-4;
-}
-
-/* FullCalendar theme overrides */
-.calendar-wrapper .fc {
-  --fc-border-color: hsl(var(--border));
-  --fc-today-bg-color: hsl(var(--primary) / 0.08);
-  --fc-page-bg-color: transparent;
-  --fc-neutral-bg-color: hsl(var(--muted));
-  --fc-neutral-text-color: hsl(var(--muted-foreground));
-  --fc-button-bg-color: hsl(var(--primary));
-  --fc-button-border-color: hsl(var(--primary));
-  --fc-button-hover-bg-color: hsl(var(--primary) / 0.85);
-  --fc-button-hover-border-color: hsl(var(--primary) / 0.85);
-  --fc-button-active-bg-color: hsl(var(--primary) / 0.75);
-  --fc-button-active-border-color: hsl(var(--primary) / 0.75);
-  --fc-event-text-color: #fff;
-  --fc-non-business-color: hsl(var(--muted) / 0.4);
-  font-family: inherit;
-}
-
-.calendar-wrapper .fc .fc-button {
-  border-radius: var(--radius);
-  font-size: 0.8125rem;
-  font-weight: 500;
-  padding: 0.375rem 0.75rem;
-  text-transform: none;
-  box-shadow: none !important;
-}
-
-.calendar-wrapper .fc .fc-toolbar-title {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: hsl(var(--foreground));
-}
-
-.calendar-wrapper .fc .fc-col-header-cell-cushion,
-.calendar-wrapper .fc .fc-daygrid-day-number {
-  color: hsl(var(--foreground));
-  font-weight: 500;
-  font-size: 0.8125rem;
-  text-decoration: none;
-}
-
-.calendar-wrapper .fc .fc-daygrid-day.fc-day-today {
-  background: var(--fc-today-bg-color);
-}
-
-.calendar-wrapper .fc .fc-daygrid-event {
-  border-radius: calc(var(--radius) - 2px);
-  padding: 1px 4px;
-  font-size: 0.75rem;
-}
-
-.calendar-wrapper .fc .fc-scrollgrid {
-  border-color: hsl(var(--border));
-}
-
-.calendar-wrapper .fc th,
-.calendar-wrapper .fc td {
-  border-color: hsl(var(--border));
-}
-
-.calendar-wrapper .fc .fc-list-event:hover td {
-  background: hsl(var(--muted));
-}
-
-/* FullCalendar mobile */
-@media (max-width: 767px) {
-  .calendar-wrapper .fc .fc-toolbar.fc-header-toolbar {
-    flex-direction: column;
-    gap: 0.5rem;
-    font-size: 0.875rem;
-  }
-  .calendar-wrapper .fc .fc-toolbar-chunk {
-    width: 100%;
-    justify-content: center;
-  }
-  .calendar-wrapper .fc .fc-list-event {
-    padding: 0.5rem 0;
   }
 }

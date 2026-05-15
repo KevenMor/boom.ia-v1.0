@@ -8,6 +8,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import boomLogoDark from "@/assets/boom-ia-logo-dark.png";
+import boomLogo from "@/assets/boom-ia-logo.png";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -52,10 +53,10 @@ export default function Login() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
           >
-            <h2 className="text-3xl font-bold text-white">Boom IA</h2>
+            <h2 className="text-3xl font-bold text-white">Boom</h2>
             <p className="mt-3 max-w-lg text-gray-300 text-sm leading-relaxed">
-              Plataforma inteligente de gestão de agentes conversacionais.
-              Automatize atendimentos com IA de forma simples e eficiente.
+              O sistema operacional do seu negócio.
+              Automatize operações de forma simples e eficiente.
             </p>
           </motion.div>
         </div>
@@ -71,8 +72,9 @@ export default function Login() {
         >
           {/* Logo */}
           <div className="text-center">
-            <div className="mx-auto mb-6 flex h-24 w-48 items-center justify-center">
-              <img src={boomLogoDark} alt="Boom IA" className="h-full w-full object-contain" />
+            <div className="mx-auto mb-6 flex items-center justify-center">
+              <img src={boomLogo} alt="Boom IA" className="hidden dark:block h-10 w-auto object-contain" />
+              <img src={boomLogoDark} alt="Boom IA" className="block dark:hidden h-10 w-auto object-contain" />
             </div>
             <p className="text-sm text-muted-foreground">
               Faça login para acessar sua conta
@@ -144,7 +146,7 @@ export default function Login() {
           </form>
 
           <p className="mt-8 text-center text-xs text-muted-foreground">
-            Boom IA Platform v1.0
+            Boom Platform v2.0
           </p>
         </motion.div>
       </div>

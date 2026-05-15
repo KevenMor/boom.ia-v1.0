@@ -1,107 +1,65 @@
 import type { CSSProperties } from "react";
 
-/** Painel clássico (teal shadcn) vs painel Chatwoot (tokens `cw-*` dentro de `.ds-chatwoot`). */
 export type DashboardVisual = "default" | "cw";
 
 export const CW_DONUT_COLORS = [
-  "var(--cw-series-1)",
-  "var(--cw-series-2)",
-  "var(--cw-series-3)",
-  "var(--cw-series-4)",
-  "var(--cw-series-5)",
-  "var(--cw-series-6)",
+  "hsl(var(--primary))",
+  "hsl(var(--info))",
+  "hsl(var(--muted-foreground))",
+  "hsl(217 30% 50%)",
+  "hsl(220 15% 40%)",
+  "hsl(215 20% 55%)",
 ] as const;
 
-export function chartTooltipStyle(visual: DashboardVisual): CSSProperties {
-  if (visual === "cw") {
-    return {
-      backgroundColor: "var(--cw-elevated)",
-      border: "1px solid var(--cw-weak)",
-      borderRadius: "8px",
-      fontSize: "12px",
-      color: "var(--cw-slate-12)",
-    };
-  }
+export function chartTooltipStyle(_visual?: DashboardVisual): CSSProperties {
   return {
-    backgroundColor: "hsl(var(--popover))",
+    backgroundColor: "hsl(var(--card))",
     border: "1px solid hsl(var(--border))",
-    borderRadius: "8px",
+    borderRadius: "5px",
     fontSize: "12px",
-    color: "hsl(var(--popover-foreground))",
+    color: "hsl(var(--foreground))",
   };
 }
 
-export function chartAxisTickClass(visual: DashboardVisual): string {
-  return visual === "cw" ? "text-[11px] fill-cw-slate-10" : "text-[11px] fill-muted-foreground";
+export function chartAxisTickClass(_visual?: DashboardVisual): string {
+  return "text-[11px] fill-muted-foreground";
 }
 
-export function chartGridClass(visual: DashboardVisual): string {
-  return visual === "cw" ? "stroke-cw-weak" : "stroke-border";
+export function chartGridClass(_visual?: DashboardVisual): string {
+  return "stroke-border";
 }
 
-export function subtitleClass(visual: DashboardVisual): string {
-  return visual === "cw" ? "text-[11px] text-cw-slate-10" : "text-[11px] text-muted-foreground";
+export function subtitleClass(_visual?: DashboardVisual): string {
+  return "text-xs text-muted-foreground";
 }
 
-export function emptyStateClass(visual: DashboardVisual): string {
-  return visual === "cw"
-    ? "flex items-center justify-center text-sm text-cw-slate-10"
-    : "flex items-center justify-center text-sm text-muted-foreground";
+export function emptyStateClass(_visual?: DashboardVisual): string {
+  return "flex items-center justify-center text-sm text-muted-foreground";
 }
 
-export function inlineLinkClass(visual: DashboardVisual): string {
-  return visual === "cw"
-    ? "text-xs font-medium text-cw-brand hover:underline"
-    : "text-xs text-primary font-medium hover:underline";
+export function inlineLinkClass(_visual?: DashboardVisual): string {
+  return "text-xs text-primary font-medium hover:underline";
 }
 
-export function mutedSmallClass(visual: DashboardVisual): string {
-  return visual === "cw" ? "text-xs text-cw-slate-10" : "text-xs text-muted-foreground";
+export function mutedSmallClass(_visual?: DashboardVisual): string {
+  return "text-xs text-muted-foreground";
 }
 
-export function iconBadgeBox(visual: DashboardVisual, variant: "brand" | "muted" | "accent" | "success" | "info"): string {
-  if (visual !== "cw") {
-    const map = {
-      brand: "rounded-lg bg-primary/10",
-      muted: "rounded-lg bg-secondary/10",
-      accent: "rounded-lg bg-warning/10",
-      success: "rounded-lg bg-success/10",
-      info: "rounded-lg bg-info/10",
-    } as const;
-    return `flex h-8 w-8 items-center justify-center ${map[variant]}`;
-  }
-  const mapCw = {
-    brand: "rounded-lg border border-cw-weak bg-cw-alpha",
-    muted: "rounded-lg border border-cw-weak bg-cw-solid-2",
-    accent: "rounded-lg border border-cw-weak bg-cw-alpha",
-    success: "rounded-lg border border-emerald-500/25 bg-emerald-500/10",
-    info: "rounded-lg border border-cw-weak bg-cw-alpha",
+export function iconBadgeBox(_visual?: DashboardVisual, variant: "brand" | "muted" | "accent" | "success" | "info" = "brand"): string {
+  const map = {
+    brand: "rounded-md bg-muted",
+    muted: "rounded-md bg-muted",
+    accent: "rounded-md bg-muted",
+    success: "rounded-md bg-muted",
+    info: "rounded-md bg-muted",
   } as const;
-  return `flex h-8 w-8 items-center justify-center ${mapCw[variant]}`;
+  return `flex h-8 w-8 items-center justify-center ${map[variant]}`;
 }
 
-export function iconBadgeIcon(visual: DashboardVisual, variant: "brand" | "muted" | "accent" | "success" | "info"): string {
-  if (visual !== "cw") {
-    const map = {
-      brand: "h-4 w-4 text-primary",
-      muted: "h-4 w-4 text-secondary",
-      accent: "h-4 w-4 text-warning",
-      success: "h-4 w-4 text-success",
-      info: "h-4 w-4 text-info",
-    } as const;
-    return `h-4 w-4 ${map[variant]}`;
-  }
-  const mapCw = {
-    brand: "h-4 w-4 text-cw-brand",
-    muted: "h-4 w-4 text-cw-slate-11",
-    accent: "h-4 w-4 text-cw-slate-11",
-    success: "h-4 w-4 text-emerald-600 dark:text-emerald-400",
-    info: "h-4 w-4 text-cw-brand",
-  } as const;
-  return `h-4 w-4 ${mapCw[variant]}`;
+export function iconBadgeIcon(_visual?: DashboardVisual, _variant?: string): string {
+  return "h-4 w-4 text-muted-foreground";
 }
 
-/** Cor de série para barras / avatares (índice modular). */
 export function cwSeriesColor(idx: number): string {
   return CW_DONUT_COLORS[idx % CW_DONUT_COLORS.length];
 }

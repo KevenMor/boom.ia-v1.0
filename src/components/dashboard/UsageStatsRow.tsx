@@ -11,11 +11,9 @@ interface Props {
 export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
   if (loading) {
     return (
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i}>
-            <StatCard title="..." value="..." icon={Zap} />
-          </div>
+          <div key={i} className="h-[104px] animate-pulse rounded-lg border border-border bg-card" />
         ))}
       </div>
     );
@@ -74,22 +72,14 @@ export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
   const formatTokens = (n: number) =>
     n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
 
-  // Generate simple spark data from last 7 days of dailySummary
-  const last7 = dailySummary
-    .map((d) => d.sum_tokens || 0)
-    .slice(-9);
-  const spark1 = last7.length > 2 ? last7 : [25, 44, 30, 56, 40, 50, 13, 24, 84];
-
   return (
-    <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+    <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
       <StatCard
         title="Tokens Hoje"
         value={formatTokens(todayTokens)}
-        change={tokensDiff ? `${Number(tokensDiff) >= 0 ? "+" : ""}${tokensDiff}% vs ontem` : "Sem dados de ontem"}
+        change={tokensDiff ? `${Number(tokensDiff) >= 0 ? "+" : ""}${tokensDiff}% vs ontem` : "Sem dados ontem"}
         changeType={tokensDiff ? (Number(tokensDiff) <= 0 ? "positive" : "neutral") : "neutral"}
         icon={Zap}
-        iconBg="bg-primary"
-        iconColor="text-primary-foreground"
       />
       <StatCard
         title="Latência Média"
@@ -97,26 +87,20 @@ export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
         change={yesterdayAvgLat > 0 ? `${((avgLatency - yesterdayAvgLat) / 1000).toFixed(1)}s vs ontem` : "Sem referência"}
         changeType={avgLatency < yesterdayAvgLat ? "positive" : avgLatency > yesterdayAvgLat ? "negative" : "neutral"}
         icon={Clock}
-        iconBg="bg-secondary"
-        iconColor="text-secondary-foreground"
       />
       <StatCard
-        title="Tool Calls Hoje"
+        title="Tool Calls"
         value={String(todayToolCalls)}
         change={`${todayRequests} requisições`}
         changeType="neutral"
         icon={Wrench}
-        iconBg="bg-amber"
-        iconColor="text-amber-foreground"
       />
       <StatCard
-        title="Requisições Hoje"
+        title="Requisições"
         value={String(todayRequests)}
         change={`${yesterdayEvents.length} ontem`}
         changeType={todayRequests >= yesterdayEvents.length ? "positive" : "negative"}
         icon={MessageSquare}
-        iconBg="bg-info"
-        iconColor="text-info-foreground"
       />
     </div>
   );

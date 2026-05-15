@@ -238,7 +238,7 @@ export function ConversationMessagesView({
                 if (isBoomLive) {
                   return (
                     <div key={msg.id} {...searchMessageAnchor(msg, "flex justify-center py-2")}>
-                      <div className="max-w-md rounded-xl border border-violet-500/10 bg-violet-500/5 px-5 py-2.5 text-center shadow-sm">
+                      <div className="max-w-md rounded-xl border border-border bg-muted px-5 py-2.5 text-center">
                         <p className="text-[12px] leading-relaxed text-slate-600 dark:text-muted-foreground">
                           {msg.content?.slice(0, 420)}
                         </p>
@@ -465,7 +465,7 @@ export function ConversationMessagesView({
                             isBoomLive
                               ? isUser
                                 ? "rounded-2xl rounded-bl-sm border border-slate-200/60 bg-white text-slate-900 shadow-sm"
-                                : "rounded-2xl rounded-br-sm border-0 bg-[#7c3aed] text-white shadow-[0_8px_30px_rgba(124,58,237,0.28)] [&_.prose_a]:text-white/95 [&_.prose_strong]:text-white"
+                                : "rounded-2xl rounded-br-sm border-0 bg-primary text-white [&_.prose_a]:text-white/95 [&_.prose_strong]:text-white"
                               : isChatApp
                                 ? isUser
                                   ? "chat-bubble-user rounded-tl-md"
@@ -618,7 +618,7 @@ export function ConversationMessagesView({
                               <CheckCheck
                                 className={cn(
                                   "h-[15px] w-[15px] shrink-0 text-primary",
-                                  isBoomLive && "text-[#7c3aed] dark:text-violet-400"
+                                  isBoomLive && "text-primary dark:text-primary"
                                 )}
                                 aria-hidden
                               />

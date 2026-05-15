@@ -284,7 +284,7 @@ function ConversationContactPanel(props: {
             <span className="flex items-center gap-2 text-slate-500 dark:text-muted-foreground">
               <Headphones className="h-4 w-4 shrink-0 opacity-70" /> Atendente
             </span>
-            <span className="max-w-[58%] text-right font-bold text-[#7c3aed]">{assigneeDisplay}</span>
+            <span className="max-w-[58%] text-right font-bold text-primary">{assigneeDisplay}</span>
           </div>
         </div>
       </div>
@@ -294,7 +294,7 @@ function ConversationContactPanel(props: {
           <h3 className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400">Etiquetas</h3>
           <button
             type="button"
-            className="flex min-h-[40px] min-w-[40px] items-center justify-center gap-1 rounded-md bg-violet-500/10 px-3 py-2 text-xs font-bold text-[#7c3aed] transition-colors active:scale-[0.98] hover:bg-violet-500/15"
+            className="flex min-h-[40px] min-w-[40px] items-center justify-center gap-1 rounded-md bg-primary/10 px-3 py-2 text-xs font-bold text-primary transition-colors active:scale-[0.98] hover:bg-primary/15"
             onClick={onRequestAddLabel}
           >
             + Adicionar
@@ -895,14 +895,14 @@ export default function Conversations() {
     !agentsLoading && agents && agents.length === 1 ? agents[0] ?? null : null;
 
   return (
-    <div className="font-jakarta flex h-full min-h-0 flex-1 touch-manipulation flex-col overflow-hidden overscroll-none bg-[#f4f7f9] text-[#0f172a] dark:bg-background dark:text-foreground">
+    <div className="flex h-full min-h-0 flex-1 touch-manipulation flex-col overflow-hidden overscroll-none bg-background text-foreground">
       {!selectedAgentId ? (
         <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto overscroll-contain px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 sm:items-center sm:px-4 sm:pb-8 md:py-8">
           <div className="w-full max-w-[920px] overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-[0_4px_32px_-8px_rgba(15,23,42,0.12)] dark:border-border dark:bg-card sm:rounded-2xl">
             <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(272px,360px)] lg:grid-cols-[1fr_380px]">
               <div className="relative flex flex-col justify-center gap-4 border-b border-slate-100 bg-gradient-to-br from-[#f5f3ff] via-white to-[#ecfeff] px-5 py-6 dark:border-border dark:from-card dark:via-card dark:to-card sm:gap-6 sm:px-8 sm:py-10 md:border-b-0 md:border-r md:py-12">
                 <div>
-                  <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#7c3aed]">Área operacional</span>
+                  <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">Área operacional</span>
                   <h1 className="mt-3 text-[1.65rem] font-bold tracking-tight text-[#0f172a] dark:text-foreground md:text-[2rem] md:leading-tight">
                     Entre na sua caixa de chat
                   </h1>
@@ -912,15 +912,15 @@ export default function Conversations() {
                 </div>
                 <ul className="space-y-3 text-[14px] leading-snug text-slate-600 dark:text-muted-foreground">
                   <li className="flex gap-3">
-                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#7c3aed]" />
+                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
                     <span>Conversas, etiquetas e contato lado a lado, no padrão operacional Boom.</span>
                   </li>
                   <li className="flex gap-3">
-                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#7c3aed]" />
+                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
                     <span>Trocar de tenant no menu lateral altera os agentes listados ao lado.</span>
                   </li>
                   <li className="flex gap-3">
-                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#7c3aed]" />
+                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
                     <span>Um único agente no escopo aparece destacado para entrar rápido.</span>
                   </li>
                 </ul>
@@ -928,7 +928,7 @@ export default function Conversations() {
                   <span className="font-semibold text-slate-800 dark:text-foreground">Escopo atual: </span>
                   <span className="text-slate-600 dark:text-muted-foreground">{pickerScopeLabel}</span>
                   <span className="mx-2 text-slate-300 dark:text-border">·</span>
-                  <span className="font-medium text-[#7c3aed]">{agents?.length ?? 0} agente(s)</span>
+                  <span className="font-medium text-primary">{agents?.length ?? 0} agente(s)</span>
                 </div>
               </div>
 
@@ -938,7 +938,7 @@ export default function Conversations() {
                     Agentes no escopo
                   </h2>
                   {!agentsLoading && (
-                    <span className="shrink-0 rounded-full bg-violet-500/12 px-2.5 py-0.5 text-xs font-bold tabular-nums text-[#6d28d9] dark:bg-violet-500/20 dark:text-violet-300">
+                    <span className="shrink-0 rounded-full bg-primary/12 px-2.5 py-0.5 text-xs font-bold tabular-nums text-primary dark:bg-primary/20 dark:text-primary">
                       {agents?.length ?? 0}
                     </span>
                   )}
@@ -959,7 +959,7 @@ export default function Conversations() {
                     <button
                       type="button"
                       onClick={() => openAgentBox(singlePickerAgent.id)}
-                      className="group w-full overflow-hidden rounded-2xl border-2 border-violet-200/90 bg-white text-left shadow-[0_8px_28px_-8px_rgba(124,58,237,0.35)] transition-all hover:border-[#7c3aed] hover:shadow-[0_16px_40px_-12px_rgba(124,58,237,0.45)] dark:border-violet-800/70 dark:bg-card dark:hover:border-violet-400/80"
+                      className="group w-full overflow-hidden rounded-2xl border border-border bg-card text-left transition-all hover:border-primary dark:border-border dark:bg-card dark:hover:border-primary"
                     >
                       <div className="flex items-start gap-4 p-5 pb-4">
                         <div className="relative shrink-0">
@@ -967,11 +967,11 @@ export default function Conversations() {
                             <img
                               src={singlePickerAgent.avatar_url}
                               alt={singlePickerAgent.name}
-                              className="h-[4.25rem] w-[4.25rem] rounded-full object-cover ring-[3px] ring-violet-100 dark:ring-violet-900/40"
+                              className="h-[4.25rem] w-[4.25rem] rounded-full object-cover ring-[3px] ring-border dark:ring-border"
                             />
                           ) : (
-                            <div className="flex h-[4.25rem] w-[4.25rem] items-center justify-center rounded-full bg-gradient-to-br from-violet-400/25 to-teal-400/20">
-                              <Bot className="h-9 w-9 text-[#7c3aed]" />
+                            <div className="flex h-[4.25rem] w-[4.25rem] items-center justify-center rounded-full bg-primary/10">
+                              <Bot className="h-9 w-9 text-primary" />
                             </div>
                           )}
                           <span
@@ -990,9 +990,9 @@ export default function Conversations() {
                               "Sem tenant"}
                           </p>
                         </div>
-                        <ChevronRight className="mt-2 h-5 w-5 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-[#7c3aed]" />
+                        <ChevronRight className="mt-2 h-5 w-5 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
                       </div>
-                      <div className="flex items-center justify-center gap-2 bg-[#7c3aed] py-3.5 text-sm font-semibold text-white transition-colors group-hover:bg-[#6d28d9]">
+                      <div className="flex items-center justify-center gap-2 bg-primary py-3.5 text-sm font-semibold text-white transition-colors group-hover:bg-primary/90">
                         <MessageSquare className="h-4 w-4" />
                         Abrir caixa de conversas
                       </div>
@@ -1013,7 +1013,7 @@ export default function Conversations() {
                           <button
                             type="button"
                             onClick={() => openAgentBox(agent.id)}
-                            className="group flex w-full items-center gap-3 rounded-xl border border-slate-200/75 bg-white p-4 text-left shadow-sm transition-all hover:border-violet-200 hover:shadow-md dark:border-border dark:bg-card dark:hover:border-violet-700/50"
+                            className="group flex w-full items-center gap-3 rounded-xl border border-border bg-card p-4 text-left transition-all hover:border-primary hover:bg-muted dark:border-border dark:bg-card dark:hover:border-primary"
                           >
                             <div className="relative shrink-0">
                               {agent.avatar_url ? (
@@ -1023,8 +1023,8 @@ export default function Conversations() {
                                   className="h-11 w-11 rounded-full object-cover ring-2 ring-slate-100 dark:ring-border"
                                 />
                               ) : (
-                                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-violet-500/15 to-teal-500/15">
-                                  <Bot className="h-5 w-5 text-[#7c3aed]" />
+                                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/10">
+                                  <Bot className="h-5 w-5 text-primary" />
                                 </div>
                               )}
                               <span
@@ -1038,7 +1038,7 @@ export default function Conversations() {
                               <p className="truncate font-semibold text-[#0f172a] dark:text-foreground">{agent.name}</p>
                               <p className="truncate text-[13px] text-slate-500 dark:text-muted-foreground">{tenantLine}</p>
                             </div>
-                            <ChevronRight className="h-5 w-5 shrink-0 text-slate-300 group-hover:text-[#7c3aed]" />
+                            <ChevronRight className="h-5 w-5 shrink-0 text-slate-300 group-hover:text-primary" />
                           </button>
                         </li>
                       );
@@ -1083,7 +1083,7 @@ export default function Conversations() {
                 <button
                   type="button"
                   onClick={() => { setSelectedAgentId(null); setSelectedContactKey(null); }}
-                  className="min-h-[40px] shrink-0 rounded-lg px-3 py-2 text-xs font-medium text-slate-500 transition-colors active:bg-slate-100 hover:bg-slate-100 hover:text-[#7c3aed] dark:text-muted-foreground"
+                  className="min-h-[40px] shrink-0 rounded-lg px-3 py-2 text-xs font-medium text-slate-500 transition-colors active:bg-slate-100 hover:bg-slate-100 hover:text-primary dark:text-muted-foreground"
                 >
                   <span className="inline-flex items-center gap-1">
                     <ArrowLeft className="h-3 w-3" /> Sair
@@ -1108,7 +1108,7 @@ export default function Conversations() {
                     className={cn(
                       "touch-manipulation whitespace-nowrap rounded-lg px-2.5 py-2 text-[11px] font-semibold shadow-sm transition-colors active:scale-[0.98] sm:px-3 sm:py-2.5 sm:text-xs",
                       inboxScope === chip.id
-                        ? "bg-[#7c3aed] text-white"
+                        ? "bg-primary text-white"
                         : "border border-slate-200/60 bg-slate-50 text-slate-600 hover:bg-slate-100 dark:border-border dark:bg-muted dark:text-muted-foreground"
                     )}
                   >
@@ -1150,8 +1150,8 @@ export default function Conversations() {
                   {selectedAgent.avatar_url ? (
                     <img src={selectedAgent.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover" />
                   ) : (
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-violet-500/15">
-                      <Bot className="h-4 w-4 text-[#7c3aed]" />
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/15">
+                      <Bot className="h-4 w-4 text-primary" />
                     </div>
                   )}
                   <div className="min-w-0 flex-1">
@@ -1176,7 +1176,7 @@ export default function Conversations() {
                   <DialogTrigger asChild>
                     <button
                       type="button"
-                      className="rounded-lg px-2 py-1 text-xs font-semibold text-[#7c3aed] transition-colors hover:bg-violet-500/10"
+                      className="rounded-lg px-2 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/10"
                     >
                       <span className="inline-flex items-center gap-1">
                         <UserPlus className="h-3.5 w-3.5" /> Novo contato
@@ -1297,7 +1297,7 @@ export default function Conversations() {
                       onClick={() => setSelectedContactKey(getContactKey(conv))}
                       className={cn(
                         "relative flex min-h-[56px] w-full touch-manipulation items-start gap-3 border-b border-slate-50 p-3 text-start transition-colors active:bg-slate-100 hover:bg-slate-50/90 dark:border-border dark:active:bg-muted/50 dark:hover:bg-muted/60 sm:p-4",
-                        isSelected ? "border-l-4 border-l-[#7c3aed] bg-violet-500/[0.06]" : "border-l-4 border-l-transparent"
+                        isSelected ? "border-l-4 border-l-primary bg-primary/[0.06]" : "border-l-4 border-l-transparent"
                       )}
                     >
                       {/* Avatar */}
@@ -1328,7 +1328,7 @@ export default function Conversations() {
                             <span
                               className={cn(
                                 "shrink-0 text-right tabular-nums text-[11px] font-semibold tracking-tight",
-                                isSelected ? "text-[#7c3aed]" : "text-slate-400 dark:text-muted-foreground",
+                                isSelected ? "text-primary" : "text-slate-400 dark:text-muted-foreground",
                               )}
                             >
                               {timestamp}
@@ -1426,7 +1426,7 @@ export default function Conversations() {
                       type="button"
                       variant="outline"
                       size="icon"
-                      className="touch-manipulation h-9 w-9 shrink-0 rounded-xl border-slate-200/60 bg-white shadow-sm hover:text-[#7c3aed] sm:h-10 sm:w-10 xl:hidden"
+                      className="touch-manipulation h-9 w-9 shrink-0 rounded-xl border-slate-200/60 bg-white shadow-sm hover:text-primary sm:h-10 sm:w-10 xl:hidden"
                       title="Detalhes do contato"
                       aria-label="Abrir detalhes do contato"
                       onClick={() => setContactSheetOpen(true)}
@@ -1438,8 +1438,8 @@ export default function Conversations() {
                       variant="outline"
                       size="icon"
                       className={cn(
-                        "hidden h-9 w-9 shrink-0 rounded-xl border-slate-200/60 bg-white text-slate-500 shadow-sm hover:text-[#7c3aed] sm:h-10 sm:w-10 xl:inline-flex",
-                        contactPanelCollapsed && "border-violet-300/80 text-[#7c3aed]",
+                        "hidden h-9 w-9 shrink-0 rounded-xl border-slate-200/60 bg-white text-slate-500 shadow-sm hover:text-primary sm:h-10 sm:w-10 xl:inline-flex",
+                        contactPanelCollapsed && "border-primary/80 text-primary",
                       )}
                       title={
                         contactPanelCollapsed
@@ -1467,8 +1467,8 @@ export default function Conversations() {
                           variant="outline"
                           size="icon"
                           className={cn(
-                            "h-9 w-9 shrink-0 touch-manipulation rounded-xl border-slate-200/60 bg-white shadow-sm hover:text-[#7c3aed] sm:h-10 sm:w-10",
-                            threadMessageSearch.trim().length > 0 && "border-violet-300 text-[#7c3aed]",
+                            "h-9 w-9 shrink-0 touch-manipulation rounded-xl border-slate-200/60 bg-white shadow-sm hover:text-primary sm:h-10 sm:w-10",
+                            threadMessageSearch.trim().length > 0 && "border-primary text-primary",
                           )}
                           type="button"
                           title={threadMessageSearch.trim() ? "Busca ativa — clique para editar" : "Buscar no histórico da conversa"}
@@ -1555,7 +1555,7 @@ export default function Conversations() {
                         <Button
                           variant="outline"
                           size="icon"
-                          className="h-9 w-9 shrink-0 rounded-xl border-slate-200/60 bg-white text-slate-500 shadow-sm hover:text-[#7c3aed] sm:h-10 sm:w-10"
+                          className="h-9 w-9 shrink-0 rounded-xl border-slate-200/60 bg-white text-slate-500 shadow-sm hover:text-primary sm:h-10 sm:w-10"
                           title="Etiquetas"
                           aria-label="Etiquetas"
                         >
@@ -1597,7 +1597,7 @@ export default function Conversations() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className={cn("h-9 w-9 rounded-xl", showDebug ? "text-[#7c3aed]" : "text-slate-500")}
+                        className={cn("h-9 w-9 rounded-xl", showDebug ? "text-primary" : "text-slate-500")}
                         onClick={() => setShowDebug(!showDebug)}
                         title={showDebug ? "Ocultar debug" : "Mostrar debug"}
                       >
@@ -1616,7 +1616,7 @@ export default function Conversations() {
                       <Button
                         variant="outline"
                         size="icon"
-                        className="h-10 w-10 rounded-xl border-slate-200/60 bg-white text-slate-500 shadow-sm hover:text-[#7c3aed]"
+                        className="h-10 w-10 rounded-xl border-slate-200/60 bg-white text-slate-500 shadow-sm hover:text-primary"
                         type="button"
                         disabled
                         title="Brevemente"
@@ -1732,7 +1732,7 @@ export default function Conversations() {
                       <div className="flex gap-0.5">
                         <button
                           type="button"
-                          className="rounded-full p-2.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-[#7c3aed] dark:hover:bg-muted"
+                          className="rounded-full p-2.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-primary dark:hover:bg-muted"
                           aria-label="Anexo"
                           tabIndex={-1}
                         >
@@ -1740,7 +1740,7 @@ export default function Conversations() {
                         </button>
                         <button
                           type="button"
-                          className="rounded-full p-2.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-[#7c3aed] dark:hover:bg-muted"
+                          className="rounded-full p-2.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-primary dark:hover:bg-muted"
                           aria-label="Emoji"
                           tabIndex={-1}
                         >
@@ -1749,7 +1749,7 @@ export default function Conversations() {
                       </div>
                       <button
                         type="submit"
-                        className="inline-flex min-h-[44px] shrink-0 touch-manipulation items-center gap-2 rounded-xl bg-[#7c3aed] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_30px_rgba(124,58,237,0.22)] transition-all hover:bg-[#6d28d9] active:scale-[0.98] sm:px-6"
+                        className="inline-flex min-h-[44px] shrink-0 touch-manipulation items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-primary/90 active:scale-[0.98] sm:px-6"
                       >
                         Enviar <Send className="h-[18px] w-[18px]" />
                       </button>

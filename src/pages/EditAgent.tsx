@@ -74,7 +74,7 @@ type EditAgentTab = "basic" | "model" | "integration" | "schedule" | "advanced";
 
 /** Campos Stitch / Material Amethyst — alinhado ao mock Editar agente Boom IA Premium */
 const fld =
-  "w-full min-w-0 max-w-full rounded-lg border border-[#ccc3d8] bg-white px-4 py-2.5 font-jakarta text-base text-[#0b1c30] outline-none transition-all placeholder:text-muted-foreground focus:border-[#7c3aed] focus:ring-2 focus:ring-[#7c3aed]/20 dark:border-border dark:bg-card dark:text-foreground";
+  "w-full min-w-0 max-w-full rounded-md border border-border bg-card px-4 py-2.5 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-1 focus:ring-ring";
 
 /** Cartões tipo Stitch Material — surface-container-lowest */
 const stitchCard =
@@ -368,7 +368,7 @@ export default function EditAgent() {
               type="submit"
               form="edit-agent-form"
               disabled={update.isPending}
-              className="h-9 shrink-0 gap-1.5 rounded-lg bg-[#7c3aed] px-3 text-xs font-semibold text-white shadow-sm hover:bg-[#630ed4] sm:h-11 sm:gap-2 sm:px-6 sm:text-sm"
+              className="h-9 shrink-0 gap-1.5 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90 sm:h-10 sm:gap-2 sm:px-6 sm:text-sm"
             >
               {update.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Salvar
@@ -393,7 +393,7 @@ export default function EditAgent() {
                     className={cn(
                       "shrink-0 whitespace-nowrap rounded-full px-3 py-2 text-xs font-semibold transition-colors active:scale-[0.97] sm:rounded-none sm:border-b-2 sm:px-4 sm:pb-3 sm:pt-1 sm:text-sm",
                       agentTab === t.id
-                        ? "bg-[#7c3aed] text-white shadow-sm sm:border-[#630ed4] sm:bg-transparent sm:text-[#630ed4] sm:shadow-none"
+                        ? "bg-primary text-primary-foreground sm:border-primary sm:bg-transparent sm:text-primary sm:shadow-none"
                         : "bg-slate-100 text-[#4a4455] dark:bg-muted dark:text-muted-foreground sm:border-transparent sm:bg-transparent sm:hover:border-[#ccc3d8]/80 sm:hover:text-[#630ed4] sm:dark:hover:border-border"
                     )}
                   >

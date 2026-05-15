@@ -9,23 +9,22 @@ export default {
       center: true,
       padding: "2rem",
       screens: {
-        "2xl": "1400px",
+        "2xl": "1280px",
       },
     },
     extend: {
-      /** Mock Stitch / Material 3 labels — mesmo peso e tracking do HTML de referência */
       fontSize: {
-        "label-sm": ["12px", { lineHeight: "1", letterSpacing: "0.05em", fontWeight: "600" }],
-        "label-md": ["14px", { lineHeight: "1", letterSpacing: "0.02em", fontWeight: "600" }],
-        "body-md": ["15px", { lineHeight: "1.6", fontWeight: "500" }],
+        xs: ["11px", { lineHeight: "1.4" }],
+        sm: ["13px", { lineHeight: "1.5" }],
+        base: ["14px", { lineHeight: "1.6" }],
+        md: ["16px", { lineHeight: "1.5" }],
+        lg: ["20px", { lineHeight: "1.3" }],
+        xl: ["28px", { lineHeight: "1.1" }],
+        "2xl": ["36px", { lineHeight: "1.0" }],
       },
       fontFamily: {
-        sans: ['"Plus Jakarta Sans"', "system-ui", "-apple-system", "sans-serif"],
-        jakarta: ['"Plus Jakarta Sans"', "system-ui", "sans-serif"],
-        poppins: ["Poppins", "system-ui", "-apple-system", "sans-serif"],
-        cw: ["Inter", "ui-sans-serif", "system-ui", "-apple-system", "sans-serif"],
-        serif: ["Georgia", "serif"],
-        mono: ["'IBM Plex Mono'", "Menlo", "monospace"],
+        sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],
+        mono: ["JetBrains Mono", "Menlo", "monospace"],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -36,13 +35,6 @@ export default {
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
-        },
-        "primary-tint1": "hsl(var(--primary-tint1))",
-        "primary-tint2": "hsl(var(--primary-tint2))",
-        "primary-tint3": "hsl(var(--primary-tint3))",
-        amber: {
-          DEFAULT: "hsl(var(--amber))",
-          foreground: "hsl(var(--amber-foreground))",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
@@ -90,29 +82,11 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
-        /** Tokens do mock Stitch (texto sidebar em tema claro) */
-        "on-surface": "#0f172a",
-        "on-surface-variant": "#64748b",
-        "on-background": "#0f172a",
-        /* Chatwoot-scoped — parent must have .ds-chatwoot */
-        cw: {
-          brand: "var(--cw-brand)",
-          "ruby-8": "var(--cw-ruby-8)",
-          "ruby-9": "var(--cw-ruby-9)",
-          "slate-10": "var(--cw-slate-10)",
-          "slate-11": "var(--cw-slate-11)",
-          "slate-12": "var(--cw-slate-12)",
-          weak: "var(--cw-weak)",
-          "solid-2": "var(--cw-solid-2)",
-          surface: "var(--cw-surface)",
-          elevated: "var(--cw-elevated)",
-          alpha: "var(--cw-alpha)",
-        },
       },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        lg: "6px",
+        md: "5px",
+        sm: "3px",
       },
       keyframes: {
         "accordion-down": {
@@ -124,19 +98,14 @@ export default {
           to: { height: "0" },
         },
         "fade-in": {
-          from: { opacity: "0", transform: "translateY(8px)" },
+          from: { opacity: "0", transform: "translateY(4px)" },
           to: { opacity: "1", transform: "translateY(0)" },
-        },
-        "slide-in-left": {
-          from: { opacity: "0", transform: "translateX(-12px)" },
-          to: { opacity: "1", transform: "translateX(0)" },
         },
       },
       animation: {
-        "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
-        "fade-in": "fade-in 0.3s ease-out",
-        "slide-in-left": "slide-in-left 0.2s ease-out",
+        "accordion-down": "accordion-down 0.15s ease-out",
+        "accordion-up": "accordion-up 0.15s ease-out",
+        "fade-in": "fade-in 0.15s ease-out",
       },
     },
   },

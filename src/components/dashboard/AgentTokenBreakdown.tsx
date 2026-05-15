@@ -221,9 +221,9 @@ export function AgentTokenBreakdown({
                     </div>
                     <div className="mt-1.5 flex items-center justify-between text-[11px] text-cw-slate-10">
                       <span>{sharePct.toFixed(0)}% do total</span>
-                      <span className="font-mono tabular-nums">{agent.total_requests} req</span>
+                      <span className="tabular-nums">{agent.total_requests} req</span>
                     </div>
-                    <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[10px] text-cw-slate-10">
+                    <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-cw-slate-10">
                       <span className="inline-flex items-center gap-0.5">
                         <ArrowUpRight className="h-2.5 w-2.5 text-cw-brand" />
                         {fmt(agent.prompt_tokens)} ({inputPct}% in)
@@ -239,7 +239,7 @@ export function AgentTokenBreakdown({
                         {agent.models_used.map((m) => (
                           <span
                             key={m}
-                            className="rounded-md border border-cw-weak bg-[rgba(0,0,0,0.12)] px-1.5 py-0.5 font-mono text-[9px] text-cw-slate-10 dark:bg-black/20"
+                            className="rounded-md border border-cw-weak bg-[rgba(0,0,0,0.12)] px-1.5 py-0.5 text-[9px] text-cw-slate-10 dark:bg-black/20"
                           >
                             {m}
                           </span>
@@ -401,8 +401,8 @@ export function AgentTokenBreakdown({
                       <ArrowDownRight className="h-2.5 w-2.5 text-success" />
                       {fmt(agent.completion_tokens)} ({outputPct}%)
                     </span>
-                    <span className="ml-auto font-mono">{agent.total_requests} req</span>
-                    {agent.tool_calls > 0 && <span className="font-mono">{agent.tool_calls} tools</span>}
+                    <span className="ml-auto">{agent.total_requests} req</span>
+                    {agent.tool_calls > 0 && <span>{agent.tool_calls} tools</span>}
                   </div>
 
                   {agent.models_used.length > 0 && (
@@ -410,7 +410,7 @@ export function AgentTokenBreakdown({
                       {agent.models_used.map((m) => (
                         <span
                           key={m}
-                          className="rounded-full border border-border bg-muted px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground"
+                          className="rounded-full border border-border bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground"
                         >
                           {m}
                         </span>
