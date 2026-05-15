@@ -1179,6 +1179,17 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           }
           console.log("[Chat-Local] Dispatcher model:", dispatcherModel);
 
+          /** Sandbox: com dual-provider, sem tool calls no dispatcher não havia evento `debug` — a UI ficava sem bloco. */
+          const dualSandboxCfg = (agent.config || {}) as Record<string, unknown>;
+          const dualSandboxDebugConfig: Record<string, unknown> = {
+            type: "config",
+            model: `${dispatcherModel} (dispatcher) → ${model} (conversacional)`,
+            temperature: agent.temperature ?? 0.7,
+            tools_count: openaiTools.length,
+          };
+          if (typeof dualSandboxCfg.top_p === "number") dualSandboxDebugConfig.top_p = dualSandboxCfg.top_p;
+          if (typeof dualSandboxCfg.top_k === "number") dualSandboxDebugConfig.top_k = dualSandboxCfg.top_k;
+
           const todayISO = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
           const tomorrowDate = new Date();
           tomorrowDate.setDate(tomorrowDate.getDate() + 1);
@@ -1361,6 +1372,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             conversationalMessages.push(assistantMsg);
 
             const debugEntries: Array<{ type: string; tool?: string; args?: Record<string, unknown>; tool_type?: string; preview?: unknown; [k: string]: unknown }> = [
+              dualSandboxDebugConfig,
               { type: "dispatcher_tool_calls", tool_names: phase1ToolCalls.map((tc) => tc.function.name), tool_calls_count: phase1ToolCalls.length },
             ];
 
@@ -1830,6 +1842,10 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }
           }
 
+          if (phase1ToolCalls.length === 0) {
+            sendSse({ debug: [dualSandboxDebugConfig] });
+          }
+
           const rawConvAssist = prependWelcomeToAssistantText((convFullContent || "").trim());
           emitRepairedAssistant(rawConvAssist);
           const assistantForHistory = sanitizeLLMOutput(rawConvAssist) || rawConvAssist;
@@ -1843,6 +1859,23 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           return;
         }
       }
+
+      /** Sandbox: UI só mostra DebugBlock se houver `debug` ou `token_usage`; vários proxies não mandam usage no stream. */
+      const sendSingleProviderSandboxDebug = () => {
+        const cfg = (agent.config || {}) as Record<string, unknown>;
+        sendSse({
+          debug: [
+            {
+              type: "config",
+              model,
+              temperature: agent.temperature ?? 0.7,
+              ...(typeof cfg.top_p === "number" ? { top_p: cfg.top_p } : {}),
+              ...(typeof cfg.top_k === "number" ? { top_k: cfg.top_k } : {}),
+              tools_count: openaiTools.length,
+            },
+          ],
+        });
+      };
 
       let llmMessages = toOpenAIMessages(systemPrompt, messages);
       let fullContent = "";
@@ -2014,6 +2047,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
           fullContent = applySuiteGalleryRepairs(fullContent, toolStringsSP, lastUserForGalleryInjectSP);
           emitMediaCommandsSseIfNeeded(sendSse, fullContent);
+          sendSingleProviderSandboxDebug();
           if (singleProviderUsageAccum.total_tokens > 0) {
             sendSse({ token_usage: { single: { ...singleProviderUsageAccum, model } } });
             try {
@@ -2184,6 +2218,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
         const rawLoopAssist = prependWelcomeToAssistantText((finalAssistantRaw || "").trim());
         emitRepairedAssistant(rawLoopAssist);
         const assistantForHistory = sanitizeLLMOutput(rawLoopAssist) || rawLoopAssist;
+        sendSingleProviderSandboxDebug();
         const assistantMetadata =
           singleProviderUsageAccum.total_tokens > 0
             ? { token_usage: { single: { ...singleProviderUsageAccum, model } } }

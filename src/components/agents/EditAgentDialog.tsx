@@ -20,6 +20,7 @@ import { getModelsForProvider } from "@/lib/provider-models";
 import { ChatwootConfigSection } from "@/components/agents/ChatwootConfigSection";
 import { FollowUpConfigSection } from "@/components/agents/FollowUpConfigSection";
 import { AgentAvatarUpload } from "@/components/agents/AgentAvatarUpload";
+import { AgentStatusField } from "@/components/agents/AgentStatusField";
 import type { Agent } from "@/types/database";
 
 import { getApiBase } from "@/lib/api-client";
@@ -358,17 +359,17 @@ export function EditAgentDialog({ agent, open, onOpenChange }: Props) {
             thinkingDelayMinutes={followupThinkingDelayMinutes} setThinkingDelayMinutes={setFollowupThinkingDelayMinutes}
           />
 
-          {/* Status */}
-          <div className="space-y-3">
-            <Label className="text-sm font-medium text-muted-foreground">Status</Label>
-            <Select defaultValue={agent?.status} onValueChange={(v) => setValue("status", v)}>
-              <SelectTrigger className="h-11 rounded-lg bg-background border-border"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">🟢 Ativo</SelectItem>
-                <SelectItem value="test">🧪 Teste</SelectItem>
-                <SelectItem value="inactive">⛔ Inativo</SelectItem>
-              </SelectContent>
-            </Select>
+          {/* Situação */}
+          <div className="space-y-2">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Situação do cadastro</p>
+              <p className="mt-1 text-xs text-muted-foreground">Participação nas conversas do Chatwoot.</p>
+            </div>
+            <AgentStatusField
+              value={watch("status") || agent?.status || "inactive"}
+              onChange={(v) => setValue("status", v)}
+              idPrefix={agent ? `dlg-agent-${agent.id}-status` : "dlg-agent-status"}
+            />
           </div>
 
           <DialogFooter className="gap-3 pt-2">

@@ -37,6 +37,7 @@ import { toast } from "sonner";
 import { getModelsForProvider } from "@/lib/provider-models";
 import { getApiBase, callAPI } from "@/lib/api-client";
 import { ChatwootConfigSection } from "@/components/agents/ChatwootConfigSection";
+import { AgentStatusField } from "@/components/agents/AgentStatusField";
 import { FollowUpConfigSection } from "@/components/agents/FollowUpConfigSection";
 import { AgentAvatarUpload } from "@/components/agents/AgentAvatarUpload";
 import { ReminderConfigSection } from "@/components/agents/ReminderConfigSection";
@@ -445,33 +446,19 @@ export default function EditAgent() {
                     <Label className={stitchLbl}>Descrição interna</Label>
                     <Textarea {...register("description")} rows={2} className={cn(fld, "min-h-[72px] resize-y sm:min-h-[88px]")} />
                   </div>
-                    <div className="rounded-lg border border-[#ccc3d8] bg-[#eff4ff] p-4 dark:border-border dark:bg-muted/40">
-                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                          <h4 className="text-sm font-semibold text-[#0b1c30] dark:text-foreground">Status do Agente</h4>
-                          <p className="mt-1 text-sm text-[#4a4455] dark:text-muted-foreground">
-                            Escolha ativo (produção), teste ou inativo conforme sua operação no Chatwoot.
-                          </p>
-                        </div>
-                        <div className="w-full sm:max-w-xs">
-                          <Label className="sr-only">Status</Label>
-                          <Select value={watch("status") || agent.status} onValueChange={(v) => setValue("status", v)}>
-                            <SelectTrigger className={cn(fld, "h-11 shrink-0 items-center [&>span]:line-clamp-1")}>
-                              <SelectValue placeholder="Escolher status" />
-                            </SelectTrigger>
-                            <SelectContent className="min-w-[var(--radix-select-trigger-width)]">
-                              <SelectItem value="active" textValue="Ativo">
-                                🟢 Ativo
-                              </SelectItem>
-                              <SelectItem value="test" textValue="Teste">
-                                🧪 Teste
-                              </SelectItem>
-                              <SelectItem value="inactive" textValue="Inativo">
-                                ⛔ Inativo
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
+                    <div className="rounded-md border border-border bg-card px-4 py-3 shadow-sm">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Situação do cadastro
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Defina como este agente participa das conversas no Chatwoot.
+                      </p>
+                      <div className="mt-3">
+                        <AgentStatusField
+                          value={watch("status") || agent.status || "inactive"}
+                          onChange={(v) => setValue("status", v)}
+                          idPrefix={`edit-agent-${agent.id}-status`}
+                        />
                       </div>
                     </div>
 
