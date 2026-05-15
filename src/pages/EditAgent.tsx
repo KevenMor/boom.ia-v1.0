@@ -37,7 +37,6 @@ import { toast } from "sonner";
 import { getModelsForProvider } from "@/lib/provider-models";
 import { getApiBase, callAPI } from "@/lib/api-client";
 import { ChatwootConfigSection } from "@/components/agents/ChatwootConfigSection";
-import { AgentStatusField } from "@/components/agents/AgentStatusField";
 import { FollowUpConfigSection } from "@/components/agents/FollowUpConfigSection";
 import { AgentAvatarUpload } from "@/components/agents/AgentAvatarUpload";
 import { ReminderConfigSection } from "@/components/agents/ReminderConfigSection";
@@ -75,24 +74,24 @@ type EditAgentTab = "basic" | "model" | "integration" | "schedule" | "advanced";
 
 /** Campos Stitch / Material Amethyst — alinhado ao mock Editar agente Boom IA Premium */
 const fld =
-  "w-full min-w-0 max-w-full rounded-md border border-border bg-card px-4 py-2.5 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-1 focus:ring-ring";
+  "w-full min-w-0 max-w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-1 focus:ring-ring";
 
 /** Cartões tipo Stitch Material — surface-container-lowest */
 const stitchCard =
-  "rounded-xl border border-[#ccc3d8] bg-white p-4 shadow-sm dark:border-border dark:bg-card sm:p-6 max-sm:border-0 max-sm:bg-transparent max-sm:shadow-none max-sm:p-0";
+  "rounded-xl border border-[#ccc3d8] bg-white p-3 shadow-sm dark:border-border dark:bg-card sm:p-5 max-sm:border-0 max-sm:bg-transparent max-sm:shadow-none max-sm:p-0";
 
-const stitchLbl = "mb-2 block text-sm font-semibold tracking-wide text-[#4a4455] dark:text-muted-foreground";
+const stitchLbl = "mb-1.5 block text-xs font-medium tracking-wide text-[#4a4455] dark:text-muted-foreground";
 
 /** Card visível no mobile (stitchCard remove borda no max-sm) */
 const stitchSection =
-  "box-border w-full min-w-0 max-w-full overflow-x-hidden rounded-xl border border-[#ccc3d8] bg-white p-4 shadow-sm dark:border-border dark:bg-card sm:p-6";
+  "box-border w-full min-w-0 max-w-full overflow-x-hidden rounded-xl border border-[#ccc3d8] bg-white p-3 shadow-sm dark:border-border dark:bg-card sm:p-5";
 
 const stitchSectionTitle =
-  "text-lg font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-2xl";
+  "text-sm font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-base";
 
 /** Sliders com alvo de toque maior no mobile (px evita thumb cortar a borda do card) */
 const sliderTouch =
-  "box-border w-full min-w-0 max-w-full touch-pan-y py-3 sm:py-2 [&>span.block]:h-7 [&>span.block]:w-7 [&>span.block]:shadow-md sm:[&>span.block]:h-5 sm:[&>span.block]:w-5 sm:[&>span.block]:shadow-none";
+  "box-border w-full min-w-0 max-w-full touch-pan-y py-2 sm:py-1.5 [&>span.block]:h-5 [&>span.block]:w-5 [&>span.block]:shadow-sm sm:[&>span.block]:h-4 sm:[&>span.block]:w-4 sm:[&>span.block]:shadow-none";
 
 const EDIT_AGENT_STITCH_TABS: { id: EditAgentTab; label: string; shortLabel?: string }[] = [
   { id: "basic", label: "Informações Básicas", shortLabel: "Básico" },
@@ -362,7 +361,7 @@ export default function EditAgent() {
             <Button variant="ghost" size="icon" type="button" className="h-9 w-9 shrink-0 -ml-1" onClick={() => navigate("/agents")}>
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <h2 className="min-w-0 flex-1 truncate text-base font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-xl">
+            <h2 className="min-w-0 flex-1 truncate text-sm font-medium tracking-tight text-[#0b1c30] dark:text-foreground sm:text-base">
               {watch("name")?.trim() || "Editar Agente"}
             </h2>
             <Button
@@ -406,7 +405,7 @@ export default function EditAgent() {
 
               {agentTab === "basic" && (
               <section className="rounded-xl border-0 bg-transparent p-0 sm:border sm:border-[#ccc3d8] sm:bg-white sm:p-6 sm:shadow-sm sm:dark:border-border sm:dark:bg-card">
-                <h3 className="mb-4 text-lg font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:mb-6 sm:text-2xl">
+                <h3 className="mb-3 text-sm font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:mb-4 sm:text-base">
                   Informações Básicas
                 </h3>
                 {/* Avatar — compact row on mobile, column on desktop */}
@@ -429,7 +428,7 @@ export default function EditAgent() {
                     <div className="space-y-1.5 sm:space-y-2">
                       <Label className={stitchLbl}>Tenant</Label>
                       <Select value={watch("tenant_id") || agent.tenant_id} onValueChange={(v) => setValue("tenant_id", v)}>
-                        <SelectTrigger className={cn(fld, "flex h-auto min-h-11 items-center")}>
+                        <SelectTrigger className={cn(fld, "flex h-9 items-center")}>
                           <SelectValue placeholder="Tenant" />
                         </SelectTrigger>
                         <SelectContent>
@@ -446,20 +445,18 @@ export default function EditAgent() {
                     <Label className={stitchLbl}>Descrição interna</Label>
                     <Textarea {...register("description")} rows={2} className={cn(fld, "min-h-[72px] resize-y sm:min-h-[88px]")} />
                   </div>
-                    <div className="rounded-md border border-border bg-card px-4 py-3 shadow-sm">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        Situação do cadastro
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Defina como este agente participa das conversas no Chatwoot.
-                      </p>
-                      <div className="mt-3">
-                        <AgentStatusField
-                          value={watch("status") || agent.status || "inactive"}
-                          onChange={(v) => setValue("status", v)}
-                          idPrefix={`edit-agent-${agent.id}-status`}
-                        />
-                      </div>
+                    <div className="space-y-1.5 sm:space-y-2">
+                      <Label className={stitchLbl}>Status</Label>
+                      <Select value={watch("status") || agent.status || "inactive"} onValueChange={(v) => setValue("status", v)}>
+                        <SelectTrigger className={cn(fld, "flex h-9 items-center")}>
+                          <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">Ativo</SelectItem>
+                          <SelectItem value="test">Teste</SelectItem>
+                          <SelectItem value="inactive">Inativo</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     {(watch("status") || agent.status) === "test" && (
@@ -508,7 +505,7 @@ export default function EditAgent() {
                       const models = getModelsForProvider(prov?.name);
                       if (models.length > 0) setValue("model", models[0].value);
                     }}>
-                      <SelectTrigger className={cn(fld, "flex h-auto min-h-11 items-center")}>
+                      <SelectTrigger className={cn(fld, "flex h-9 items-center")}>
                         <SelectValue placeholder="Nenhum" />
                       </SelectTrigger>
                       <SelectContent>
@@ -794,7 +791,7 @@ export default function EditAgent() {
                   <div className="space-y-2">
                     <Label className={stitchLbl}>Provedor do dispatcher</Label>
                     <Select value={dispatcherProviderId || "_none"} onValueChange={(v) => setDispatcherProviderId(v === "_none" ? "" : v)}>
-                      <SelectTrigger className={cn(fld, "flex h-auto min-h-11 max-w-full min-w-0 items-center [&>span]:min-w-0 [&>span]:truncate")}>
+                      <SelectTrigger className={cn(fld, "flex h-9 max-w-full min-w-0 items-center [&>span]:min-w-0 [&>span]:truncate")}>
                         <SelectValue placeholder="Nenhum (desabilitado)" />
                       </SelectTrigger>
                       <SelectContent>
@@ -813,7 +810,7 @@ export default function EditAgent() {
                       <div className="space-y-2">
                         <Label className={stitchLbl}>Modelo do dispatcher</Label>
                         <Select value={dispatcherModel || "_default"} onValueChange={(v) => setDispatcherModel(v === "_default" ? "" : v)}>
-                          <SelectTrigger className={cn(fld, "flex h-auto min-h-11 max-w-full min-w-0 items-center [&>span]:min-w-0 [&>span]:truncate")}>
+                          <SelectTrigger className={cn(fld, "flex h-9 max-w-full min-w-0 items-center [&>span]:min-w-0 [&>span]:truncate")}>
                             <SelectValue placeholder="Padrão do provedor" />
                           </SelectTrigger>
                           <SelectContent>
