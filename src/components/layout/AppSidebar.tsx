@@ -205,7 +205,7 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
   return (
     <div
       className={cn(
-        "flex h-full min-h-0 flex-col border-r border-border bg-background",
+        "flex h-full min-h-0 flex-col border-r border-border bg-card/50 backdrop-blur-sm",
         collapsed ? "px-1.5 py-3" : "px-3 py-4",
       )}
     >

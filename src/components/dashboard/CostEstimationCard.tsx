@@ -58,14 +58,14 @@ export function CostEstimationCard({ events, loading }: Props) {
 
   if (loading) {
     return (
-      <div className="flex h-full min-h-[200px] flex-col rounded-lg border border-border bg-card p-5">
+      <div className="flex h-full min-h-[200px] flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
         <Skeleton className="h-full w-full rounded-md" />
       </div>
     );
   }
 
   return (
-    <div className="flex h-full flex-col rounded-lg border border-border bg-card p-5">
+    <div className="flex h-full flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-md font-medium text-foreground">Custo estimado</h3>
         <Link to="/analytics/tokens" className="text-xs text-muted-foreground hover:text-foreground transition-colors duration-150">

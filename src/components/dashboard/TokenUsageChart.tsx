@@ -41,7 +41,7 @@ export function TokenUsageChart({ data, loading }: Props) {
 
   if (loading) {
     return (
-      <div className="flex h-full min-h-[300px] flex-col rounded-lg border border-border bg-card p-5">
+      <div className="flex h-full min-h-[300px] flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
         <Skeleton className="h-full w-full rounded-md" />
       </div>
     );
@@ -49,14 +49,14 @@ export function TokenUsageChart({ data, loading }: Props) {
 
   if (sortedChartRows.length === 0) {
     return (
-      <div className="flex h-full min-h-[300px] flex-col items-center justify-center rounded-lg border border-border bg-card p-5">
+      <div className="flex h-full min-h-[300px] flex-col items-center justify-center rounded-xl border border-border bg-card p-5 shadow-sm">
         <span className="text-sm text-muted-foreground">Nenhum dado de uso ainda</span>
       </div>
     );
   }
 
   return (
-    <div className="flex h-full min-h-[300px] flex-col rounded-lg border border-border bg-card p-5">
+    <div className="flex h-full min-h-[300px] flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h3 className="text-md font-medium text-foreground">Consumo de tokens</h3>

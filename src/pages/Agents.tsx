@@ -92,7 +92,7 @@ export default function Agents() {
           return (
             <div
               key={agent.id}
-              className="group flex items-center gap-4 rounded-lg border border-border bg-card px-4 py-3 transition-colors duration-150 hover:bg-muted cursor-pointer"
+              className="group flex items-center gap-4 rounded-xl border border-border bg-card px-4 py-3 shadow-sm transition-all duration-200 hover:shadow-md hover:border-primary/30 cursor-pointer"
               onClick={() => navigate(`/agents/${agent.id}/edit`)}
             >
               {/* Name + Tenant */}

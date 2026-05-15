@@ -42,7 +42,7 @@ export function ModelBreakdown({ data, loading }: Props) {
 
   if (loading) {
     return (
-      <div className="flex h-full min-h-[300px] flex-col rounded-lg border border-border bg-card p-5">
+      <div className="flex h-full min-h-[300px] flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
         <Skeleton className="h-full w-full rounded-md" />
       </div>
     );
@@ -50,14 +50,14 @@ export function ModelBreakdown({ data, loading }: Props) {
 
   if (models.length === 0) {
     return (
-      <div className="flex h-full min-h-[300px] flex-col items-center justify-center rounded-lg border border-border bg-card p-5">
+      <div className="flex h-full min-h-[300px] flex-col items-center justify-center rounded-xl border border-border bg-card p-5 shadow-sm">
         <span className="text-sm text-muted-foreground">Sem dados</span>
       </div>
     );
   }
 
   return (
-    <div className="flex h-full min-h-[300px] flex-col rounded-lg border border-border bg-card p-5">
+    <div className="flex h-full min-h-[300px] flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
       <div className="mb-4">
         <h3 className="text-md font-medium text-foreground">Uso por modelo</h3>
         <p className="text-xs text-muted-foreground">Distribuição de tokens</p>

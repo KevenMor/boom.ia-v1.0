@@ -57,7 +57,7 @@ export function AppHeader() {
   ).toUpperCase();
 
   return (
-    <header className="sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between border-b border-border bg-background px-4">
+    <header className="sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between border-b border-border bg-background/80 backdrop-blur-md px-4">
       <div className="flex items-center gap-2">
         {isMobile && (
           <Button

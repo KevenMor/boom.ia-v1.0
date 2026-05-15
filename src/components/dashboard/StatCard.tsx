@@ -22,7 +22,7 @@ export function StatCard({
   icon: Icon,
 }: StatCardProps) {
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-5">
+    <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-5 shadow-sm transition-shadow duration-200 hover:shadow-md">
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
           {title}
