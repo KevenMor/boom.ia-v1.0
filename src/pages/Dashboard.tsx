@@ -37,35 +37,35 @@ const Dashboard = React.forwardRef<HTMLDivElement>(function Dashboard(_props, re
   const totalAgents = agents?.length ?? 0;
 
   return (
-    <div ref={ref} className="space-y-6">
+    <div ref={ref} className="space-y-4 md:space-y-6">
       <UsageStatsRow events={recentEvents ?? []} dailySummary={dailySummary ?? []} loading={loadingEvents} />
 
-      <div className="grid grid-cols-12 gap-4">
-        <div className="col-span-12 xl:col-span-8">
+      <div className="grid grid-cols-1 gap-3 md:gap-4 xl:grid-cols-12">
+        <div className="xl:col-span-8">
           <TokenUsageChart data={dailySummary ?? []} loading={loadingDaily} />
         </div>
-        <div className="col-span-12 xl:col-span-4">
+        <div className="xl:col-span-4">
           <ModelBreakdown data={dailySummary ?? []} loading={loadingDaily} />
         </div>
       </div>
 
-      <div className="grid grid-cols-12 gap-4">
-        <div className="col-span-12 xl:col-span-5">
+      <div className="grid grid-cols-1 gap-3 md:gap-4 xl:grid-cols-12">
+        <div className="xl:col-span-5">
           <AgentTokenBreakdown data={agentTokens ?? []} loading={loadingAgentTokens} />
         </div>
-        <div className="col-span-12 xl:col-span-4">
+        <div className="xl:col-span-4">
           <LatencyChart data={dailySummary ?? []} loading={loadingDaily} />
         </div>
-        <div className="col-span-12 xl:col-span-3">
+        <div className="xl:col-span-3">
           <CostEstimationCard events={recentEvents ?? []} loading={loadingEvents} />
         </div>
       </div>
 
-      <div className="grid grid-cols-12 gap-4">
-        <div className="col-span-12 md:col-span-6 lg:col-span-3">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-2 md:gap-4 lg:grid-cols-4">
+        <div>
           <RevenueChart />
         </div>
-        <div className="col-span-12 md:col-span-6 lg:col-span-3">
+        <div>
           <SprintProgress
             activeAgents={activeAgents}
             pausedAgents={pausedAgents}
@@ -73,18 +73,18 @@ const Dashboard = React.forwardRef<HTMLDivElement>(function Dashboard(_props, re
             loading={loadingAgents}
           />
         </div>
-        <div className="col-span-12 md:col-span-6 lg:col-span-3">
+        <div>
           <FeatureAdoption agents={totalAgents} providers={providers?.length ?? 0} tenants={activeTenants} />
         </div>
-        <div className="col-span-12 md:col-span-6 lg:col-span-3">
+        <div>
           <ProviderTokensCard data={providerTokens ?? []} loading={loadingProviderTokens} />
         </div>
       </div>
 
       {/* Lista de tenants faz sentido só na visão agregada (superadmin sem tenant fixo). */}
       {selectedTenantId === null && (
-        <div className="grid grid-cols-12 gap-4">
-          <div className="col-span-12 lg:col-span-6">
+        <div className="grid grid-cols-1 gap-3 md:gap-4 lg:grid-cols-2">
+          <div>
             <RecentDeployments tenants={tenants ?? []} loading={loadingTenants} />
           </div>
         </div>

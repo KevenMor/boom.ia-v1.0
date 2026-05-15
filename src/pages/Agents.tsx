@@ -41,19 +41,19 @@ export default function Agents() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
           <h2 className="text-lg font-semibold text-foreground">Agentes</h2>
           <p className="text-sm text-muted-foreground">{agents?.length ?? 0} agentes configurados</p>
         </div>
-        <Button className="gap-2 rounded-xl" onClick={() => setCreateOpen(true)}>
+        <Button className="gap-2 rounded-xl shrink-0" onClick={() => setCreateOpen(true)}>
           <Plus className="h-4 w-4" />
-          Novo Agente
+          <span className="hidden sm:inline">Novo Agente</span>
         </Button>
       </div>
 
       {/* Search */}
-      <div className="relative max-w-sm">
+      <div className="relative w-full md:max-w-sm">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder="Buscar agente ou tenant..."
@@ -130,7 +130,7 @@ export default function Agents() {
                   <h3 className="text-sm font-semibold text-foreground truncate">{agent.name}</h3>
                   <p className="text-xs text-muted-foreground truncate mt-0.5">{tenantName}</p>
                   {agent.description && (
-                    <p className="text-xs text-muted-foreground/80 mt-1.5 line-clamp-2 leading-relaxed">
+                    <p className="hidden text-xs text-muted-foreground/80 mt-1.5 line-clamp-2 leading-relaxed sm:block">
                       {agent.description}
                     </p>
                   )}
@@ -139,7 +139,7 @@ export default function Agents() {
                 {/* Menu */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button className="shrink-0 rounded-lg p-1.5 text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground opacity-0 group-hover:opacity-100">
+                    <button className="shrink-0 rounded-lg p-1.5 text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground md:opacity-0 md:group-hover:opacity-100">
                       <MoreHorizontal className="h-4 w-4" />
                     </button>
                   </DropdownMenuTrigger>
@@ -174,7 +174,7 @@ export default function Agents() {
               </div>
 
               {/* Webhook */}
-              <div className="mx-5 mb-3 rounded-xl bg-muted/40 border border-border/40 px-3 py-2 flex items-center gap-2">
+              <div className="mx-5 mb-3 hidden rounded-xl bg-muted/40 border border-border/40 px-3 py-2 sm:flex items-center gap-2">
                 <Globe className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
                 <span className="flex-1 truncate text-[11px] text-muted-foreground select-all">
                   {webhookUrl}
@@ -194,7 +194,7 @@ export default function Agents() {
               {/* Actions — bottom bar */}
               <div className="mt-auto border-t border-border/40 flex">
                 <button
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground active:bg-muted/70"
                   onClick={(e) => { e.stopPropagation(); navigate(`/agents/${agent.id}/edit`); }}
                 >
                   <Pencil className="h-3.5 w-3.5" />
@@ -202,7 +202,7 @@ export default function Agents() {
                 </button>
                 <span className="w-px bg-border/40" />
                 <button
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-primary transition-colors hover:bg-primary/5"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium text-primary transition-colors hover:bg-primary/5 active:bg-primary/10"
                   onClick={(e) => { e.stopPropagation(); navigate(`/agents/${agent.id}/sandbox`); }}
                 >
                   <MessageSquare className="h-3.5 w-3.5" />
@@ -210,7 +210,7 @@ export default function Agents() {
                 </button>
                 <span className="w-px bg-border/40" />
                 <button
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground active:bg-muted/70"
                   onClick={(e) => {
                     e.stopPropagation();
                     navigator.clipboard.writeText(demoUrl);

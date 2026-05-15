@@ -11,9 +11,11 @@ interface Props {
 export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
   if (loading) {
     return (
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
         {[1, 2, 3, 4].map((i) => (
-          <StatCard key={i} title="..." value="..." icon={Zap} />
+          <div key={i}>
+            <StatCard title="..." value="..." icon={Zap} />
+          </div>
         ))}
       </div>
     );
@@ -79,7 +81,7 @@ export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
   const spark1 = last7.length > 2 ? last7 : [25, 44, 30, 56, 40, 50, 13, 24, 84];
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
       <StatCard
         title="Tokens Hoje"
         value={formatTokens(todayTokens)}

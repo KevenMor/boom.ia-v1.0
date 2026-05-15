@@ -108,15 +108,12 @@ Boom IA é uma plataforma multi-tenant de **agentes WhatsApp** com painel React 
 
 ## 9. Pontos de atenção / dívida técnica
 
-- **README.md ainda é o template Lovable** — não reflete o projeto real. Manter este `CLAUDE.md` como fonte da verdade.
-- **Múltiplos `docker-compose.*`** (8+ variantes) e vários `.env.*` — fácil confundir alvo de deploy. Consolidar quando possível.
+- **Múltiplos `docker-compose.*`** (7 variantes) e vários `.env.*` — fácil confundir alvo de deploy. Consolidar quando possível.
 - **Prompts em código TS** (não em DB) — adicionar tenant exige redeploy do server. Há tabela `prompts` mas o registry hardcoda imports.
 - **Fallback cron quando Redis ausente** funciona, mas duplica lógica de agendamento; preferir BullMQ em produção.
 - **Catch-all content-type parser** (`*` → buffer) em `index.ts` aceita qualquer body — útil mas perigoso; revisar.
-- **`bun.lock` + `bun.lockb` + `package-lock.json` + `deno.lock`** convivem — escolher um gerenciador.
 - **Encoding:** commits recentes (cb51a1a, 31b6e85, dd954fe) corrigiram corrupção UTF-8 em prompts; arquivos com pt-BR podem reaparecer corrompidos — sempre salvar UTF-8 sem BOM (registry.ts ainda mostra `���` em comentário).
-- **`.env` commitado** na raiz (395 bytes) — verificar se contém apenas placeholders.
-- **`node_modules/` em `server/` e `src/`** versionados? `.gitignore` deve cobrir; conferir.
+- **`server/src/routes/auth.ts`** existe mas não é registrado em `index.ts` — verificar se é dead code ou falta registro.
 
 ## 10. Convenções para o Claude Code nesta base
 
@@ -126,6 +123,36 @@ Boom IA é uma plataforma multi-tenant de **agentes WhatsApp** com painel React 
 - Antes de editar prompt de tenant, conferir teste correspondente (`*.prompt.test.ts`).
 - Quando Redis não está disponível, alterações em workers devem ter fallback no cron de `index.ts`.
 - Mexer em `chat-local.ts` exige rodar `npm run test` em `server/` (testes de sanitize, extract-media-commands, agendaNotification).
+
+---
+
+## 11. Documentação detalhada por pasta
+
+### Server
+- [server/src/routes/CLAUDE.md](server/src/routes/CLAUDE.md)
+- [server/src/services/CLAUDE.md](server/src/services/CLAUDE.md)
+- [server/src/services/prompts/CLAUDE.md](server/src/services/prompts/CLAUDE.md)
+- [server/src/utils/CLAUDE.md](server/src/utils/CLAUDE.md)
+- [server/src/workers/CLAUDE.md](server/src/workers/CLAUDE.md)
+- [server/src/config/CLAUDE.md](server/src/config/CLAUDE.md)
+- [server/src/constants/CLAUDE.md](server/src/constants/CLAUDE.md)
+- [server/src/types/CLAUDE.md](server/src/types/CLAUDE.md)
+- [server/src/lib/CLAUDE.md](server/src/lib/CLAUDE.md)
+
+### Frontend
+- [src/pages/CLAUDE.md](src/pages/CLAUDE.md)
+- [src/components/CLAUDE.md](src/components/CLAUDE.md)
+- [src/hooks/CLAUDE.md](src/hooks/CLAUDE.md)
+- [src/contexts/CLAUDE.md](src/contexts/CLAUDE.md)
+- [src/lib/CLAUDE.md](src/lib/CLAUDE.md)
+- [src/integrations/supabase/CLAUDE.md](src/integrations/supabase/CLAUDE.md)
+
+### Infraestrutura
+- [sql/CLAUDE.md](sql/CLAUDE.md)
+- [supabase/functions/CLAUDE.md](supabase/functions/CLAUDE.md)
+- [docker/CLAUDE.md](docker/CLAUDE.md)
+- [docs/CLAUDE.md](docs/CLAUDE.md)
+- [scripts/CLAUDE.md](scripts/CLAUDE.md)
 
 ---
 

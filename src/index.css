@@ -206,6 +206,15 @@
 }
 
 @layer utilities {
+  /* Hide scrollbar but keep scroll functionality */
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Box card — clean Xintra style */
   .box {
     @apply bg-card border border-border shadow-[0_1px_3px_rgba(0,0,0,0.04)] mb-0;

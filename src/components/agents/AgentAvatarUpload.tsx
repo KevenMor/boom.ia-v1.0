@@ -17,9 +17,25 @@ interface Props {
   className?: string;
   /** Layout grande estilo Stitch / Material (Editar agente premium). */
   layout?: "default" | "stitch";
+  /** Tamanho do círculo no layout stitch (mobile-first: compact evita sobrepor campos). */
+  stitchSize?: "compact" | "default";
 }
 
-export function AgentAvatarUpload({ currentUrl, onUploaded, className, layout = "default" }: Props) {
+const stitchCircle =
+  "group relative flex shrink-0 cursor-pointer overflow-hidden rounded-full border-2 border-[#ccc3d8] bg-[#dce9ff] dark:border-border dark:bg-muted";
+
+const stitchSizes = {
+  compact: "h-20 w-20 sm:h-24 sm:w-24",
+  default: "h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28",
+} as const;
+
+export function AgentAvatarUpload({
+  currentUrl,
+  onUploaded,
+  className,
+  layout = "default",
+  stitchSize = "default",
+}: Props) {
   const [selected, setSelected] = useState<string | null>(currentUrl ?? null);
   const [showPicker, setShowPicker] = useState(!currentUrl);
 
@@ -49,12 +65,12 @@ export function AgentAvatarUpload({ currentUrl, onUploaded, className, layout = 
 
   if (layout === "stitch") {
     return (
-      <div className={cn("flex w-full flex-col items-center gap-4", className)}>
+      <div className={cn("flex w-full flex-col items-center gap-3 sm:items-start sm:gap-4", className)}>
         <div className="relative shrink-0">
           <button
             type="button"
             onClick={() => setShowPicker(true)}
-            className="group relative flex h-32 w-32 cursor-pointer overflow-hidden rounded-full border-2 border-[#ccc3d8] bg-[#dce9ff] dark:border-border dark:bg-muted"
+            className={cn(stitchCircle, stitchSizes[stitchSize])}
           >
             {displayUrl ? (
               <>
@@ -91,7 +107,7 @@ export function AgentAvatarUpload({ currentUrl, onUploaded, className, layout = 
           Alterar avatar
         </button>
         {showPicker ? (
-          <div className="flex w-full max-w-[240px] flex-wrap justify-center gap-2 pt-2 md:max-w-none md:justify-start">
+          <div className="flex w-full flex-wrap justify-center gap-2 pt-1 sm:max-w-none sm:justify-start">
             {PRESET_AVATARS.map(({ url, label }) => (
               <button
                 key={url}

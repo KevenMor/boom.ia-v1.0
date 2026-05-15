@@ -74,24 +74,35 @@ type EditAgentTab = "basic" | "model" | "integration" | "schedule" | "advanced";
 
 /** Campos Stitch / Material Amethyst — alinhado ao mock Editar agente Boom IA Premium */
 const fld =
-  "w-full rounded-lg border border-[#ccc3d8] bg-white px-4 py-2.5 font-jakarta text-base text-[#0b1c30] outline-none transition-all placeholder:text-muted-foreground focus:border-[#7c3aed] focus:ring-2 focus:ring-[#7c3aed]/20 dark:border-border dark:bg-card dark:text-foreground";
+  "w-full min-w-0 max-w-full rounded-lg border border-[#ccc3d8] bg-white px-4 py-2.5 font-jakarta text-base text-[#0b1c30] outline-none transition-all placeholder:text-muted-foreground focus:border-[#7c3aed] focus:ring-2 focus:ring-[#7c3aed]/20 dark:border-border dark:bg-card dark:text-foreground";
 
 /** Cartões tipo Stitch Material — surface-container-lowest */
 const stitchCard =
-  "rounded-xl border border-[#ccc3d8] bg-white p-5 shadow-sm dark:border-border dark:bg-card sm:p-6";
+  "rounded-xl border border-[#ccc3d8] bg-white p-4 shadow-sm dark:border-border dark:bg-card sm:p-6 max-sm:border-0 max-sm:bg-transparent max-sm:shadow-none max-sm:p-0";
 
 const stitchLbl = "mb-2 block text-sm font-semibold tracking-wide text-[#4a4455] dark:text-muted-foreground";
 
-const EDIT_AGENT_STITCH_TABS: { id: EditAgentTab; label: string }[] = [
-  { id: "basic", label: "Informações Básicas" },
-  { id: "model", label: "Modelo de IA" },
-  { id: "integration", label: "Integração" },
-  { id: "schedule", label: "Horário e Follow-up" },
-  { id: "advanced", label: "Parâmetros Avançados" },
+/** Card visível no mobile (stitchCard remove borda no max-sm) */
+const stitchSection =
+  "box-border w-full min-w-0 max-w-full overflow-x-hidden rounded-xl border border-[#ccc3d8] bg-white p-4 shadow-sm dark:border-border dark:bg-card sm:p-6";
+
+const stitchSectionTitle =
+  "text-lg font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-2xl";
+
+/** Sliders com alvo de toque maior no mobile (px evita thumb cortar a borda do card) */
+const sliderTouch =
+  "box-border w-full min-w-0 max-w-full touch-pan-y py-3 sm:py-2 [&>span.block]:h-7 [&>span.block]:w-7 [&>span.block]:shadow-md sm:[&>span.block]:h-5 sm:[&>span.block]:w-5 sm:[&>span.block]:shadow-none";
+
+const EDIT_AGENT_STITCH_TABS: { id: EditAgentTab; label: string; shortLabel?: string }[] = [
+  { id: "basic", label: "Informações Básicas", shortLabel: "Básico" },
+  { id: "model", label: "Modelo de IA", shortLabel: "Modelo" },
+  { id: "integration", label: "Integração", shortLabel: "Integração" },
+  { id: "schedule", label: "Horário e Follow-up", shortLabel: "Horário" },
+  { id: "advanced", label: "Parâmetros Avançados", shortLabel: "Avançado" },
 ];
 
 /** Mesma coluna para header + conteúdo (evita desalinhamento entre abas e cards) */
-const editAgentCol = "mx-auto w-full max-w-[1280px] px-5 sm:px-6 lg:px-8";
+const editAgentCol = "mx-auto w-full max-w-[1280px] px-3 sm:px-6 lg:px-8";
 
 export default function EditAgent() {
   const { agentId } = useParams<{ agentId: string }>();
@@ -323,7 +334,7 @@ export default function EditAgent() {
 
   if (isLoading) {
     return (
-      <div className="-mx-4 flex min-h-[50vh] flex-1 flex-col bg-[#f8f9ff] py-8 dark:bg-background md:-mx-6">
+      <div className="flex min-h-[50vh] flex-1 flex-col bg-[#f8f9ff] py-8 dark:bg-background">
         <div className={cn(editAgentCol, "space-y-6")}>
           <Skeleton className="h-9 max-w-md rounded-lg" />
           <Skeleton className="min-h-[560px] w-full rounded-xl border border-[#ccc3d8]/80 dark:border-border" />
@@ -344,44 +355,32 @@ export default function EditAgent() {
 
   return (
     <>
-      <div className="-mx-4 flex min-h-[calc(100dvh-6rem)] flex-1 flex-col overflow-hidden bg-[#f8f9ff] dark:bg-background md:-mx-6">
+      <div className="flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col overflow-x-hidden bg-[#f8f9ff] dark:bg-background">
         <header className="sticky top-0 z-40 shrink-0 border-b border-[#ccc3d8] bg-white/90 backdrop-blur-md dark:border-border dark:bg-card/95">
-          <div className={cn(editAgentCol, "flex flex-wrap items-center gap-4 py-4 sm:flex-nowrap")}>
-            <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
-              <Button variant="ghost" size="icon" type="button" className="h-9 w-9 shrink-0 -ml-1" onClick={() => navigate("/agents")}>
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-              <h2 className="min-w-0 truncate text-lg font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-xl">
-                Editar Agente: {watch("name")?.trim() || "…"}
-              </h2>
-            </div>
-            <div className="flex w-full shrink-0 justify-end gap-2 sm:w-auto">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-11 shrink-0 rounded-lg border border-[#ccc3d8] bg-white px-5 font-semibold text-[#630ed4] transition-colors hover:bg-[#cbdbf5] dark:border-border dark:bg-card dark:text-violet-400 dark:hover:bg-accent sm:px-6"
-                onClick={() => navigate("/agents")}
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                form="edit-agent-form"
-                disabled={update.isPending}
-                className="h-11 shrink-0 gap-2 rounded-lg bg-[#7c3aed] px-5 font-semibold text-white shadow-sm hover:bg-[#630ed4] sm:px-6"
-              >
-                {update.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                Salvar Alterações
-              </Button>
-            </div>
+          <div className={cn(editAgentCol, "flex items-center gap-2 py-2.5 sm:gap-4 sm:py-4")}>
+            <Button variant="ghost" size="icon" type="button" className="h-9 w-9 shrink-0 -ml-1" onClick={() => navigate("/agents")}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <h2 className="min-w-0 flex-1 truncate text-base font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-xl">
+              {watch("name")?.trim() || "Editar Agente"}
+            </h2>
+            <Button
+              type="submit"
+              form="edit-agent-form"
+              disabled={update.isPending}
+              className="h-9 shrink-0 gap-1.5 rounded-lg bg-[#7c3aed] px-3 text-xs font-semibold text-white shadow-sm hover:bg-[#630ed4] sm:h-11 sm:gap-2 sm:px-6 sm:text-sm"
+            >
+              {update.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Salvar
+            </Button>
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className={cn(editAgentCol, "pb-12 pt-6 md:pt-8")}>
-            <form id="edit-agent-form" onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+        <div className="min-w-0 flex-1 pb-[max(2rem,env(safe-area-inset-bottom))] pt-2">
+          <div className={cn(editAgentCol, "min-w-0 max-w-full pb-8 pt-2 md:pt-4")}>
+            <form id="edit-agent-form" onSubmit={handleSubmit(onSubmit)} className="min-w-0 max-w-full space-y-5 sm:space-y-8">
               <nav
-                className="-mx-px flex gap-6 overflow-x-auto border-b border-[#ccc3d8] dark:border-border [-ms-overflow-style:none] [scrollbar-width:none] sm:gap-8 md:gap-10 [&::-webkit-scrollbar]:hidden"
+                className="scrollbar-none flex w-full min-w-0 max-w-full gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch] sm:border-b sm:border-[#ccc3d8] sm:pb-0 sm:dark:border-border"
                 aria-label="Seções do formulário"
               >
                 {EDIT_AGENT_STITCH_TABS.map((t) => (
@@ -392,55 +391,60 @@ export default function EditAgent() {
                     aria-selected={agentTab === t.id}
                     onClick={() => setAgentTab(t.id)}
                     className={cn(
-                      "relative -mb-px shrink-0 whitespace-nowrap border-b-2 pb-3 pt-0.5 text-sm font-semibold tracking-wide outline-none ring-offset-background transition-colors focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-[#7c3aed]/40 dark:ring-offset-card",
+                      "shrink-0 whitespace-nowrap rounded-full px-3 py-2 text-xs font-semibold transition-colors active:scale-[0.97] sm:rounded-none sm:border-b-2 sm:px-4 sm:pb-3 sm:pt-1 sm:text-sm",
                       agentTab === t.id
-                        ? "border-[#630ed4] text-[#630ed4]"
-                        : "border-transparent text-[#4a4455] hover:border-[#ccc3d8]/80 hover:text-[#630ed4] dark:text-muted-foreground dark:hover:border-border dark:hover:text-foreground"
+                        ? "bg-[#7c3aed] text-white shadow-sm sm:border-[#630ed4] sm:bg-transparent sm:text-[#630ed4] sm:shadow-none"
+                        : "bg-slate-100 text-[#4a4455] dark:bg-muted dark:text-muted-foreground sm:border-transparent sm:bg-transparent sm:hover:border-[#ccc3d8]/80 sm:hover:text-[#630ed4] sm:dark:hover:border-border"
                     )}
                   >
-                    {t.label}
+                    <span className="sm:hidden">{t.shortLabel ?? t.label}</span>
+                    <span className="hidden sm:inline">{t.label}</span>
                   </button>
                 ))}
               </nav>
 
               {agentTab === "basic" && (
-              <section className={cn(stitchCard)}>
-                <h3 className="mb-6 text-xl font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-2xl">Informações Básicas</h3>
-                <div className="grid grid-cols-1 gap-8 md:grid-cols-[minmax(0,13.5rem)_minmax(0,1fr)] md:items-start md:gap-10 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] lg:gap-12">
-                  <div className="flex w-full flex-col items-center md:items-start">
-                    <Label className={cn(stitchLbl, "w-full text-center md:text-left")}>Foto do perfil</Label>
+              <section className="rounded-xl border-0 bg-transparent p-0 sm:border sm:border-[#ccc3d8] sm:bg-white sm:p-6 sm:shadow-sm sm:dark:border-border sm:dark:bg-card">
+                <h3 className="mb-4 text-lg font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:mb-6 sm:text-2xl">
+                  Informações Básicas
+                </h3>
+                {/* Avatar — compact row on mobile, column on desktop */}
+                <div className="mb-6 flex flex-col gap-5 sm:mb-8">
+                  <div className="flex justify-center border-b border-[#ccc3d8]/50 pb-5 dark:border-border/60 sm:justify-start sm:border-0 sm:pb-0">
                     <AgentAvatarUpload
                       agentId={agent.id}
                       currentUrl={avatarUrl}
                       onUploaded={(url) => setAvatarUrl(url)}
                       layout="stitch"
-                      className="md:items-start"
+                      stitchSize="compact"
+                      className="w-auto"
                     />
                   </div>
-                  <div className="min-w-0 space-y-6">
-                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label className={stitchLbl}>Nome do Agente</Label>
-                        <Input {...register("name")} className={fld} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className={stitchLbl}>Tenant</Label>
-                        <Select value={watch("tenant_id") || agent.tenant_id} onValueChange={(v) => setValue("tenant_id", v)}>
-                          <SelectTrigger className={cn(fld, "flex h-auto min-h-11 items-center")}>
-                            <SelectValue placeholder="Tenant" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {activeTenants.map((t) => (
-                              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                  <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
+                    <div className="space-y-1.5 sm:space-y-2">
+                      <Label className={stitchLbl}>Nome do Agente</Label>
+                      <Input {...register("name")} className={fld} />
                     </div>
-                    <div className="space-y-2">
-                      <Label className={stitchLbl}>Descrição interna</Label>
-                      <Textarea {...register("description")} rows={3} className={cn(fld, "min-h-[88px] resize-y")} />
+                    <div className="space-y-1.5 sm:space-y-2">
+                      <Label className={stitchLbl}>Tenant</Label>
+                      <Select value={watch("tenant_id") || agent.tenant_id} onValueChange={(v) => setValue("tenant_id", v)}>
+                        <SelectTrigger className={cn(fld, "flex h-auto min-h-11 items-center")}>
+                          <SelectValue placeholder="Tenant" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {activeTenants.map((t) => (
+                            <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
+                  </div>
+                </div>
+                <div className="min-w-0 space-y-5 sm:space-y-6">
+                  <div className="space-y-1.5 sm:space-y-2">
+                    <Label className={stitchLbl}>Descrição interna</Label>
+                    <Textarea {...register("description")} rows={2} className={cn(fld, "min-h-[72px] resize-y sm:min-h-[88px]")} />
+                  </div>
                     <div className="rounded-lg border border-[#ccc3d8] bg-[#eff4ff] p-4 dark:border-border dark:bg-muted/40">
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <div>
@@ -502,7 +506,6 @@ export default function EditAgent() {
                       </div>
                     )}
                   </div>
-                </div>
               </section>
             )}
 
@@ -791,20 +794,20 @@ export default function EditAgent() {
             )}
 
             {agentTab === "advanced" && (
-              <>
-                <section className={cn(stitchCard, "space-y-6")}>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-xl font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-2xl">Dispatcher (Phase 1)</h3>
-                    <Badge variant="secondary" className="text-[10px]">Tool calling</Badge>
+              <div className="min-w-0 w-full max-w-full space-y-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:space-y-6">
+                <section className={cn(stitchSection, "space-y-4 sm:space-y-6")}>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                    <h3 className={stitchSectionTitle}>Dispatcher (Phase 1)</h3>
+                    <Badge variant="secondary" className="w-fit text-[10px]">Tool calling</Badge>
                   </div>
-                  <p className="-mt-2 text-xs text-muted-foreground">
+                  <p className="break-words text-xs leading-relaxed text-muted-foreground sm:-mt-2 [overflow-wrap:anywhere]">
                     Escolha o modelo que decide quando acionar ferramentas. Prompt do dispatcher pode estar definido por tenant — veja{' '}
                     <Link className="text-[#630ed4] underline dark:text-violet-400" to="/prompts">Prompts</Link>.
                   </p>
                   <div className="space-y-2">
                     <Label className={stitchLbl}>Provedor do dispatcher</Label>
                     <Select value={dispatcherProviderId || "_none"} onValueChange={(v) => setDispatcherProviderId(v === "_none" ? "" : v)}>
-                      <SelectTrigger className={cn(fld, "flex h-auto min-h-11 items-center")}>
+                      <SelectTrigger className={cn(fld, "flex h-auto min-h-11 max-w-full min-w-0 items-center [&>span]:min-w-0 [&>span]:truncate")}>
                         <SelectValue placeholder="Nenhum (desabilitado)" />
                       </SelectTrigger>
                       <SelectContent>
@@ -823,7 +826,7 @@ export default function EditAgent() {
                       <div className="space-y-2">
                         <Label className={stitchLbl}>Modelo do dispatcher</Label>
                         <Select value={dispatcherModel || "_default"} onValueChange={(v) => setDispatcherModel(v === "_default" ? "" : v)}>
-                          <SelectTrigger className={cn(fld, "flex h-auto min-h-11 items-center")}>
+                          <SelectTrigger className={cn(fld, "flex h-auto min-h-11 max-w-full min-w-0 items-center [&>span]:min-w-0 [&>span]:truncate")}>
                             <SelectValue placeholder="Padrão do provedor" />
                           </SelectTrigger>
                           <SelectContent>
@@ -838,39 +841,39 @@ export default function EditAgent() {
                   })()}
                 </section>
 
-                <section className={cn(stitchCard, "space-y-6")}>
-                  <h3 className="text-xl font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-2xl">Parâmetros de geração</h3>
-                  <div className="space-y-6">
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
+                <section className={cn(stitchSection, "space-y-4 sm:space-y-6")}>
+                  <h3 className={stitchSectionTitle}>Parâmetros de geração</h3>
+                  <div className="space-y-6 sm:space-y-7">
+                    <div className="min-w-0 w-full space-y-3">
+                      <div className="flex items-center justify-between gap-3">
                         <Label className="text-sm font-medium text-muted-foreground">Temperature</Label>
-                        <span className="font-mono text-sm text-[#630ed4]">{temp.toFixed(2)}</span>
+                        <span className="shrink-0 font-mono text-sm font-semibold text-[#630ed4]">{temp.toFixed(2)}</span>
                       </div>
-                      <Slider value={[temp]} onValueChange={([v]) => { setTemp(v); setValue("temperature", v); }} min={0} max={2} step={0.05} />
+                      <Slider className={sliderTouch} value={[temp]} onValueChange={([v]) => { setTemp(v); setValue("temperature", v); }} min={0} max={2} step={0.05} />
                     </div>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
+                    <div className="min-w-0 w-full space-y-3">
+                      <div className="flex items-center justify-between gap-3">
                         <Label className="text-sm font-medium text-muted-foreground">Top P</Label>
-                        <span className="font-mono text-sm text-[#630ed4]">{topP.toFixed(2)}</span>
+                        <span className="shrink-0 font-mono text-sm font-semibold text-[#630ed4]">{topP.toFixed(2)}</span>
                       </div>
-                      <Slider value={[topP]} onValueChange={([v]) => { setTopP(v); setValue("top_p", v); }} min={0} max={1} step={0.05} />
-                      <p className="text-xs text-muted-foreground">Limita palavras pouco prováveis (0,8 mais focado).</p>
+                      <Slider className={sliderTouch} value={[topP]} onValueChange={([v]) => { setTopP(v); setValue("top_p", v); }} min={0} max={1} step={0.05} />
+                      <p className="text-xs leading-relaxed text-muted-foreground">Limita palavras pouco prováveis (0,8 mais focado).</p>
                     </div>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
+                    <div className="min-w-0 w-full space-y-3">
+                      <div className="flex items-center justify-between gap-3">
                         <Label className="text-sm font-medium text-muted-foreground">Top K</Label>
-                        <span className="font-mono text-sm text-[#630ed4]">{topK}</span>
+                        <span className="shrink-0 font-mono text-sm font-semibold text-[#630ed4]">{topK}</span>
                       </div>
-                      <Slider value={[topK]} onValueChange={([v]) => { setTopK(v); setValue("top_k", v); }} min={1} max={100} step={1} />
-                      <p className="text-xs text-muted-foreground">Tamanho do vocabulário considerado em cada passo.</p>
+                      <Slider className={sliderTouch} value={[topK]} onValueChange={([v]) => { setTopK(v); setValue("top_k", v); }} min={1} max={100} step={1} />
+                      <p className="text-xs leading-relaxed text-muted-foreground">Tamanho do vocabulário considerado em cada passo.</p>
                     </div>
                   </div>
                 </section>
 
-                <section className={cn(stitchCard, "space-y-6")}>
-                  <h3 className="text-xl font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-2xl">Delays de humanização</h3>
-                  <p className="-mt-2 text-sm text-muted-foreground">Tempo em segundos com variação automática ±30%.</p>
-                  <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+                <section className={cn(stitchSection, "space-y-4 sm:space-y-6")}>
+                  <h3 className={stitchSectionTitle}>Delays de humanização</h3>
+                  <p className="text-sm leading-relaxed text-muted-foreground sm:-mt-2">Tempo em segundos com variação automática ±30%.</p>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-6">
                     <div className="space-y-2">
                       <Label className={stitchLbl}>Leitura</Label>
                       <Input type="number" min={0} step={0.5} value={readDelay} onChange={(e) => setReadDelay(Number(e.target.value))} className={cn(fld, "font-mono text-sm")} />
@@ -886,8 +889,8 @@ export default function EditAgent() {
                   </div>
                 </section>
 
-                <section className={cn(stitchCard, "space-y-4")}>
-                  <h3 className="text-xl font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-2xl">Debounce de mensagens</h3>
+                <section className={cn(stitchSection, "space-y-4")}>
+                  <h3 className={stitchSectionTitle}>Debounce de mensagens</h3>
                   <div className="flex items-center justify-between">
                     <Label className="text-sm font-medium text-muted-foreground">Janela (s)</Label>
                     <span className="font-mono text-sm text-[#630ed4]">{debounceMs}s</span>
@@ -898,8 +901,8 @@ export default function EditAgent() {
                   </p>
                 </section>
 
-                <section className={cn(stitchCard, "space-y-4")}>
-                  <h3 className="text-xl font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-2xl">Boas-vindas (primeiro contato)</h3>
+                <section className={cn(stitchSection, "space-y-4")}>
+                  <h3 className={stitchSectionTitle}>Boas-vindas (primeiro contato)</h3>
                   <p className="text-xs text-muted-foreground">
                     Fluxo típico: texto de boas-vindas, vídeo opcional em seguida, depois pergunta o nome se configurado.
                   </p>
@@ -915,10 +918,10 @@ export default function EditAgent() {
                   </div>
                 </section>
 
-                <section className={cn(stitchCard, "space-y-4")}>
+                <section className={cn(stitchSection, "space-y-4")}>
                   <div className="flex items-center gap-2">
-                    <Link2 className="h-6 w-6 text-[#630ed4]" />
-                    <h3 className="text-xl font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-2xl">Demo público</h3>
+                    <Link2 className="h-5 w-5 shrink-0 text-[#630ed4] sm:h-6 sm:w-6" />
+                    <h3 className={stitchSectionTitle}>Demo público</h3>
                   </div>
                   <div className="space-y-2">
                     <Label className={stitchLbl}>Senha do demo (vazio = livre)</Label>
@@ -945,7 +948,7 @@ export default function EditAgent() {
                     </div>
                   )}
                 </section>
-              </>
+              </div>
             )}
           </form>
           </div>

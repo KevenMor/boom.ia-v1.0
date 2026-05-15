@@ -17,13 +17,13 @@ function LayoutInner() {
       ? "flex min-h-0 flex-1 flex-col overflow-hidden"
       : isConversations
         ? "flex min-h-0 flex-1 flex-col overflow-hidden bg-[#f4f7f9] pb-[env(safe-area-inset-bottom,0px)] pt-0 [-webkit-tap-highlight-color:transparent] dark:bg-background"
-        : "flex-1 overflow-auto p-4 md:p-6";
+        : "min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 md:p-6";
 
   return (
     <div className="flex h-[100dvh] min-h-0 overflow-hidden bg-background">
       <AppSidebar />
       <div
-        className="flex flex-1 flex-col transition-all duration-300"
+        className="flex min-w-0 flex-1 flex-col transition-all duration-300"
         style={{ paddingLeft: isMobile ? 0 : (collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH) }}
       >
         <Suspense
@@ -38,7 +38,9 @@ function LayoutInner() {
         </Suspense>
         <main className={mainChrome}>
           <Suspense fallback={null}>
-            <Outlet />
+            <div className="min-w-0 w-full max-w-full">
+              <Outlet />
+            </div>
           </Suspense>
         </main>
       </div>

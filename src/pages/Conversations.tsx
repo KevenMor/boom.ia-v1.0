@@ -900,7 +900,7 @@ export default function Conversations() {
         <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto overscroll-contain px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 sm:items-center sm:px-4 sm:pb-8 md:py-8">
           <div className="w-full max-w-[920px] overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-[0_4px_32px_-8px_rgba(15,23,42,0.12)] dark:border-border dark:bg-card sm:rounded-2xl">
             <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(272px,360px)] lg:grid-cols-[1fr_380px]">
-              <div className="relative flex flex-col justify-center gap-6 border-b border-slate-100 bg-gradient-to-br from-[#f5f3ff] via-white to-[#ecfeff] px-8 py-10 dark:border-border dark:from-card dark:via-card dark:to-card md:border-b-0 md:border-r md:py-12">
+              <div className="relative flex flex-col justify-center gap-4 border-b border-slate-100 bg-gradient-to-br from-[#f5f3ff] via-white to-[#ecfeff] px-5 py-6 dark:border-border dark:from-card dark:via-card dark:to-card sm:gap-6 sm:px-8 sm:py-10 md:border-b-0 md:border-r md:py-12">
                 <div>
                   <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#7c3aed]">Área operacional</span>
                   <h1 className="mt-3 text-[1.65rem] font-bold tracking-tight text-[#0f172a] dark:text-foreground md:text-[2rem] md:leading-tight">

@@ -25,6 +25,17 @@ dist
 dist-ssr
 *.local
 
+# Build output
+dist/
+server/dist/
+
+# Lock files (projeto usa npm — manter apenas package-lock.json)
+bun.lock
+bun.lockb
+
+# E2E artifacts
+e2e-screenshots/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

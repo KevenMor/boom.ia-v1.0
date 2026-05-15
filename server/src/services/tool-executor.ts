@@ -127,8 +127,8 @@ async function executeInventoryQuery(
       }
     }
 
-    // #region agent log
     const colorSynonyms = cor ? getColorSynonyms(cor) : [];
+    // #region agent log
     fetch("http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "ad5eb6" },
