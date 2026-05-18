@@ -1181,7 +1181,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
 
           /** Sandbox: com dual-provider, sem tool calls no dispatcher não havia evento `debug` — a UI ficava sem bloco. */
           const dualSandboxCfg = (agent.config || {}) as Record<string, unknown>;
-          const dualSandboxDebugConfig: Record<string, unknown> = {
+          const dualSandboxDebugConfig: { type: string; [k: string]: unknown } = {
             type: "config",
             model: `${dispatcherModel} (dispatcher) → ${model} (conversacional)`,
             temperature: agent.temperature ?? 0.7,
