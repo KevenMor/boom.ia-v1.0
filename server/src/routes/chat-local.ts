@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+﻿import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
 import { buildSystemPrompt, getDispatcherPrompt } from "../services/prompts/registry.js";
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
@@ -14,7 +14,7 @@ const MSG_SPLIT = "<<MSG_SPLIT>>";
 const MAX_TOOL_ITERATIONS = 5;
 
 /**
- * O dispatcher costuma chamar `atribuir_time` / marcar lead só com `reason`.
+ * O dispatcher costuma chamar `atribuir_time` / marcar lead sÃ³ com `reason`.
  * Repassa conversation_id e chatwoot_conversation_id do POST /chat-local para o tool-executor.
  */
 function injectChatwootToolContext(
@@ -38,17 +38,17 @@ function injectChatwootToolContext(
 /** Quando modelos Gemini 2.5 / *-lite devolvem 503 (alta demanda na API), tentar este modelo na mesma chave. */
 const GEMINI_CONVERSATIONAL_FALLBACK_MODEL = "gemini-2.0-flash";
 
-/** Mensagem amigável quando a API do provedor (OpenAI/Gemini) retorna erro HTTP */
+/** Mensagem amigÃ¡vel quando a API do provedor (OpenAI/Gemini) retorna erro HTTP */
 function providerErrorMessage(status: number, errText: string): string {
   const preview = errText.slice(0, 200).replace(/\s+/g, " ").trim();
-  if (status === 401) return "API key inválida ou expirada (401). Verifique o provedor em Provedores e atualize a chave.";
-  if (status === 403) return "Acesso negado pelo provedor de IA (403). Verifique a API key e permissões em Provedores.";
-  if (status === 429) return "Limite de uso do provedor excedido (429). Tente mais tarde ou verifique o plano/créditos.";
+  if (status === 401) return "API key invÃ¡lida ou expirada (401). Verifique o provedor em Provedores e atualize a chave.";
+  if (status === 403) return "Acesso negado pelo provedor de IA (403). Verifique a API key e permissÃµes em Provedores.";
+  if (status === 429) return "Limite de uso do provedor excedido (429). Tente mais tarde ou verifique o plano/crÃ©ditos.";
   if (status === 503) {
     if (/high demand|UNAVAILABLE|overloaded/i.test(errText)) {
-      return "O provedor de IA está temporariamente sobrecarregado (503). Tente de novo em instantes ou, no agente, use o modelo gemini-2.0-flash (costuma ser mais estável na API do que 2.5 / *-lite).";
+      return "O provedor de IA estÃ¡ temporariamente sobrecarregado (503). Tente de novo em instantes ou, no agente, use o modelo gemini-2.0-flash (costuma ser mais estÃ¡vel na API do que 2.5 / *-lite).";
     }
-    return `Serviço temporariamente indisponível (503). Tente novamente em alguns minutos. ${preview ? `Detalhe: ${preview}` : ""}`;
+    return `ServiÃ§o temporariamente indisponÃ­vel (503). Tente novamente em alguns minutos. ${preview ? `Detalhe: ${preview}` : ""}`;
   }
   if (status >= 500) return `Erro interno do provedor (${status}). Tente novamente em alguns minutos.`;
   return preview || `Erro do provedor (${status}). Verifique a API key em Provedores.`;
@@ -122,7 +122,7 @@ function toOpenAIMessages(
   return result;
 }
 
-// ── nearest_unit / consultar_unidade guard ─────────────────────────────────
+// â”€â”€ nearest_unit / consultar_unidade guard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const NEAREST_UNIT_TOOL_NAMES = new Set([
   "consultar_unidade",
@@ -134,10 +134,10 @@ function isNearestUnitTool(toolName: string): boolean {
   return NEAREST_UNIT_TOOL_NAMES.has(toolName);
 }
 
-/** Extrai CEP (8 dígitos) do histórico de mensagens do usuário */
+/** Extrai CEP (8 dÃ­gitos) do histÃ³rico de mensagens do usuÃ¡rio */
 function extractCepFromMessages(messages: Array<{ role: string; content: string }>): string | null {
   const CEP_RE = /\b(\d{5})-?(\d{3})\b/;
-  // Percorre mensagens do usuário do mais recente para o mais antigo
+  // Percorre mensagens do usuÃ¡rio do mais recente para o mais antigo
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].role !== "user") continue;
     const m = (messages[i].content || "").match(CEP_RE);
@@ -146,7 +146,7 @@ function extractCepFromMessages(messages: Array<{ role: string; content: string 
   return null;
 }
 
-// ── Vale Suíço / Omnibees guards ───────────────────────────────────────────
+// â”€â”€ Vale SuÃ­Ã§o / Omnibees guards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const OMNIBEES_TOOL_NAMES = new Set([
   "consultar_disponibilidade_vale_suico",
@@ -159,43 +159,43 @@ function isOmnibeesTool(toolName: string): boolean {
 }
 
 /**
- * Detecta se o usuário forneceu de forma explícita o número de adultos no histórico.
- * Trata variações como "2 adultos", "duas pessoas", "casal", "só nós dois", "eu e minha esposa", etc.
+ * Detecta se o usuÃ¡rio forneceu de forma explÃ­cita o nÃºmero de adultos no histÃ³rico.
+ * Trata variaÃ§Ãµes como "2 adultos", "duas pessoas", "casal", "sÃ³ nÃ³s dois", "eu e minha esposa", etc.
  */
 function userProvidedAdultsCount(messages: Array<{ role: string; content: string }>): boolean {
   const userMsgs = messages.filter((m) => m?.role === "user").map((m) => (m.content || "").toLowerCase());
   const joined = userMsgs.join(" \n ").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  if (/\b(\d+)\s*(adultos?|pessoas?|hospedes?|hóspedes?|adulto)\b/.test(joined)) return true;
-  if (/\b(uma|duas|dois|tres|tr[eê]s|quatro|cinco|seis)\s*(adultos?|pessoas?|hospedes?)\b/.test(joined)) return true;
-  if (/\b(somos|seremos|vamos|estamos|iremos)\s*(em|nos)?\s*(\d+|uma|duas|dois|tr[eê]s|quatro)\b/.test(joined)) return true;
-  if (/\b(s[oó]\s+(n[oó]s|eu|nosso)\s+dois|n[oó]s\s+dois|casal|os\s+dois|s[oó]\s+(eu|n[oó]s))\b/.test(joined)) return true;
+  if (/\b(\d+)\s*(adultos?|pessoas?|hospedes?|hÃ³spedes?|adulto)\b/.test(joined)) return true;
+  if (/\b(uma|duas|dois|tres|tr[eÃª]s|quatro|cinco|seis)\s*(adultos?|pessoas?|hospedes?)\b/.test(joined)) return true;
+  if (/\b(somos|seremos|vamos|estamos|iremos)\s*(em|nos)?\s*(\d+|uma|duas|dois|tr[eÃª]s|quatro)\b/.test(joined)) return true;
+  if (/\b(s[oÃ³]\s+(n[oÃ³]s|eu|nosso)\s+dois|n[oÃ³]s\s+dois|casal|os\s+dois|s[oÃ³]\s+(eu|n[oÃ³]s))\b/.test(joined)) return true;
   if (/\b(eu\s+e\s+(meu|minha|a\s+|o\s+))/.test(joined)) return true;
   if (/\b(viajo\s+sozinho|vou\s+sozinho|vou\s+sozinha|viagem\s+solo)\b/.test(joined)) return true;
   return false;
 }
 
 /**
- * Detecta se o usuário forneceu situação de crianças de forma explícita.
+ * Detecta se o usuÃ¡rio forneceu situaÃ§Ã£o de crianÃ§as de forma explÃ­cita.
  */
 function userProvidedChildrenStatus(messages: Array<{ role: string; content: string }>): boolean {
   const userMsgs = messages.filter((m) => m?.role === "user").map((m) => (m.content || "").toLowerCase());
   const joined = userMsgs.join(" \n ").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  if (/\b(\d+)\s*(crian[cç]as?|filhos?|bebes?|beb[eê]s?|kids)\b/.test(joined)) return true;
-  if (/\b(uma|duas|dois|tres|tr[eê]s)\s*(crian[cç]as?|filhos?)\b/.test(joined)) return true;
-  if (/\b(sem|n[ãa]o\s+tem|nenhuma|zero)\s*(crian[cç]a|filho)/.test(joined)) return true;
-  // Grupo só de adultos (equivale a 0 crianças): "somente 2 adultos", "só nós dois", "apenas adultos"
+  if (/\b(\d+)\s*(crian[cÃ§]as?|filhos?|bebes?|beb[eÃª]s?|kids)\b/.test(joined)) return true;
+  if (/\b(uma|duas|dois|tres|tr[eÃª]s)\s*(crian[cÃ§]as?|filhos?)\b/.test(joined)) return true;
+  if (/\b(sem|n[Ã£a]o\s+tem|nenhuma|zero)\s*(crian[cÃ§]a|filho)/.test(joined)) return true;
+  // Grupo sÃ³ de adultos (equivale a 0 crianÃ§as): "somente 2 adultos", "sÃ³ nÃ³s dois", "apenas adultos"
   if (/\b(somente|apenas)\s+(\d+\s+)?adultos?\b/.test(joined)) return true;
-  if (/\bs[oó]\s+(\d+\s+)?adultos?\b/.test(joined)) return true;
-  if (/\bs[oó]\s*(adulto|nos\s+dois|os\s+dois|n[oó]s\s+dois|eu)\b/.test(joined)) return true;
-  if (/\bcasal\b/.test(joined) && !/crian[cç]a|filho|beb[eê]/.test(joined)) return true;
+  if (/\bs[oÃ³]\s+(\d+\s+)?adultos?\b/.test(joined)) return true;
+  if (/\bs[oÃ³]\s*(adulto|nos\s+dois|os\s+dois|n[oÃ³]s\s+dois|eu)\b/.test(joined)) return true;
+  if (/\bcasal\b/.test(joined) && !/crian[cÃ§]a|filho|beb[eÃª]/.test(joined)) return true;
   if (/\bsozinh[oa]\b/.test(joined)) return true;
-  if (/\b\d+\s*anos?\b/.test(joined) && /crian[cç]a|filho|beb[eê]/.test(joined)) return true;
+  if (/\b\d+\s*anos?\b/.test(joined) && /crian[cÃ§]a|filho|beb[eÃª]/.test(joined)) return true;
   return false;
 }
 
 /**
- * Guarda determinístico para Omnibees: bloqueia chamada se ocupação não está explícita
- * no histórico (proteção contra dispatcher chutar adults=2 / children=0).
+ * Guarda determinÃ­stico para Omnibees: bloqueia chamada se ocupaÃ§Ã£o nÃ£o estÃ¡ explÃ­cita
+ * no histÃ³rico (proteÃ§Ã£o contra dispatcher chutar adults=2 / children=0).
  */
 function validateOmnibeesArgs(
   args: Record<string, unknown>,
@@ -204,7 +204,7 @@ function validateOmnibeesArgs(
   const checkIn = args.checkIn ?? args.check_in ?? args.CheckIn;
   const checkOut = args.checkOut ?? args.check_out ?? args.CheckOut;
   if (!checkIn || !checkOut) {
-    return { ok: false, error: "checkIn e checkOut são obrigatórios. Pergunte ao cliente as datas exatas antes de consultar." };
+    return { ok: false, error: "checkIn e checkOut sÃ£o obrigatÃ³rios. Pergunte ao cliente as datas exatas antes de consultar." };
   }
   const adults = args.adults;
   const hasAdultsInArgs = adults !== undefined && adults !== null && adults !== "";
@@ -212,10 +212,10 @@ function validateOmnibeesArgs(
     return {
       ok: false,
       error:
-        "PROIBIDO consultar Omnibees sem número de adultos explícito do cliente. " +
-        "O dispatcher NÃO deve chutar adults=2. Pergunte ao cliente quantos adultos vão no total antes de consultar. " +
-        "PROIBIDO ABSOLUTO citar valores em R$, nomes de quartos com preços ou parcelamento. " +
-        "Responda em texto sem nenhum valor, perguntando quantos adultos vão.",
+        "PROIBIDO consultar Omnibees sem nÃºmero de adultos explÃ­cito do cliente. " +
+        "O dispatcher NÃƒO deve chutar adults=2. Pergunte ao cliente quantos adultos vÃ£o no total antes de consultar. " +
+        "PROIBIDO ABSOLUTO citar valores em R$, nomes de quartos com preÃ§os ou parcelamento. " +
+        "Responda em texto sem nenhum valor, perguntando quantos adultos vÃ£o.",
     };
   }
   const children = args.children;
@@ -224,17 +224,17 @@ function validateOmnibeesArgs(
     return {
       ok: false,
       error:
-        "PROIBIDO consultar Omnibees sem situação de crianças explícita. " +
-        "O dispatcher NÃO deve assumir 0 crianças. Pergunte ao cliente se vai criança e, se sim, quantas e idades. " +
-        "PROIBIDO ABSOLUTO citar valores em R$. Responda em texto sem nenhum valor, perguntando sobre crianças.",
+        "PROIBIDO consultar Omnibees sem situaÃ§Ã£o de crianÃ§as explÃ­cita. " +
+        "O dispatcher NÃƒO deve assumir 0 crianÃ§as. Pergunte ao cliente se vai crianÃ§a e, se sim, quantas e idades. " +
+        "PROIBIDO ABSOLUTO citar valores em R$. Responda em texto sem nenhum valor, perguntando sobre crianÃ§as.",
     };
   }
   return { ok: true };
 }
 
 /**
- * Guarda anti-alucinação: se a Omnibees falhou ou retornou sem rooms,
- * monta payload com prohibition explícito para o conversacional.
+ * Guarda anti-alucinaÃ§Ã£o: se a Omnibees falhou ou retornou sem rooms,
+ * monta payload com prohibition explÃ­cito para o conversacional.
  */
 function buildOmnibeesGuardedContent(toolName: string, result: { success: boolean; result: unknown; error?: string }): string {
   if (!isOmnibeesTool(toolName)) {
@@ -244,9 +244,9 @@ function buildOmnibeesGuardedContent(toolName: string, result: { success: boolea
     return JSON.stringify({
       error: result.error || "Falha ao consultar Omnibees",
       _prohibition:
-        "PROIBIDO ABSOLUTO citar qualquer valor em R$, nome de quarto com preço, parcelamento, regime ou qualquer dado tarifário. " +
-        "A consulta de disponibilidade FALHOU neste turno. NÃO invente tarifas. " +
-        "Responda ao cliente em texto consultivo sem nenhum valor — informe que vai verificar a disponibilidade ou peça os dados que faltam (datas exatas, adultos, crianças, idades).",
+        "PROIBIDO ABSOLUTO citar qualquer valor em R$, nome de quarto com preÃ§o, parcelamento, regime ou qualquer dado tarifÃ¡rio. " +
+        "A consulta de disponibilidade FALHOU neste turno. NÃƒO invente tarifas. " +
+        "Responda ao cliente em texto consultivo sem nenhum valor â€” informe que vai verificar a disponibilidade ou peÃ§a os dados que faltam (datas exatas, adultos, crianÃ§as, idades).",
     });
   }
   const obj = (result.result || {}) as Record<string, unknown>;
@@ -256,13 +256,13 @@ function buildOmnibeesGuardedContent(toolName: string, result: { success: boolea
       ...obj,
       _prohibition:
         "Resultado SEM disponibilidade (rooms vazio). PROIBIDO ABSOLUTO citar qualquer valor em R$ ou nome de quarto. " +
-        "Diga ao cliente com transparência que para essas datas a consulta não trouxe tarifa, e ofereça uma alternativa (outras datas próximas) sem inventar nenhum valor.",
+        "Diga ao cliente com transparÃªncia que para essas datas a consulta nÃ£o trouxe tarifa, e ofereÃ§a uma alternativa (outras datas prÃ³ximas) sem inventar nenhum valor.",
     });
   }
   return JSON.stringify(obj);
 }
 
-// ── Entity extraction helpers ──────────────────────────────────────────────
+// â”€â”€ Entity extraction helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const KNOWN_BRANDS: Record<string, string> = {
   chevrolet: "Chevrolet", chevy: "Chevrolet", gm: "Chevrolet",
@@ -270,7 +270,7 @@ const KNOWN_BRANDS: Record<string, string> = {
   fiat: "Fiat", ford: "Ford", honda: "Honda",
   hyundai: "Hyundai", toyota: "Toyota", renault: "Renault",
   nissan: "Nissan", jeep: "Jeep", mitsubishi: "Mitsubishi",
-  peugeot: "Peugeot", citroen: "Citroën", kia: "Kia",
+  peugeot: "Peugeot", citroen: "CitroÃ«n", kia: "Kia",
   bmw: "BMW", "mercedes-benz": "Mercedes-Benz", mercedes: "Mercedes-Benz",
   audi: "Audi", volvo: "Volvo", porsche: "Porsche",
   land: "Land Rover", range: "Range Rover", jaguar: "Jaguar",
@@ -295,7 +295,7 @@ function extractVehicleEntities(text: string): ExtractedEntities {
     if (idx !== -1) {
       result.marca = brand;
       const afterBrand = text.slice(idx + key.length).trim();
-      const modelMatch = afterBrand.match(/^[\s]*([A-Za-zÀ-ÿ0-9]+(?:[\s]+[A-Za-zÀ-ÿ0-9]+)?)/i);
+      const modelMatch = afterBrand.match(/^[\s]*([A-Za-z\u00C0-\u00FF0-9]+(?:[\s]+[A-Za-z\u00C0-\u00FF0-9]+)?)/i);
       if (modelMatch) {
         const raw = modelMatch[1].trim();
         const yearTest = /^(19|20)\d{2}$/.test(raw);
@@ -314,7 +314,7 @@ function extractVehicleEntities(text: string): ExtractedEntities {
   return result;
 }
 
-/** Formata valor em reais no padrão brasileiro (ex.: R$ 127.900,00). */
+/** Formata valor em reais no padrÃ£o brasileiro (ex.: R$ 127.900,00). */
 function formatCurrencyBR(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
@@ -325,15 +325,15 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
     const err = obj.error;
     const isPastDate = /passado|no passado|past/i.test(err);
     if (isPastDate) {
-      return `Erro ao agendar: ${err}\n\nIMPORTANTE: O agendamento NÃO foi realizado. NUNCA confirme ao cliente que o horário foi reservado. Se o cliente pediu horário para "amanhã", use a data de AMANHÃ em start_at (não a de hoje). Corrija o start_at e chame novamente a ferramenta consultar_agenda com action "criar".`;
+      return `Erro ao agendar: ${err}\n\nIMPORTANTE: O agendamento NÃƒO foi realizado. NUNCA confirme ao cliente que o horÃ¡rio foi reservado. Se o cliente pediu horÃ¡rio para "amanhÃ£", use a data de AMANHÃƒ em start_at (nÃ£o a de hoje). Corrija o start_at e chame novamente a ferramenta consultar_agenda com action "criar".`;
     }
-    return `Erro: ${err}\n\nO agendamento NÃO foi feito. NÃO confirme ao cliente. Informe o problema de forma breve e corrija os dados antes de tentar novamente.`;
+    return `Erro: ${err}\n\nO agendamento NÃƒO foi feito. NÃƒO confirme ao cliente. Informe o problema de forma breve e corrija os dados antes de tentar novamente.`;
   }
   const action = obj.action as string | undefined;
   if (action === "check_availability") {
     const slots = obj.available_slots as Record<string, string[]> | undefined;
     if (!slots || Object.keys(slots).length === 0) {
-      return "Nenhum horário disponível no período consultado.";
+      return "Nenhum horÃ¡rio disponÃ­vel no perÃ­odo consultado.";
     }
     const parts: string[] = [];
     for (const [dateStr, times] of Object.entries(slots)) {
@@ -344,8 +344,8 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
       }
     }
     return parts.length > 0
-      ? `Horários disponíveis:\n${parts.join("\n")}`
-      : "Nenhum horário disponível.";
+      ? `HorÃ¡rios disponÃ­veis:\n${parts.join("\n")}`
+      : "Nenhum horÃ¡rio disponÃ­vel.";
   }
   if (action === "created" || action === "create") {
     const ev = obj.event as { start_at?: string; title?: string } | undefined;
@@ -354,33 +354,33 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
       const parts = formatted.split(", ");
       const date = parts[1] ?? ev.start_at.slice(0, 10).split("-").reverse().join("/");
       const time = parts[2] ?? ev.start_at.slice(11, 16);
-      return `Agendamento confirmado para ${date} às ${time}.`;
+      return `Agendamento confirmado para ${date} Ã s ${time}.`;
     }
     return "Agendamento confirmado com sucesso.";
   }
   if (action === "cancelled" || action === "cancel") {
     return "Agendamento cancelado.";
   }
-  // consultar_estoque: incluir resumo dos veículos E photos_markdown para o LLM poder enviar as fotos
+  // consultar_estoque: incluir resumo dos veÃ­culos E photos_markdown para o LLM poder enviar as fotos
   const vehicles = obj.vehicles as Array<{ id?: string; nome_completo?: string; ano?: number; preco?: number; preco_formatado?: string; km?: number; cor?: string; photos_markdown?: string }> | undefined;
   const photosMarkdown = obj.photos_markdown as string | undefined;
   if (Array.isArray(vehicles) && vehicles.length > 0) {
     const lines: string[] = [];
-    lines.push(`ESTOQUE ATUAL (${vehicles.length} veículo(s)):`);
+    lines.push(`ESTOQUE ATUAL (${vehicles.length} veÃ­culo(s)):`);
     for (const v of vehicles.slice(0, 10)) {
       const precoStr = v.preco_formatado ?? (v.preco != null ? formatCurrencyBR(v.preco) : null);
       const parts = [v.nome_completo, v.ano, v.km != null ? `${v.km} km` : null, precoStr, v.cor].filter(Boolean);
       lines.push("- " + parts.join(", "));
     }
-    if (vehicles.length > 10) lines.push(`... e mais ${vehicles.length - 10} veículo(s).`);
+    if (vehicles.length > 10) lines.push(`... e mais ${vehicles.length - 10} veÃ­culo(s).`);
     const withPerVehiclePhotos = vehicles.some((v) => v.photos_markdown && v.photos_markdown.trim());
     if (withPerVehiclePhotos) {
       lines.push("");
-      lines.push("FOTOS (quando o cliente pedir ou aceitar ver fotos, inclua na sua resposta APENAS o bloco do veículo escolhido — use ENVIAR_FOTOS_VEICULO: nome | id: uuid):");
+      lines.push("FOTOS (quando o cliente pedir ou aceitar ver fotos, inclua na sua resposta APENAS o bloco do veÃ­culo escolhido â€” use ENVIAR_FOTOS_VEICULO: nome | id: uuid):");
       for (const v of vehicles) {
         if (v.photos_markdown && v.photos_markdown.trim()) {
           lines.push("");
-          lines.push(`--- Fotos do veículo: ${v.nome_completo ?? "?"} (id: ${v.id ?? "?"}) ---`);
+          lines.push(`--- Fotos do veÃ­culo: ${v.nome_completo ?? "?"} (id: ${v.id ?? "?"}) ---`);
           lines.push(v.photos_markdown);
         }
       }
@@ -397,7 +397,7 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
       const parts = [v.brand, v.model, v.year].filter(Boolean);
       return parts.join(" ");
     });
-    return `Encontrados ${items.length} veículo(s): ${preview.join("; ")}${items.length > 5 ? "..." : ""}`;
+    return `Encontrados ${items.length} veÃ­culo(s): ${preview.join("; ")}${items.length > 5 ? "..." : ""}`;
   }
   // suite_gallery_query: repassar photos_markdown integralmente para que o conversacional possa incluir as fotos
   if (Array.isArray(obj.galleries)) {
@@ -413,9 +413,9 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
     if (hint) lines.push(hint);
     for (const g of galleries) {
       if (g.rotulo_para_cliente) {
-        lines.push(`\nÁrea (falar assim com o cliente): ${g.rotulo_para_cliente}`);
+        lines.push(`\nÃrea (falar assim com o cliente): ${g.rotulo_para_cliente}`);
       } else if (g.exibir_no_catalogo_cliente === false) {
-        lines.push("\n[Mídia operacional — não oferecer como opção na lista de fotos ao cliente]");
+        lines.push("\n[MÃ­dia operacional â€” nÃ£o oferecer como opÃ§Ã£o na lista de fotos ao cliente]");
       } else if (g.nome) {
         lines.push(`\nGaleria: ${g.nome}`);
       }
@@ -427,12 +427,12 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
         const anyWhen = g.videos.some((v) => v.llm_send_when?.trim());
         lines.push(
           anyWhen
-            ? "VÍDEOS — use o critério llm_send_when de cada item; envie só a(s) URL(s) adequada(s) ao contexto:"
-            : "VÍDEOS (URLs — uma por linha):"
+            ? "VÃDEOS â€” use o critÃ©rio llm_send_when de cada item; envie sÃ³ a(s) URL(s) adequada(s) ao contexto:"
+            : "VÃDEOS (URLs â€” uma por linha):"
         );
         for (const v of g.videos) {
           if (v.llm_send_when?.trim()) {
-            lines.push(`- Critério: ${v.llm_send_when.trim().replace(/\s+/g, " ")}`);
+            lines.push(`- CritÃ©rio: ${v.llm_send_when.trim().replace(/\s+/g, " ")}`);
           }
           lines.push(`  ${v.url}`);
         }
@@ -441,7 +441,7 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
     return lines.join("\n") || JSON.stringify(obj).slice(0, 300);
   }
   // Omnibees / consultar_disponibilidade_vale_suico: o conversacional PRECISA do summaryText inteiro
-  // (todas as suítes, parcelado, horários). Truncar quebrava orçamentos com 2+ acomodações.
+  // (todas as suÃ­tes, parcelado, horÃ¡rios). Truncar quebrava orÃ§amentos com 2+ acomodaÃ§Ãµes.
   if (typeof obj.summaryText === "string" && obj.summaryText.trim()) {
     const hasOmnibeesShape =
       typeof obj.bookingUrl === "string" ||
@@ -452,10 +452,10 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
       const lines: string[] = [];
       if (typeof obj.roomCount === "number") {
         lines.push(
-          `ACOMODACOES_COM_TARIFA (roomCount=${obj.roomCount}): cite TODAS as categorias abaixo ao cliente, com à vista e parcelado quando constar em cada linha.`
+          `ACOMODACOES_COM_TARIFA (roomCount=${obj.roomCount}): cite TODAS as categorias abaixo ao cliente, com Ã  vista e parcelado quando constar em cada linha.`
         );
       }
-      lines.push("CONSULTA OMNIBEES — use os dados abaixo por completo (não resuma a uma suíte só):");
+      lines.push("CONSULTA OMNIBEES â€” use os dados abaixo por completo (nÃ£o resuma a uma suÃ­te sÃ³):");
       lines.push(String(obj.summaryText).trim());
       if (typeof obj.bookingUrl === "string" && obj.bookingUrl.trim()) {
         lines.push(`bookingUrl (enviar ao cliente somente se ele pedir link/reserva): ${obj.bookingUrl.trim()}`);
@@ -481,20 +481,20 @@ function isAppraisalContext(messages: Array<{ role: string; content: string }>):
 }
 
 /**
- * Sanitiza nome de função para OpenAI e Gemini.
+ * Sanitiza nome de funÃ§Ã£o para OpenAI e Gemini.
  * OpenAI exige: ^[a-zA-Z0-9_-]+$
  * Gemini exige: ^[a-zA-Z_][a-zA-Z0-9_.:-]{0,63}$
- * Sempre sanitizar para evitar rejeição (ex: enviar_notificação -> enviar_notificacao).
+ * Sempre sanitizar para evitar rejeiÃ§Ã£o (ex: enviar_notificaÃ§Ã£o -> enviar_notificacao).
  */
 function sanitizeFunctionName(name: string, _baseUrl: string): string {
   let s = String(name || "tool").trim();
-  // Remover acentos (NFD: ç -> c + combining cedilla)
+  // Remover acentos (NFD: Ã§ -> c + combining cedilla)
   s = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  // Substituir caracteres inválidos por underscore (OpenAI: apenas a-zA-Z0-9_-)
+  // Substituir caracteres invÃ¡lidos por underscore (OpenAI: apenas a-zA-Z0-9_-)
   s = s.replace(/[^a-zA-Z0-9_-]/g, "_");
   // Remover underscores consecutivos
   s = s.replace(/_+/g, "_");
-  // Garantir que começa com letra ou underscore
+  // Garantir que comeÃ§a com letra ou underscore
   if (s && !/^[a-zA-Z_]/.test(s)) s = "_" + s;
   // Remover trailing underscores
   s = s.replace(/_+$/, "");
@@ -525,9 +525,6 @@ async function buildNotificationWithLLM(
   if (!providerConfig?.apiKey) return null;
 
   const dataHoraBR = formatDateBR(payload.start_at);
-  // #region agent log
-  fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ad5eb6'},body:JSON.stringify({sessionId:'ad5eb6',location:'chat-local.ts:buildNotificationWithLLM',message:'dataHoraBR formatado',data:{startAtOriginal:payload.start_at,dataHoraBR},timestamp:Date.now(),hypothesisId:'H_LLM_INPUT'})}).catch(()=>{});
-  // #endregion
   const historyText = messages
     .slice(-20)
     .map((m) => `${m.role === "user" ? "Cliente" : "Assistente"}: ${(m.content || "").slice(0, 300)}`)
@@ -543,9 +540,6 @@ Historico (ultimas mensagens):
 ${historyText || "(vazio)"}
 
 Gere a notificacao organizada.`;
-  // #region agent log
-  fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ad5eb6'},body:JSON.stringify({sessionId:'ad5eb6',location:'chat-local.ts:buildNotificationWithLLM:userContent',message:'userContent enviado para LLM',data:{userContentPreview:userContent.slice(0,400)},timestamp:Date.now(),hypothesisId:'H_LLM_PROMPT'})}).catch(()=>{});
-  // #endregion
 
   const isGemini = /generativelanguage|googleapis\.com/i.test(providerConfig.baseUrl);
   const model = isGemini ? "gemini-2.0-flash" : "gpt-4o-mini";
@@ -587,11 +581,11 @@ Gere a notificacao organizada.`;
 }
 
 /**
- * Dispara notificação automática via tool enviar_notificacao após criar/cancelar agendamento.
+ * Dispara notificaÃ§Ã£o automÃ¡tica via tool enviar_notificacao apÃ³s criar/cancelar agendamento.
  * Busca a tool send_notification vinculada ao agente e usa a config dela (conversation_id do grupo).
- * Sempre usa fallback com formato BR (DD/MM/AAAA HH:MM), telefone e veículo.
+ * Sempre usa fallback com formato BR (DD/MM/AAAA HH:MM), telefone e veÃ­culo.
  * 
- * Também agenda lembrete em appointment_reminders se reminder_enabled.
+ * TambÃ©m agenda lembrete em appointment_reminders se reminder_enabled.
  */
 async function sendNotificationToGroup(
   agentId: string,
@@ -632,7 +626,7 @@ async function sendNotificationToGroup(
     const cwAccountId = cfg.chatwoot_account_id;
 
     if (!cwUrl || !cwToken || !cwAccountId) {
-      console.warn("[Chat-Local] Chatwoot não configurado no agente para notificação");
+      console.warn("[Chat-Local] Chatwoot nÃ£o configurado no agente para notificaÃ§Ã£o");
       return;
     }
 
@@ -646,12 +640,12 @@ async function sendNotificationToGroup(
     });
 
     if (!resp.ok) {
-      console.error("[Chat-Local] Notificação falhou:", resp.status, await resp.text());
+      console.error("[Chat-Local] NotificaÃ§Ã£o falhou:", resp.status, await resp.text());
     } else {
-      console.log("[Chat-Local] Notificação enviada com sucesso para conversa", targetConvId);
+      console.log("[Chat-Local] NotificaÃ§Ã£o enviada com sucesso para conversa", targetConvId);
     }
   } catch (e) {
-    console.warn("[Chat-Local] Erro ao enviar notificação:", e);
+    console.warn("[Chat-Local] Erro ao enviar notificaÃ§Ã£o:", e);
   }
 }
 
@@ -679,9 +673,6 @@ async function sendAgendaNotification(
   const evt = isCreated ? res.event! : res.deleted_event!;
   const title = evt.title || "Agendamento";
   const startAt = evt.start_at || "";
-  // #region agent log
-  fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ad5eb6'},body:JSON.stringify({sessionId:'ad5eb6',location:'chat-local.ts:sendAgendaNotification',message:'start_at do evento antes de formatDateBR',data:{isCreated,isCancelled,startAt,startAtLength:startAt.length,hasOffset:!!startAt.match(/[+-]\d{2}:?\d{2}$/),hasZ:startAt.endsWith('Z')},timestamp:Date.now(),hypothesisId:'H_TIMEZONE'})}).catch(()=>{});
-  // #endregion
   const dataHoraBR = formatDateBR(startAt);
 
   let message: string;
@@ -736,8 +727,8 @@ async function sendAgendaNotification(
 }
 
 /**
- * Dispara notificação de handoff (cliente aguardando atendimento) quando o assistente usa HANDOFF_COMERCIAL.
- * Mesmo padrão do agendamento: nome, telefone, veículo de interesse.
+ * Dispara notificaÃ§Ã£o de handoff (cliente aguardando atendimento) quando o assistente usa HANDOFF_COMERCIAL.
+ * Mesmo padrÃ£o do agendamento: nome, telefone, veÃ­culo de interesse.
  */
 async function sendHandoffNotification(
   agentId: string,
@@ -767,9 +758,9 @@ function normalizeParametersSchema(params: unknown): Record<string, unknown> {
 }
 
 /**
- * Enriquece a descrição de uma tool chatwoot_assign com instruções de roteamento
- * baseadas no execution_config (regras com labels ou assignee/team padrão).
- * Exportada para teste unitário.
+ * Enriquece a descriÃ§Ã£o de uma tool chatwoot_assign com instruÃ§Ãµes de roteamento
+ * baseadas no execution_config (regras com labels ou assignee/team padrÃ£o).
+ * Exportada para teste unitÃ¡rio.
  */
 export function enrichChatwootAssignDescription(tool: ToolDef, originalDescription: string): string {
   if (tool.tool_type !== "chatwoot_assign") return originalDescription;
@@ -783,8 +774,8 @@ export function enrichChatwootAssignDescription(tool: ToolDef, originalDescripti
   const base = originalDescription.trim();
 
   if (!hasLabels) {
-    // Sem labels: execução sem argumentos (execution_config cuida do roteamento)
-    const noArgsNote = `IMPORTANTE: chame sem argumentos — NÃO envie assignee_id nem team_id. O execution_config já define o destino.`;
+    // Sem labels: execuÃ§Ã£o sem argumentos (execution_config cuida do roteamento)
+    const noArgsNote = `IMPORTANTE: chame sem argumentos â€” NÃƒO envie assignee_id nem team_id. O execution_config jÃ¡ define o destino.`;
     return base ? `${base}\n${noArgsNote}` : noArgsNote;
   }
 
@@ -794,9 +785,9 @@ export function enrichChatwootAssignDescription(tool: ToolDef, originalDescripti
 
   const firstLabel = rules.find((r) => r.label)?.label ?? "nome da unidade";
   const routing = [
-    `Sempre envie reason descrevendo a unidade/destino. Opções disponíveis: ${labelList}.`,
-    `NÃO envie assignee_id nem team_id — use apenas reason com o nome da unidade (ex.: reason: "${firstLabel}").`,
-    hasDefault ? `Se nenhuma opção casar, o sistema usa o destino padrão (escalacao geral).` : null,
+    `Sempre envie reason descrevendo a unidade/destino. OpÃ§Ãµes disponÃ­veis: ${labelList}.`,
+    `NÃƒO envie assignee_id nem team_id â€” use apenas reason com o nome da unidade (ex.: reason: "${firstLabel}").`,
+    hasDefault ? `Se nenhuma opÃ§Ã£o casar, o sistema usa o destino padrÃ£o (escalacao geral).` : null,
   ].filter(Boolean).join(" ");
 
   return base ? `${base}\n${routing}` : routing;
@@ -826,7 +817,7 @@ function buildOpenAITools(
   return { openaiTools, nameToTool };
 }
 
-/** Evita duas chamadas idênticas à mesma galeria no mesmo turno (dispatcher às vezes duplica). */
+/** Evita duas chamadas idÃªnticas Ã  mesma galeria no mesmo turno (dispatcher Ã s vezes duplica). */
 function dedupeParallelSuiteGalleryToolCalls(
   toolCalls: Array<{ id: string; function: { name: string; arguments: string } }>,
   nameToTool: Map<string, ToolDef>
@@ -850,7 +841,7 @@ function dedupeParallelSuiteGalleryToolCalls(
     const tema = s(args.tema) || s(args.contexto) || s(args.topico);
     const key = `${tc.function.name}::${nome}|${tema}|${s(args.query)}|${s(args.q)}`;
     if (seen.has(key)) {
-      console.warn("[Chat-Local] suite_gallery_query duplicada no mesmo turno — ignorando:", key);
+      console.warn("[Chat-Local] suite_gallery_query duplicada no mesmo turno â€” ignorando:", key);
       continue;
     }
     seen.add(key);
@@ -919,10 +910,11 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       const hasInventoryTool = tools.some((t) => t.tool_type === "inventory_query");
 
       const systemPrompt = buildSystemPrompt(
-        agent.system_prompt || "", // ignorado quando o tenant tem entrada em TENANT_PROMPTS (prompt vem só do projeto)
+        agent.system_prompt || "", // ignorado quando o tenant tem entrada em TENANT_PROMPTS (prompt vem sÃ³ do projeto)
         tenantSlug,
         hasInventoryTool
       );
+
 
       const providerConfig = await getProviderApiKey(agent.provider_id, supabase);
       if (!providerConfig) {
@@ -942,8 +934,8 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       const useTools = openaiTools.length > 0;
       const isGeminiProvider = /generativelanguage|googleapis\.com\/v1beta/i.test(providerConfig.baseUrl);
 
-      // Gemini 3 e 2.5 (thinking) exigem thought_signature em function calls - não suportado.
-      // Fallback apenas em single-provider (quando Gemini recebe tools). Em dual-provider, Gemini conversacional não usa tools.
+      // Gemini 3 e 2.5 (thinking) exigem thought_signature em function calls - nÃ£o suportado.
+      // Fallback apenas em single-provider (quando Gemini recebe tools). Em dual-provider, Gemini conversacional nÃ£o usa tools.
       if (useTools && !dispatcherProviderId && isGeminiProvider && /^gemini-(3|2\.5)-/i.test(model)) {
         const fallback = "gemini-2.0-flash";
         console.log(`[Chat-Local] Single-provider: modelo ${model} exige thought_signature com tools; usando ${fallback}`);
@@ -956,9 +948,9 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           return !/^[a-zA-Z_][a-zA-Z0-9_.:-]{0,63}$/.test(name);
         });
         if (invalidTools.length > 0) {
-          console.error("[Chat-Local] Tools com nomes inválidos para Gemini:", invalidTools);
+          console.error("[Chat-Local] Tools com nomes invÃ¡lidos para Gemini:", invalidTools);
           return reply.status(500).send({
-            error: "Configuração inválida de tools para Gemini",
+            error: "ConfiguraÃ§Ã£o invÃ¡lida de tools para Gemini",
             details: invalidTools.map((t) => t.function.name),
           });
         }
@@ -979,7 +971,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       async function ensureConversationId(): Promise<void> {
         if (responseConvId || !shouldPersistHistory) return;
         try {
-          // Se tenant não tem schema, tenta provisionar automaticamente
+          // Se tenant nÃ£o tem schema, tenta provisionar automaticamente
           if (!resolvedTenantSchema) {
             console.log("[Chat-Local] Tenant sem db_name, tentando provisionar:", tenantId);
             const { error: provErr } = await supabase.rpc("provision_tenant_schema", {
@@ -989,7 +981,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
               console.warn("[Chat-Local] provision_tenant_schema falhou:", provErr.message, "code:", provErr.code);
               return;
             }
-            // Recarrega db_name após provisionamento
+            // Recarrega db_name apÃ³s provisionamento
             const { data: refreshedTenant } = await supabase
               .from("tenants")
               .select("db_name")
@@ -997,12 +989,12 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
               .single();
             resolvedTenantSchema = refreshedTenant?.db_name ?? null;
             if (!resolvedTenantSchema) {
-              console.warn("[Chat-Local] db_name ainda null após provisionamento");
+              console.warn("[Chat-Local] db_name ainda null apÃ³s provisionamento");
               return;
             }
             console.log("[Chat-Local] Tenant provisionado com schema:", resolvedTenantSchema);
           }
-          /** Passa todos os parâmetros para evitar ambiguidade PGRST203 entre as duas assinaturas */
+          /** Passa todos os parÃ¢metros para evitar ambiguidade PGRST203 entre as duas assinaturas */
           const { data: createdConvId, error: createErr } = await supabase.rpc("create_conversation", {
             p_agent_id: agent_id,
             p_channel: "sandbox",
@@ -1012,7 +1004,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           });
           if (!createErr && createdConvId) {
             responseConvId = createdConvId as string;
-            console.log("[Chat-Local] Conversa sandbox (RPC):", String(responseConvId).slice(0, 8) + "…");
+            console.log("[Chat-Local] Conversa sandbox (RPC):", String(responseConvId).slice(0, 8) + "â€¦");
             return;
           }
           console.warn("[Chat-Local] create_conversation RPC falhou:", createErr?.message, "code:", createErr?.code, "details:", createErr?.details);
@@ -1036,7 +1028,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
             };
           }
         } catch (e) {
-          console.warn("[Chat-Local] Falha ao carregar último histórico:", (e as Error)?.message);
+          console.warn("[Chat-Local] Falha ao carregar Ãºltimo histÃ³rico:", (e as Error)?.message);
         }
       }
 
@@ -1068,7 +1060,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
             return;
           }
           lastPersistedMessage = { role, content: cleanContent };
-          console.log("[Chat-Local] Histórico persistido:", { conversation_id: responseConvId, role, len: cleanContent.length });
+          console.log("[Chat-Local] HistÃ³rico persistido:", { conversation_id: responseConvId, role, len: cleanContent.length });
         } catch (e) {
           console.warn(`[Chat-Local] Falha ao persistir mensagem (${role}):`, (e as Error)?.message);
         }
@@ -1077,7 +1069,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       await ensureConversationId();
       await loadLastPersistedMessage();
       if (shouldPersistHistory && !responseConvId) {
-        console.warn("[Chat-Local] Sem conversation_id — histórico do sandbox não será gravado (RPC/fallback falharam?)");
+        console.warn("[Chat-Local] Sem conversation_id â€” histÃ³rico do sandbox nÃ£o serÃ¡ gravado (RPC/fallback falharam?)");
       }
       const latestUserMessage = [...messages].reverse().find((m) => m.role === "user")?.content || "";
       await persistMessage("user", latestUserMessage);
@@ -1143,7 +1135,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           lastUserMessage,
         });
         if (galleryInject) {
-          console.log("[Chat-Local] Injetando photos_markdown suite_gallery (omissão do modelo)");
+          console.log("[Chat-Local] Injetando photos_markdown suite_gallery (omissÃ£o do modelo)");
           text = galleryInject.fullText;
         }
         const videoInject = injectSuiteGalleryVideosIfMissing({
@@ -1152,12 +1144,12 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           lastUserMessage,
         });
         if (videoInject) {
-          console.log("[Chat-Local] Injetando vídeo suite_gallery (omissão do modelo)");
+          console.log("[Chat-Local] Injetando vÃ­deo suite_gallery (omissÃ£o do modelo)");
           text = videoInject.fullText;
         }
         const omnibeesPhotoInject = injectOmnibeesQuotePhotosIfMissing(text, toolResultStrings);
         if (omnibeesPhotoInject) {
-          console.log("[Chat-Local] Injetando fotos cover Omnibees no orçamento (omissão do modelo)");
+          console.log("[Chat-Local] Injetando fotos cover Omnibees no orÃ§amento (omissÃ£o do modelo)");
           text = omnibeesPhotoInject.fullText;
         }
         text = formatOmnibeesQuoteForDelivery(text, toolResultStrings);
@@ -1175,15 +1167,15 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
             || "gpt-4o";
           if (dispatcherModel === "gpt-4o-mini") {
             dispatcherModel = "gpt-4o";
-            console.log("[Chat-Local] Dispatcher upgrade: gpt-4o-mini -> gpt-4o (maior inteligência para tool calls)");
+            console.log("[Chat-Local] Dispatcher upgrade: gpt-4o-mini -> gpt-4o (maior inteligÃªncia para tool calls)");
           }
           console.log("[Chat-Local] Dispatcher model:", dispatcherModel);
 
-          /** Sandbox: com dual-provider, sem tool calls no dispatcher não havia evento `debug` — a UI ficava sem bloco. */
+          /** Sandbox: com dual-provider, sem tool calls no dispatcher nÃ£o havia evento `debug` â€” a UI ficava sem bloco. */
           const dualSandboxCfg = (agent.config || {}) as Record<string, unknown>;
           const dualSandboxDebugConfig: { type: string; [k: string]: unknown } = {
             type: "config",
-            model: `${dispatcherModel} (dispatcher) → ${model} (conversacional)`,
+            model: `${dispatcherModel} (dispatcher) â†’ ${model} (conversacional)`,
             temperature: agent.temperature ?? 0.7,
             tools_count: openaiTools.length,
           };
@@ -1196,26 +1188,26 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           const tomorrowISO = tomorrowDate.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
           const dispatcherDateContext = `
 
-[CONTEXTO TEMPORAL] Data de hoje (Brasília): ${todayISO}. Amanhã: ${tomorrowISO}.
-Quando o cliente ESCOLHER um horário após você ter oferecido opções:
-- Se você ofereceu horários para HOJE → use start_at="${todayISO}T[HORA]:00:00-03:00".
-- Se você ofereceu horários para AMANHÃ (ex.: "amanhã de manhã", "amanhã às 11h") → use start_at="${tomorrowISO}T[HORA]:00:00-03:00", NÃO use a data de hoje.
-Chame consultar_agenda com action="criar", title="Visita - [nome do cliente]", start_at no formato correto conforme o dia oferecido. NUNCA chame só check_availability quando o cliente já escolheu o horário.
-REGRA ABSOLUTA: Se o cliente responde a uma oferta de horários com uma escolha (ex: "pode ser as 14:00", "10h", "amanhã as 10"), a action OBRIGATÓRIA é "criar". Chamar "cancelar" ou "check_availability" nesse cenário é um ERRO CRÍTICO.
-Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado para dia 09/03 às 09:00"). Use esse horário em cancelar: start_at no formato YYYY-MM-DDTHH:mm:ss-03:00 (ano = ano de hoje). Em seguida use criar com o novo horário pedido pelo cliente, também com a data de hoje.`;
+[CONTEXTO TEMPORAL] Data de hoje (BrasÃ­lia): ${todayISO}. AmanhÃ£: ${tomorrowISO}.
+Quando o cliente ESCOLHER um horÃ¡rio apÃ³s vocÃª ter oferecido opÃ§Ãµes:
+- Se vocÃª ofereceu horÃ¡rios para HOJE â†’ use start_at="${todayISO}T[HORA]:00:00-03:00".
+- Se vocÃª ofereceu horÃ¡rios para AMANHÃƒ (ex.: "amanhÃ£ de manhÃ£", "amanhÃ£ Ã s 11h") â†’ use start_at="${tomorrowISO}T[HORA]:00:00-03:00", NÃƒO use a data de hoje.
+Chame consultar_agenda com action="criar", title="Visita - [nome do cliente]", start_at no formato correto conforme o dia oferecido. NUNCA chame sÃ³ check_availability quando o cliente jÃ¡ escolheu o horÃ¡rio.
+REGRA ABSOLUTA: Se o cliente responde a uma oferta de horÃ¡rios com uma escolha (ex: "pode ser as 14:00", "10h", "amanhÃ£ as 10"), a action OBRIGATÃ“RIA Ã© "criar". Chamar "cancelar" ou "check_availability" nesse cenÃ¡rio Ã© um ERRO CRÃTICO.
+Para REMARCAR: a conversa contÃ©m o horÃ¡rio jÃ¡ confirmado (ex.: "confirmado para dia 09/03 Ã s 09:00"). Use esse horÃ¡rio em cancelar: start_at no formato YYYY-MM-DDTHH:mm:ss-03:00 (ano = ano de hoje). Em seguida use criar com o novo horÃ¡rio pedido pelo cliente, tambÃ©m com a data de hoje.`;
 
           const lastAssistantMsg = [...messages].reverse().find((m) => m.role === "assistant");
           const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
           let schedulingHint = "";
           if (lastAssistantMsg && lastUserMsg) {
             const offeredTimes = /\b\d{1,2}[h:]\d{0,2}\b/.test(lastAssistantMsg.content);
-            const offeredTomorrow = /amanh[aã]|dia seguinte|depois de amanhã/i.test(lastAssistantMsg.content);
+            const offeredTomorrow = /amanh[aÃ£]|dia seguinte|depois de amanhÃ£/i.test(lastAssistantMsg.content);
             const userChoseTime = /\b\d{1,2}[h:]\d{0,2}\b/.test(lastUserMsg.content) ||
-              /(pode ser|quero|prefiro|vou|marco|as\s+\d|amanh[aã]\s*(as)?\s*\d)/i.test(lastUserMsg.content);
+              /(pode ser|quero|prefiro|vou|marco|as\s+\d|amanh[aÃ£]\s*(as)?\s*\d)/i.test(lastUserMsg.content);
             if (offeredTimes && userChoseTime) {
-              schedulingHint = `\n\n[HINT OBRIGATÓRIO] O assistente ofereceu horários e o cliente ESCOLHEU um. Você DEVE chamar consultar_agenda com action="criar". NÃO use "cancelar" nem "check_availability".`;
+              schedulingHint = `\n\n[HINT OBRIGATÃ“RIO] O assistente ofereceu horÃ¡rios e o cliente ESCOLHEU um. VocÃª DEVE chamar consultar_agenda com action="criar". NÃƒO use "cancelar" nem "check_availability".`;
               if (offeredTomorrow) {
-                schedulingHint += ` Use a data de AMANHÃ em start_at: ${tomorrowISO}T[HORA]:00:00-03:00 (ex.: ${tomorrowISO}T11:00:00-03:00), NÃO use ${todayISO}.`;
+                schedulingHint += ` Use a data de AMANHÃƒ em start_at: ${tomorrowISO}T[HORA]:00:00-03:00 (ex.: ${tomorrowISO}T11:00:00-03:00), NÃƒO use ${todayISO}.`;
               }
             }
           }
@@ -1230,10 +1222,10 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             if (entities.modelo) parts.push(`Modelo: ${entities.modelo}`);
             if (entities.ano) parts.push(`Ano: ${entities.ano}`);
             if (entities.km) parts.push(`KM: ${entities.km}`);
-            entityHint = `\n\n[ENTIDADES DETECTADAS na última mensagem do cliente]\n${parts.join("\n")}\nUse EXATAMENTE estas entidades ao montar os argumentos das tools. NÃO invente valores diferentes.`;
+            entityHint = `\n\n[ENTIDADES DETECTADAS na Ãºltima mensagem do cliente]\n${parts.join("\n")}\nUse EXATAMENTE estas entidades ao montar os argumentos das tools. NÃƒO invente valores diferentes.`;
           }
           if (appraisalCtx) {
-            entityHint += `\n\n[CONTEXTO DE FLUXO] A última mensagem do assistente pedia dados do veículo do CLIENTE (marca, modelo, ano, km). Isso é APPRAISAL (intent A). NÃO chame consultar_fipe — avaliação é feita presencialmente pelo time comercial. Se o cliente já forneceu marca+modelo+ano, chame consultar_agenda com action "check_availability" e date "${todayISO}" para oferecer horários reais ao sugerir visita na loja. NÃO chame consultar_estoque.`;
+            entityHint += `\n\n[CONTEXTO DE FLUXO] A Ãºltima mensagem do assistente pedia dados do veÃ­culo do CLIENTE (marca, modelo, ano, km). Isso Ã© APPRAISAL (intent A). NÃƒO chame consultar_fipe â€” avaliaÃ§Ã£o Ã© feita presencialmente pelo time comercial. Se o cliente jÃ¡ forneceu marca+modelo+ano, chame consultar_agenda com action "check_availability" e date "${todayISO}" para oferecer horÃ¡rios reais ao sugerir visita na loja. NÃƒO chame consultar_estoque.`;
           }
 
           const dispatcherMessages = toOpenAIMessages(
@@ -1279,7 +1271,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             const e = fetchErr as { code?: string; message?: string };
             const isNetworkError = e?.code === "ECONNRESET" || /ECONNRESET|ETIMEDOUT|ENOTFOUND|ECONNREFUSED/i.test(String(e?.message || ""));
             console.error("[Chat-Local] Dispatcher fetch failed:", e?.message || fetchErr);
-            sendSse({ error: isNetworkError ? "Conexão com LLM interrompida. Tente novamente." : (e?.message || "Falha ao conectar com dispatcher") });
+            sendSse({ error: isNetworkError ? "ConexÃ£o com LLM interrompida. Tente novamente." : (e?.message || "Falha ao conectar com dispatcher") });
             sendSse("[DONE]");
             reply.raw.end();
             return;
@@ -1376,12 +1368,12 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               { type: "dispatcher_tool_calls", tool_names: phase1ToolCalls.map((tc) => tc.function.name), tool_calls_count: phase1ToolCalls.length },
             ];
 
-            // consultar_fipe removido do fluxo (v3.5.0) — avaliações são presenciais
+            // consultar_fipe removido do fluxo (v3.5.0) â€” avaliaÃ§Ãµes sÃ£o presenciais
 
             for (const tc of phase1ToolCalls) {
               const tool = dispatcherNameToTool.get(tc.function.name);
               if (!tool) {
-                console.warn("[Chat-Local] Tool não encontrada:", tc.function.name);
+                console.warn("[Chat-Local] Tool nÃ£o encontrada:", tc.function.name);
                 let args: Record<string, unknown> = {};
                 try {
                   args = JSON.parse(tc.function.arguments || "{}");
@@ -1403,24 +1395,24 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   args = {};
                 }
 
-                // ── consultar_fipe removido (v3.5.0) — avaliações são presenciais ──
+                // â”€â”€ consultar_fipe removido (v3.5.0) â€” avaliaÃ§Ãµes sÃ£o presenciais â”€â”€
                 // Se o dispatcher ainda chamar consultar_fipe por engano, rejeitar com mensagem clara
                 const isFipeTool = /consultar_fipe|fipe/i.test(tc.function.name);
                 if (isFipeTool) {
                   console.warn("[Chat-Local] consultar_fipe REJEITADO: ferramenta removida do fluxo (v3.5.0). args:", JSON.stringify(args));
                   debugEntries.push({ type: "tool_call", tool: tc.function.name, args, tool_type: "function" });
-                  debugEntries.push({ type: "tool_result", preview: { error: "consultar_fipe removido — avaliação é presencial" } });
+                  debugEntries.push({ type: "tool_result", preview: { error: "consultar_fipe removido â€” avaliaÃ§Ã£o Ã© presencial" } });
                   conversationalMessages.push({
                     role: "tool",
                     tool_call_id: tc.id,
-                    content: JSON.stringify({ error: "consultar_fipe não é mais utilizado. A avaliação do veículo do cliente é feita presencialmente pelo time comercial. Colete os dados do veículo (marca, modelo, ano, km, placa) e conduza para agendamento de visita." }),
+                    content: JSON.stringify({ error: "consultar_fipe nÃ£o Ã© mais utilizado. A avaliaÃ§Ã£o do veÃ­culo do cliente Ã© feita presencialmente pelo time comercial. Colete os dados do veÃ­culo (marca, modelo, ano, km, placa) e conduza para agendamento de visita." }),
                   });
                   continue;
                 }
 
                 // Garantir que args seja sempre um objeto (JSON.parse pode retornar primitivo)
                 if (typeof args !== "object" || args === null || Array.isArray(args)) {
-                  console.warn("[Chat-Local] args não é objeto, resetando para {}. Valor original:", JSON.stringify(args));
+                  console.warn("[Chat-Local] args nÃ£o Ã© objeto, resetando para {}. Valor original:", JSON.stringify(args));
                   args = {};
                 }
 
@@ -1436,15 +1428,15 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                     if (fallbackEntities.marca) args.marca = fallbackEntities.marca;
                     if (fallbackEntities.modelo) args.modelo = fallbackEntities.modelo;
                     if (fallbackEntities.ano) args.ano = fallbackEntities.ano;
-                    console.log("[Chat-Local] consultar_estoque args vazios: fallback extraiu do histórico:", JSON.stringify(args));
+                    console.log("[Chat-Local] consultar_estoque args vazios: fallback extraiu do histÃ³rico:", JSON.stringify(args));
                   } else {
-                    console.warn("[Chat-Local] consultar_estoque BLOQUEADO: args vazios e nenhum veículo no histórico.");
+                    console.warn("[Chat-Local] consultar_estoque BLOQUEADO: args vazios e nenhum veÃ­culo no histÃ³rico.");
                     debugEntries.push({ type: "tool_call", tool: tc.function.name, args, tool_type: "function" });
-                    debugEntries.push({ type: "tool_result", preview: { error: "consultar_estoque rejeitado — args vazios" } });
+                    debugEntries.push({ type: "tool_result", preview: { error: "consultar_estoque rejeitado â€” args vazios" } });
                     conversationalMessages.push({
                       role: "tool",
                       tool_call_id: tc.id,
-                      content: JSON.stringify({ error: "consultar_estoque chamado com args vazios {}. Você DEVE especificar pelo menos marca ou modelo. Analise o histórico da conversa para identificar o veículo discutido." }),
+                      content: JSON.stringify({ error: "consultar_estoque chamado com args vazios {}. VocÃª DEVE especificar pelo menos marca ou modelo. Analise o histÃ³rico da conversa para identificar o veÃ­culo discutido." }),
                     });
                     continue;
                   }
@@ -1454,15 +1446,15 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   const fallbackCep = extractCepFromMessages(messages);
                   if (fallbackCep) {
                     args = { ...args, cep: fallbackCep };
-                    console.log("[Chat-Local] consultar_unidade sem cep: fallback extraiu do histórico:", fallbackCep);
+                    console.log("[Chat-Local] consultar_unidade sem cep: fallback extraiu do histÃ³rico:", fallbackCep);
                   } else {
-                    console.warn("[Chat-Local] consultar_unidade BLOQUEADO: cep ausente e não encontrado no histórico.");
+                    console.warn("[Chat-Local] consultar_unidade BLOQUEADO: cep ausente e nÃ£o encontrado no histÃ³rico.");
                     debugEntries.push({ type: "tool_call", tool: tc.function.name, args, tool_type: "function" });
-                    debugEntries.push({ type: "tool_result", preview: { error: "consultar_unidade rejeitada — cep ausente" } });
+                    debugEntries.push({ type: "tool_result", preview: { error: "consultar_unidade rejeitada â€” cep ausente" } });
                     conversationalMessages.push({
                       role: "tool",
                       tool_call_id: tc.id,
-                      content: JSON.stringify({ error: "consultar_unidade chamada sem o argumento cep. Peça o CEP (8 dígitos) ao cliente antes de chamar esta ferramenta." }),
+                      content: JSON.stringify({ error: "consultar_unidade chamada sem o argumento cep. PeÃ§a o CEP (8 dÃ­gitos) ao cliente antes de chamar esta ferramenta." }),
                     });
                     continue;
                   }
@@ -1514,7 +1506,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
 
           // Limpar mensagens para Gemini conversacional: remover tool_calls e mensagens "tool"
-          // Gemini 3/2.5 exige thought_signature quando vê tool_calls; sem tool_calls não exige
+          // Gemini 3/2.5 exige thought_signature quando vÃª tool_calls; sem tool_calls nÃ£o exige
           const toolResults: string[] = [];
           const conversationalMessagesClean = conversationalMessages
             .map((msg) => {
@@ -1541,12 +1533,9 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }).join("\n\n");
             conversationalMessagesClean.push({
               role: "user",
-              content: `Resultados obtidos:\n${naturalToolResultsText}\n\nCom base nesses resultados, responda ao cliente de forma natural e objetiva. NÃO inclua JSON, nomes de ferramentas ou artefatos técnicos.`,
+              content: `Resultados obtidos:\n${naturalToolResultsText}\n\nCom base nesses resultados, responda ao cliente de forma natural e objetiva. NÃƒO inclua JSON, nomes de ferramentas ou artefatos tÃ©cnicos.`,
             });
           }
-          // #region agent log
-          fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:929',message:'Mensagens para conversacional (Gemini)',data:{messagesCount:conversationalMessagesClean.length,toolResultsCount:toolResults.length,naturalToolResultsTextPreview:naturalToolResultsText.slice(0,300),lastMessage:conversationalMessagesClean[conversationalMessagesClean.length-1]},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
-          // #endregion
 
           const convModel = model;
           const convBody: Record<string, unknown> = {
@@ -1585,7 +1574,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               if (convAttempt > 0) {
                 const delayMs = 700 * convAttempt;
                 console.warn(
-                  `[Chat-Local] Conversational retry ${convAttempt + 1}/${convMaxAttempts} após ${lastStatus} (aguardando ${delayMs}ms)`
+                  `[Chat-Local] Conversational retry ${convAttempt + 1}/${convMaxAttempts} apÃ³s ${lastStatus} (aguardando ${delayMs}ms)`
                 );
                 await new Promise((r) => setTimeout(r, delayMs));
                 if (
@@ -1635,7 +1624,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             const e = fetchErr as { code?: string; message?: string };
             const isNetworkError = e?.code === "ECONNRESET" || /ECONNRESET|ETIMEDOUT|ENOTFOUND|ECONNREFUSED/i.test(String(e?.message || ""));
             console.error("[Chat-Local] Conversational fetch failed:", e?.message || fetchErr);
-            sendSse({ error: isNetworkError ? "Conexão com LLM interrompida. Tente novamente." : (e?.message || "Falha ao conectar com LLM conversacional") });
+            sendSse({ error: isNetworkError ? "ConexÃ£o com LLM interrompida. Tente novamente." : (e?.message || "Falha ao conectar com LLM conversacional") });
             sendSse("[DONE]");
             reply.raw.end();
             return;
@@ -1679,14 +1668,8 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                     convFullContent += delta.content;
                     debugDeltaCount++;
                     debugDeltaTotalLen += (delta.content || "").length;
-                    // #region agent log
-                    fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1017',message:'Delta recebido do Gemini',data:{deltaContent:delta.content,deltaLen:delta.content.length,streamFilterBufferBefore:streamFilterBuffer},timestamp:Date.now(),hypothesisId:'H1,H4'})}).catch(()=>{});
-                    // #endregion
                     const { toSend, newBuffer } = filterCommandLinesFromStream(streamFilterBuffer, delta.content);
                     streamFilterBuffer = newBuffer;
-                    // #region agent log
-                    fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1020',message:'Após filterCommandLines',data:{toSend:toSend,toSendLen:toSend.length,newBuffer:newBuffer,wasFiltered:delta.content.length>0&&toSend.length===0},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
-                    // #endregion
                     if (toSend) {
                       debugSendCount++;
                       debugSendTotalLen += toSend.length;
@@ -1698,18 +1681,18 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               }
             }
             if (done) {
-              // convFullContent já inclui todos os delta.content; não somar streamFilterBuffer (duplicava o sufixo).
+              // convFullContent jÃ¡ inclui todos os delta.content; nÃ£o somar streamFilterBuffer (duplicava o sufixo).
               if (streamFilterBuffer) {
                 debugSendCount++;
                 debugSendTotalLen += streamFilterBuffer.length;
                 sendSse({ choices: [{ delta: { content: streamFilterBuffer } }] });
               }
-              // Primeiro contato: pergunta do nome só se NÃO tiver vídeo de boas-vindas E o modelo ainda não perguntou o nome
+              // Primeiro contato: pergunta do nome sÃ³ se NÃƒO tiver vÃ­deo de boas-vindas E o modelo ainda nÃ£o perguntou o nome
               const isFirstContact = messages.filter((m) => m.role === "assistant").length === 0;
               const agentCfg = (agent?.config || {}) as Record<string, unknown>;
               const hasWelcomeVideo = !!(agentCfg.welcome_video_url as string)?.trim();
               const nameQuestion = (agentCfg.welcome_name_question as string) || "Como posso te chamar?";
-              const modelAlreadyAskedName = /como\s+(prefere\s+ser\s+chamad|posso\s+te\s+chamar|posso\s+chamar|gostaria\s+de\s+ser\s+chamad)|com\s+quem\s+(eu\s+)?tenho\s+o\s+prazer|com\s+quem\s+(eu\s+)?falo|qual\s+(é\s+)?(seu|o)\s+nome|como\s+você\s+prefere\s+ser\s+chamad/i.test(convFullContent);
+              const modelAlreadyAskedName = /como\s+(prefere\s+ser\s+chamad|posso\s+te\s+chamar|posso\s+chamar|gostaria\s+de\s+ser\s+chamad)|com\s+quem\s+(eu\s+)?tenho\s+o\s+prazer|com\s+quem\s+(eu\s+)?falo|qual\s+(Ã©\s+)?(seu|o)\s+nome|como\s+vocÃª\s+prefere\s+ser\s+chamad/i.test(convFullContent);
               if (isFirstContact && nameQuestion && !hasWelcomeVideo && !modelAlreadyAskedName) {
                 const nqContent = "\n\n" + nameQuestion;
                 debugSendCount++;
@@ -1725,7 +1708,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
 
           if (/HANDOFF_COMERCIAL/i.test(convFullContent)) {
             sendHandoffNotification(agent_id, agent, messages, external_user_id).catch((e) => {
-              console.warn("[Chat-Local] Erro ao enviar notificação de handoff:", (e as Error)?.message);
+              console.warn("[Chat-Local] Erro ao enviar notificaÃ§Ã£o de handoff:", (e as Error)?.message);
             });
             if (responseConvId) {
               supabase.rpc("cancel_pending_followups", {
@@ -1750,17 +1733,14 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               debugDeltaCount,
               debugDeltaTotalLen,
               debugSendCount,
-              hint: debugDeltaTotalLen > 0 && debugSendTotalLen === 0 ? "conteúdo filtrado por filterCommandLines" : "modelo retornou vazio ou sem deltas",
+              hint: debugDeltaTotalLen > 0 && debugSendTotalLen === 0 ? "conteÃºdo filtrado por filterCommandLines" : "modelo retornou vazio ou sem deltas",
             });
-            // #region agent log
-            fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1053',message:'Resposta vazia - iniciando retry',data:{debugDeltaCount,debugDeltaTotalLen,debugSendCount,streamFilterBufferFinal:streamFilterBuffer},timestamp:Date.now(),hypothesisId:'H1,H2,H4'})}).catch(()=>{});
-            // #endregion
             try {
               const retryMessages = conversationalMessagesClean.slice(0, 1).concat(
                 conversationalMessagesClean.filter((m) => m.role === "user" || m.role === "assistant").slice(-4)
               );
               if (toolResults.length > 0 && naturalToolResultsText) {
-                retryMessages.push({ role: "user", content: `Resultados obtidos:\n${naturalToolResultsText}\n\nCom base nesses resultados, responda ao cliente de forma natural e objetiva. NÃO inclua JSON, nomes de ferramentas ou artefatos técnicos.` });
+                retryMessages.push({ role: "user", content: `Resultados obtidos:\n${naturalToolResultsText}\n\nCom base nesses resultados, responda ao cliente de forma natural e objetiva. NÃƒO inclua JSON, nomes de ferramentas ou artefatos tÃ©cnicos.` });
               }
               const retryBody = { model: convModel, messages: retryMessages, stream: false, temperature: agent.temperature ?? 0.7 };
               const retryResp = await fetch(convApiUrl, {
@@ -1772,22 +1752,13 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               if (retryResp.ok) {
                 const retryJson = await retryResp.json() as { choices?: Array<{ message?: { content?: string } }> };
                 const retryContent = retryJson.choices?.[0]?.message?.content?.trim();
-                // #region agent log
-                fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1077',message:'Retry response recebido',data:{retryContent:retryContent,retryContentLen:retryContent?.length||0},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-                // #endregion
                 if (retryContent) {
                   const sanitized = sanitizeLLMOutput(retryContent);
-                  // #region agent log
-                  fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1081',message:'Após sanitizeLLMOutput',data:{sanitized:sanitized,sanitizedLen:sanitized.length,wasStripped:retryContent.length>0&&sanitized.length===0},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
-                  // #endregion
                   if (sanitized) {
-                    console.log("[Chat-Local] Retry OK, enviando conteúdo sanitizado:", sanitized.slice(0, 80));
+                    console.log("[Chat-Local] Retry OK, enviando conteÃºdo sanitizado:", sanitized.slice(0, 80));
                     sendSse({ choices: [{ delta: { content: sanitized } }] });
                   } else {
                     const fallback = fallbackSanitizeForRetry(retryContent);
-                    // #region agent log
-                    fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1089',message:'Fallback sanitize',data:{fallback:fallback,fallbackLen:fallback.length,retryContentPreview:retryContent.slice(0,300)},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
-                    // #endregion
                     if (fallback) {
                       console.log("[Chat-Local] sanitize retornou vazio, usando fallback:", fallback.slice(0, 80));
                       sendSse({ choices: [{ delta: { content: fallback } }] });
@@ -1797,17 +1768,11 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                     }
                   }
                 } else {
-                  // #region agent log
-                  fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1102',message:'Retry retornou vazio',data:{},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-                  // #endregion
-                  console.warn("[Chat-Local] Retry também retornou vazio, enviando mensagem neutra");
+                  console.warn("[Chat-Local] Retry tambÃ©m retornou vazio, enviando mensagem neutra");
                   sendSse({ choices: [{ delta: { content: "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?" } }] });
                 }
               } else {
                 const errText = await retryResp.text();
-                // #region agent log
-                fetch('http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9697c3'},body:JSON.stringify({sessionId:'9697c3',location:'chat-local.ts:1111',message:'Retry HTTP falhou',data:{status:retryResp.status,errText:errText.slice(0,200)},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-                // #endregion
                 console.warn("[Chat-Local] Retry falhou:", retryResp.status, errText.slice(0, 150));
                 sendSse({ choices: [{ delta: { content: "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?" } }] });
               }
@@ -1860,7 +1825,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
         }
       }
 
-      /** Sandbox: UI só mostra DebugBlock se houver `debug` ou `token_usage`; vários proxies não mandam usage no stream. */
+      /** Sandbox: UI sÃ³ mostra DebugBlock se houver `debug` ou `token_usage`; vÃ¡rios proxies nÃ£o mandam usage no stream. */
       const sendSingleProviderSandboxDebug = () => {
         const cfg = (agent.config || {}) as Record<string, unknown>;
         sendSse({
@@ -1898,7 +1863,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           body.tool_choice = "auto";
         }
 
-        // Gemini: endpoint OpenAI-compatible é /openai/chat/completions
+        // Gemini: endpoint OpenAI-compatible Ã© /openai/chat/completions
         const base = providerConfig.baseUrl.replace(/\/+$/, "");
         const isGeminiBase = /generativelanguage\.googleapis\.com/i.test(base);
         const apiUrl =
@@ -1995,7 +1960,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             const agentCfgSingle = (agent?.config || {}) as Record<string, unknown>;
             const hasWelcomeVideoSingle = !!(agentCfgSingle.welcome_video_url as string)?.trim();
             const nameQuestionSingle = (agentCfgSingle.welcome_name_question as string) || "Como posso te chamar?";
-            const modelAlreadyAskedNameSingle = /como\s+(prefere\s+ser\s+chamad|posso\s+te\s+chamar|posso\s+chamar|gostaria\s+de\s+ser\s+chamad)|com\s+quem\s+(eu\s+)?tenho\s+o\s+prazer|com\s+quem\s+(eu\s+)?falo|qual\s+(é\s+)?(seu|o)\s+nome|como\s+você\s+prefere\s+ser\s+chamad/i.test(content);
+            const modelAlreadyAskedNameSingle = /como\s+(prefere\s+ser\s+chamad|posso\s+te\s+chamar|posso\s+chamar|gostaria\s+de\s+ser\s+chamad)|com\s+quem\s+(eu\s+)?tenho\s+o\s+prazer|com\s+quem\s+(eu\s+)?falo|qual\s+(Ã©\s+)?(seu|o)\s+nome|como\s+vocÃª\s+prefere\s+ser\s+chamad/i.test(content);
             if (isFirstContact && nameQuestionSingle && !hasWelcomeVideoSingle && !modelAlreadyAskedNameSingle) {
               const nqContentSingle = "\n\n" + nameQuestionSingle;
               content += nqContentSingle;
@@ -2020,7 +1985,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
         if (toolCalls.length === 0) {
           if (/HANDOFF_COMERCIAL/i.test(fullContent)) {
             sendHandoffNotification(agent_id, agent, messages, external_user_id).catch((e) => {
-              console.warn("[Chat-Local] Erro ao enviar notificação de handoff (single-provider):", (e as Error)?.message);
+              console.warn("[Chat-Local] Erro ao enviar notificaÃ§Ã£o de handoff (single-provider):", (e as Error)?.message);
             });
             if (responseConvId) {
               supabase.rpc("cancel_pending_followups", {
@@ -2094,7 +2059,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
         for (const tc of toolCalls) {
           const tool = nameToTool.get(tc.function.name);
           if (!tool) {
-            console.warn("[Chat-Local] Tool não encontrada (single-provider):", tc.function.name);
+            console.warn("[Chat-Local] Tool nÃ£o encontrada (single-provider):", tc.function.name);
             llmMessages.push({
               role: "tool",
               tool_call_id: tc.id,
@@ -2112,7 +2077,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
 
           // Garantir que args seja sempre um objeto (JSON.parse pode retornar primitivo)
           if (typeof args !== "object" || args === null || Array.isArray(args)) {
-            console.warn("[Chat-Local] args não é objeto (single-provider), resetando para {}. Valor original:", JSON.stringify(args));
+            console.warn("[Chat-Local] args nÃ£o Ã© objeto (single-provider), resetando para {}. Valor original:", JSON.stringify(args));
             args = {};
           }
 
@@ -2128,13 +2093,13 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               if (fallbackEntitiesSP.marca) args.marca = fallbackEntitiesSP.marca;
               if (fallbackEntitiesSP.modelo) args.modelo = fallbackEntitiesSP.modelo;
               if (fallbackEntitiesSP.ano) args.ano = fallbackEntitiesSP.ano;
-              console.log("[Chat-Local] consultar_estoque args vazios (single-provider): fallback extraiu do histórico:", JSON.stringify(args));
+              console.log("[Chat-Local] consultar_estoque args vazios (single-provider): fallback extraiu do histÃ³rico:", JSON.stringify(args));
             } else {
-              console.warn("[Chat-Local] consultar_estoque BLOQUEADO (single-provider): args vazios e nenhum veículo no histórico.");
+              console.warn("[Chat-Local] consultar_estoque BLOQUEADO (single-provider): args vazios e nenhum veÃ­culo no histÃ³rico.");
               llmMessages.push({
                 role: "tool",
                 tool_call_id: tc.id,
-                content: JSON.stringify({ error: "consultar_estoque chamado com args vazios {}. Você DEVE especificar pelo menos marca ou modelo. Analise o histórico da conversa para identificar o veículo discutido." }),
+                content: JSON.stringify({ error: "consultar_estoque chamado com args vazios {}. VocÃª DEVE especificar pelo menos marca ou modelo. Analise o histÃ³rico da conversa para identificar o veÃ­culo discutido." }),
               });
               continue;
             }
@@ -2144,13 +2109,13 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             const fallbackCepSP = extractCepFromMessages(messages);
             if (fallbackCepSP) {
               args = { ...args, cep: fallbackCepSP };
-              console.log("[Chat-Local] consultar_unidade sem cep (single-provider): fallback extraiu do histórico:", fallbackCepSP);
+              console.log("[Chat-Local] consultar_unidade sem cep (single-provider): fallback extraiu do histÃ³rico:", fallbackCepSP);
             } else {
-              console.warn("[Chat-Local] consultar_unidade BLOQUEADO (single-provider): cep ausente e não encontrado no histórico.");
+              console.warn("[Chat-Local] consultar_unidade BLOQUEADO (single-provider): cep ausente e nÃ£o encontrado no histÃ³rico.");
               llmMessages.push({
                 role: "tool",
                 tool_call_id: tc.id,
-                content: JSON.stringify({ error: "consultar_unidade chamada sem o argumento cep. Peça o CEP (8 dígitos) ao cliente antes de chamar esta ferramenta." }),
+                content: JSON.stringify({ error: "consultar_unidade chamada sem o argumento cep. PeÃ§a o CEP (8 dÃ­gitos) ao cliente antes de chamar esta ferramenta." }),
               });
               continue;
             }
