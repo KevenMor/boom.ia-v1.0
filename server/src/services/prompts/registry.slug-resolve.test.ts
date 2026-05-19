@@ -15,7 +15,7 @@ describe("registry — slug aliases (hífen / underscore)", () => {
 
   it("resolve Auto Escola Ideal com slug do banco (variantes com hífen)", () => {
     const prompt = buildSystemPrompt("PROMPT_DO_BANCO_QUE_NAO_DEVE_APARECER", "auto-escola-ideal", false);
-    expect(prompt).toContain("v8.8");
+    expect(prompt).toContain("v8.11");
     expect(prompt).not.toContain("PROMPT_DO_BANCO_QUE_NAO_DEVE_APARECER");
     expect(prompt).toMatch(/R\$ 90,00/);
   });
@@ -36,7 +36,7 @@ describe("registry — slug aliases (hífen / underscore)", () => {
   it("slug canônico ideal ignora prompt do banco", () => {
     const prompt = buildSystemPrompt("TEXTO_SOMENTE_BANCO_NAO_USAR", "ideal", false);
     expect(prompt).not.toContain("TEXTO_SOMENTE_BANCO_NAO_USAR");
-    expect(prompt).toContain("v8.8");
+    expect(prompt).toContain("v8.11");
   });
 
   it("tenant fora do registry usa system prompt do banco", () => {
