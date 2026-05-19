@@ -1687,13 +1687,15 @@ Para REMARCAR: a conversa contÃ©m o horÃ¡rio jÃ¡ confirmado (ex.: "confirm
                 debugSendTotalLen += streamFilterBuffer.length;
                 sendSse({ choices: [{ delta: { content: streamFilterBuffer } }] });
               }
-              // Primeiro contato: pergunta do nome sÃ³ se NÃƒO tiver vÃ­deo de boas-vindas E o modelo ainda nÃ£o perguntou o nome
+              // Primeiro contato: pergunta do nome só se NÃO tiver vídeo de boas-vindas, modelo ainda não perguntou E usuário ainda não informou
               const isFirstContact = messages.filter((m) => m.role === "assistant").length === 0;
               const agentCfg = (agent?.config || {}) as Record<string, unknown>;
               const hasWelcomeVideo = !!(agentCfg.welcome_video_url as string)?.trim();
               const nameQuestion = (agentCfg.welcome_name_question as string) || "Como posso te chamar?";
-              const modelAlreadyAskedName = /como\s+(prefere\s+ser\s+chamad|posso\s+te\s+chamar|posso\s+chamar|gostaria\s+de\s+ser\s+chamad)|com\s+quem\s+(eu\s+)?tenho\s+o\s+prazer|com\s+quem\s+(eu\s+)?falo|qual\s+(Ã©\s+)?(seu|o)\s+nome|como\s+vocÃª\s+prefere\s+ser\s+chamad/i.test(convFullContent);
-              if (isFirstContact && nameQuestion && !hasWelcomeVideo && !modelAlreadyAskedName) {
+              const modelAlreadyAskedName = /como\s+(prefere\s+ser\s+chamad|posso\s+te\s+chamar|posso\s+chamar|gostaria\s+de\s+ser\s+chamad)|com\s+quem\s+(eu\s+)?tenho\s+o\s+prazer|com\s+quem\s+(eu\s+)?falo|qual\s+(é\s+)?(seu|o)\s+nome|como\s+você\s+prefere\s+ser\s+chamad/i.test(convFullContent);
+              const firstUserMsg = (messages.find((m) => m.role === "user")?.content || "").toLowerCase().normalize("NFD").replace(/\p{Mn}/gu, "");
+              const userAlreadyProvidedName = /\b(me\s+chamo|meu\s+nome\s+(e|eh|é)|pode\s+me\s+chamar\s+de|sou\s+o\s+|sou\s+a\s+|aqui\s+e\s+o\s+|aqui\s+e\s+a\s+|falo\s+com\s+)\b/i.test(firstUserMsg);
+              if (isFirstContact && nameQuestion && !hasWelcomeVideo && !modelAlreadyAskedName && !userAlreadyProvidedName) {
                 const nqContent = "\n\n" + nameQuestion;
                 debugSendCount++;
                 debugSendTotalLen += nqContent.length;
@@ -1960,8 +1962,10 @@ Para REMARCAR: a conversa contÃ©m o horÃ¡rio jÃ¡ confirmado (ex.: "confirm
             const agentCfgSingle = (agent?.config || {}) as Record<string, unknown>;
             const hasWelcomeVideoSingle = !!(agentCfgSingle.welcome_video_url as string)?.trim();
             const nameQuestionSingle = (agentCfgSingle.welcome_name_question as string) || "Como posso te chamar?";
-            const modelAlreadyAskedNameSingle = /como\s+(prefere\s+ser\s+chamad|posso\s+te\s+chamar|posso\s+chamar|gostaria\s+de\s+ser\s+chamad)|com\s+quem\s+(eu\s+)?tenho\s+o\s+prazer|com\s+quem\s+(eu\s+)?falo|qual\s+(Ã©\s+)?(seu|o)\s+nome|como\s+vocÃª\s+prefere\s+ser\s+chamad/i.test(content);
-            if (isFirstContact && nameQuestionSingle && !hasWelcomeVideoSingle && !modelAlreadyAskedNameSingle) {
+            const modelAlreadyAskedNameSingle = /como\s+(prefere\s+ser\s+chamad|posso\s+te\s+chamar|posso\s+chamar|gostaria\s+de\s+ser\s+chamad)|com\s+quem\s+(eu\s+)?tenho\s+o\s+prazer|com\s+quem\s+(eu\s+)?falo|qual\s+(é\s+)?(seu|o)\s+nome|como\s+você\s+prefere\s+ser\s+chamad/i.test(content);
+            const firstUserMsgSingle = (messages.find((m) => m.role === "user")?.content || "").toLowerCase().normalize("NFD").replace(/\p{Mn}/gu, "");
+            const userAlreadyProvidedNameSingle = /\b(me\s+chamo|meu\s+nome\s+(e|eh|é)|pode\s+me\s+chamar\s+de|sou\s+o\s+|sou\s+a\s+|aqui\s+e\s+o\s+|aqui\s+e\s+a\s+|falo\s+com\s+)\b/i.test(firstUserMsgSingle);
+            if (isFirstContact && nameQuestionSingle && !hasWelcomeVideoSingle && !modelAlreadyAskedNameSingle && !userAlreadyProvidedNameSingle) {
               const nqContentSingle = "\n\n" + nameQuestionSingle;
               content += nqContentSingle;
               sendSse({ choices: [{ delta: { content: nqContentSingle } }] });
