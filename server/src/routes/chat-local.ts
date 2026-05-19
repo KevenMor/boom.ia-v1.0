@@ -6,6 +6,7 @@ import { filterCommandLinesFromStream, sanitizeLLMOutput, fallbackSanitizeForRet
 import { emitMediaCommandsSseIfNeeded } from "../utils/extract-media-commands.js";
 import { injectSuiteGalleryMarkdownIfMissing, injectSuiteGalleryVideosIfMissing } from "../utils/suite-gallery-markdown-inject.js";
 import { injectOmnibeesQuotePhotosIfMissing } from "../utils/omnibees-photo-markdown.js";
+import { injectInventoryPhotosIfMissing } from "../utils/inventory-photo-inject.js";
 import { formatOmnibeesQuoteForDelivery } from "../utils/omnibees-quote-format.js";
 import { getWelcomeConversationImageMarkdown } from "../utils/suite-gallery-welcome-image.js";
 import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification, buildHandoffNotification, extractClientNameFromMessages, toBrasiliaISO } from "../utils/agendaNotification.js";
@@ -1153,6 +1154,14 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           text = omnibeesPhotoInject.fullText;
         }
         text = formatOmnibeesQuoteForDelivery(text, toolResultStrings);
+        const inventoryPhotoInject = injectInventoryPhotosIfMissing({
+          assistantText: text,
+          toolResultStrings,
+        });
+        if (inventoryPhotoInject) {
+          console.log("[Chat-Local] Injetando photos_markdown inventário (omissão do modelo)");
+          text = inventoryPhotoInject.fullText;
+        }
         return text;
       };
 
