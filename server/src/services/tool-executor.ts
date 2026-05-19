@@ -1488,13 +1488,31 @@ async function executeChatwootAssign(
       };
     }
 
-    // A atribui├º├úo ├® feita pelo delivery AP├ôS o envio da mensagem, para evitar que o Chatwoot
-    // desvincule o agente humano quando a IA envia a resposta. Retornamos assignee_id/team_id
-    // para o chat-local repassar ao delivery.
+    const baseUrl = cwUrl.replace(/\/+$/, "");
+    const assignUrl = `${baseUrl}/api/v1/accounts/${cwAccountId}/conversations/${cwConvId}/assignments`;
+    const assignBody: Record<string, unknown> = {};
+    if (assigneeId) assignBody.assignee_id = Number(assigneeId);
+    if (teamId) assignBody.team_id = Number(teamId);
+
+    const assignResp = await fetch(assignUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", api_access_token: cwToken },
+      body: JSON.stringify(assignBody),
+    });
+
+    if (!assignResp.ok) {
+      const detail = await assignResp.text();
+      return {
+        success: false,
+        result: null,
+        error: `Falha na atribuição Chatwoot: ${assignResp.status} — ${detail.slice(0, 200)}`,
+      };
+    }
+
     return {
       success: true,
       result: {
-        status: "deferred",
+        status: "atribuido",
         chatwoot_conversation_id: cwConvId,
         assignee_id: assigneeId ?? null,
         team_id: teamId ?? null,
