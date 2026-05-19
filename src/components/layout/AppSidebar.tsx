@@ -39,7 +39,7 @@ import { useSidebar } from "@/contexts/SidebarContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTenantContext } from "@/contexts/TenantContext";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { TenantSwitcher } from "./TenantSwitcher";
 import { BoomIaLogo } from "@/components/brand/BoomIaLogo";
 import type { LucideIcon } from "lucide-react";
@@ -178,7 +178,7 @@ function CollapsibleSection({
   );
 }
 
-function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
+function SidebarContent({ collapsed = false, onDropdownOpenChange }: { collapsed?: boolean; onDropdownOpenChange?: (open: boolean) => void }) {
   const navigate = useNavigate();
   const { signOut, user, profile, isSuperAdmin } = useAuth();
   const location = useLocation();
@@ -215,12 +215,12 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
       {/* Workspace switcher */}
       {!collapsed && (
         <div className="mb-3 px-1">
-          <TenantSwitcher collapsed={false} />
+          <TenantSwitcher collapsed={false} onDropdownOpenChange={onDropdownOpenChange} />
         </div>
       )}
       {collapsed && (
         <div className="mb-3 flex justify-center">
-          <TenantSwitcher collapsed />
+          <TenantSwitcher collapsed onDropdownOpenChange={onDropdownOpenChange} />
         </div>
       )}
 
@@ -307,7 +307,7 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
       {/* User footer */}
       {!collapsed && (
         <div className="mt-2 shrink-0 border-t border-border pt-3 px-2">
-          <DropdownMenu>
+          <DropdownMenu onOpenChange={onDropdownOpenChange}>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
@@ -340,6 +340,31 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
 export function AppSidebar() {
   const { collapsed, mobileOpen, setMobileOpen } = useSidebar();
   const isMobile = useIsMobile();
+  const [hoveredOpen, setHoveredOpen] = useState(false);
+  const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dropdownOpen = useRef(false);
+
+  const handleMouseEnter = useCallback(() => {
+    if (leaveTimer.current) {
+      clearTimeout(leaveTimer.current);
+      leaveTimer.current = null;
+    }
+    if (collapsed) setHoveredOpen(true);
+  }, [collapsed]);
+
+  const handleMouseLeave = useCallback(() => {
+    if (dropdownOpen.current) return;
+    leaveTimer.current = setTimeout(() => setHoveredOpen(false), 200);
+  }, []);
+
+  const handleDropdownOpenChange = useCallback((open: boolean) => {
+    dropdownOpen.current = open;
+    if (!open) {
+      leaveTimer.current = setTimeout(() => setHoveredOpen(false), 200);
+    }
+  }, []);
+
+  const effectiveCollapsed = collapsed && !hoveredOpen;
 
   if (isMobile) {
     return (
@@ -364,10 +389,12 @@ export function AppSidebar() {
 
   return (
     <aside
-      className="fixed inset-y-0 left-0 z-30 transition-all duration-200 ease-out"
-      style={{ width: collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH }}
+      className="fixed inset-y-0 left-0 z-40 transition-all duration-200 ease-out"
+      style={{ width: effectiveCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
-      <SidebarContent collapsed={collapsed} />
+      <SidebarContent collapsed={effectiveCollapsed} onDropdownOpenChange={handleDropdownOpenChange} />
     </aside>
   );
 }

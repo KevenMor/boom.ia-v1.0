@@ -41,7 +41,7 @@ export function TokenUsageChart({ data, loading }: Props) {
 
   if (loading) {
     return (
-      <div className="flex h-full min-h-[300px] flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
+      <div className="flex h-full min-h-[300px] flex-col rounded-xl border border-border bg-card p-6 shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-shadow duration-200 hover:shadow-md">
         <Skeleton className="h-full w-full rounded-md" />
       </div>
     );
@@ -49,17 +49,17 @@ export function TokenUsageChart({ data, loading }: Props) {
 
   if (sortedChartRows.length === 0) {
     return (
-      <div className="flex h-full min-h-[300px] flex-col items-center justify-center rounded-xl border border-border bg-card p-5 shadow-sm">
+      <div className="flex h-full min-h-[300px] flex-col items-center justify-center rounded-xl border border-border bg-card p-6 shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-shadow duration-200 hover:shadow-md">
         <span className="text-sm text-muted-foreground">Nenhum dado de uso ainda</span>
       </div>
     );
   }
 
   return (
-    <div className="flex h-full min-h-[300px] flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
+    <div className="flex h-full min-h-[300px] flex-col rounded-xl border border-border bg-card p-6 shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-shadow duration-200 hover:shadow-md">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h3 className="text-md font-medium text-foreground">Consumo de tokens</h3>
+          <h3 className="text-md font-semibold text-foreground">Consumo de tokens</h3>
           <p className="text-xs text-muted-foreground">Últimos 30 dias</p>
         </div>
         <button
@@ -98,9 +98,10 @@ export function TokenUsageChart({ data, loading }: Props) {
               contentStyle={{
                 backgroundColor: "hsl(var(--card))",
                 border: "1px solid hsl(var(--border))",
-                borderRadius: "5px",
+                borderRadius: "8px",
                 fontSize: "12px",
                 color: "hsl(var(--foreground))",
+                boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
               }}
               formatter={(value: number) => [value.toLocaleString("pt-BR"), "Tokens"]}
               labelFormatter={(_, payload) => {

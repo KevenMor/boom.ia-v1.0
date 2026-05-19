@@ -15,9 +15,10 @@ export function chartTooltipStyle(_visual?: DashboardVisual): CSSProperties {
   return {
     backgroundColor: "hsl(var(--card))",
     border: "1px solid hsl(var(--border))",
-    borderRadius: "5px",
+    borderRadius: "8px",
     fontSize: "12px",
     color: "hsl(var(--foreground))",
+    boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
   };
 }
 

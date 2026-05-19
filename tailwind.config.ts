@@ -84,9 +84,9 @@ export default {
         },
       },
       borderRadius: {
-        lg: "6px",
-        md: "5px",
-        sm: "3px",
+        lg: "12px",
+        md: "8px",
+        sm: "6px",
       },
       keyframes: {
         "accordion-down": {

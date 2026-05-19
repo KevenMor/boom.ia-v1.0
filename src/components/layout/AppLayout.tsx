@@ -17,7 +17,7 @@ function LayoutInner() {
       ? "flex min-h-0 flex-1 flex-col overflow-hidden"
       : isConversations
         ? "flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
-        : "min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 md:p-6";
+        : "min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-6 md:p-8";
 
   return (
     <div className="flex h-[100dvh] min-h-0 overflow-hidden bg-background">

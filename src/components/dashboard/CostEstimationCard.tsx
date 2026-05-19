@@ -58,16 +58,16 @@ export function CostEstimationCard({ events, loading }: Props) {
 
   if (loading) {
     return (
-      <div className="flex h-full min-h-[200px] flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
+      <div className="flex h-full min-h-[200px] flex-col rounded-xl border border-border bg-card p-6 shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-shadow duration-200 hover:shadow-md">
         <Skeleton className="h-full w-full rounded-md" />
       </div>
     );
   }
 
   return (
-    <div className="flex h-full flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
+    <div className="flex h-full flex-col rounded-xl border border-border bg-card p-6 shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-shadow duration-200 hover:shadow-md">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-md font-medium text-foreground">Custo estimado</h3>
+        <h3 className="text-md font-semibold text-foreground">Custo estimado</h3>
         <Link to="/analytics/tokens" className="text-xs text-muted-foreground hover:text-foreground transition-colors duration-150">
           Ver detalhes →
         </Link>

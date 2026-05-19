@@ -4,7 +4,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowLeft,
   Bot,
   Save,
   Loader2,
@@ -15,7 +14,14 @@ import {
   Copy,
   Maximize2,
   ChevronDown,
+  User,
+  Brain,
+  Plug,
+  Clock,
+  SlidersHorizontal,
+  Info,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +35,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useAgents, useUpdateAgent } from "@/hooks/useAgents";
 import { useTenants } from "@/hooks/useTenants";
+import { useTenantContext } from "@/contexts/TenantContext";
 import { useProviders } from "@/hooks/useProviders";
 import { useTools } from "@/hooks/useTools";
 import { nexusDb } from "@/integrations/supabase/nexus-client";
@@ -72,33 +79,30 @@ interface AdminPromptDetail {
 
 type EditAgentTab = "basic" | "model" | "integration" | "schedule" | "advanced";
 
-/** Campos Stitch / Material Amethyst — alinhado ao mock Editar agente Boom IA Premium */
 const fld =
-  "w-full min-w-0 max-w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-1 focus:ring-ring";
+  "w-full min-w-0 max-w-full rounded-md border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-foreground/30 focus:ring-1 focus:ring-foreground/20 dark:bg-card";
 
-/** Cartões tipo Stitch Material — surface-container-lowest */
 const stitchCard =
-  "rounded-xl border border-[#ccc3d8] bg-white p-3 shadow-sm dark:border-border dark:bg-card sm:p-5 max-sm:border-0 max-sm:bg-transparent max-sm:shadow-none max-sm:p-0";
+  "rounded-lg border border-border bg-card p-4 sm:p-6 max-sm:border-0 max-sm:bg-transparent max-sm:p-0";
 
-const stitchLbl = "mb-1.5 block text-xs font-medium tracking-wide text-[#4a4455] dark:text-muted-foreground";
+const stitchLbl = "mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground";
 
-/** Card visível no mobile (stitchCard remove borda no max-sm) */
 const stitchSection =
-  "box-border w-full min-w-0 max-w-full overflow-x-hidden rounded-xl border border-[#ccc3d8] bg-white p-3 shadow-sm dark:border-border dark:bg-card sm:p-5";
+  "box-border w-full min-w-0 max-w-full overflow-x-hidden rounded-lg border border-border bg-card p-4 sm:p-6";
 
 const stitchSectionTitle =
-  "text-sm font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-base";
+  "text-base font-semibold text-foreground";
 
 /** Sliders com alvo de toque maior no mobile (px evita thumb cortar a borda do card) */
 const sliderTouch =
   "box-border w-full min-w-0 max-w-full touch-pan-y py-2 sm:py-1.5 [&>span.block]:h-5 [&>span.block]:w-5 [&>span.block]:shadow-sm sm:[&>span.block]:h-4 sm:[&>span.block]:w-4 sm:[&>span.block]:shadow-none";
 
-const EDIT_AGENT_STITCH_TABS: { id: EditAgentTab; label: string; shortLabel?: string }[] = [
-  { id: "basic", label: "Informações Básicas", shortLabel: "Básico" },
-  { id: "model", label: "Modelo de IA", shortLabel: "Modelo" },
-  { id: "integration", label: "Integração", shortLabel: "Integração" },
-  { id: "schedule", label: "Horário e Follow-up", shortLabel: "Horário" },
-  { id: "advanced", label: "Parâmetros Avançados", shortLabel: "Avançado" },
+const EDIT_AGENT_STITCH_TABS: { id: EditAgentTab; label: string; icon: LucideIcon }[] = [
+  { id: "basic", label: "Informações Básicas", icon: User },
+  { id: "model", label: "Modelo de IA", icon: Brain },
+  { id: "integration", label: "Integração", icon: Plug },
+  { id: "schedule", label: "Horário e Follow-up", icon: Clock },
+  { id: "advanced", label: "Avançados", icon: SlidersHorizontal },
 ];
 
 /** Mesma coluna para header + conteúdo (evita desalinhamento entre abas e cards) */
@@ -107,6 +111,7 @@ const editAgentCol = "mx-auto w-full max-w-[1280px] px-3 sm:px-6 lg:px-8";
 export default function EditAgent() {
   const { agentId } = useParams<{ agentId: string }>();
   const navigate = useNavigate();
+  const { selectedTenantId } = useTenantContext();
   const update = useUpdateAgent();
   const { data: agents, isLoading } = useAgents();
   const { data: tenants } = useTenants();
@@ -114,6 +119,12 @@ export default function EditAgent() {
   const { data: allTools } = useTools();
 
   const agent = agents?.find((a) => a.id === agentId) ?? null;
+
+  useEffect(() => {
+    if (!isLoading && agent && selectedTenantId && agent.tenant_id !== selectedTenantId) {
+      navigate("/agents", { replace: true });
+    }
+  }, [selectedTenantId, agent, isLoading, navigate]);
 
 
   // Fetch linked tool IDs for this agent
@@ -334,10 +345,10 @@ export default function EditAgent() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-[50vh] flex-1 flex-col bg-[#f8f9ff] py-8 dark:bg-background">
+      <div className="flex min-h-[50vh] flex-1 flex-col bg-background py-8">
         <div className={cn(editAgentCol, "space-y-6")}>
           <Skeleton className="h-9 max-w-md rounded-lg" />
-          <Skeleton className="min-h-[560px] w-full rounded-xl border border-[#ccc3d8]/80 dark:border-border" />
+          <Skeleton className="min-h-[560px] w-full rounded-lg border border-border" />
         </div>
       </div>
     );
@@ -355,15 +366,24 @@ export default function EditAgent() {
 
   return (
     <>
-      <div className="flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col overflow-x-hidden bg-[#f8f9ff] dark:bg-background">
-        <header className="sticky top-0 z-40 shrink-0 border-b border-[#ccc3d8] bg-white/90 backdrop-blur-md dark:border-border dark:bg-card/95">
-          <div className={cn(editAgentCol, "flex items-center gap-2 py-2.5 sm:gap-4 sm:py-4")}>
-            <Button variant="ghost" size="icon" type="button" className="h-9 w-9 shrink-0 -ml-1" onClick={() => navigate("/agents")}>
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <h2 className="min-w-0 flex-1 truncate text-sm font-medium tracking-tight text-[#0b1c30] dark:text-foreground sm:text-base">
+      <div className="flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col overflow-x-hidden bg-background">
+        <header className="sticky top-0 z-40 shrink-0 border-b border-border bg-card/95 backdrop-blur-sm dark:bg-card/95">
+          <div className={cn(editAgentCol, "flex items-center gap-3 py-3 sm:py-4")}>
+            <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-foreground sm:text-lg">
               {watch("name")?.trim() || "Editar Agente"}
             </h2>
+            <Badge
+              variant="secondary"
+              className={cn(
+                "shrink-0 text-xs font-medium",
+                (watch("status") || agent.status) === "active" && "border-success/30 bg-success/10 text-success",
+                (watch("status") || agent.status) === "test" && "border-warning/30 bg-warning/10 text-warning",
+                (watch("status") || agent.status) === "inactive" && "border-muted-foreground/30 bg-muted text-muted-foreground",
+              )}
+            >
+              {(watch("status") || agent.status) === "active" ? "Ativo" :
+               (watch("status") || agent.status) === "test" ? "Teste" : "Inativo"}
+            </Badge>
             <Button
               type="submit"
               form="edit-agent-form"
@@ -376,41 +396,47 @@ export default function EditAgent() {
           </div>
         </header>
 
-        <div className="min-w-0 flex-1 pb-[max(2rem,env(safe-area-inset-bottom))] pt-2">
-          <div className={cn(editAgentCol, "min-w-0 max-w-full pb-8 pt-2 md:pt-4")}>
-            <form id="edit-agent-form" onSubmit={handleSubmit(onSubmit)} className="min-w-0 max-w-full space-y-5 sm:space-y-8">
-              <nav
-                className="scrollbar-none flex w-full min-w-0 max-w-full gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch] sm:border-b sm:border-[#ccc3d8] sm:pb-0 sm:dark:border-border"
-                aria-label="Seções do formulário"
-              >
-                {EDIT_AGENT_STITCH_TABS.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={agentTab === t.id}
-                    onClick={() => setAgentTab(t.id)}
-                    className={cn(
-                      "shrink-0 whitespace-nowrap rounded-full px-3 py-2 text-xs font-semibold transition-colors active:scale-[0.97] sm:rounded-none sm:border-b-2 sm:px-4 sm:pb-3 sm:pt-1 sm:text-sm",
-                      agentTab === t.id
-                        ? "bg-primary text-primary-foreground sm:border-primary sm:bg-transparent sm:text-primary sm:shadow-none"
-                        : "bg-slate-100 text-[#4a4455] dark:bg-muted dark:text-muted-foreground sm:border-transparent sm:bg-transparent sm:hover:border-[#ccc3d8]/80 sm:hover:text-[#630ed4] sm:dark:hover:border-border"
-                    )}
-                  >
-                    <span className="sm:hidden">{t.shortLabel ?? t.label}</span>
-                    <span className="hidden sm:inline">{t.label}</span>
-                  </button>
-                ))}
-              </nav>
+        <div className="min-w-0 flex-1 pb-[max(2rem,env(safe-area-inset-bottom))]">
+          <div className={cn(editAgentCol, "min-w-0 max-w-full pb-8 pt-4")}>
+            <form id="edit-agent-form" onSubmit={handleSubmit(onSubmit)} className="flex min-w-0 gap-6">
+              {/* Section sidebar */}
+              <aside className="sticky top-[73px] hidden h-fit w-[220px] shrink-0 lg:block">
+                <nav className="flex flex-col gap-0.5 rounded-lg border border-border bg-card p-2" aria-label="Seções do formulário">
+                  {EDIT_AGENT_STITCH_TABS.map((t) => {
+                    const Icon = t.icon;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={agentTab === t.id}
+                        onClick={() => setAgentTab(t.id)}
+                        className={cn(
+                          "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                          agentTab === t.id
+                            ? "bg-foreground/[0.06] text-foreground dark:bg-foreground/10"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        )}
+                      >
+                        <Icon className="h-4 w-4 shrink-0" />
+                        {t.label}
+                      </button>
+                    );
+                  })}
+                </nav>
+              </aside>
+
+              {/* Content area */}
+              <div className="min-w-0 flex-1 space-y-5 sm:space-y-8">
 
               {agentTab === "basic" && (
-              <section className="rounded-xl border-0 bg-transparent p-0 sm:border sm:border-[#ccc3d8] sm:bg-white sm:p-6 sm:shadow-sm sm:dark:border-border sm:dark:bg-card">
-                <h3 className="mb-3 text-sm font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:mb-4 sm:text-base">
+              <section className="rounded-lg border-0 bg-transparent p-0 sm:border sm:border-border sm:bg-card sm:p-6">
+                <h3 className="mb-3 text-base font-semibold text-foreground sm:mb-4">
                   Informações Básicas
                 </h3>
                 {/* Avatar — compact row on mobile, column on desktop */}
                 <div className="mb-6 flex flex-col gap-5 sm:mb-8">
-                  <div className="flex justify-center border-b border-[#ccc3d8]/50 pb-5 dark:border-border/60 sm:justify-start sm:border-0 sm:pb-0">
+                  <div className="flex justify-center border-b border-border/50 pb-5 sm:justify-start sm:border-0 sm:pb-0">
                     <AgentAvatarUpload
                       agentId={agent.id}
                       currentUrl={avatarUrl}
@@ -460,8 +486,11 @@ export default function EditAgent() {
                     </div>
 
                     {(watch("status") || agent.status) === "test" && (
-                      <div className="space-y-3 rounded-lg border border-dashed border-[#630ed4]/40 bg-[#ede0ff]/40 p-4 dark:bg-primary/10">
-                        <Label className="text-sm font-semibold text-foreground">Assignee ID para Teste</Label>
+                      <div className="space-y-3 rounded-xl bg-muted p-5 dark:bg-muted">
+                        <div className="flex items-center gap-2">
+                          <Info className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <Label className="text-sm font-semibold text-foreground">Assignee ID para Teste</Label>
+                        </div>
                         <Input
                           type="number"
                           placeholder="ID do atendente no Chatwoot"
@@ -475,8 +504,11 @@ export default function EditAgent() {
                       </div>
                     )}
                     {(watch("status") || agent.status) === "active" && (
-                      <div className="space-y-3 rounded-lg border border-dashed border-[#630ed4]/40 bg-[#ede0ff]/40 p-4 dark:bg-primary/10">
-                        <Label className="text-sm font-semibold text-foreground">Assignee ID do agente (bot)</Label>
+                      <div className="space-y-3 rounded-xl bg-muted p-5 dark:bg-muted">
+                        <div className="flex items-center gap-2">
+                          <Info className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <Label className="text-sm font-semibold text-foreground">Assignee ID do agente (bot)</Label>
+                        </div>
                         <Input
                           type="number"
                           placeholder="ID do usuário no Chatwoot que representa o bot"
@@ -495,7 +527,7 @@ export default function EditAgent() {
 
             {agentTab === "model" && (
               <section className={cn(stitchCard, "space-y-6")}>
-                <h3 className="text-xl font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-2xl">Configuração do Modelo de IA</h3>
+                <h3 className="text-base font-semibold text-foreground">Configuração do Modelo de IA</h3>
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label className={stitchLbl}>Provedor</Label>
@@ -580,7 +612,7 @@ export default function EditAgent() {
                         variant="ghost"
                         size="sm"
                         disabled={promptPreviewLoading || (hasRegistryPreview && !promptDetail?.fullComposedPrompt)}
-                        className="h-auto gap-1 px-2 text-[#630ed4] hover:bg-transparent hover:underline disabled:opacity-50 dark:text-violet-400"
+                        className="h-auto gap-1 px-2 text-primary hover:bg-transparent hover:underline disabled:opacity-50 dark:text-primary"
                         onClick={() => setPromptDlg(hasRegistryPreview ? "production" : "override")}
                       >
                         <Maximize2 className="h-4 w-4" /> Expandir
@@ -612,13 +644,13 @@ export default function EditAgent() {
                         value={promptDetail?.fullComposedPrompt ?? ""}
                         className={cn(
                           fld,
-                          "min-h-[200px] cursor-default resize-y bg-[#f8f9ff] font-mono text-sm leading-relaxed text-[#4a4455] dark:bg-muted/30 dark:text-foreground",
+                          "min-h-[200px] cursor-default resize-y bg-muted/50 font-mono text-sm leading-relaxed text-foreground/80 dark:bg-muted/30 dark:text-foreground",
                         )}
                       />
                       <p className="text-xs text-muted-foreground">
                         Montado pelo servidor (bloco do tenant + regras globais, idioma e data). É um preview aproximado — no chat pode variar conforme ferramentas e calendário.
                         Código-fonte no painel{" "}
-                        <Link className="text-[#630ed4] underline dark:text-violet-400" to="/prompts">Prompts</Link>.
+                        <Link className="text-primary underline dark:text-primary" to="/prompts">Prompts</Link>.
                       </p>
                       <p className="rounded-lg border border-amber-200/90 bg-amber-50/90 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
                         Este tenant tem prompt no repositório. O motor usa essa base no código — o campo{" "}
@@ -630,7 +662,7 @@ export default function EditAgent() {
                           <Button
                             type="button"
                             variant="outline"
-                            className="flex h-auto w-full items-center justify-between gap-2 border-dashed py-3 text-left text-sm font-semibold text-[#630ed4] dark:border-border dark:text-violet-400"
+                            className="flex h-auto w-full items-center justify-between gap-2 border-dashed py-3 text-left text-sm font-semibold text-foreground dark:border-border dark:text-foreground"
                           >
                             Campo system_prompt no banco (opcional)
                             <ChevronDown className={cn("h-4 w-4 shrink-0 opacity-70 transition-transform", dbPromptOpen && "rotate-180")} />
@@ -642,7 +674,7 @@ export default function EditAgent() {
                             <Button
                               type="button"
                               variant="link"
-                              className="h-auto p-0 text-xs text-[#630ed4] dark:text-violet-400"
+                              className="h-auto p-0 text-xs text-primary dark:text-primary"
                               onClick={() => setPromptDlg("override")}
                             >
                               Expandir em janela
@@ -671,11 +703,11 @@ export default function EditAgent() {
                       <Textarea
                         rows={8}
                         {...register("system_prompt")}
-                        className={cn(fld, "min-h-[160px] resize-y font-mono text-sm leading-relaxed text-[#4a4455] dark:text-foreground")}
+                        className={cn(fld, "min-h-[160px] resize-y font-mono text-sm leading-relaxed text-foreground/80 dark:text-foreground")}
                       />
                       <p className="text-xs text-muted-foreground">
                         Prompt base gravado neste agente. Ver também{" "}
-                        <Link className="text-[#630ed4] underline dark:text-violet-400" to="/prompts">Prompts</Link>.
+                        <Link className="text-primary underline dark:text-primary" to="/prompts">Prompts</Link>.
                       </p>
                     </>
                   ) : null}
@@ -686,7 +718,7 @@ export default function EditAgent() {
             {agentTab === "integration" && (
               <>
                 <section className={cn(stitchCard, "space-y-4")}>
-                  <h3 className="text-xl font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-2xl">Integração Chatwoot &amp; WAHA</h3>
+                  <h3 className="text-base font-semibold text-foreground">Integração Chatwoot &amp; WAHA</h3>
                   <ChatwootConfigSection
                     chatwootUrl={chatwootUrl} setChatwootUrl={setChatwootUrl}
                     chatwootApiToken={chatwootApiToken} setChatwootApiToken={setChatwootApiToken}
@@ -698,9 +730,9 @@ export default function EditAgent() {
                     deliverMediaViaWaha={deliverMediaViaWaha}
                     setDeliverMediaViaWaha={setDeliverMediaViaWaha}
                   />
-                  <div className="mt-4 flex flex-col gap-3 rounded-lg border border-[#ccc3d8] bg-[#f8f9ff] p-4 dark:border-border dark:bg-muted/30 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="mt-4 flex flex-col gap-3 rounded-lg border border-border bg-muted/50 p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <Label className="text-sm font-semibold text-[#0b1c30] dark:text-foreground">Etiquetar novo lead automaticamente</Label>
+                      <Label className="text-sm font-semibold text-foreground">Etiquetar novo lead automaticamente</Label>
                       <p className="mt-1 text-xs text-muted-foreground">Ao identificar novo lead, aplica a etiqueta leadsDD-MM-YYYY no Chatwoot.</p>
                     </div>
                     <Switch checked={leadLabelEnabled} onCheckedChange={setLeadLabelEnabled} />
@@ -709,8 +741,8 @@ export default function EditAgent() {
 
                 <section className={cn(stitchCard, "space-y-4")}>
                   <div className="flex items-center gap-2">
-                    <Wrench className="h-6 w-6 text-[#630ed4]" />
-                    <h3 className="text-xl font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-2xl">Tools vinculadas</h3>
+                    <Wrench className="h-5 w-5 text-muted-foreground" />
+                    <h3 className="text-base font-semibold text-foreground">Tools vinculadas</h3>
                   </div>
                   <p className="text-xs text-muted-foreground">Carregadas pelo dispatcher (phase 1) para function calling.</p>
                   {linkedTools.length === 0 ? (
@@ -718,7 +750,7 @@ export default function EditAgent() {
                   ) : (
                     <div className="space-y-2">
                       {linkedTools.map((tool) => (
-                        <div key={tool.id} className="flex items-center justify-between rounded-lg border border-[#ccc3d8] px-3 py-2 dark:border-border">
+                        <div key={tool.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
                           <div className="flex flex-wrap items-center gap-2">
                             <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
                             <span className="font-mono text-sm">{tool.name}</span>
@@ -732,11 +764,11 @@ export default function EditAgent() {
                     </div>
                   )}
                   {unlinkableTools.length > 0 && (
-                    <div className="space-y-2 border-t border-dashed border-[#ccc3d8] pt-4 dark:border-border">
+                    <div className="space-y-2 border-t border-dashed border-border pt-4">
                       <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Adicionar tool</Label>
                       <div className="flex flex-wrap gap-2">
                         {unlinkableTools.map((tool) => (
-                          <Button key={tool.id} type="button" variant="outline" size="sm" className="h-8 gap-1 border-[#ccc3d8] text-xs dark:border-border" onClick={() => linkTool(tool.id)}>
+                          <Button key={tool.id} type="button" variant="outline" size="sm" className="h-8 gap-1 border-border text-xs" onClick={() => linkTool(tool.id)}>
                             <Plus className="h-3 w-3" /> {tool.name}
                           </Button>
                         ))}
@@ -786,7 +818,7 @@ export default function EditAgent() {
                   </div>
                   <p className="break-words text-xs leading-relaxed text-muted-foreground sm:-mt-2 [overflow-wrap:anywhere]">
                     Escolha o modelo que decide quando acionar ferramentas. Prompt do dispatcher pode estar definido por tenant — veja{' '}
-                    <Link className="text-[#630ed4] underline dark:text-violet-400" to="/prompts">Prompts</Link>.
+                    <Link className="text-primary underline dark:text-primary" to="/prompts">Prompts</Link>.
                   </p>
                   <div className="space-y-2">
                     <Label className={stitchLbl}>Provedor do dispatcher</Label>
@@ -831,14 +863,14 @@ export default function EditAgent() {
                     <div className="min-w-0 w-full space-y-3">
                       <div className="flex items-center justify-between gap-3">
                         <Label className="text-sm font-medium text-muted-foreground">Temperature</Label>
-                        <span className="shrink-0 font-mono text-sm font-semibold text-[#630ed4]">{temp.toFixed(2)}</span>
+                        <span className="shrink-0 font-mono text-sm font-semibold text-foreground">{temp.toFixed(2)}</span>
                       </div>
                       <Slider className={sliderTouch} value={[temp]} onValueChange={([v]) => { setTemp(v); setValue("temperature", v); }} min={0} max={2} step={0.05} />
                     </div>
                     <div className="min-w-0 w-full space-y-3">
                       <div className="flex items-center justify-between gap-3">
                         <Label className="text-sm font-medium text-muted-foreground">Top P</Label>
-                        <span className="shrink-0 font-mono text-sm font-semibold text-[#630ed4]">{topP.toFixed(2)}</span>
+                        <span className="shrink-0 font-mono text-sm font-semibold text-foreground">{topP.toFixed(2)}</span>
                       </div>
                       <Slider className={sliderTouch} value={[topP]} onValueChange={([v]) => { setTopP(v); setValue("top_p", v); }} min={0} max={1} step={0.05} />
                       <p className="text-xs leading-relaxed text-muted-foreground">Limita palavras pouco prováveis (0,8 mais focado).</p>
@@ -846,7 +878,7 @@ export default function EditAgent() {
                     <div className="min-w-0 w-full space-y-3">
                       <div className="flex items-center justify-between gap-3">
                         <Label className="text-sm font-medium text-muted-foreground">Top K</Label>
-                        <span className="shrink-0 font-mono text-sm font-semibold text-[#630ed4]">{topK}</span>
+                        <span className="shrink-0 font-mono text-sm font-semibold text-foreground">{topK}</span>
                       </div>
                       <Slider className={sliderTouch} value={[topK]} onValueChange={([v]) => { setTopK(v); setValue("top_k", v); }} min={1} max={100} step={1} />
                       <p className="text-xs leading-relaxed text-muted-foreground">Tamanho do vocabulário considerado em cada passo.</p>
@@ -877,7 +909,7 @@ export default function EditAgent() {
                   <h3 className={stitchSectionTitle}>Debounce de mensagens</h3>
                   <div className="flex items-center justify-between">
                     <Label className="text-sm font-medium text-muted-foreground">Janela (s)</Label>
-                    <span className="font-mono text-sm text-[#630ed4]">{debounceMs}s</span>
+                    <span className="font-mono text-sm text-foreground">{debounceMs}s</span>
                   </div>
                   <Input type="number" min={0} max={30} step={1} value={debounceMs} onChange={(e) => setDebounceMs(Number(e.target.value))} className={cn(fld, "font-mono text-sm")} />
                   <p className="text-xs text-muted-foreground">
@@ -904,7 +936,7 @@ export default function EditAgent() {
 
                 <section className={cn(stitchSection, "space-y-4")}>
                   <div className="flex items-center gap-2">
-                    <Link2 className="h-5 w-5 shrink-0 text-[#630ed4] sm:h-6 sm:w-6" />
+                    <Link2 className="h-5 w-5 shrink-0 text-muted-foreground sm:h-5 sm:w-5" />
                     <h3 className={stitchSectionTitle}>Demo público</h3>
                   </div>
                   <div className="space-y-2">
@@ -934,7 +966,9 @@ export default function EditAgent() {
                 </section>
               </div>
             )}
-          </form>
+
+              </div>{/* end content area */}
+            </form>
           </div>
         </div>
       </div>

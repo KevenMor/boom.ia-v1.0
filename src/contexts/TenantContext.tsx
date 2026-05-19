@@ -6,8 +6,10 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
+  useRef,
   type ReactNode,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Tenant } from "@/types/database";
 import { nexusDb } from "@/integrations/supabase/nexus-client";
 import { relationName } from "@/lib/utils";
@@ -32,6 +34,7 @@ const TenantContext = createContext<TenantContextValue | undefined>(undefined);
 
 export function TenantProvider({ children }: { children: ReactNode }) {
   const { canAccessTenant, isSuperAdmin, memberships, loading: authLoading } = useAuth();
+  const queryClient = useQueryClient();
   const [selectedTenantId, setSelectedTenantIdRaw] = useState<string | null>(() => {
     try {
       return localStorage.getItem("boomia-selected-tenant") || null;
@@ -42,6 +45,14 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
   const [selectedTenantModules, setSelectedTenantModules] = useState<TenantModulesMap | null>(null);
   const [tenantModulesLoading, setTenantModulesLoading] = useState(false);
+  const prevTenantId = useRef(selectedTenantId);
+
+  useEffect(() => {
+    if (prevTenantId.current !== selectedTenantId) {
+      prevTenantId.current = selectedTenantId;
+      queryClient.invalidateQueries();
+    }
+  }, [selectedTenantId, queryClient]);
 
   const setSelectedTenantId = useCallback(
     (id: string | null) => {

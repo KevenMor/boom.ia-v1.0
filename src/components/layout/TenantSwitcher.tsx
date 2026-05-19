@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
+export function TenantSwitcher({ collapsed = false, onDropdownOpenChange }: { collapsed?: boolean; onDropdownOpenChange?: (open: boolean) => void }) {
   const { data: tenants, isLoading, isError, error } = useTenants();
   const { isSuperAdmin } = useAuth();
   const { selectedTenantId, setSelectedTenantId, selectedTenant, setSelectedTenant, scopedTenantDisplayName } =
@@ -39,7 +39,7 @@ export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
     }
   }, [tenants, selectedTenantId, isSuperAdmin, setSelectedTenantId, setSelectedTenant, isLoading]);
 
-  const visibleTenants = tenants ?? [];
+  const visibleTenants = (tenants ?? []).filter((t) => t.status !== "suspended");
   const nameForSelectedId =
     selectedTenantId && tenants?.length ? tenants.find((t) => t.id === selectedTenantId)?.name : undefined;
   const displayName = isSuperAdmin
@@ -51,7 +51,7 @@ export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
 
   if (collapsed) {
     return (
-      <DropdownMenu>
+      <DropdownMenu onOpenChange={onDropdownOpenChange}>
         <DropdownMenuTrigger asChild>
           <button
             className="flex h-8 w-8 items-center justify-center rounded-md bg-muted text-[10px] font-bold text-foreground transition-colors duration-150 hover:bg-muted/80"
@@ -90,7 +90,7 @@ export function TenantSwitcher({ collapsed = false }: { collapsed?: boolean }) {
   }
 
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChange={onDropdownOpenChange}>
       <DropdownMenuTrigger asChild>
         <button
           type="button"

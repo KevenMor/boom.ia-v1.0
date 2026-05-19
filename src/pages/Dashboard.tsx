@@ -37,10 +37,10 @@ const Dashboard = React.forwardRef<HTMLDivElement>(function Dashboard(_props, re
   const totalAgents = agents?.length ?? 0;
 
   return (
-    <div ref={ref} className="space-y-4 md:space-y-6">
+    <div ref={ref} className="space-y-6 md:space-y-8">
       <UsageStatsRow events={recentEvents ?? []} dailySummary={dailySummary ?? []} loading={loadingEvents} />
 
-      <div className="grid grid-cols-1 gap-3 md:gap-4 xl:grid-cols-12">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
         <div className="xl:col-span-8">
           <TokenUsageChart data={dailySummary ?? []} loading={loadingDaily} />
         </div>
@@ -49,7 +49,7 @@ const Dashboard = React.forwardRef<HTMLDivElement>(function Dashboard(_props, re
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:gap-4 xl:grid-cols-12">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
         <div className="xl:col-span-5">
           <AgentTokenBreakdown data={agentTokens ?? []} loading={loadingAgentTokens} />
         </div>
@@ -61,7 +61,7 @@ const Dashboard = React.forwardRef<HTMLDivElement>(function Dashboard(_props, re
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-2 md:gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-6 md:grid-cols-2 lg:grid-cols-4">
         <div>
           <RevenueChart />
         </div>
@@ -83,7 +83,7 @@ const Dashboard = React.forwardRef<HTMLDivElement>(function Dashboard(_props, re
 
       {/* Lista de tenants faz sentido só na visão agregada (superadmin sem tenant fixo). */}
       {selectedTenantId === null && (
-        <div className="grid grid-cols-1 gap-3 md:gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div>
             <RecentDeployments tenants={tenants ?? []} loading={loadingTenants} />
           </div>

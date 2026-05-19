@@ -42,7 +42,7 @@ export function ModelBreakdown({ data, loading }: Props) {
 
   if (loading) {
     return (
-      <div className="flex h-full min-h-[300px] flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
+      <div className="flex h-full min-h-[300px] flex-col rounded-xl border border-border bg-card p-6 shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-shadow duration-200 hover:shadow-md">
         <Skeleton className="h-full w-full rounded-md" />
       </div>
     );
@@ -50,16 +50,16 @@ export function ModelBreakdown({ data, loading }: Props) {
 
   if (models.length === 0) {
     return (
-      <div className="flex h-full min-h-[300px] flex-col items-center justify-center rounded-xl border border-border bg-card p-5 shadow-sm">
+      <div className="flex h-full min-h-[300px] flex-col items-center justify-center rounded-xl border border-border bg-card p-6 shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-shadow duration-200 hover:shadow-md">
         <span className="text-sm text-muted-foreground">Sem dados</span>
       </div>
     );
   }
 
   return (
-    <div className="flex h-full min-h-[300px] flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
+    <div className="flex h-full min-h-[300px] flex-col rounded-xl border border-border bg-card p-6 shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-shadow duration-200 hover:shadow-md">
       <div className="mb-4">
-        <h3 className="text-md font-medium text-foreground">Uso por modelo</h3>
+        <h3 className="text-md font-semibold text-foreground">Uso por modelo</h3>
         <p className="text-xs text-muted-foreground">Distribuição de tokens</p>
       </div>
       <div className="flex flex-1 flex-col justify-center gap-3">
@@ -77,9 +77,9 @@ export function ModelBreakdown({ data, loading }: Props) {
                   <span className="text-xs font-medium text-foreground">{pct}%</span>
                 </div>
               </div>
-              <div className="h-2 w-full rounded-sm bg-muted">
+              <div className="h-2 w-full rounded-full bg-muted">
                 <div
-                  className="h-full rounded-sm transition-all duration-300"
+                  className="h-full rounded-full transition-all duration-300"
                   style={{
                     width: `${barWidth}%`,
                     backgroundColor: BAR_COLORS[idx % BAR_COLORS.length],

@@ -1,5 +1,5 @@
 import { Bot, Plus, Search, Copy, Pencil, Play, Link2 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,12 @@ export default function Agents() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editAgent, setEditAgent] = useState<Agent | null>(null);
   const [deleteAgent, setDeleteAgent] = useState<Agent | null>(null);
+
+  useEffect(() => {
+    setEditAgent(null);
+    setDeleteAgent(null);
+    setCreateOpen(false);
+  }, [selectedTenantId]);
 
   const filtered = (agents ?? []).filter(
     (a) =>

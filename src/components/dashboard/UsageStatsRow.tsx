@@ -11,11 +11,11 @@ interface Props {
 export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
   if (loading) {
     return (
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 sm:gap-6 xl:grid-cols-4">
         {[1, 2, 3, 4].map((i) => (
           <div
             key={i}
-            className="min-h-[128px] animate-pulse rounded-lg border border-border border-l-[3px] border-l-muted bg-muted/20"
+            className="min-h-[128px] animate-pulse rounded-xl border border-border border-l-[3px] border-l-muted bg-muted/20"
           />
         ))}
       </div>
@@ -76,7 +76,7 @@ export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
     n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+    <div className="grid grid-cols-2 gap-4 sm:gap-6 xl:grid-cols-4">
       <StatCard
         title="Tokens hoje"
         value={formatTokens(todayTokens)}
