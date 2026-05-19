@@ -1,8 +1,8 @@
 ﻿import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
-import { buildSystemPrompt, getDispatcherPrompt } from "../services/prompts/registry.js";
+import { buildSystemPrompt, getDispatcherPrompt, getPromptConfig } from "../services/prompts/registry.js";
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
-import { filterCommandLinesFromStream, sanitizeLLMOutput, fallbackSanitizeForRetry } from "../utils/sanitize.js";
+import { filterCommandLinesFromStream, sanitizeLLMOutput, fallbackSanitizeForRetry, stripChatbotPhrases } from "../utils/sanitize.js";
 import { emitMediaCommandsSseIfNeeded } from "../utils/extract-media-commands.js";
 import { injectSuiteGalleryMarkdownIfMissing, injectSuiteGalleryVideosIfMissing } from "../utils/suite-gallery-markdown-inject.js";
 import { injectOmnibeesQuotePhotosIfMissing } from "../utils/omnibees-photo-markdown.js";
@@ -1119,8 +1119,11 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         if (text.startsWith(welcomeImagePrefix)) return text;
         return welcomeImagePrefix + text;
       };
+      const hasRegistryPromptForTenant = !!getPromptConfig(tenantSlug);
       const emitRepairedAssistant = (text: string) => {
-        const trimmed = (text || "").trim();
+        let processed = sanitizeLLMOutput(text || "");
+        if (hasRegistryPromptForTenant) processed = stripChatbotPhrases(processed);
+        const trimmed = processed.trim();
         if (!trimmed) return;
         sendSse({ repaired_assistant: trimmed });
       };
@@ -1700,11 +1703,12 @@ Para REMARCAR: a conversa contÃ©m o horÃ¡rio jÃ¡ confirmado (ex.: "confirm
               const isFirstContact = messages.filter((m) => m.role === "assistant").length === 0;
               const agentCfg = (agent?.config || {}) as Record<string, unknown>;
               const hasWelcomeVideo = !!(agentCfg.welcome_video_url as string)?.trim();
-              const nameQuestion = (agentCfg.welcome_name_question as string) || "Como posso te chamar?";
+              const hasRegistryPrompt = !!getPromptConfig(tenantSlug);
+              const nameQuestion = (agentCfg.welcome_name_question as string) ?? "Como posso te chamar?";
               const modelAlreadyAskedName = /como\s+(prefere\s+ser\s+chamad|posso\s+te\s+chamar|posso\s+chamar|gostaria\s+de\s+ser\s+chamad)|com\s+quem\s+(eu\s+)?tenho\s+o\s+prazer|com\s+quem\s+(eu\s+)?falo|qual\s+(é\s+)?(seu|o)\s+nome|como\s+você\s+prefere\s+ser\s+chamad/i.test(convFullContent);
               const firstUserMsg = (messages.find((m) => m.role === "user")?.content || "").toLowerCase().normalize("NFD").replace(/\p{Mn}/gu, "");
               const userAlreadyProvidedName = /\b(me\s+chamo|meu\s+nome\s+(e|eh|é)|pode\s+me\s+chamar\s+de|sou\s+o\s+|sou\s+a\s+|aqui\s+e\s+o\s+|aqui\s+e\s+a\s+|falo\s+com\s+)\b/i.test(firstUserMsg);
-              if (isFirstContact && nameQuestion && !hasWelcomeVideo && !modelAlreadyAskedName && !userAlreadyProvidedName) {
+              if (isFirstContact && nameQuestion && !hasWelcomeVideo && !hasRegistryPrompt && !modelAlreadyAskedName && !userAlreadyProvidedName) {
                 const nqContent = "\n\n" + nameQuestion;
                 debugSendCount++;
                 debugSendTotalLen += nqContent.length;
@@ -1970,11 +1974,12 @@ Para REMARCAR: a conversa contÃ©m o horÃ¡rio jÃ¡ confirmado (ex.: "confirm
             const isFirstContact = messages.filter((m) => m.role === "assistant").length === 0;
             const agentCfgSingle = (agent?.config || {}) as Record<string, unknown>;
             const hasWelcomeVideoSingle = !!(agentCfgSingle.welcome_video_url as string)?.trim();
-            const nameQuestionSingle = (agentCfgSingle.welcome_name_question as string) || "Como posso te chamar?";
+            const hasRegistryPromptSingle = !!getPromptConfig(tenantSlug);
+            const nameQuestionSingle = (agentCfgSingle.welcome_name_question as string) ?? "Como posso te chamar?";
             const modelAlreadyAskedNameSingle = /como\s+(prefere\s+ser\s+chamad|posso\s+te\s+chamar|posso\s+chamar|gostaria\s+de\s+ser\s+chamad)|com\s+quem\s+(eu\s+)?tenho\s+o\s+prazer|com\s+quem\s+(eu\s+)?falo|qual\s+(é\s+)?(seu|o)\s+nome|como\s+você\s+prefere\s+ser\s+chamad/i.test(content);
             const firstUserMsgSingle = (messages.find((m) => m.role === "user")?.content || "").toLowerCase().normalize("NFD").replace(/\p{Mn}/gu, "");
             const userAlreadyProvidedNameSingle = /\b(me\s+chamo|meu\s+nome\s+(e|eh|é)|pode\s+me\s+chamar\s+de|sou\s+o\s+|sou\s+a\s+|aqui\s+e\s+o\s+|aqui\s+e\s+a\s+|falo\s+com\s+)\b/i.test(firstUserMsgSingle);
-            if (isFirstContact && nameQuestionSingle && !hasWelcomeVideoSingle && !modelAlreadyAskedNameSingle && !userAlreadyProvidedNameSingle) {
+            if (isFirstContact && nameQuestionSingle && !hasWelcomeVideoSingle && !hasRegistryPromptSingle && !modelAlreadyAskedNameSingle && !userAlreadyProvidedNameSingle) {
               const nqContentSingle = "\n\n" + nameQuestionSingle;
               content += nqContentSingle;
               sendSse({ choices: [{ delta: { content: nqContentSingle } }] });

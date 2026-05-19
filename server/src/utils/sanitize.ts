@@ -117,6 +117,11 @@ export function stripToolNameLeakage(text: string): string {
 export function sanitizeLLMOutput(content: string): string {
   let text = stripThoughtAndReasoningBlocks(stripToolNameLeakage(content || ""));
 
+  // Remove artefatos de instrução que o modelo copia literalmente do prompt
+  text = text.replace(/\bFIM\.?\s*/g, "");
+  text = text.replace(/^→\s*/gm, "");
+  text = text.replace(/^Pare aqui\..*$/gm, "");
+
   const trimmed = text.trim();
   if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
     try {
@@ -565,6 +570,23 @@ export function filterCommandLinesFromStream(buffer: string, chunk: string): { t
     else if (!body.trim()) toSend += "\n";
   }
   return { toSend, newBuffer: acc };
+}
+
+/**
+ * Remove frases de chatbot/SAC que modelos menores insistem em gerar.
+ * Aplicar APENAS para tenants com prompt no registry (que controlam o tom via prompt).
+ * Tenants sem registry (ex: Autoescola Ideal) podem querer essas frases.
+ */
+export function stripChatbotPhrases(content: string): string {
+  let text = content;
+  text = text.replace(/\n?\s*Como posso te chamar\??\s*/gi, "");
+  text = text.replace(/\n?\s*Com quem eu falo\??\s*/gi, "");
+  text = text.replace(/\n?\s*Como posso te ajudar\??\s*/gi, "");
+  text = text.replace(/\n?\s*Como posso ajud[aá]-l[oa]\??\s*/gi, "");
+  text = text.replace(/\n?\s*Em que posso ajudar\??\s*/gi, "");
+  text = text.replace(/\n?\s*Estou [aà] disposi[cç][aã]o\.?\s*/gi, "");
+  text = text.replace(/\n?\s*Ser[aá] um prazer atend[eê]-l[oa]\.?\s*/gi, "");
+  return text.trim();
 }
 
 export function stripEmojis(content: string): string {
