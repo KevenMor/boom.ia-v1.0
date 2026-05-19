@@ -77,6 +77,12 @@ import {
   DISPATCHER_PROMPT as BZ_DISPATCHER,
   FOLLOWUP_PROMPT as BZ_FOLLOWUP,
 } from "./biazini.js";
+import {
+  SYSTEM_PROMPT as MVR_SYSTEM,
+  COMMUNICATION_RULES as MVR_COMM_RULES,
+  DISPATCHER_PROMPT as MVR_DISPATCHER,
+  FOLLOWUP_PROMPT as MVR_FOLLOWUP,
+} from "./monte-verde-ranch.js";
 
 /**
  * Configura?�?�o de prompt por tenant.
@@ -92,6 +98,8 @@ interface TenantPromptConfig {
   followupPrompt?: string;
   /** Always inject communication rules even without inventory tool */
   alwaysInjectCommRules?: boolean;
+  /** Skip BASE_GREETING injection (tenant has own greeting rules) */
+  skipGreeting?: boolean;
   /** Vers?�o do prompt para refer?�ncia */
   version: string;
   /** Descri?�?�o para exibi?�?�o no painel */
@@ -302,6 +310,36 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     version: "v1.0.1",
     description: "Bia — Secretária Equipe Dr. Biazini (Atendimento Veterinário Domiciliar)",
   },
+  "monte-verde-ranch": {
+    systemPrompt: MVR_SYSTEM,
+    communicationRules: MVR_COMM_RULES,
+    dispatcherPrompt: MVR_DISPATCHER,
+    followupPrompt: MVR_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    skipGreeting: true,
+    version: "v1.0.0",
+    description: "Cleide — Atendente Monte Verde Ranch (Fazenda Centenária Sorocaba/SP)",
+  },
+  "monteverderanch": {
+    systemPrompt: MVR_SYSTEM,
+    communicationRules: MVR_COMM_RULES,
+    dispatcherPrompt: MVR_DISPATCHER,
+    followupPrompt: MVR_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    skipGreeting: true,
+    version: "v1.0.0",
+    description: "Cleide — Atendente Monte Verde Ranch (Fazenda Centenária Sorocaba/SP)",
+  },
+  "dp_monte_verde_ranch": {
+    systemPrompt: MVR_SYSTEM,
+    communicationRules: MVR_COMM_RULES,
+    dispatcherPrompt: MVR_DISPATCHER,
+    followupPrompt: MVR_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    skipGreeting: true,
+    version: "v1.0.0",
+    description: "Cleide — Atendente Monte Verde Ranch (Fazenda Centenária Sorocaba/SP)",
+  },
 };
 
 /**
@@ -341,7 +379,7 @@ export function buildSystemPrompt(
     : (agentSystemPrompt.trim() || "You are a helpful AI assistant.");
   const shouldInjectComm = (hasInventoryTool && config?.communicationRules) || config?.alwaysInjectCommRules;
   const commRules = (shouldInjectComm && config?.communicationRules) ? "\n\n" + config.communicationRules : "";
-  const greeting = "\n\n" + BASE_GREETING;
+  const greeting = config?.skipGreeting ? "" : "\n\n" + BASE_GREETING;
 
   // Inject current Brasilia datetime so the model knows "hoje" and "amanh?�"
   const now = new Date();

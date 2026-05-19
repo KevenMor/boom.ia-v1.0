@@ -11,9 +11,12 @@ interface Props {
 export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
   if (loading) {
     return (
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="h-[104px] animate-pulse rounded-lg border border-border bg-card" />
+          <div
+            key={i}
+            className="min-h-[128px] animate-pulse rounded-lg border border-border border-l-[3px] border-l-muted bg-muted/20"
+          />
         ))}
       </div>
     );
@@ -73,32 +76,46 @@ export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
     n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
 
   return (
-    <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
       <StatCard
-        title="Tokens Hoje"
+        title="Tokens hoje"
         value={formatTokens(todayTokens)}
-        change={tokensDiff ? `${Number(tokensDiff) >= 0 ? "+" : ""}${tokensDiff}% vs ontem` : "Sem dados ontem"}
+        change={tokensDiff ? `${Number(tokensDiff) >= 0 ? "+" : ""}${tokensDiff}% vs. ontem` : "Sem base ontem para comparar"}
         changeType={tokensDiff ? (Number(tokensDiff) <= 0 ? "positive" : "neutral") : "neutral"}
         icon={Zap}
       />
       <StatCard
-        title="Latência Média"
-        value={avgLatency > 0 ? `${(avgLatency / 1000).toFixed(1)}s` : "—"}
-        change={yesterdayAvgLat > 0 ? `${((avgLatency - yesterdayAvgLat) / 1000).toFixed(1)}s vs ontem` : "Sem referência"}
-        changeType={avgLatency < yesterdayAvgLat ? "positive" : avgLatency > yesterdayAvgLat ? "negative" : "neutral"}
+        title="Latência média"
+        value={avgLatency > 0 ? `${(avgLatency / 1000).toFixed(1)} s` : "—"}
+        change={
+          yesterdayAvgLat > 0 && avgLatency > 0
+            ? `${avgLatency >= yesterdayAvgLat ? "+" : ""}${(((avgLatency - yesterdayAvgLat) / yesterdayAvgLat) * 100).toFixed(0)}% vs. ontem`
+            : avgLatency > 0
+              ? "Conversacional hoje"
+              : "Sem amostras com latência hoje"
+        }
+        changeType={
+          yesterdayAvgLat > 0 && avgLatency > 0
+            ? avgLatency < yesterdayAvgLat
+              ? "positive"
+              : avgLatency > yesterdayAvgLat
+                ? "negative"
+                : "neutral"
+            : "neutral"
+        }
         icon={Clock}
       />
       <StatCard
-        title="Tool Calls"
+        title="Tool calls"
         value={String(todayToolCalls)}
-        change={`${todayRequests} requisições`}
+        change={todayToolCalls > 0 ? `${todayRequests} eventos no período` : "Nenhuma tool registrada hoje"}
         changeType="neutral"
         icon={Wrench}
       />
       <StatCard
         title="Requisições"
         value={String(todayRequests)}
-        change={`${yesterdayEvents.length} ontem`}
+        change={`Ontem: ${yesterdayEvents.length} eventos`}
         changeType={todayRequests >= yesterdayEvents.length ? "positive" : "negative"}
         icon={MessageSquare}
       />
