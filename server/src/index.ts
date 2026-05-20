@@ -10,6 +10,7 @@ import { toolsRoutes } from "./routes/tools.js";
 import { adminRoutes } from "./routes/admin.js";
 import { promptReadRoutes } from "./routes/prompts-read.js";
 import { inventoryRoutes } from "./routes/inventory.js";
+import { inventorySyncReferencyRoutes } from "./routes/inventory-sync-referency.js";
 import { ragRoutes } from "./routes/rag.js";
 import { contactsRoutes } from "./routes/contacts.js";
 import { crmContactsRoutes } from "./routes/crm-contacts.js";
@@ -165,6 +166,7 @@ async function build() {
   fastify.register(promptReadRoutes, { prefix: "/api" });
   fastify.register(adminRoutes, { prefix: "/api" });
   fastify.register(inventoryRoutes, { prefix: "/api" });
+  fastify.register(inventorySyncReferencyRoutes, { prefix: "/api" });
   fastify.register(ragRoutes, { prefix: "/api" });
   fastify.register(contactsRoutes, { prefix: "/api" });
   fastify.register(crmContactsRoutes, { prefix: "/api" });
