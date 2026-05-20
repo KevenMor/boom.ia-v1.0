@@ -115,6 +115,10 @@ export function stripToolNameLeakage(text: string): string {
 }
 
 export function sanitizeLLMOutput(content: string): string {
+  if (/\[SISTEMA\s+INTERNO\s*[-—]\s*FOLLOW-UP\s+GUARD\]/i.test(content)) {
+    return "";
+  }
+
   let text = stripThoughtAndReasoningBlocks(stripToolNameLeakage(content || ""));
 
   // Remove artefatos de instrução que o modelo copia literalmente do prompt

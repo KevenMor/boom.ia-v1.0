@@ -88,6 +88,16 @@ describe("sanitizeLLMOutput — regressão vazamento para cliente", () => {
     expect(out).toContain("https://x.com/a.jpg");
     expect(out).toMatch(/Boa noite/);
   });
+
+  it("should strip FOLLOW-UP GUARD prompt entirely", () => {
+    const guardText = `[SISTEMA INTERNO - FOLLOW-UP GUARD]\n\nAnalise o histórico desta conversa. O cliente deixou claro que NÃO quer prosseguir, já fechou com outro, ou o contexto é negativo?\n\nResponda APENAS com uma destas palavras:\n- SEND = pode enviar follow-up (cliente ainda em consideração)\n- SKIP = não enviar (cliente rejeitou, desistiu, fechou com outro, ou contexto negativo)`;
+    expect(sanitizeLLMOutput(guardText)).toBe("");
+  });
+
+  it("should strip FOLLOW-UP GUARD even when mixed with client text", () => {
+    const mixed = `Oi, tudo bem?\n\n[SISTEMA INTERNO - FOLLOW-UP GUARD]\nAnalise o histórico desta conversa.`;
+    expect(sanitizeLLMOutput(mixed)).toBe("");
+  });
 });
 
 describe("filterCommandLinesFromStream — regressão", () => {

@@ -7,6 +7,7 @@ import {
   getHumanizationConfig,
   applyJitter,
 } from "../services/delivery.js";
+import { shouldSkipFollowUpByContext } from "../services/followup-guard.js";
 import { sendViaWaha } from "../services/waha.js";
 import { transcribeAudio, isAudioAttachment } from "../services/transcribe.js";
 import { buildReminderMessage } from "../utils/buildReminderMessage.js";
@@ -393,6 +394,25 @@ export async function processFollowUpItem(
       return [10, 20, 30];
     }
   })();
+
+  const guardResult = await shouldSkipFollowUpByContext(
+    callChatAgent,
+    baseUrl,
+    nexusKey,
+    item.agent_id,
+    conversationMessages,
+    item.conversation_id,
+    item.external_user_id,
+    item.chatwoot_conversation_id ?? null
+  );
+  if (guardResult === "skip") {
+    await supabase
+      .from("follow_up_queue")
+      .update({ status: "cancelled", updated_at: new Date().toISOString() })
+      .eq("id", item.id);
+    console.log(`[FollowUp] Guard SKIP for ${item.id}`);
+    return { processed: false };
+  }
 
   let followupPrompt = getFollowupPrompt(tenantSlug);
   if (!followupPrompt) {
