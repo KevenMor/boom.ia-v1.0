@@ -54,7 +54,7 @@ export function parseReferencyListingPage(html: string): ReferencyVehicleCard[] 
       const external_id = slug;
       const detail_url = `${BASE_URL}/veiculo/${slug}`;
 
-      const photoMatch = card.match(/background-image:\s*url\(['"]?([^'")\s]+)['"]?\)/);
+      const photoMatch = card.match(/background-image:\s*url\(['"]?(.+?\.\w{3,4})['"]?\)/);
       const photo_url = photoMatch ? normalizeUrl(photoMatch[1]) : "";
 
       const brandMatch = card.match(/<span class="fabricante">([^<]+)<\/span>/);
