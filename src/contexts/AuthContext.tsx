@@ -135,6 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    localStorage.removeItem("boomia-selected-tenant");
     await supabase.auth.signOut();
   };
 

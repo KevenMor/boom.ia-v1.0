@@ -247,6 +247,17 @@ async function build() {
       if (v && !["host", "connection", "content-length"].includes(k.toLowerCase())) headers[k] = Array.isArray(v) ? v[0] : v;
     }
 
+    // Bloquear queries REST sem JWT de usuário autenticado (auth e storage continuam abertos)
+    const isRestQuery = /^rest\/v1\//.test(suffix);
+    if (isRestQuery) {
+      const authVal = headers.authorization || headers.Authorization || "";
+      const anonKey = process.env.NEXUS_DB_ANON_KEY?.trim() || "";
+      const isAnonOnly = !authVal || authVal === `Bearer ${anonKey}`;
+      if (isAnonOnly) {
+        return reply.code(401).send({ error: "unauthorized", message: "Authentication required for data queries" });
+      }
+    }
+
     // Storage: sempre substituir apikey pelo real — o browser pode enviar o demo key (fallback do nexus-client)
     // que o Supabase real rejeita. Para writes (POST/PUT) preserva o Bearer JWT do usuário; para reads força anon.
     const nexusAnon = process.env.NEXUS_DB_ANON_KEY?.trim();

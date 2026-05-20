@@ -33,7 +33,7 @@ interface TenantContextValue {
 const TenantContext = createContext<TenantContextValue | undefined>(undefined);
 
 export function TenantProvider({ children }: { children: ReactNode }) {
-  const { canAccessTenant, isSuperAdmin, memberships, loading: authLoading } = useAuth();
+  const { canAccessTenant, isSuperAdmin, memberships, loading: authLoading, user } = useAuth();
   const queryClient = useQueryClient();
   const [selectedTenantId, setSelectedTenantIdRaw] = useState<string | null>(() => {
     try {
@@ -116,7 +116,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
-    if (!selectedTenantId) {
+    if (!selectedTenantId || !user) {
       setSelectedTenantModules(null);
       setTenantModulesLoading(false);
       return;
@@ -124,7 +124,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
 
     setTenantModulesLoading(true);
     void (async () => {
-      const userId = (await nexusDb.auth.getUser()).data.user?.id ?? null;
+      const userId = user.id;
 
       const [{ data: tenantData, error: tenantError }, { data: aclData }] = await Promise.all([
         nexusDb
@@ -173,7 +173,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [selectedTenantId]);
+  }, [selectedTenantId, user]);
 
   const isModuleEnabled = useCallback(
     (moduleKey: string) => {
