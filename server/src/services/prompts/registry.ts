@@ -83,6 +83,12 @@ import {
   DISPATCHER_PROMPT as MVR_DISPATCHER,
   FOLLOWUP_PROMPT as MVR_FOLLOWUP,
 } from "./monte-verde-ranch.js";
+import {
+  SYSTEM_PROMPT as REF_SYSTEM,
+  COMMUNICATION_RULES as REF_COMM_RULES,
+  DISPATCHER_PROMPT as REF_DISPATCHER,
+  FOLLOWUP_PROMPT as REF_FOLLOWUP,
+} from "./referency.js";
 
 /**
  * Configura?�?�o de prompt por tenant.
@@ -127,6 +133,14 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     followupPrompt: PPL_FOLLOWUP,
     version: "v2.0.0",
     description: "Ana Júlia — SDR PPL Motors (Concessionária Sorocaba/SP)",
+  },
+  referency: {
+    systemPrompt: REF_SYSTEM,
+    communicationRules: REF_COMM_RULES,
+    dispatcherPrompt: REF_DISPATCHER,
+    followupPrompt: REF_FOLLOWUP,
+    version: "v1.0.0",
+    description: "Amanda — SDR Referency (Concessionária)",
   },
   "instituto-vicentim-maekawa": {
     systemPrompt: IVM_SYSTEM,
