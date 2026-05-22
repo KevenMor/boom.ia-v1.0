@@ -19,10 +19,18 @@ describe("Monte Verde Ranch — SYSTEM_PROMPT (contratos de negócio)", () => {
   it("regra de saudação simples obrigatória (Oi! Aqui e a Cleide...)", () => {
     expect(SYSTEM_PROMPT).toMatch(/SAUDACAO SIMPLES/i);
     expect(SYSTEM_PROMPT).toMatch(/Oi! Aqui e a Cleide, da Monte Verde Ranch/i);
+    expect(SYSTEM_PROMPT).not.toMatch(/Oi! Aqui e a Cleide, da Monte Verde Ranch 🤠/);
   });
 
   it("regra de ouro: máximo 1 ponto de interrogação", () => {
     expect(SYSTEM_PROMPT).toMatch(/Maximo 1 ponto de interrogacao por mensagem/i);
+  });
+
+  it("proíbe absolutamente emojis", () => {
+    expect(SYSTEM_PROMPT).toMatch(/PROIBICAO ABSOLUTA DE EMOJIS/i);
+    expect(SYSTEM_PROMPT).toMatch(/MINHA RESPOSTA TEM ZERO EMOJIS/i);
+    // Verificando se não há emojis comuns no texto do prompt
+    expect(SYSTEM_PROMPT).not.toMatch(/[🤠🐎🍽️🍃😊]/);
   });
 
   it("proíbe inventar consulta ao sistema/calendário", () => {
@@ -56,7 +64,12 @@ describe("Monte Verde Ranch — COMMUNICATION_RULES", () => {
   });
 
   it("reforça separação com linha em branco", () => {
-    expect(COMMUNICATION_RULES).toMatch(/Separe blocos com linha em branco/i);
+    expect(COMMUNICATION_RULES).toMatch(/Separe blocos.*linha em branco/i);
+  });
+
+  it("proíbe emojis explicitamente", () => {
+    expect(COMMUNICATION_RULES).toMatch(/PROIBICAO ABSOLUTA DE EMOJIS/i);
+    expect(COMMUNICATION_RULES).toMatch(/NUNCA use emojis/i);
   });
 });
 
@@ -71,5 +84,9 @@ describe("Monte Verde Ranch — DISPATCHER_PROMPT", () => {
 describe("Monte Verde Ranch — FOLLOWUP_PROMPT", () => {
   it("define tom informal e curto", () => {
     expect(FOLLOWUP_PROMPT).toMatch(/informal, curta, calorosa/i);
+  });
+
+  it("proíbe emojis no follow-up", () => {
+    expect(FOLLOWUP_PROMPT).toMatch(/PROIBICAO ABSOLUTA DE EMOJIS/i);
   });
 });
