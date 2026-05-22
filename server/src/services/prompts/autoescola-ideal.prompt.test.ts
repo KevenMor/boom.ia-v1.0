@@ -20,7 +20,7 @@ describe("Autoescola Ideal — SYSTEM_PROMPT (contratos de negócio)", () => {
   });
 
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v8\.11/);
+    expect(SYSTEM_PROMPT).toMatch(/v8\.12/);
   });
 
   it("adição de categoria: médico obrigatório; teórico e psicotécnico não necessários", () => {
