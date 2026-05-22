@@ -331,7 +331,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     followupPrompt: MVR_FOLLOWUP,
     alwaysInjectCommRules: true,
     skipGreeting: true,
-    version: "v1.2.0",
+    version: "v1.2.1",
     description: "Cleide — Atendente Monte Verde Ranch (Fazenda Centenária Sorocaba/SP)",
   },
   "monteverderanch": {
@@ -341,7 +341,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     followupPrompt: MVR_FOLLOWUP,
     alwaysInjectCommRules: true,
     skipGreeting: true,
-    version: "v1.2.0",
+    version: "v1.2.1",
     description: "Cleide — Atendente Monte Verde Ranch (Fazenda Centenária Sorocaba/SP)",
   },
   "dp_monte_verde_ranch": {
@@ -351,7 +351,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     followupPrompt: MVR_FOLLOWUP,
     alwaysInjectCommRules: true,
     skipGreeting: true,
-    version: "v1.2.0",
+    version: "v1.2.1",
     description: "Cleide — Atendente Monte Verde Ranch (Fazenda Centenária Sorocaba/SP)",
   },
 };

@@ -16,15 +16,21 @@ describe("Monte Verde Ranch — SYSTEM_PROMPT (contratos de negócio)", () => {
     expect(SYSTEM_PROMPT).toMatch(/Evite mencionar IA, robo, bot, assistente virtual/i);
   });
 
-  it("regra de saudação simples obrigatória (Oi! Aqui e a Cleide...)", () => {
+  it("regra de saudação simples com tom natural", () => {
     expect(SYSTEM_PROMPT).toMatch(/SAUDACAO SIMPLES/i);
-    expect(SYSTEM_PROMPT).toMatch(/Oi! Aqui e a Cleide, da Monte Verde Ranch/i);
+    expect(SYSTEM_PROMPT).toMatch(/Sou a Cleide, da Monte Verde Ranch\. Qual seu nome/i);
     expect(SYSTEM_PROMPT).not.toMatch(/Oi! Aqui e a Cleide, da Monte Verde Ranch 🤠/);
   });
 
-  it("primeira saudacao pede o nome antes do assunto", () => {
-    expect(SYSTEM_PROMPT).toMatch(/Me passa seu nome que eu ja te atendo melhor/i);
+  it("primeira saudacao pede o nome de forma natural", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Qual seu nome/i);
+    expect(SYSTEM_PROMPT).toMatch(/Como posso te chamar/i);
     expect(SYSTEM_PROMPT).toMatch(/Nao pergunte "o que te trouxe aqui"/i);
+  });
+
+  it("proíbe frases roboticas de call center", () => {
+    expect(SYSTEM_PROMPT).toMatch(/PROIBIDO na saudacao.*te atendo melhor/is);
+    expect(SYSTEM_PROMPT).toMatch(/Nunca usa frases roboticas de call center/i);
   });
 
   it("proíbe reapresentação após primeira mensagem", () => {
