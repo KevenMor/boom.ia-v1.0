@@ -22,6 +22,17 @@ describe("Monte Verde Ranch — SYSTEM_PROMPT (contratos de negócio)", () => {
     expect(SYSTEM_PROMPT).not.toMatch(/Oi! Aqui e a Cleide, da Monte Verde Ranch 🤠/);
   });
 
+  it("primeira saudacao pede o nome antes do assunto", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Me passa seu nome que eu ja te atendo melhor/i);
+    expect(SYSTEM_PROMPT).toMatch(/Nao pergunte "o que te trouxe aqui"/i);
+  });
+
+  it("proíbe reapresentação após primeira mensagem", () => {
+    expect(SYSTEM_PROMPT).toMatch(/NUNCA repita "Aqui e a Cleide"/i);
+    expect(SYSTEM_PROMPT).toMatch(/no maximo UMA VEZ por conversa/i);
+    expect(COMMUNICATION_RULES).toMatch(/APRESENTACAO.*no maximo uma vez por conversa/i);
+  });
+
   it("regra de ouro: máximo 1 ponto de interrogação", () => {
     expect(SYSTEM_PROMPT).toMatch(/Maximo 1 ponto de interrogacao por mensagem/i);
   });
