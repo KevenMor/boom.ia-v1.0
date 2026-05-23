@@ -4,6 +4,41 @@ import { runFipeQuery } from "../services/fipe.js";
 import { runFindNearestUnit } from "../services/find-nearest-unit.js";
 import { formatDateBR } from "../utils/agendaNotification.js";
 import { runLodgingConsulta } from "../services/lodging-consulta.js";
+import { executeTool } from "../services/tool-executor.js";
+
+const EXECUTE_TOOL_TEST_TYPES = new Set([
+  "inventory_query",
+  "nearest_unit",
+  "consultar_unidade",
+  "omnibees_availability",
+  "suite_gallery_query",
+  "marcar_lead",
+]);
+
+const AGENT_REQUIRED_TEST_TYPES = new Set([
+  "inventory_query",
+  "omnibees_availability",
+  "suite_gallery_query",
+  "marcar_lead",
+]);
+
+async function resolveAgentIdForToolTest(
+  supabase: ReturnType<typeof createNexusClient>,
+  toolId: string,
+  args: Record<string, unknown> | undefined
+): Promise<string | null> {
+  const fromArgs = args?.agent_id;
+  if (typeof fromArgs === "string" && fromArgs.trim()) {
+    return fromArgs.trim();
+  }
+  const { data: linkRows } = await supabase
+    .from("agent_tools")
+    .select("agent_id")
+    .eq("tool_id", toolId)
+    .limit(1);
+  const linked = linkRows?.[0]?.agent_id;
+  return typeof linked === "string" && linked.trim() ? linked.trim() : null;
+}
 
 export async function toolsRoutes(fastify: FastifyInstance) {
   fastify.post("/tools/fipe", async (req: FastifyRequest, reply: FastifyReply) => {
@@ -634,8 +669,26 @@ export async function toolsRoutes(fastify: FastifyInstance) {
           break;
         }
 
-        default:
+        default: {
+          if (EXECUTE_TOOL_TEST_TYPES.has(tool.tool_type)) {
+            const agentId = await resolveAgentIdForToolTest(supabase, tool.id, args);
+            if (!agentId && AGENT_REQUIRED_TEST_TYPES.has(tool.tool_type)) {
+              result = {
+                error:
+                  "Nenhum agente vinculado a esta tool. Vincule a tool a um agente ou informe agent_id nos argumentos.",
+              };
+              break;
+            }
+            const execResult = await executeTool(tool, args || {}, agentId || "");
+            if (!execResult.success) {
+              result = { error: execResult.error || "Falha na execução" };
+            } else {
+              result = execResult.result;
+            }
+            break;
+          }
           result = { error: `Unknown tool type: ${tool.tool_type}` };
+        }
       }
 
       return reply.send({
