@@ -21,8 +21,14 @@ describe("Referency — SYSTEM_PROMPT (Amanda)", () => {
     expect(SYSTEM_PROMPT).toMatch(/Você já tem algum modelo em mente\?/);
   });
 
+  it("não permite afirmar estoque sem ESTOQUE ATUAL após o cliente informar o nome", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Antes de falar de preço, disponibilidade, versão, cor, km ou dizer que "temos" alguma opção/i);
+    expect(SYSTEM_PROMPT).toMatch(/Sem esse bloco, NÃO afirme estoque/i);
+    expect(SYSTEM_PROMPT).toMatch(/NUNCA invente "temos algumas opções"/i);
+  });
+
   it("mantém versão do prompt registrada", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.6\.1/);
-    expect(getPromptConfig("referency")?.version).toBe("v1.6.1");
+    expect(SYSTEM_PROMPT).toMatch(/v1\.6\.2/);
+    expect(getPromptConfig("referency")?.version).toBe("v1.6.2");
   });
 });

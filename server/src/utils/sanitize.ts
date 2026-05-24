@@ -583,9 +583,6 @@ export function filterCommandLinesFromStream(buffer: string, chunk: string): { t
  */
 export function stripChatbotPhrases(content: string): string {
   let text = content;
-  // Não remove quando a frase faz parte de uma sentença (ex.: "...detalhes, como posso te chamar?")
-  text = text.replace(/(?<!,\s)\n?\s*Como posso te chamar\??\s*/gi, "");
-  text = text.replace(/(?<!,\s)\n?\s*Com quem eu falo\??\s*/gi, "");
   text = text.replace(/\n?\s*Como posso te ajudar\??\s*/gi, "");
   text = text.replace(/\n?\s*Como posso ajud[aá]-l[oa]\??\s*/gi, "");
   text = text.replace(/\n?\s*Em que posso ajudar\??\s*/gi, "");

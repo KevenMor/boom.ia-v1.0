@@ -4,6 +4,7 @@ import {
   filterCommandLinesFromStream,
   stripToolNameLeakage,
   stripThoughtAndReasoningBlocks,
+  stripChatbotPhrases,
 } from "./sanitize.js";
 
 describe("sanitizeLLMOutput — regressão vazamento para cliente", () => {
@@ -41,6 +42,11 @@ describe("sanitizeLLMOutput — regressão vazamento para cliente", () => {
     expect(out).not.toMatch(/INSTRU/i);
     expect(out).not.toMatch(/marcar.*lead/i);
     expect(out.toLowerCase()).toContain("orçamento");
+  });
+
+  it("stripChatbotPhrases preserva pergunta de nome", () => {
+    const out = stripChatbotPhrases("Olá! Sou a Amanda, da Referency. Antes de eu te passar os detalhes, como posso te chamar?");
+    expect(out).toMatch(/como posso te chamar\?/i);
   });
 
   it("remove NO_TOOLS_NEEDED", () => {

@@ -1211,6 +1211,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           const lastAssistantMsg = [...messages].reverse().find((m) => m.role === "assistant");
           const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
           let schedulingHint = "";
+          let referencyInventoryHint = "";
           if (lastAssistantMsg && lastUserMsg) {
             const offeredTimes = /\b\d{1,2}[h:]\d{0,2}\b/.test(lastAssistantMsg.content);
             const offeredTomorrow = /amanh[aã]|dia seguinte|depois de amanhã/i.test(lastAssistantMsg.content);
@@ -1239,9 +1240,29 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           if (appraisalCtx) {
             entityHint += `\n\n[CONTEXTO DE FLUXO] A última mensagem do assistente pedia dados do veículo do CLIENTE (marca, modelo, ano, km). Isso é APPRAISAL (intent A). NÃO chame consultar_fipe — avaliação é feita presencialmente pelo time comercial. Se o cliente já forneceu marca+modelo+ano, chame consultar_agenda com action "check_availability" e date "${todayISO}" para oferecer horários reais ao sugerir visita na loja. NÃO chame consultar_estoque.`;
           }
+          if (tenantSlug === "referency" && lastUserMsg) {
+            const normalizedUser = lastUserMsg.content.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+            const looksLikeOnlyName = /^\s*(me\s+chamo\s+)?([a-z]{2,})(\s+[a-z]{2,})?\s*$/i.test(normalizedUser);
+            const priorUserWithVehicle = messages
+              .filter((m) => m.role === "user")
+              .slice(0, -1)
+              .reverse()
+              .find((m) => {
+                const extracted = extractVehicleEntities(m.content || "");
+                return !!(extracted.marca || extracted.modelo);
+              });
+            if (looksLikeOnlyName && priorUserWithVehicle) {
+              const extracted = extractVehicleEntities(priorUserWithVehicle.content || "");
+              const parts: string[] = [];
+              if (extracted.marca) parts.push(`marca="${extracted.marca}"`);
+              if (extracted.modelo) parts.push(`modelo="${extracted.modelo}"`);
+              if (extracted.ano) parts.push(`ano=${extracted.ano}`);
+              referencyInventoryHint = `\n\n[HINT OBRIGATÓRIO — REFERENCY]\nO cliente acabou de responder apenas com o NOME, mas na mensagem anterior já tinha citado um veículo. Neste segundo turno, NÃO responda NO_TOOLS_NEEDED. Você DEVE chamar consultar_estoque para o veículo já citado anteriormente antes da resposta conversacional. Use os filtros: ${parts.join(", ")}.`;
+            }
+          }
 
           const dispatcherMessages = toOpenAIMessages(
-            getDispatcherPrompt(tenantSlug) + dispatcherDateContext + entityHint + schedulingHint,
+            getDispatcherPrompt(tenantSlug) + dispatcherDateContext + entityHint + schedulingHint + referencyInventoryHint,
             messages
           );
 
