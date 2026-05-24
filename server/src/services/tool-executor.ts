@@ -12,6 +12,13 @@ import {
   isGalleryExcludedFromClientCatalog,
 } from "../utils/suite-gallery-llm-labels.js";
 import { runLodgingConsulta, type LodgingGuestInput } from "./lodging-consulta.js";
+import {
+  classifyVehicleSegments,
+  resolveSegmentFilter,
+  SEGMENT_STYLE_KEYWORDS,
+  type VehicleSegment,
+} from "../lib/vehicle-segments.js";
+import { buildInventoryPhotosMarkdown, filterValidInventoryPhotoUrls } from "../lib/inventory-photo-url.js";
 
 export interface ToolExecutionResult {
   success: boolean;
@@ -143,11 +150,25 @@ async function executeInventoryQuery(
     }).catch(() => {});
     // #endregion
     // Normaliza pickup/picape/pikup → camionete (termo em português)
+    const estiloRaw = sanitizeVehicleParam(
+      (args.estilo || args.segmento || args.style) as string | undefined
+    );
+    let segmentFilter: VehicleSegment | null = resolveSegmentFilter(estiloRaw ?? undefined);
+    if (!segmentFilter && tipoRaw) {
+      segmentFilter = resolveSegmentFilter(tipoRaw);
+    }
+    if (!segmentFilter && modelo) {
+      segmentFilter = resolveSegmentFilter(modelo);
+    }
+
     const PICKUP_TO_CAMIONETE = ["pickup", "picape", "pikup"];
-    const tipo =
+    let tipo =
       tipoRaw && PICKUP_TO_CAMIONETE.includes(normalizeForSearch(tipoRaw))
         ? "camionete"
         : tipoRaw;
+    if (tipo && segmentFilter && resolveSegmentFilter(tipo)) {
+      tipo = undefined;
+    }
 
     // Normaliza valor numérico: se for número pequeno (< 1000) e o texto tiver "mil", trata como milhares
     function parsePriceValue(val: number | string, strContext?: string): number {
@@ -189,9 +210,20 @@ async function executeInventoryQuery(
     }
 
     const PICKUP_SYNONYMS = ["camionete", "caminhonete", "picape", "pickup", "pikup"];
-    const skipModelFilter = ["suv", "sedan", "hatch", ...PICKUP_SYNONYMS, ...MOTORIZACAO_KEYWORDS];
+    const skipModelFilter = [
+      "suv",
+      "sedan",
+      "hatch",
+      ...PICKUP_SYNONYMS,
+      ...MOTORIZACAO_KEYWORDS,
+      ...SEGMENT_STYLE_KEYWORDS,
+    ];
     const hasMarca = Boolean(marca?.trim());
-    const hasModelo = Boolean(modelo?.trim() && !skipModelFilter.some((k) => normalizeForSearch(modelo!).includes(k)));
+    const hasModelo = Boolean(
+      modelo?.trim() &&
+        !skipModelFilter.some((k) => normalizeForSearch(modelo!).includes(k)) &&
+        !resolveSegmentFilter(modelo)
+    );
 
     // Quando há apenas um termo (marca OU modelo), buscar em brand E model (OR) para cobrir casos como Haval,
     // que pode estar em brand ou em model no inventário. Assim "tem haval?" encontra em qualquer coluna.
@@ -299,6 +331,18 @@ async function executeInventoryQuery(
       }
     }
 
+    if (segmentFilter) {
+      vehicles = vehicles.filter((v) =>
+        classifyVehicleSegments({
+          brand: v.brand,
+          model: v.model,
+          version: v.version,
+          description: v.description,
+          fuel_type: (v as { fuel_type?: string }).fuel_type,
+        }).includes(segmentFilter!)
+      );
+    }
+
     // #region agent log
     fetch("http://127.0.0.1:7548/ingest/03d040d2-be13-440a-b98b-a3afe43b18d4", {
       method: "POST",
@@ -330,10 +374,11 @@ async function executeInventoryQuery(
       if (photos.length === 0 && v.photo_url) {
         photos = [v.photo_url];
       }
+      photos = filterValidInventoryPhotoUrls(photos);
+      const validPhotoUrl = photos[0] || (v.photo_url && filterValidInventoryPhotoUrls([v.photo_url])[0]) || undefined;
 
-      const vehiclePhotosMarkdown = (photos.length ? photos : [v.photo_url].filter(Boolean))
-        .map((url) => `![foto](${url})`)
-        .join("\n");
+      const vehiclePhotosMarkdown = buildInventoryPhotosMarkdown(photos);
+      const fotosDisponiveis = photos.length > 0;
 
       const fullName = [v.brand, v.model, v.version].filter(Boolean).join(" ");
       const precoFormatado =
@@ -341,6 +386,13 @@ async function executeInventoryQuery(
       const raw = v.raw_data as { features?: string[]; optionals?: string[] } | undefined;
       const features = (raw?.features ?? []).map(decodeHtmlEntities);
       const optionals = (raw?.optionals ?? []).map(decodeHtmlEntities);
+      const segmentos = classifyVehicleSegments({
+        brand: v.brand,
+        model: v.model,
+        version: v.version,
+        description: v.description,
+        fuel_type: (v as { fuel_type?: string }).fuel_type,
+      });
       return {
         id: v.id,
         external_id: (v as { external_id?: string }).external_id,
@@ -354,10 +406,12 @@ async function executeInventoryQuery(
         km: v.mileage,
         cor: v.color ? decodeHtmlEntities(v.color) : v.color,
         cambio: v.transmission ? decodeHtmlEntities(v.transmission) : v.transmission,
-        photo_url: v.photo_url,
+        photo_url: validPhotoUrl,
         photos,
         detail_url: v.detail_url,
         photos_markdown: vehiclePhotosMarkdown || undefined,
+        fotos_disponiveis: fotosDisponiveis,
+        segmentos: segmentos.length > 0 ? segmentos : undefined,
         descricao: (() => {
           const d = v.description ? decodeHtmlEntities(v.description) : "";
           if (!d || /^(&copy;|®)\s*PPL Motors|pplmotors\.(co|com\.br)\s*$/i.test(d) || /^EMPTY$/i.test(d)) return undefined;
@@ -375,11 +429,9 @@ async function executeInventoryQuery(
         ? formatted[0].photos_markdown
         : formatted.length > 1
           ? null
-          : formatted
-              .flatMap((v) => (v.photos && v.photos.length ? v.photos : v.photo_url ? [v.photo_url] : []))
-              .filter(Boolean)
-              .map((url) => `![foto](${url})`)
-              .join("\n");
+          : buildInventoryPhotosMarkdown(
+              formatted.flatMap((v) => (v.photos && v.photos.length ? v.photos : []))
+            ) || undefined;
 
     const hasVideoDetails = vehicles.some((v) => v.video_details);
     let hint: string;
@@ -396,6 +448,16 @@ async function executeInventoryQuery(
         hint = `${baseHint}\nNOTA: O cliente pediu na cor "${corOriginal}", mas não temos nessa cor exata. Temos o mesmo modelo nas cores: ${availableColors.join(", ")}. Informe o cliente que não há na cor "${corOriginal}" mas apresente as opções disponíveis com entusiasmo.`;
       } else {
         hint = baseHint;
+      }
+      hint +=
+        " Cada veículo inclui o campo segmentos (ex.: esportivo, premium, suv, picape) — use-o para responder pedidos de estilo/pegada (esportivo, luxo, SUV etc.). NUNCA diga que não há opções de um segmento sem antes consultar com estilo/segmento/tipo adequado.";
+      if (segmentFilter) {
+        hint += ` Filtro de segmento aplicado: ${segmentFilter}.`;
+      }
+      const anyWithoutPhotos = formatted.some((v) => v.fotos_disponiveis === false);
+      if (anyWithoutPhotos) {
+        hint +=
+          " ATENÇÃO: um ou mais veículos têm fotos_disponiveis=false (sem fotos válidas no site ainda). Se o cliente pedir fotos desses veículos: NÃO use ENVIAR_FOTOS_VEICULO, NÃO diga 'dá uma olhada nas fotos' nem similares. Informe que no momento não consegue enviar as fotos por aqui e que já está encaminhando para um consultor dar continuidade e enviar as imagens.";
       }
     } else {
       hint = "Nenhum veículo encontrado com os filtros informados.";

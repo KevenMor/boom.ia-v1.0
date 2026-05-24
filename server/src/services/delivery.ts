@@ -1,6 +1,12 @@
 import { normalizeStorageUrlForExternalUse } from "../lib/supabase-storage-public-url.js";
+import {
+  filterValidInventoryPhotoUrls,
+  INVENTORY_PHOTOS_UNAVAILABLE_PT,
+  isDeliverableImageContentType,
+  isLikelyDirectVehicleImageUrl,
+} from "../lib/inventory-photo-url.js";
 
-/** Mensagem quando download/upload de mídia falha — nunca enviar URL crua ao cliente. */
+/** Mensagem genérica quando download/upload de mídia falha — nunca enviar URL crua ao cliente. */
 const MEDIA_DELIVERY_FAILED_PT =
   "Não consegui enviar o arquivo de mídia agora. Quer que eu tente de novo em instantes?";
 
@@ -74,7 +80,8 @@ function extractImagesFromMarkdown(text: string): { textOnly: string; imageUrls:
   const imageUrls: string[] = [];
   let match: RegExpExecArray | null;
   while ((match = imageRegex.exec(text)) !== null) {
-    if (match[1]) imageUrls.push(match[1].trim());
+    const url = match[1]?.trim();
+    if (url && isLikelyDirectVehicleImageUrl(url)) imageUrls.push(url);
   }
   const textOnly = text.replace(imageRegex, "").replace(/\n{3,}/g, "\n\n").trim();
 
@@ -124,13 +131,25 @@ async function sendChatwootImagesBatch(
   imageUrls: string[],
   caption?: string
 ): Promise<boolean> {
-  if (!imageUrls.length) return true;
-  console.warn(`[Deliver] sendChatwootImagesBatch: attempting ${imageUrls.length} image(s)`);
-  // WhatsApp bridge only forwards the FIRST attachment of a Chatwoot message.
-  // Send each image as a separate POST so all arrive on WhatsApp.
+  const validUrls = filterValidInventoryPhotoUrls(imageUrls);
+  if (!validUrls.length) {
+    if (imageUrls.length > 0) {
+      console.warn(`[Deliver] sendChatwootImagesBatch: ${imageUrls.length} URL(s) rejeitada(s) — nenhuma imagem direta válida`);
+      await sendChatwootTextMessage(url, apiToken, INVENTORY_PHOTOS_UNAVAILABLE_PT);
+    }
+    return false;
+  }
+  console.warn(`[Deliver] sendChatwootImagesBatch: attempting ${validUrls.length} image(s)`);
   let successCount = 0;
-  for (let i = 0; i < imageUrls.length; i++) {
-    const imageUrl = imageUrls[i];
+  let failureNotified = false;
+  const notifyFailureOnce = async () => {
+    if (failureNotified) return;
+    failureNotified = true;
+    await sendChatwootTextMessage(url, apiToken, INVENTORY_PHOTOS_UNAVAILABLE_PT);
+  };
+
+  for (let i = 0; i < validUrls.length; i++) {
+    const imageUrl = validUrls[i];
     try {
       const fetchUrl = normalizeStorageUrlForExternalUse(imageUrl);
       const parsedUrl = new URL(fetchUrl);
@@ -143,7 +162,15 @@ async function sendChatwootImagesBatch(
       });
       if (!imgResp.ok) {
         console.warn(`[Deliver] Image download failed ${imgResp.status}: ${fetchUrl.slice(0, 80)}...`);
-        await sendChatwootTextMessage(url, apiToken, MEDIA_DELIVERY_FAILED_PT);
+        await notifyFailureOnce();
+        continue;
+      }
+      const contentType = imgResp.headers.get("content-type");
+      if (!isDeliverableImageContentType(contentType)) {
+        console.warn(
+          `[Deliver] Image rejected — content-type=${contentType ?? "unknown"} url=${fetchUrl.slice(0, 80)}...`
+        );
+        await notifyFailureOnce();
         continue;
       }
       const blob = await imgResp.blob();
@@ -160,17 +187,20 @@ async function sendChatwootImagesBatch(
       });
       if (!resp.ok) {
         console.error(`[Deliver] Image msg error ${resp.status}:`, await resp.text());
-        await sendChatwootTextMessage(url, apiToken, MEDIA_DELIVERY_FAILED_PT);
+        await notifyFailureOnce();
       } else {
         successCount++;
-        console.warn(`[Deliver] Image ${i + 1}/${imageUrls.length} sent OK`);
+        console.warn(`[Deliver] Image ${i + 1}/${validUrls.length} sent OK`);
       }
     } catch (e) {
       console.warn(`[Deliver] Image send exception: ${(e as Error)?.message?.slice(0, 120)}`);
-      await sendChatwootTextMessage(url, apiToken, MEDIA_DELIVERY_FAILED_PT);
+      await notifyFailureOnce();
     }
   }
-  console.warn(`[Deliver] sendChatwootImagesBatch: sent ${successCount}/${imageUrls.length} image(s)`);
+  if (successCount === 0 && validUrls.length > 0 && !failureNotified) {
+    await notifyFailureOnce();
+  }
+  console.warn(`[Deliver] sendChatwootImagesBatch: sent ${successCount}/${validUrls.length} image(s)`);
   return successCount > 0;
 }
 

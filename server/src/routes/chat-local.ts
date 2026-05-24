@@ -9,6 +9,7 @@ import { injectOmnibeesQuotePhotosIfMissing } from "../utils/omnibees-photo-mark
 import {
   injectInventoryPhotosIfMissing,
   reorderInventoryPhotosBeforeText,
+  sanitizeInvalidInventoryPhotoAttempt,
 } from "../utils/inventory-photo-inject.js";
 import { formatOmnibeesQuoteForDelivery } from "../utils/omnibees-quote-format.js";
 import { getWelcomeConversationImageMarkdown } from "../utils/suite-gallery-welcome-image.js";
@@ -1169,6 +1170,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           text = inventoryPhotoInject.fullText;
         }
         text = reorderInventoryPhotosBeforeText(text);
+        text = sanitizeInvalidInventoryPhotoAttempt(text);
         return text;
       };
 

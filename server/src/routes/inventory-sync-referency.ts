@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
+import { filterValidInventoryPhotoUrls } from "../lib/inventory-photo-url.js";
 
 const BASE_URL = "https://www.referency.com.br";
 const LISTING_URL = `${BASE_URL}/estoque`;
@@ -119,6 +120,8 @@ export function parseReferencyDetailPage(html: string): ReferencyVehicleDetail {
     }
   }
 
+  const validPhotos = filterValidInventoryPhotoUrls(photos);
+
   const detailMatch = html.match(/DETALHES DO VEÍCULO<\/p>\s*([\s\S]*?)<\/div>/);
   if (detailMatch) {
     const items = detailMatch[1].match(/<p>-\s*([^<]+)<\/p>/g);
@@ -129,7 +132,7 @@ export function parseReferencyDetailPage(html: string): ReferencyVehicleDetail {
     }
   }
 
-  return { version, transmission, fuel_type, color, motor, photos, description };
+  return { version, transmission, fuel_type, color, motor, photos: validPhotos, description };
 }
 
 export async function inventorySyncReferencyRoutes(fastify: FastifyInstance) {
@@ -183,12 +186,16 @@ export async function inventorySyncReferencyRoutes(fastify: FastifyInstance) {
             const detailHtml = await detailResp.text();
             detail = parseReferencyDetailPage(detailHtml);
             if (detail.photos.length === 0 && vehicle.photo_url) {
-              detail.photos = [vehicle.photo_url];
+              detail.photos = filterValidInventoryPhotoUrls([vehicle.photo_url]);
             }
           }
         } catch (e) {
           console.warn(`Detail fetch timeout/error for ${vehicle.external_id}`);
         }
+
+        const syncedPhotos = filterValidInventoryPhotoUrls(
+          detail.photos.length > 0 ? detail.photos : vehicle.photo_url ? [vehicle.photo_url] : []
+        );
 
         const record = {
           external_id: `referency-${vehicle.external_id}`,
@@ -202,12 +209,12 @@ export async function inventorySyncReferencyRoutes(fastify: FastifyInstance) {
           color: detail.color,
           transmission: detail.transmission,
           fuel_type: detail.fuel_type,
-          photo_url: vehicle.photo_url,
-          photos: JSON.stringify(detail.photos),
+          photo_url: syncedPhotos[0] || null,
+          photos: JSON.stringify(syncedPhotos),
           detail_url: vehicle.detail_url,
           description: [detail.motor, detail.description].filter(Boolean).join(" | "),
           status: "available",
-          raw_data: JSON.stringify({ motor: detail.motor, photos: detail.photos }),
+          raw_data: JSON.stringify({ motor: detail.motor, photos: syncedPhotos }),
           last_synced_at: new Date().toISOString(),
         };
 

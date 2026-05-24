@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   injectInventoryPhotosIfMissing,
   reorderInventoryPhotosBeforeText,
+  sanitizeInvalidInventoryPhotoAttempt,
 } from "./inventory-photo-inject.js";
+import { INVENTORY_PHOTOS_UNAVAILABLE_PT } from "../lib/inventory-photo-url.js";
 
 const toolResult = JSON.stringify({
   _hint: "ESTOQUE ATUAL...",
@@ -79,6 +81,25 @@ describe("injectInventoryPhotosIfMissing", () => {
     expect(result).not.toBeNull();
     expect(result!.fullText).toContain("![foto](https://example.com/1.jpg)");
   });
+
+  it("retorna mensagem de consultor quando veículo não tem fotos válidas", () => {
+    const emptyPhotosTool = JSON.stringify({
+      vehicles: [
+        {
+          id: "9032b933-d637-43fd-a04c-0d0bbfbc9ade",
+          nome_completo: "FIAT PALIO ATTRACTIVE 2016",
+          photos_markdown: "![foto](https://referency.com.br/galeria/)",
+          fotos_disponiveis: false,
+        },
+      ],
+    });
+    const result = injectInventoryPhotosIfMissing({
+      assistantText: "ENVIAR_FOTOS_VEICULO: FIAT PALIO | id: 9032b933-d637-43fd-a04c-0d0bbfbc9ade\n\nDá uma olhada!",
+      toolResultStrings: [emptyPhotosTool],
+    });
+    expect(result).not.toBeNull();
+    expect(result!.fullText).toBe(INVENTORY_PHOTOS_UNAVAILABLE_PT);
+  });
 });
 
 describe("reorderInventoryPhotosBeforeText", () => {
@@ -98,5 +119,21 @@ describe("reorderInventoryPhotosBeforeText", () => {
   it("retorna texto inalterado sem imagens markdown", () => {
     const input = "Temos opções no estoque. Quer ver fotos?";
     expect(reorderInventoryPhotosBeforeText(input)).toBe(input);
+  });
+});
+
+describe("sanitizeInvalidInventoryPhotoAttempt", () => {
+  it("substitui markdown de diretório /galeria/ por mensagem ao consultor", () => {
+    const input =
+      "![foto](https://referency.com.br/galeria/)\n\nDá uma olhada nas fotos do Palio!";
+    const out = sanitizeInvalidInventoryPhotoAttempt(input);
+    expect(out).toBe(INVENTORY_PHOTOS_UNAVAILABLE_PT);
+    expect(out).not.toContain("galeria");
+    expect(out).not.toMatch(/!\[/);
+  });
+
+  it("mantém texto válido quando há fotos diretas", () => {
+    const input = "![foto](https://referency.com.br/galeria/veiculos-1029-001.jpeg)\n\nConfira!";
+    expect(sanitizeInvalidInventoryPhotoAttempt(input)).toBe(input);
   });
 });
