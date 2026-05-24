@@ -122,7 +122,7 @@ async function sendChatwootImageMessage(
   imageUrl: string,
   caption?: string
 ): Promise<boolean> {
-  return sendChatwootImagesBatch(url, apiToken, [imageUrl], caption);
+  return (await sendChatwootImagesBatch(url, apiToken, [imageUrl], caption)) > 0;
 }
 
 async function sendChatwootImagesBatch(
@@ -130,23 +130,16 @@ async function sendChatwootImagesBatch(
   apiToken: string,
   imageUrls: string[],
   caption?: string
-): Promise<boolean> {
+): Promise<number> {
   const validUrls = filterValidInventoryPhotoUrls(imageUrls);
   if (!validUrls.length) {
     if (imageUrls.length > 0) {
       console.warn(`[Deliver] sendChatwootImagesBatch: ${imageUrls.length} URL(s) rejeitada(s) — nenhuma imagem direta válida`);
-      await sendChatwootTextMessage(url, apiToken, INVENTORY_PHOTOS_UNAVAILABLE_PT);
     }
-    return false;
+    return 0;
   }
   console.warn(`[Deliver] sendChatwootImagesBatch: attempting ${validUrls.length} image(s)`);
   let successCount = 0;
-  let failureNotified = false;
-  const notifyFailureOnce = async () => {
-    if (failureNotified) return;
-    failureNotified = true;
-    await sendChatwootTextMessage(url, apiToken, INVENTORY_PHOTOS_UNAVAILABLE_PT);
-  };
 
   for (let i = 0; i < validUrls.length; i++) {
     const imageUrl = validUrls[i];
@@ -162,15 +155,13 @@ async function sendChatwootImagesBatch(
       });
       if (!imgResp.ok) {
         console.warn(`[Deliver] Image download failed ${imgResp.status}: ${fetchUrl.slice(0, 80)}...`);
-        await notifyFailureOnce();
         continue;
       }
       const contentType = imgResp.headers.get("content-type");
-      if (!isDeliverableImageContentType(contentType)) {
+      if (!isDeliverableImageContentType(contentType, fetchUrl)) {
         console.warn(
           `[Deliver] Image rejected — content-type=${contentType ?? "unknown"} url=${fetchUrl.slice(0, 80)}...`
         );
-        await notifyFailureOnce();
         continue;
       }
       const blob = await imgResp.blob();
@@ -187,21 +178,16 @@ async function sendChatwootImagesBatch(
       });
       if (!resp.ok) {
         console.error(`[Deliver] Image msg error ${resp.status}:`, await resp.text());
-        await notifyFailureOnce();
       } else {
         successCount++;
         console.warn(`[Deliver] Image ${i + 1}/${validUrls.length} sent OK`);
       }
     } catch (e) {
       console.warn(`[Deliver] Image send exception: ${(e as Error)?.message?.slice(0, 120)}`);
-      await notifyFailureOnce();
     }
   }
-  if (successCount === 0 && validUrls.length > 0 && !failureNotified) {
-    await notifyFailureOnce();
-  }
   console.warn(`[Deliver] sendChatwootImagesBatch: sent ${successCount}/${validUrls.length} image(s)`);
-  return successCount > 0;
+  return successCount;
 }
 
 async function sendChatwootMediaMessage(
@@ -461,6 +447,15 @@ async function replyToChatwoot(
 
   const consolidated = consolidateImageParts(parts);
 
+  const hasImageBlocks = consolidated.some((b) => b.type === "images" && b.imageUrls?.length);
+  if (hasImageBlocks) {
+    for (const block of consolidated) {
+      if (block.type !== "text" || !block.content) continue;
+      if (!block.content.includes(INVENTORY_PHOTOS_UNAVAILABLE_PT)) continue;
+      block.content = block.content.replace(INVENTORY_PHOTOS_UNAVAILABLE_PT, "").replace(/\n{3,}/g, "\n\n").trim();
+    }
+  }
+
   const totalImageUrls = consolidated
     .filter((b) => b.type === "images" && b.imageUrls?.length)
     .reduce((acc, b) => acc + (b.imageUrls?.length ?? 0), 0);
@@ -468,12 +463,17 @@ async function replyToChatwoot(
     console.warn(`[Deliver] replyToChatwoot: total image URLs to send=${totalImageUrls}, blocks=${consolidated.filter((b) => b.type === "images").length}`);
   }
 
+  let imagesSentTotal = 0;
+  let imagesAttemptedTotal = 0;
+
   for (let i = 0; i < consolidated.length; i++) {
     const block = consolidated[i];
     const isLast = i === consolidated.length - 1;
 
     if (block.type === "images" && block.imageUrls?.length) {
-      await sendChatwootImagesBatch(msgUrl, apiToken, block.imageUrls, block.content?.trim() || "");
+      imagesAttemptedTotal += block.imageUrls.length;
+      const sent = await sendChatwootImagesBatch(msgUrl, apiToken, block.imageUrls, block.content?.trim() || "");
+      imagesSentTotal += sent;
       // Após imagens: aguarda 15 s para Chatwoot concluir entrega ao WhatsApp antes do próximo bloco.
       // EXCEÇÃO: se o próximo bloco também é `images` com `content` (legenda integrada),
       // usa 5 s em vez de 15 s (fotos com legenda entregam mais rápido).
@@ -521,6 +521,10 @@ async function replyToChatwoot(
         await safeDelay(POST_VIDEO_DELAY_MS);
       }
     }
+  }
+
+  if (imagesAttemptedTotal > 0 && imagesSentTotal === 0) {
+    await sendChatwootTextMessage(msgUrl, apiToken, INVENTORY_PHOTOS_UNAVAILABLE_PT);
   }
 }
 

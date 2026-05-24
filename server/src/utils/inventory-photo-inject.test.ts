@@ -105,15 +105,23 @@ describe("injectInventoryPhotosIfMissing", () => {
 describe("reorderInventoryPhotosBeforeText", () => {
   it("move texto que veio antes das fotos para depois do bloco de imagens", () => {
     const input =
-      "Dá uma olhada!\n\n![foto](https://example.com/1.jpg)\n![foto](https://example.com/2.jpg)";
+      "Que carro lindo!\n\n![foto](https://example.com/1.jpg)\n![foto](https://example.com/2.jpg)";
     const out = reorderInventoryPhotosBeforeText(input);
-    expect(out.indexOf("![foto](https://example.com/1.jpg)")).toBeLessThan(out.indexOf("Dá uma olhada!"));
+    expect(out.indexOf("![foto](https://example.com/1.jpg)")).toBeLessThan(out.indexOf("Que carro lindo!"));
   });
 
   it("mantém ordem quando fotos já vêm primeiro", () => {
     const input =
       "![foto](https://example.com/1.jpg)\n![foto](https://example.com/2.jpg)\n\nEsse carro está impecável!";
     expect(reorderInventoryPhotosBeforeText(input)).toBe(input);
+  });
+
+  it("remove frase introdutória redundante após reordenar fotos", () => {
+    const input =
+      "Olha só como ele está:\n\n![foto](https://example.com/1.jpg)\n\nQue carro incrível!";
+    const out = reorderInventoryPhotosBeforeText(input);
+    expect(out.indexOf("![foto](https://example.com/1.jpg)")).toBeLessThan(out.indexOf("Que carro incrível!"));
+    expect(out).not.toMatch(/olha\s+só como ele está/i);
   });
 
   it("retorna texto inalterado sem imagens markdown", () => {

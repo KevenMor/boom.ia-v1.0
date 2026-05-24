@@ -50,9 +50,11 @@ export function buildInventoryPhotosMarkdown(urls: string[]): string {
 export const INVENTORY_PHOTOS_UNAVAILABLE_PT =
   "No momento não consegui enviar as fotos por aqui. Já encaminhei seu pedido para um consultor dar continuidade e te mandar as imagens em seguida.";
 
-export function isDeliverableImageContentType(contentType: string | null): boolean {
-  if (!contentType) return false;
-  const ct = contentType.split(";")[0]?.trim().toLowerCase() || "";
+export function isDeliverableImageContentType(contentType: string | null, url?: string): boolean {
+  const ct = contentType?.split(";")[0]?.trim().toLowerCase() || "";
   if (ct.startsWith("image/")) return true;
+  if ((ct === "application/octet-stream" || !ct) && url && isLikelyDirectVehicleImageUrl(url)) {
+    return true;
+  }
   return false;
 }

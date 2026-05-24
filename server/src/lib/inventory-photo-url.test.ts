@@ -46,4 +46,13 @@ describe("isDeliverableImageContentType", () => {
   it("aceita image/jpeg", () => {
     expect(isDeliverableImageContentType("image/jpeg")).toBe(true);
   });
+
+  it("aceita octet-stream quando URL parece imagem direta", () => {
+    expect(
+      isDeliverableImageContentType(
+        "application/octet-stream",
+        "https://referency.com.br/galeria/veiculos-1029-001.jpeg"
+      )
+    ).toBe(true);
+  });
 });
