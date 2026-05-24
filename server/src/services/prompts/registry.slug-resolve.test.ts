@@ -15,7 +15,7 @@ describe("registry — slug aliases (hífen / underscore)", () => {
 
   it("resolve Auto Escola Ideal com slug do banco (variantes com hífen)", () => {
     const prompt = buildSystemPrompt("PROMPT_DO_BANCO_QUE_NAO_DEVE_APARECER", "auto-escola-ideal", false);
-    expect(prompt).toContain("v8.11");
+    expect(prompt).toContain("v8.13");
     expect(prompt).not.toContain("PROMPT_DO_BANCO_QUE_NAO_DEVE_APARECER");
     expect(prompt).toMatch(/R\$ 90,00/);
   });
@@ -36,12 +36,19 @@ describe("registry — slug aliases (hífen / underscore)", () => {
   it("slug canônico ideal ignora prompt do banco", () => {
     const prompt = buildSystemPrompt("TEXTO_SOMENTE_BANCO_NAO_USAR", "ideal", false);
     expect(prompt).not.toContain("TEXTO_SOMENTE_BANCO_NAO_USAR");
-    expect(prompt).toContain("v8.11");
+    expect(prompt).toContain("v8.13");
   });
 
   it("tenant fora do registry usa system prompt do banco", () => {
     const db = "Sou um agente customizado só no Supabase.";
     const prompt = buildSystemPrompt(db, "tenant-sem-registry-xyz-12345", false);
     expect(prompt).toContain(db);
+  });
+
+  it("referency não injeta saudação base genérica", () => {
+    const prompt = buildSystemPrompt("PROMPT_DO_BANCO_IGNORAR", "referency", false);
+    expect(prompt).toContain("Como posso te chamar?");
+    expect(prompt).not.toContain("COMPORTAMENTO DE SAUDAÇÃO:");
+    expect(prompt).not.toContain("pergunte como pode ajudar o cliente");
   });
 });

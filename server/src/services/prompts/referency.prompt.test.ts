@@ -7,6 +7,8 @@ describe("Referency — SYSTEM_PROMPT (Amanda)", () => {
     expect(SYSTEM_PROMPT).toMatch(/TRAVA OBRIGATÓRIA ANTES DE ENVIAR A PRIMEIRA MENSAGEM/i);
     expect(SYSTEM_PROMPT).toMatch(/NUNCA pode terminar só em apresentação|frase vaga/i);
     expect(SYSTEM_PROMPT).toMatch(/deve terminar com exatamente 1 pergunta objetiva/i);
+    expect(SYSTEM_PROMPT).toMatch(/PERGUNTAS VAGAS PROIBIDAS no primeiro contato/i);
+    expect(SYSTEM_PROMPT).toMatch(/Como posso ajudar\?|Em que posso ajudar\?|Posso te ajudar\?/i);
     expect(SYSTEM_PROMPT).toMatch(/Se a mensagem gerada não tiver ponto de interrogação, REESCREVA/i);
   });
 

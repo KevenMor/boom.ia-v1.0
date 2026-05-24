@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { extractVideoUrlsFromText, consolidateImageParts } from "./delivery.js";
+import {
+  extractVideoUrlsFromText,
+  consolidateImageParts,
+  shouldPromoteTextToImageCaption,
+} from "./delivery.js";
 
 describe("extractVideoUrlsFromText", () => {
   it("remove linha só com URL .mp4 e query string", () => {
@@ -100,6 +104,24 @@ describe("consolidateImageParts — múltiplos vídeos", () => {
   it("deduplica a mesma URL de vídeo", () => {
     const parts = ["https://x.com/a.mp4\n\nhttps://x.com/a.mp4"];
     expect(consolidateImageParts(parts).filter((b) => b.type === "video").length).toBe(1);
+  });
+});
+
+describe("mergeAdjacentImageAndTextBlocks", () => {
+  it("promove texto curto para legenda da foto", () => {
+    expect(shouldPromoteTextToImageCaption("Olha essa opção." )).toBe(true);
+  });
+
+  it("não promove texto longo pós-foto para legenda", () => {
+    expect(
+      shouldPromoteTextToImageCaption(
+        "Recebi seu interesse nesse modelo. Me confirma se você quer fotos, valor de entrada ou simulação para eu seguir do jeito certo com você."
+      )
+    ).toBe(false);
+  });
+
+  it("não promove texto com múltiplas linhas para legenda", () => {
+    expect(shouldPromoteTextToImageCaption("Linha 1\n\nLinha 2" )).toBe(false);
   });
 });
 

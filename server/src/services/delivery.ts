@@ -316,7 +316,14 @@ interface ConsolidatedPart {
   videoUrl?: string;
 }
 
-/** Junta bloco só-imagem + bolha de texto seguinte num único envio (legenda na foto). */
+function shouldPromoteTextToImageCaption(text: string): boolean {
+  const normalized = text.trim();
+  if (!normalized) return false;
+  if (normalized.includes("\n")) return false;
+  return normalized.length <= 80;
+}
+
+/** Junta bloco só-imagem + texto curto seguinte num único envio (legenda na foto). */
 function mergeAdjacentImageAndTextBlocks(blocks: ConsolidatedPart[]): ConsolidatedPart[] {
   const out: ConsolidatedPart[] = [];
   for (let i = 0; i < blocks.length; i++) {
@@ -328,7 +335,8 @@ function mergeAdjacentImageAndTextBlocks(blocks: ConsolidatedPart[]): Consolidat
       b.imageUrls.length > 0 &&
       n?.type === "text" &&
       n.content?.trim() &&
-      !b.content
+      !b.content &&
+      shouldPromoteTextToImageCaption(n.content)
     ) {
       out.push({ type: "images", imageUrls: b.imageUrls, content: n.content.trim() });
       i++;
@@ -501,6 +509,7 @@ export {
   extractVideoUrlsFromText,
   extractImagesFromMarkdown,
   consolidateImageParts,
+  shouldPromoteTextToImageCaption,
   sendChatwootTextMessage,
   sendChatwootImageMessage,
   sendChatwootMediaMessage,
