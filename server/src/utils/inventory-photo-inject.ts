@@ -29,7 +29,7 @@ function parseInventoryToolResults(toolResultStrings: string[]): VehiclePhotoBlo
       const id = typeof v.id === "string" ? v.id.trim() : "";
       const name = typeof v.nome_completo === "string" ? v.nome_completo.trim() : "";
       const pm = typeof v.photos_markdown === "string" ? buildInventoryPhotosMarkdown(
-        v.photos_markdown.split(/\r?\n/).map((line) => {
+        v.photos_markdown.split(/\r?\n/).map((line: string) => {
           const m = line.match(/\((https?:\/\/[^)\s]+)\)/);
           return m?.[1] || "";
         }).filter(Boolean)
