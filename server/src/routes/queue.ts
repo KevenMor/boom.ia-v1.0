@@ -12,27 +12,13 @@ import { sendViaWaha } from "../services/waha.js";
 import { transcribeAudio, isAudioAttachment } from "../services/transcribe.js";
 import { buildReminderMessage } from "../utils/buildReminderMessage.js";
 import { getWelcomeConversationImageMarkdown, responseAlreadyIncludesWelcomeImage } from "../utils/suite-gallery-welcome-image.js";
+import {
+  buildConsolidatedUserMessageForLlm,
+  MESSAGE_DEBOUNCE_QUIET_POLL_MS,
+  MESSAGE_DEBOUNCE_QUIET_TAIL_MS,
+} from "../utils/message-debounce.js";
 
 const API_BASE = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
-
-async function isLastMessage(
-  supabase: any,
-  agentId: string,
-  externalUserId: string,
-  channel: string,
-  myCreatedAt: string
-): Promise<boolean> {
-  const { data } = await supabase
-    .from("webhook_message_buffer")
-    .select("id")
-    .eq("agent_id", agentId)
-    .eq("external_user_id", externalUserId)
-    .eq("channel", channel)
-    .eq("processed", false)
-    .gt("created_at", myCreatedAt)
-    .limit(1);
-  return !data || data.length === 0;
-}
 
 async function consumeBufferedMessages(
   supabase: any,
@@ -54,6 +40,55 @@ async function consumeBufferedMessages(
   const ids = pending.map((m: any) => m.id);
   await supabase.from("webhook_message_buffer").delete().in("id", ids);
   return pending.map((m: any) => m.content as string);
+}
+
+async function getLatestPendingBufferCreatedAt(
+  supabase: any,
+  agentId: string,
+  externalUserId: string,
+  channel: string
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("webhook_message_buffer")
+    .select("created_at")
+    .eq("agent_id", agentId)
+    .eq("external_user_id", externalUserId)
+    .eq("channel", channel)
+    .eq("processed", false)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data?.created_at as string | undefined) ?? null;
+}
+
+/**
+ * Aguarda debounce inicial + período quieto (sliding tail).
+ * Evita processar a 1ª mensagem antes da 2ª chegar quando o cliente digita em sequência.
+ */
+async function waitForBufferQuietPeriod(
+  supabase: any,
+  agentId: string,
+  externalUserId: string,
+  channel: string,
+  debounceMs: number
+): Promise<string | null> {
+  await new Promise((r) => setTimeout(r, debounceMs));
+
+  const deadline = Date.now() + debounceMs;
+  let latest = await getLatestPendingBufferCreatedAt(supabase, agentId, externalUserId, channel);
+
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, MESSAGE_DEBOUNCE_QUIET_POLL_MS));
+    const nowLatest = await getLatestPendingBufferCreatedAt(supabase, agentId, externalUserId, channel);
+    if (nowLatest === latest) {
+      await new Promise((r) => setTimeout(r, MESSAGE_DEBOUNCE_QUIET_TAIL_MS));
+      const afterTail = await getLatestPendingBufferCreatedAt(supabase, agentId, externalUserId, channel);
+      if (afterTail === latest) return latest;
+    }
+    latest = nowLatest;
+  }
+
+  return latest;
 }
 
 async function callChatAgent(
@@ -562,16 +597,27 @@ export async function queueRoutes(fastify: FastifyInstance) {
       let finalMessage = user_message;
 
       if (debounce_ms > 0) {
-        await new Promise((r) => setTimeout(r, debounce_ms));
-        if (buffer_created_at) {
-          const imLast = await isLastMessage(supabase, agent_id, external_user_id || "", channel || "", buffer_created_at);
-          if (!imLast) {
-            return reply.send({ status: "skipped", reason: "newer message arrived" });
-          }
+        const latestCreatedAt = await waitForBufferQuietPeriod(
+          supabase,
+          agent_id,
+          external_user_id || "",
+          channel || "",
+          debounce_ms
+        );
+        if (!latestCreatedAt) {
+          return reply.send({ status: "skipped", reason: "buffer empty after debounce" });
+        }
+        if (buffer_created_at && latestCreatedAt !== buffer_created_at) {
+          return reply.send({ status: "skipped", reason: "newer message arrived" });
         }
         const allMessages = await consumeBufferedMessages(supabase, agent_id, external_user_id || "", channel || "");
         if (allMessages.length > 0) {
-          finalMessage = allMessages.join("\n");
+          finalMessage = buildConsolidatedUserMessageForLlm(allMessages);
+          if (allMessages.length > 1) {
+            console.log(
+              `[ProcessQueue] Consolidated ${allMessages.length} buffered messages for agent=${agent_id} user=${external_user_id}`
+            );
+          }
         }
       }
 
