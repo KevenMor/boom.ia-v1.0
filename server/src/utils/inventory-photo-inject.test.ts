@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { injectInventoryPhotosIfMissing } from "./inventory-photo-inject.js";
+import {
+  injectInventoryPhotosIfMissing,
+  reorderInventoryPhotosBeforeText,
+} from "./inventory-photo-inject.js";
 
 const toolResult = JSON.stringify({
   _hint: "ESTOQUE ATUAL...",
@@ -24,6 +27,7 @@ describe("injectInventoryPhotosIfMissing", () => {
     expect(result).not.toBeNull();
     expect(result!.fullText).toContain("![foto](https://example.com/1.jpg)");
     expect(result!.fullText).toContain("Olha só as fotos dele!");
+    expect(result!.fullText.indexOf("![foto]")).toBeLessThan(result!.fullText.indexOf("Olha só"));
     expect(result!.fullText).not.toContain("ENVIAR_FOTOS_VEICULO");
   });
 
@@ -74,5 +78,25 @@ describe("injectInventoryPhotosIfMissing", () => {
     });
     expect(result).not.toBeNull();
     expect(result!.fullText).toContain("![foto](https://example.com/1.jpg)");
+  });
+});
+
+describe("reorderInventoryPhotosBeforeText", () => {
+  it("move texto que veio antes das fotos para depois do bloco de imagens", () => {
+    const input =
+      "Dá uma olhada!\n\n![foto](https://example.com/1.jpg)\n![foto](https://example.com/2.jpg)";
+    const out = reorderInventoryPhotosBeforeText(input);
+    expect(out.indexOf("![foto](https://example.com/1.jpg)")).toBeLessThan(out.indexOf("Dá uma olhada!"));
+  });
+
+  it("mantém ordem quando fotos já vêm primeiro", () => {
+    const input =
+      "![foto](https://example.com/1.jpg)\n![foto](https://example.com/2.jpg)\n\nEsse carro está impecável!";
+    expect(reorderInventoryPhotosBeforeText(input)).toBe(input);
+  });
+
+  it("retorna texto inalterado sem imagens markdown", () => {
+    const input = "Temos opções no estoque. Quer ver fotos?";
+    expect(reorderInventoryPhotosBeforeText(input)).toBe(input);
   });
 });

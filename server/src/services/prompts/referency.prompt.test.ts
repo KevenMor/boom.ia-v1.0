@@ -30,7 +30,13 @@ describe("Referency — SYSTEM_PROMPT (Amanda)", () => {
   });
 
   it("mantém versão do prompt registrada", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.6\.2/);
-    expect(getPromptConfig("referency")?.version).toBe("v1.6.2");
+    expect(SYSTEM_PROMPT).toMatch(/v1\.6\.4/);
+    expect(getPromptConfig("referency")?.version).toBe("v1.6.4");
+  });
+
+  it("obriga fotos antes do texto na entrega de imagens", () => {
+    expect(SYSTEM_PROMPT).toMatch(/ORDEM DE ENTREGA \(OBRIGATÓRIA — v1\.6\.4\)/i);
+    expect(SYSTEM_PROMPT).toMatch(/SEM nenhum texto antes das fotos/i);
+    expect(SYSTEM_PROMPT).toMatch(/somente depois.*bloco de imagens/i);
   });
 });

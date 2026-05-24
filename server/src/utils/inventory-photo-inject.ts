@@ -37,6 +37,35 @@ function parseInventoryToolResults(toolResultStrings: string[]): VehiclePhotoBlo
 }
 
 const ENVIAR_FOTOS_REGEX = /ENVIAR_FOTOS?_VEICULOS?[:\s]+([^|\n]+?)(?:\s*\|\s*id:\s*([a-f0-9-]{36}))?(?:\s*\|\s*(\d+))?\s*$/im;
+const MARKDOWN_IMAGE_LINE_RE = /^!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)\s*$/;
+
+/**
+ * Garante ordem de entrega no WhatsApp/Chatwoot: bloco de fotos primeiro, texto depois.
+ * O delivery.ts aplica delay entre imagens e o texto seguinte para preservar a ordem.
+ */
+export function reorderInventoryPhotosBeforeText(assistantText: string): string {
+  if (!assistantText?.trim()) return assistantText;
+  if (!hasAtLeastOneCompleteMarkdownHttpImage(assistantText)) return assistantText;
+
+  const lines = assistantText.split(/\r?\n/);
+  const imageLines = lines.filter((l) => MARKDOWN_IMAGE_LINE_RE.test(l.trim()));
+  if (imageLines.length === 0) return assistantText;
+
+  const firstImageIdx = lines.findIndex((l) => MARKDOWN_IMAGE_LINE_RE.test(l.trim()));
+  const firstTextIdx = lines.findIndex((l) => l.trim() && !MARKDOWN_IMAGE_LINE_RE.test(l.trim()));
+  if (firstImageIdx >= 0 && (firstTextIdx < 0 || firstImageIdx < firstTextIdx)) {
+    return assistantText;
+  }
+
+  const text = lines
+    .filter((l) => !MARKDOWN_IMAGE_LINE_RE.test(l.trim()))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  if (!text) return imageLines.join("\n");
+  return `${imageLines.join("\n")}\n\n${text}`;
+}
 
 export function injectInventoryPhotosIfMissing(params: {
   assistantText: string;
@@ -79,5 +108,5 @@ export function injectInventoryPhotosIfMissing(params: {
 
   const textWithoutCmd = assistantText.replace(/^.*ENVIAR_FOTOS?_VEICULOS?[:\s].*$/gim, "").trim();
   const sep = textWithoutCmd ? "\n\n" : "";
-  return { fullText: `${textWithoutCmd}${sep}${markdown}` };
+  return { fullText: reorderInventoryPhotosBeforeText(`${markdown}${sep}${textWithoutCmd}`) };
 }

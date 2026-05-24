@@ -140,7 +140,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: REF_DISPATCHER,
     followupPrompt: REF_FOLLOWUP,
     skipGreeting: true,
-    version: "v1.6.2",
+    version: "v1.6.4",
     description: "Amanda — SDR Referency (Concessionária)",
   },
   "instituto-vicentim-maekawa": {

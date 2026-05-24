@@ -123,6 +123,18 @@ describe("mergeAdjacentImageAndTextBlocks", () => {
   it("não promove texto com múltiplas linhas para legenda", () => {
     expect(shouldPromoteTextToImageCaption("Linha 1\n\nLinha 2" )).toBe(false);
   });
+
+  it("consolida galeria multi-foto + texto curto em blocos separados (sem legenda)", () => {
+    const parts = [
+      "![foto](https://example.com/1.jpg)\n![foto](https://example.com/2.jpg)",
+      "Dá uma olhada!",
+    ];
+    const blocks = consolidateImageParts(parts);
+    expect(blocks).toEqual([
+      { type: "images", imageUrls: ["https://example.com/1.jpg", "https://example.com/2.jpg"] },
+      { type: "text", content: "Dá uma olhada!" },
+    ]);
+  });
 });
 
 describe("POST_IMAGES delay otimizado — fotos com legenda", () => {

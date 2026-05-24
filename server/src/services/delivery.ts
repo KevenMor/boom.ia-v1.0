@@ -332,7 +332,7 @@ function mergeAdjacentImageAndTextBlocks(blocks: ConsolidatedPart[]): Consolidat
     if (
       b.type === "images" &&
       b.imageUrls &&
-      b.imageUrls.length > 0 &&
+      b.imageUrls.length === 1 &&
       n?.type === "text" &&
       n.content?.trim() &&
       !b.content &&
