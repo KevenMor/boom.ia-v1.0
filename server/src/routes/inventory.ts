@@ -7,6 +7,7 @@ import {
   canManageTenant,
 } from "../services/authorization.js";
 import { probeVideoUrl } from "../services/video-url-probe.js";
+import { decodeHtmlEntities, decodeInventoryRecord } from "../lib/html-entities.js";
 
 const LISTING_URL = "https://pplmotors.com.br/Veiculos";
 const PPL_MOTORS_TENANT_ID = "bc4a1dc9-a205-4b4b-9b6c-47bf677a2728";
@@ -56,20 +57,22 @@ function parseListingPage(html: string): VehicleCard[] {
       let model = "";
       const titleMatch = item.match(/result-item-title[^>]*>[\s\S]*?<a[^>]*>\s*([\s\S]*?)<\/a>/i);
       if (titleMatch) {
-        const titleText = titleMatch[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        const titleText = decodeHtmlEntities(
+          titleMatch[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+        );
         const parts = titleText.split(/\s+/);
         brand = parts[0] || "";
         model = parts.slice(1).join(" ") || "";
       }
 
       const versionMatch = item.match(/versaoVeiculo[^>]*>([^<]+)/);
-      const version = versionMatch ? versionMatch[1].trim() : "";
+      const version = versionMatch ? decodeHtmlEntities(versionMatch[1].trim()) : "";
 
       const priceMatch = item.match(/class="price"[^>]*>[\s\S]*?<\/span>\s*([^<]+)/);
       const price = priceMatch ? parsePrice(priceMatch[1]) : null;
 
       const fuelMatch = item.match(/vehicle-age[^>]*>([^<]+)/);
-      const fuel_type = fuelMatch ? fuelMatch[1].trim() : "";
+      const fuel_type = fuelMatch ? decodeHtmlEntities(fuelMatch[1].trim()) : "";
 
       const yearMatch = item.match(/<span>Ano<\/span>\s*<p>(\d+)<\/p>/);
       const kmMatch = item.match(/<span>Km<\/span>\s*<p>(\d+)<\/p>/);
@@ -84,8 +87,8 @@ function parseListingPage(html: string): VehicleCard[] {
         price,
         year: yearMatch ? parseInt(yearMatch[1]) : null,
         mileage: kmMatch ? parseInt(kmMatch[1]) : null,
-        color: colorMatch ? colorMatch[1].trim() : "",
-        transmission: transMatch ? transMatch[1].trim() : "",
+        color: colorMatch ? decodeHtmlEntities(colorMatch[1].trim()) : "",
+        transmission: transMatch ? decodeHtmlEntities(transMatch[1].trim()) : "",
         fuel_type,
         photo_url,
         detail_url,
@@ -119,7 +122,7 @@ function parseDetailPage(html: string): { photos: string[]; features: string[]; 
     const featRegex = /fa-check"><\/i>\s*([^<]+)/g;
     let fm;
     while ((fm = featRegex.exec(featSection[1])) !== null) {
-      features.push(fm[1].trim());
+      features.push(decodeHtmlEntities(fm[1].trim()));
     }
   }
 
@@ -128,7 +131,7 @@ function parseDetailPage(html: string): { photos: string[]; features: string[]; 
     const optRegex = /fa-check"><\/i>\s*([^<]+)/g;
     let om;
     while ((om = optRegex.exec(optSection[1])) !== null) {
-      optionals.push(om[1].trim());
+      optionals.push(decodeHtmlEntities(om[1].trim()));
     }
   }
 
@@ -199,7 +202,10 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
         const { data, error, count } = await query;
         if (error) throw error;
 
-        return reply.send({ data: data ?? [], total: count ?? 0 });
+        return reply.send({
+          data: (data ?? []).map((row) => decodeInventoryRecord(row as Record<string, unknown>)),
+          total: count ?? 0,
+        });
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         console.error("inventory list error:", err);
@@ -290,7 +296,7 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
         .single();
 
       if (error) throw error;
-      return reply.status(201).send(data);
+      return reply.status(201).send(decodeInventoryRecord(data as Record<string, unknown>));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       console.error("inventory create error:", err);
@@ -394,7 +400,7 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
         .single();
 
       if (error) throw error;
-      return reply.send(data);
+      return reply.send(decodeInventoryRecord(data as Record<string, unknown>));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       console.error("inventory patch error:", err);

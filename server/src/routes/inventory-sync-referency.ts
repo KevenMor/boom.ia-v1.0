@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
 import { filterValidInventoryPhotoUrls } from "../lib/inventory-photo-url.js";
+import { decodeHtmlEntities } from "../lib/html-entities.js";
 
 const BASE_URL = "https://www.referency.com.br";
 const LISTING_URL = `${BASE_URL}/estoque`;
@@ -59,10 +60,10 @@ export function parseReferencyListingPage(html: string): ReferencyVehicleCard[] 
       const photo_url = photoMatch ? normalizeUrl(photoMatch[1]) : "";
 
       const brandMatch = card.match(/<span class="fabricante">([^<]+)<\/span>/);
-      const brand = brandMatch ? brandMatch[1].trim() : "";
+      const brand = brandMatch ? decodeHtmlEntities(brandMatch[1].trim()) : "";
 
       const modelMatch = card.match(/<span class="fabricante">[^<]+<\/span>\s*([^<]+)<\/span>/);
-      const model = modelMatch ? modelMatch[1].trim() : "";
+      const model = modelMatch ? decodeHtmlEntities(modelMatch[1].trim()) : "";
 
       const yearMatch = card.match(/<div class="col-4">(\d{4})\s*\|\s*(\d{4})<\/div>/);
       const year = yearMatch ? parseInt(yearMatch[2]) : null;
@@ -94,19 +95,19 @@ export function parseReferencyDetailPage(html: string): ReferencyVehicleDetail {
   if (infsMatch) {
     const infs = infsMatch[1];
     const versionM = infs.match(/VERSÃO:\s*<\/b>([^<]+)/i);
-    if (versionM) version = versionM[1].trim();
+    if (versionM) version = decodeHtmlEntities(versionM[1].trim());
 
     const transM = infs.match(/TRANSMISSÃO:\s*<\/b>([^<]+)/i);
-    if (transM) transmission = transM[1].trim();
+    if (transM) transmission = decodeHtmlEntities(transM[1].trim());
 
     const fuelM = infs.match(/COMBUSTÍVEL:\s*<\/b>([^<]+)/i);
-    if (fuelM) fuel_type = fuelM[1].trim();
+    if (fuelM) fuel_type = decodeHtmlEntities(fuelM[1].trim());
 
     const colorM = infs.match(/COR EXTERNA:\s*<\/b>([^<]+)/i);
-    if (colorM) color = colorM[1].trim();
+    if (colorM) color = decodeHtmlEntities(colorM[1].trim());
 
     const motorM = infs.match(/MOTOR:\s*<\/b>([^<]+)/i);
-    if (motorM) motor = motorM[1].trim();
+    if (motorM) motor = decodeHtmlEntities(motorM[1].trim());
   }
 
   const photoRegex = /data-fancybox="galeria"[^>]*>\s*<img\s+src="([^"]+)"/g;
@@ -127,7 +128,7 @@ export function parseReferencyDetailPage(html: string): ReferencyVehicleDetail {
     const items = detailMatch[1].match(/<p>-\s*([^<]+)<\/p>/g);
     if (items) {
       description = items
-        .map((i) => i.replace(/<\/?p>/g, "").replace(/^-\s*/, "").trim())
+        .map((i) => decodeHtmlEntities(i.replace(/<\/?p>/g, "").replace(/^-\s*/, "").trim()))
         .join(", ");
     }
   }

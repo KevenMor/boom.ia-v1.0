@@ -19,6 +19,7 @@ import {
   type VehicleSegment,
 } from "../lib/vehicle-segments.js";
 import { buildInventoryPhotosMarkdown, filterValidInventoryPhotoUrls } from "../lib/inventory-photo-url.js";
+import { decodeHtmlEntities } from "../lib/html-entities.js";
 
 export interface ToolExecutionResult {
   success: boolean;
@@ -45,18 +46,6 @@ function sanitizeVehicleParam(val: string | undefined): string | undefined {
   // Remove " e " ou " e" + resto da frase (ex: "Cruze e queria", "Accord e")
   const cleaned = trimmed.replace(/\s+e\s*.*$/i, "").trim();
   return cleaned || undefined;
-}
-
-/** Decodifica entidades HTML para exibição limpa (&#225; → á, &copy; → ®) */
-function decodeHtmlEntities(s: string): string {
-  return s
-    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)))
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&copy;/g, "®");
 }
 
 const COLOR_SYNONYM_GROUPS: string[][] = [

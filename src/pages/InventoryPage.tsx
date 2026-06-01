@@ -18,6 +18,7 @@ import { EditInventoryDialog } from "@/components/inventory/EditInventoryDialog"
 import { DeleteInventoryDialog } from "@/components/inventory/DeleteInventoryDialog";
 import type { InventoryItem } from "@/types/database";
 import { toast } from "sonner";
+import { decodeInventoryDisplayText } from "@/lib/decodeHtmlEntities";
 
 export default function InventoryPage() {
   const { selectedTenantId } = useTenantContext();
@@ -191,7 +192,10 @@ export default function InventoryPage() {
 
                   {items.map((item, i) => {
                     const photoUrl = getPhotoUrl(item);
-                    const vehicleName = [item.brand, item.model, item.version].filter(Boolean).join(" ");
+                    const vehicleName = [item.brand, item.model, item.version]
+                      .filter(Boolean)
+                      .map((part) => decodeInventoryDisplayText(part))
+                      .join(" ");
                     return (
                       <tr
                         key={item.id}
@@ -231,7 +235,10 @@ export default function InventoryPage() {
                           {item.mileage != null ? `${item.mileage.toLocaleString("pt-BR")} km` : "—"}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-sm text-muted-foreground">
-                          {[item.color, item.transmission].filter(Boolean).join(" / ") || "—"}
+                          {[item.color, item.transmission]
+                            .filter(Boolean)
+                            .map((part) => decodeInventoryDisplayText(part))
+                            .join(" / ") || "—"}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3">
                           <Badge
