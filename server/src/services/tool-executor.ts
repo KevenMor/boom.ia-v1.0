@@ -2,6 +2,7 @@ import { createNexusClient } from "./supabase.js";
 import { isTenantModuleEnabled } from "./tenant-modules.js";
 import { runFipeQuery } from "./fipe.js";
 import { runOmnibeesAvailabilityQuery } from "./omnibees-availability.js";
+import { runArtaxnetAvailabilityQuery } from "./artaxnet-availability.js";
 import { runFindNearestUnit } from "./find-nearest-unit.js";
 import { buildHandoffNotification, containsInstitutionNameToken, isBlockedAsName } from "../utils/agendaNotification.js";
 import { sendNotificationToGroup } from "../utils/sendNotification.js";
@@ -627,6 +628,65 @@ async function executeOmnibeesAvailability(
   } catch (e: unknown) {
     const err = e as Error;
     return { success: false, result: null, error: err?.message || "Consulta Omnibees falhou" };
+  }
+}
+
+async function executeArtaxnetAvailability(
+  supabase: ReturnType<typeof createNexusClient>,
+  tool: ToolDef,
+  args: Record<string, unknown>,
+  agentId: string
+): Promise<ToolExecutionResult> {
+  try {
+    if (tool.tenant_id) {
+      const { data: agent } = await supabase.from("agents").select("tenant_id").eq("id", agentId).maybeSingle();
+      if (agent?.tenant_id && agent.tenant_id !== tool.tenant_id) {
+        return {
+          success: false,
+          result: null,
+          error: "Ferramenta não autorizada para o tenant deste agente.",
+        };
+      }
+    }
+    const checkIn = args.checkIn ?? args.check_in ?? args.CheckIn;
+    const checkOut = args.checkOut ?? args.check_out ?? args.CheckOut;
+    if (checkIn == null || checkOut == null || String(checkIn).trim() === "" || String(checkOut).trim() === "") {
+      return { success: false, result: null, error: "Parâmetros check_in e check_out são obrigatórios." };
+    }
+    const data = await runArtaxnetAvailabilityQuery(
+      {
+        checkIn: String(checkIn),
+        checkOut: String(checkOut),
+        adults: args.adults != null ? Number(args.adults) : undefined,
+        children: args.children != null ? Number(args.children) : args.kids != null ? Number(args.kids) : undefined,
+        coupon: args.coupon != null ? String(args.coupon) : undefined,
+      },
+      (tool.execution_config || null) as Record<string, unknown> | null
+    );
+
+    return {
+      success: true,
+      result: {
+        summaryText: data.summaryText,
+        roomCount: data.roomCount,
+        bookingUrl: data.bookingUrl,
+        cartId: data.cartId,
+        hotel: data.hotel,
+        checkIn: data.checkIn,
+        checkOut: data.checkOut,
+        checkInTime: data.checkInTime,
+        checkOutTime: data.checkOutTime,
+        nights: data.nights,
+        adults: data.adults,
+        children: data.children,
+        rooms: data.rooms,
+        otaComparisonEnabled: data.otaComparisonEnabled,
+        otas: data.otas,
+      },
+    };
+  } catch (e: unknown) {
+    const err = e as Error;
+    return { success: false, result: null, error: err?.message || "Consulta Artaxnet falhou" };
   }
 }
 
@@ -1655,6 +1715,9 @@ export async function executeTool(
 
     case "omnibees_availability":
       return executeOmnibeesAvailability(supabase, tool, args, agentId);
+
+    case "artaxnet_availability":
+      return executeArtaxnetAvailability(supabase, tool, args, agentId);
 
     case "calendar_query":
       return executeCalendarQuery(supabase, tool, args, agentId);

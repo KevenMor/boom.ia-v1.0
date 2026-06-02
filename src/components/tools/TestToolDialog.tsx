@@ -23,15 +23,28 @@ function generateExample(tool: Tool | null): string {
     if (tool?.tool_type === "rag_search") return JSON.stringify({ pergunta: "como funciona o tratamento para bruxismo?" }, null, 2);
     if (tool?.tool_type === "suite_gallery_query")
       return JSON.stringify({ nome: "LOFT", contexto: "piscinas (quando o fio for sobre área molhada)" }, null, 2);
+    if (tool?.tool_type === "artaxnet_availability" || tool?.tool_type === "omnibees_availability")
+      return JSON.stringify(
+        { check_in: "2026-06-10", check_out: "2026-06-15", adults: 2, children: 0 },
+        null,
+        2
+      );
     return "{}";
   }
   const example: Record<string, any> = {};
   for (const [key, schema] of Object.entries(params.properties) as [string, any][]) {
+    const k = key.toLowerCase();
     if (schema.type === "string") {
       if (key === "pergunta" || key === "query") example[key] = "como funciona o tratamento para bruxismo?";
+      else if (k === "check_in" || k === "checkin") example[key] = "2026-06-10";
+      else if (k === "check_out" || k === "checkout") example[key] = "2026-06-15";
+      else if (k === "coupon") example[key] = "";
       else example[key] = schema.example || `exemplo_${key}`;
-    } else if (schema.type === "number" || schema.type === "integer") example[key] = schema.example || 1;
-    else if (schema.type === "boolean") example[key] = true;
+    } else if (schema.type === "number" || schema.type === "integer") {
+      if (k === "adults") example[key] = 2;
+      else if (k === "children" || k === "kids") example[key] = 0;
+      else example[key] = schema.example ?? 1;
+    } else if (schema.type === "boolean") example[key] = true;
     else example[key] = null;
   }
   return JSON.stringify(example, null, 2);
@@ -97,15 +110,22 @@ export function TestToolDialog({ tool, open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Play className="h-4 w-4" />
-            Testar Tool: <span className="font-mono text-primary">{tool?.name}</span>
+      <DialogContent className="flex max-h-[85vh] w-[calc(100%-2rem)] max-w-xl flex-col overflow-hidden sm:w-full">
+        <DialogHeader className="min-w-0 shrink-0 pr-8 text-left">
+          <DialogTitle className="space-y-1.5 text-left text-lg font-semibold leading-snug tracking-normal">
+            <span className="flex items-center gap-2">
+              <Play className="h-4 w-4 shrink-0" aria-hidden />
+              Testar Tool
+            </span>
+            {tool?.name ? (
+              <span className="block break-all font-mono text-sm font-normal leading-relaxed text-primary">
+                {tool.name}
+              </span>
+            ) : null}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 overflow-y-auto flex-1 pr-1">
+        <div className="min-w-0 flex-1 space-y-4 overflow-y-auto pr-1">
           {properties.length > 0 && (
             <div>
               <Label className="text-xs text-muted-foreground">Parâmetros esperados</Label>
@@ -123,9 +143,9 @@ export function TestToolDialog({ tool, open, onOpenChange }: Props) {
               id="test-args"
               value={args}
               onChange={(e) => setArgs(e.target.value)}
-              className="font-mono text-xs mt-1"
-              rows={4}
-              placeholder={tool?.tool_type === "rag_search" ? '{"pergunta": "como funciona o tratamento?"}' : '{"key": "value"}'}
+              className="mt-1 min-h-[7rem] font-mono text-xs leading-relaxed"
+              rows={6}
+              placeholder='{"check_in": "2026-06-10", "check_out": "2026-06-15", "adults": 2, "children": 0}'
             />
           </div>
 
@@ -134,8 +154,8 @@ export function TestToolDialog({ tool, open, onOpenChange }: Props) {
               <Label className="flex items-center gap-1 text-xs text-green-500">
                 <CheckCircle2 className="h-3 w-3" /> Resultado
               </Label>
-              <div className="mt-1 h-64 overflow-y-auto rounded-md border bg-muted p-3">
-                <pre className="text-xs font-mono whitespace-pre-wrap break-all">{result}</pre>
+              <div className="mt-1 max-h-64 overflow-y-auto rounded-md border bg-muted p-3">
+                <pre className="whitespace-pre-wrap break-words font-mono text-xs">{result}</pre>
               </div>
             </div>
           )}
@@ -146,7 +166,7 @@ export function TestToolDialog({ tool, open, onOpenChange }: Props) {
                 <XCircle className="h-3 w-3" /> Erro
               </Label>
               <ScrollArea className="mt-1 max-h-48 rounded-md border border-destructive/20 bg-destructive/5 p-3">
-                <pre className="text-xs font-mono whitespace-pre-wrap break-all">{error}</pre>
+                <pre className="whitespace-pre-wrap break-words font-mono text-xs">{error}</pre>
               </ScrollArea>
             </div>
           )}

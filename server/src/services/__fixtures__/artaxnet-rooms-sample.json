@@ -1,0 +1,983 @@
+{
+  "rooms": {
+    "Standard ": [
+      {
+        "id": 531,
+        "price": 1125,
+        "rejected": false,
+        "allot": 2,
+        "room_type": {
+          "id": 380,
+          "name": "Standard ",
+          "description": " Quarto com cama casal Queen size, cama de solteiro box, banheiro privativo com box de vidro, ar condicionado, ventilador de teto, TV Led 32\" e frigobar</p> A diária inclui o café da manhã, roupa de cama e banho e cadeiras e guarda sol para uso na praia (não temos toalhas de praia/piscina) </p> Entrada a partir das 14h e saída até meio dia</p>",
+          "files": [
+            {
+              "id": 1562,
+              "filename": null,
+              "uri": "https://artaxnet-assets.s3.amazonaws.com/uploads/images/800x600/5ebed23724f2b.jpg",
+              "thumbnail_uri": "https://artaxnet-assets.s3.amazonaws.com/uploads/images/thumbnails/5ebed23724f2b.jpg",
+              "original_uri": "https://artaxnet-assets.s3.amazonaws.com/uploads/images/original/5ebed23724f2b.jpg",
+              "filemime": null,
+              "filesize": null,
+              "status": null,
+              "order": null,
+              "property_id": null,
+              "created_at": "2020-05-15T17:32:40.000000Z",
+              "updated_at": "2020-05-15T17:32:40.000000Z",
+              "deleted_at": null,
+              "pivot": {
+                "room_type_id": 380,
+                "file_id": 1562
+              }
+            }
+          ]
+        },
+        "rateplan": {
+          "board": {
+            "id": 1,
+            "name": "Café da manhã",
+            "system_name": "breakfast"
+          },
+          "mn": 2,
+          "label": "TARIFA BÁSICA - Pagto de 50% no ato da reserva e 50% no checkin OU 100% no ato da reserva, no cartão em até 6x sem juros"
+        },
+        "cancellation_policy": {
+          "pt-BR": "O hóspede pode cancelar gratuitamente 30 dias antes da chegada O hóspede deverá pagar 50% do preço total em caso de cancelamento nos 30 dias anteriores à chegada.",
+          "en": "The guest can cancel free of charge 30 days before arrival The guest must pay 50% the total price in case of cancellation in 30 days prior to arrival.",
+          "es": "El huésped puede cancelar gratuitamente 30 días antes de la llegada El huésped deberá pagar 50% del precio total en caso de cancelación en 30 días anteriores a la llegada."
+        },
+        "natural_language_guest": {
+          "pt-BR": "Você deverá efetuar um pré-pagamento de 50% do preço total após a reserva. Este pré-pagamento pode ser cobrado a qualquer momento antes do fim do período de cancelamento grátis",
+          "en": "You will need to make a prepayment of 50% the total price after booking. This prepayment can be charged at any time before the end of the free cancellation period",
+          "es": "Deberá realizar un pago anticipado de 50% del precio total después de la reserva. Este pago anticipado puede cobrarse en cualquier momento antes de que finalice el periodo de cancelación gratuita"
+        },
+        "property": {
+          "checkin": "02:00 PM",
+          "checkout": "12:00 PM",
+          "name": "Pousada Flores do Lázaro",
+          "profile": {
+            "active_otas_comparation": 1
+          }
+        }
+      }
+    ],
+    "Superior ": [
+      {
+        "id": 533,
+        "price": 1250,
+        "rejected": false,
+        "allot": 1,
+        "room_type": {
+          "id": 382,
+          "name": "Superior ",
+          "description": " Quarto no primeiro piso com Varanda, com 1 cama de casal Queen size e 1 cama de solteiro box, com ar condicionado, ventilador de teto, TV Led 32\" e frigobar.</p> A diária inclui o café da manhã, roupa de cama e banho e cadeiras e guarda sol para uso na praia (não temos toalhas de praia/piscina) </p> Entrada a partir das 14h e saída até meio dia</p>",
+          "files": [
+            {
+              "id": 1749,
+              "filename": null,
+              "uri": "https://artaxnet-assets.s3.amazonaws.com/uploads/images/800x600/5ed698e773c48.jpg",
+              "thumbnail_uri": "https://artaxnet-assets.s3.amazonaws.com/uploads/images/thumbnails/5ed698e773c48.jpg",
+              "original_uri": "https://artaxnet-assets.s3.amazonaws.com/uploads/images/original/5ed698e773c48.jpg",
+              "filemime": null,
+              "filesize": null,
+              "status": null,
+              "order": null,
+              "property_id": null,
+              "created_at": "2020-06-02T18:22:32.000000Z",
+              "updated_at": "2020-06-02T18:22:32.000000Z",
+              "deleted_at": null,
+              "pivot": {
+                "room_type_id": 382,
+                "file_id": 1749
+              }
+            }
+          ]
+        },
+        "rateplan": {
+          "board": {
+            "id": 1,
+            "name": "Café da manhã",
+            "system_name": "breakfast"
+          },
+          "mn": 2,
+          "label": "TARIFA BÁSICA - Pagto de 50% no ato da reserva e 50% no checkin OU 100% no ato da reserva, no cartão em até 6x sem juros"
+        },
+        "cancellation_policy": {
+          "pt-BR": "O hóspede pode cancelar gratuitamente 30 dias antes da chegada O hóspede deverá pagar 50% do preço total em caso de cancelamento nos 30 dias anteriores à chegada.",
+          "en": "The guest can cancel free of charge 30 days before arrival The guest must pay 50% the total price in case of cancellation in 30 days prior to arrival.",
+          "es": "El huésped puede cancelar gratuitamente 30 días antes de la llegada El huésped deberá pagar 50% del precio total en caso de cancelación en 30 días anteriores a la llegada."
+        },
+        "natural_language_guest": {
+          "pt-BR": "Você deverá efetuar um pré-pagamento de 50% do preço total após a reserva. Este pré-pagamento pode ser cobrado a qualquer momento antes do fim do período de cancelamento grátis",
+          "en": "You will need to make a prepayment of 50% the total price after booking. This prepayment can be charged at any time before the end of the free cancellation period",
+          "es": "Deberá realizar un pago anticipado de 50% del precio total después de la reserva. Este pago anticipado puede cobrarse en cualquier momento antes de que finalice el periodo de cancelación gratuita"
+        },
+        "property": {
+          "checkin": "02:00 PM",
+          "checkout": "12:00 PM",
+          "name": "Pousada Flores do Lázaro",
+          "profile": {
+            "active_otas_comparation": 1
+          }
+        }
+      }
+    ]
+  },
+  "roomsUnavailable": {
+    "376": [
+      {
+        "id": 529,
+        "room_type_id": 376,
+        "rateplan_id": 114,
+        "property_id": 42,
+        "created_at": null,
+        "updated_at": "2023-09-07T18:22:49.000000Z",
+        "deleted_at": null,
+        "type": "percent",
+        "price_1": "0.00",
+        "price_2": null,
+        "price_3": null,
+        "price_4": null,
+        "price_5": null,
+        "price_6": null,
+        "price_7": null,
+        "price_8": null,
+        "price_9": null,
+        "price_10": null,
+        "price_11": null,
+        "price_12": null,
+        "price_13": null,
+        "price_14": null,
+        "price_15": null,
+        "price_16": null,
+        "price_17": null,
+        "price_18": null,
+        "price_19": null,
+        "price_20": null,
+        "price_21": null,
+        "price_22": null,
+        "price_23": null,
+        "price_24": null,
+        "price_25": null,
+        "price_26": null,
+        "price_27": null,
+        "price_28": null,
+        "price_29": null,
+        "price_30": null,
+        "price_31": null,
+        "price_32": null,
+        "price_33": null,
+        "price_34": null,
+        "price_35": null,
+        "price_36": null,
+        "price_37": null,
+        "price_38": null,
+        "price_39": null,
+        "price_40": null,
+        "price_41": null,
+        "price_42": null,
+        "price_43": null,
+        "price_44": null,
+        "price_45": null,
+        "price_46": null,
+        "price_47": null,
+        "price_48": null,
+        "price_49": null,
+        "price_50": null,
+        "cancellation_policy": {
+          "pt-BR": "O hóspede pode cancelar gratuitamente 30 dias antes da chegada O hóspede deverá pagar 50% do preço total em caso de cancelamento nos 30 dias anteriores à chegada.",
+          "en": "The guest can cancel free of charge 30 days before arrival The guest must pay 50% the total price in case of cancellation in 30 days prior to arrival.",
+          "es": "El huésped puede cancelar gratuitamente 30 días antes de la llegada El huésped deberá pagar 50% del precio total en caso de cancelación en 30 días anteriores a la llegada."
+        },
+        "natural_language_guest": {
+          "pt-BR": "Você deverá efetuar um pré-pagamento de 50% do preço total após a reserva. Este pré-pagamento pode ser cobrado a qualquer momento antes do fim do período de cancelamento grátis",
+          "en": "You will need to make a prepayment of 50% the total price after booking. This prepayment can be charged at any time before the end of the free cancellation period",
+          "es": "Deberá realizar un pago anticipado de 50% del precio total después de la reserva. Este pago anticipado puede cobrarse en cualquier momento antes de que finalice el periodo de cancelación gratuita"
+        },
+        "rejected": false,
+        "rejected_reason": [],
+        "allot": 0,
+        "quantity": 0,
+        "price": 1050,
+        "previous_price": 1050,
+        "rateplan": {
+          "id": 114,
+          "property_id": 42,
+          "price_fluctuation": 0,
+          "price_fluctuation_type": "percentage",
+          "parent_id": 0,
+          "label": "TARIFA BÁSICA - Pagto de 50% no ato da reserva e 50% no checkin OU 100% no ato da reserva, no cartão em até 6x sem juros",
+          "enabled": 1,
+          "published_api": 1,
+          "published": 1,
+          "name": "ONLINE",
+          "mn": 2,
+          "mx": 0,
+          "ss": null,
+          "cut": null,
+          "ctd": null,
+          "cta": null,
+          "board_id": 1,
+          "prepayment": null,
+          "auto_confirmation": 1,
+          "prepayment_value": null,
+          "noshow": null,
+          "deadline_cancellation": null,
+          "refund_type": null,
+          "rate_single": null,
+          "cancellation_policy_id": 481,
+          "min_advanced_booking_offset": null,
+          "max_advanced_booking_offset": null,
+          "require_card": 1,
+          "created_at": "2020-05-06T16:44:24.000000Z",
+          "updated_at": "2023-08-09T16:43:45.000000Z",
+          "deleted_at": null,
+          "board": {
+            "id": 1,
+            "name": "Café da manhã",
+            "system_name": "breakfast"
+          },
+          "cancellation_policy": {
+            "id": 481,
+            "property_id": 42,
+            "penalty_after_reservation": 0,
+            "deadline_days": "30.00",
+            "deadline_hours": 720,
+            "penalty_after_deadline_percentage": 50,
+            "penalty_after_deadline_nights": null,
+            "prepayment": 1,
+            "prepayment_charge": null,
+            "prepayment_interval": null,
+            "noshow": 0,
+            "system": 0,
+            "created_at": "2020-05-06T16:41:23.000000Z",
+            "updated_at": "2020-05-06T16:41:23.000000Z",
+            "deleted_at": null,
+            "natural_language": "El huésped puede cancelar gratuitamente 30 días antes de la llegada El huésped deberá pagar 50% del precio total en caso de cancelación en 30 días anteriores a la llegada.",
+            "prepayment_natural_language": "Se cobrará al huésped un pago anticipado de 50% del precio total después de la reserva. Puede cobrar este prepago al huésped en cualquier momento antes de que finalice el periodo de cancelación gratuita",
+            "natural_language_guest": "Puede cancelar gratuitamente hasta 30 días antes de la llegada. Deberá pagar 50% el precio total de la reserva en caso de cancelación en 30 días anteriores a la llegada.",
+            "prepayment_natural_language_guest": "Deberá realizar un pago anticipado de 50% del precio total después de la reserva. Este pago anticipado puede cobrarse en cualquier momento antes de que finalice el periodo de cancelación gratuita",
+            "name": "Flexible - 30 días - Pago Anticipado"
+          }
+        },
+        "room_type": {
+          "id": 376,
+          "weight": null,
+          "sync": 0,
+          "property_id": 42,
+          "type_id": 1,
+          "size": 10,
+          "file_id": 1745,
+          "name": "Básico Casal",
+          "initials": "BAC",
+          "private": 1,
+          "description": " Quarto menor que os demais, com 1 cama de casal. Possui banheiro privativo, ar condicionado, ventilador de teto, TV Led 32\" e frigobar. </p> A diária inclui o café da manhã, roupa de cama e banho e cadeiras e guarda sol para uso na praia (não temos toalhas de praia/piscina) </p> Entrada a partir das 14h e saída até meio dia</p>",
+          "allotment": 2,
+          "beds": 1,
+          "rack_rate": null,
+          "party_standard": 2,
+          "party_max": 2,
+          "party_min": 1,
+          "enabled": 1,
+          "color": "#98b3d7",
+          "smoking": null,
+          "gender": 0,
+          "adults_max": 2,
+          "kids_max": 0,
+          "day_use": 0,
+          "age_courtesy": 0,
+          "kids_courtesy": 0,
+          "exclude_from_reports": 0,
+          "published_api": 1,
+          "published": 1,
+          "created_at": "2020-05-06T16:36:03.000000Z",
+          "updated_at": "2023-08-08T22:41:18.000000Z",
+          "deleted_at": null,
+          "services": [],
+          "amenities": [
+            {
+              "id": 1,
+              "name": "Free Wi-fi",
+              "description": "",
+              "icon": "fa-wifi",
+              "created_at": null,
+              "updated_at": "2024-07-01T16:57:28.000000Z",
+              "deleted_at": null,
+              "pivot": {
+                "room_type_id": 376,
+                "amenity_id": 1
+              }
+            },
+            {
+              "id": 7,
+              "name": "Frigobar",
+              "description": null,
+              "icon": "fa-microchip",
+              "created_at": "2018-04-04T16:46:50.000000Z",
+              "updated_at": "2018-04-18T20:40:33.000000Z",
+              "deleted_at": null,
+              "pivot": {
+                "room_type_id": 376,
+                "amenity_id": 7
+              }
+            },
+            {
+              "id": 8,
+              "name": "TV",
+              "description": null,
+              "icon": "fa-tv",
+              "created_at": "2018-08-22T21:31:50.000000Z",
+              "updated_at": "2018-08-22T21:31:50.000000Z",
+              "deleted_at": null,
+              "pivot": {
+                "room_type_id": 376,
+                "amenity_id": 8
+              }
+            },
+            {
+              "id": 11,
+              "name": "Ar Condicionado",
+              "description": "",
+              "icon": "fa-snowflake-o",
+              "created_at": "2018-08-22T21:39:48.000000Z",
+              "updated_at": "2025-09-01T18:39:45.000000Z",
+              "deleted_at": null,
+              "pivot": {
+                "room_type_id": 376,
+                "amenity_id": 11
+              }
+            },
+            {
+              "id": 13,
+              "name": "Private bathroom",
+              "description": "",
+              "icon": "fa-shower",
+              "created_at": "2018-08-22T21:40:09.000000Z",
+              "updated_at": "2024-07-01T17:00:33.000000Z",
+              "deleted_at": null,
+              "pivot": {
+                "room_type_id": 376,
+                "amenity_id": 13
+              }
+            },
+            {
+              "id": 85,
+              "name": "Ventilador de teto",
+              "description": null,
+              "icon": null,
+              "created_at": null,
+              "updated_at": null,
+              "deleted_at": null,
+              "pivot": {
+                "room_type_id": 376,
+                "amenity_id": 85
+              }
+            },
+            {
+              "id": 129,
+              "name": "Cama Queen",
+              "description": null,
+              "icon": null,
+              "created_at": null,
+              "updated_at": null,
+              "deleted_at": null,
+              "pivot": {
+                "room_type_id": 376,
+                "amenity_id": 129
+              }
+            }
+          ],
+          "files": [
+            {
+              "id": 1745,
+              "filename": null,
+              "uri": "https://artaxnet-assets.s3.amazonaws.com/uploads/images/800x600/5ed69807400c3.jpg",
+              "thumbnail_uri": "https://artaxnet-assets.s3.amazonaws.com/uploads/images/thumbnails/5ed69807400c3.jpg",
+              "original_uri": "https://artaxnet-assets.s3.amazonaws.com/uploads/images/original/5ed69807400c3.jpg",
+              "filemime": null,
+              "filesize": null,
+              "status": null,
+              "order": null,
+              "property_id": null,
+              "created_at": "2020-06-02T18:18:47.000000Z",
+              "updated_at": "2020-06-02T18:18:47.000000Z",
+              "deleted_at": null,
+              "pivot": {
+                "room_type_id": 376,
+                "file_id": 1745
+              }
+            },
+            {
+              "id": 1746,
+              "filename": null,
+              "uri": "https://artaxnet-assets.s3.amazonaws.com/uploads/images/800x600/5ed6981beae38.jpg",
+              "thumbnail_uri": "https://artaxnet-assets.s3.amazonaws.com/uploads/images/thumbnails/5ed6981beae38.jpg",
+              "original_uri": "https://artaxnet-assets.s3.amazonaws.com/uploads/images/original/5ed6981beae38.jpg",
+              "filemime": null,
+              "filesize": null,
+              "status": null,
+              "order": null,
+              "property_id": null,
+              "created_at": "2020-06-02T18:19:09.000000Z",
+              "updated_at": "2020-06-02T18:19:09.000000Z",
+              "deleted_at": null,
+              "pivot": {
+                "room_type_id": 376,
+                "file_id": 1746
+              }
+            }
+          ],
+          "allotments": [
+            {
+              "id": 204224,
+              "property_id": 42,
+              "room_type_id": 376,
+              "month": 6,
+              "year": 2026,
+              "allotment": {
+                "1": {
+                  "date": "2026-06-01",
+                  "weekday": 1,
+                  "allotment": 2
+                },
+                "2": {
+                  "date": "2026-06-02",
+                  "weekday": 2,
+                  "allotment": 2
+                },
+                "3": {
+                  "date": "2026-06-03",
+                  "weekday": 3,
+                  "allotment": 2
+                },
+                "4": {
+                  "date": "2026-06-04",
+                  "weekday": 4,
+                  "allotment": 0
+                },
+                "5": {
+                  "date": "2026-06-05",
+                  "weekday": 5,
+                  "allotment": 0
+                },
+                "6": {
+                  "date": "2026-06-06",
+                  "weekday": 6,
+                  "allotment": 0
+                },
+                "7": {
+                  "date": "2026-06-07",
+                  "weekday": 7,
+                  "allotment": 0
+                },
+                "8": {
+                  "date": "2026-06-08",
+                  "weekday": 1,
+                  "allotment": 2
+                },
+                "9": {
+                  "date": "2026-06-09",
+                  "weekday": 2,
+                  "allotment": 2
+                },
+                "10": {
+                  "date": "2026-06-10",
+                  "weekday": 3,
+                  "allotment": 2
+                },
+                "11": {
+                  "date": "2026-06-11",
+                  "weekday": 4,
+                  "allotment": 1
+                },
+                "12": {
+                  "date": "2026-06-12",
+                  "weekday": 5,
+                  "allotment": 0
+                },
+                "13": {
+                  "date": "2026-06-13",
+                  "weekday": 6,
+                  "allotment": 0
+                },
+                "14": {
+                  "date": "2026-06-14",
+                  "weekday": 7,
+                  "allotment": 1
+                },
+                "15": {
+                  "date": "2026-06-15",
+                  "weekday": 1,
+                  "allotment": 1
+                },
+                "16": {
+                  "date": "2026-06-16",
+                  "weekday": 2,
+                  "allotment": 1
+                },
+                "17": {
+                  "date": "2026-06-17",
+                  "weekday": 3,
+                  "allotment": 1
+                },
+                "18": {
+                  "date": "2026-06-18",
+                  "weekday": 4,
+                  "allotment": 1
+                },
+                "19": {
+                  "date": "2026-06-19",
+                  "weekday": 5,
+                  "allotment": 1
+                },
+                "20": {
+                  "date": "2026-06-20",
+                  "weekday": 6,
+                  "allotment": 0
+                },
+                "21": {
+                  "date": "2026-06-21",
+                  "weekday": 7,
+                  "allotment": 1
+                },
+                "22": {
+                  "date": "2026-06-22",
+                  "weekday": 1,
+                  "allotment": 1
+                },
+                "23": {
+                  "date": "2026-06-23",
+                  "weekday": 2,
+                  "allotment": 1
+                },
+                "24": {
+                  "date": "2026-06-24",
+                  "weekday": 3,
+                  "allotment": 1
+                },
+                "25": {
+                  "date": "2026-06-25",
+                  "weekday": 4,
+                  "allotment": 1
+                },
+                "26": {
+                  "date": "2026-06-26",
+                  "weekday": 5,
+                  "allotment": 1
+                },
+                "27": {
+                  "date": "2026-06-27",
+                  "weekday": 6,
+                  "allotment": 1
+                },
+                "28": {
+                  "date": "2026-06-28",
+                  "weekday": 7,
+                  "allotment": 2
+                },
+                "29": {
+                  "date": "2026-06-29",
+                  "weekday": 1,
+                  "allotment": 2
+                },
+                "30": {
+                  "date": "2026-06-30",
+                  "weekday": 2,
+                  "allotment": 2
+                }
+              },
+              "created_at": "2024-06-01T03:02:51.000000Z",
+              "updated_at": null
+            }
+          ]
+        },
+        "property": {
+          "id": 42,
+          "nfe": 0,
+          "nfe_plan_id": null,
+          "uphotel": null,
+          "account_id": null,
+          "property_type_id": 2,
+          "primary": null,
+          "gateway_id": 1,
+          "published": 1,
+          "slug": "pousada-flores-do-lazaro",
+          "webmail": null,
+          "url": null,
+          "user": "reserva@floresdolazaro.com.br",
+          "name": "Pousada Flores do Lázaro",
+          "cnpj": "09304280000104",
+          "file_id": 1781,
+          "email": "reserva@floresdolazaro.com.br",
+          "body": " Estamos localizados em Ubatuba, na praia do Lázaro, a apenas 200m do mar</p> Contamos com piscina externa climatizada, restaurante/lanchonete servindo pratos executivos, lanches e porções (pagos à parte) das 12 às 20:50h (pedidos até as 20:30), Wi-Fi gratuito, micro-ondas de uso exclusivo para mamadeiras e papinhas de bebê e todos os ambientes monitorados por sistema de câmeras de segurança, inclusive externas.</p> </p> Nossas diárias incluem um delicioso café da manhã caseiro, lençóis e toalhas nos quartos e cadeiras e guarda sol para uso na praia durante a estadia</p>",
+          "star": 0,
+          "lat": "-23.501936",
+          "lon": "-45.132857",
+          "checkin": "02:00 PM",
+          "checkout": "12:00 PM",
+          "additional": " CONDIÇÕES GERAIS E REGULAMENTO - FAVOR LER ATENTAMENTE ANTES DE EFETUAR O PAGAMENTO (O pagamento efetuado significa sua concordância):</p> * Pagamento:</strong> 50% (ou 100% conforme negociação) via depósito bancário/PIX ou cartão de crédito no ato da reserva e Saldo a pagar no Checkin em dinheiro ou cartão (se houver)</p> *PARA PAGAMENTO NO CARTÃO DE CREDITO, SELECCIONE A OPÇÃO DE PIX E ENTRE EM CONTATO PELO NOSSO WHATSAPP, FAREMOS O ENVIO DO LINK DE PAGAMENTO*</u></strong></p> * Horários:</strong> Entrada: a partir das 14hs / Saída até Meio dia - para entrada antes ou saída após o horário regular, será cobrada taxa ref. a meia diária, mediante disponibilidade. Verifique valor com a equipe de atendimento</p> * Inclui:</strong> café da manhã, roupa de cama/banho e cadeiras e 1 guarda sol para uso durante a estadia ( não temos toalhas de praia/piscina</strong>). </p> * Crianças</strong>: 1 criança até 3 anos por quarto será cortesia pelo uso de cama existente ou inclusão de cama auxiliar, quando for possível. Por favor informar número correto de adultos/crianças no momento da reserva, para evitar cobrança extra no momento do checkin.</p> * Estrutura da pousada</strong>: estamos a 200m do mar na praia do Lázaro em Ubatuba, temos piscina externa aquecida e restaurante-lanchonete servindo pratos, lanches e porções das 12 às 20:30hs (cobrados à parte). Internet Wifi gratuita em toda a área comum, ambientes monitorados por sistema de câmeras de segurança, inclusive externas</p> * Observações e Regulamento:</strong></p> Café da manhã: </strong>servido das </strong>8 às 10hs; Limpeza dos quartos: </strong>realizada diariamente mediante entrega das chaves até as 11hs na Recepção, após este horário, a limpeza não será efetuada neste dia - as toalhas de banho serão trocadas diariamente se estiverem molhadas e os lençóis, a cada 3 dias. Para troca diária de lençóis, será cobrado adicional de 20% no total de diárias</strong>. Piscina:</strong> uso liberado das 9 as 22hs; Restaurante:</strong> funciona diariamente do Meio dia às 20:20h,(pedidos até as 20:30). não cobramos 10% de taxa de serviço e solicita-se que pedidos sejam feitos na Recepção pois não temos garçons; Silêncio</strong>: pedimos respeito ao período de silêncio, das 22hs às 9hs; Energia: </strong>110V; Toalhas: </strong>Não fornecemos toalhas para piscina/praia e não é permitido o uso das toalhas de banho fora dos quartos; Animais de estimação: </strong>não aceitamos animais de nenhum porte; Visitantes: </strong>não é permitida a presença de visitantes nos apartamentos e nem na área comum da pousada; Fumo: </strong>não é permitido fumar nos quartos, varandas ou nas áreas comuns da pousada, odor intenso no quarto será passível de multa de 20% do total das diárias; Frigobar: </strong>uso livre, sem taxa adicional. Não é permitido armazenar frutos do mar</strong>, como camarão e peixe cru, o odor intenso inviabiliza o uso pelo próximo hóspede e pode ser passível de multa; Microondas para mamadeiras: </strong>localizado na área comum e exclusivo para aquecer mamadeiras, sem exceção; Piscina e área comum</strong>: a profundidade é 1,45m na área mais funda e 75cm na mais rasa, crianças devem estar acompanhadas de pais ou responsáveis, jogos de bola não permitidos, proibido caixas de som, cooler/isopor, narguilé e garrafas ou itens de vidro (whisky, long neck e bebidas afins) na área comum, bem como consumo de comidas externas como marmitas, marmitex, pizza etc; Capacidade e ocupação:</strong> trabalhamos com reservas para grupos familiares de até 8 pessoas e, por esse motivo, não recebemos excursões ou grupos maiores. Essa limitação é essencial para garantir o conforto de todos os hóspedes e o bom uso das áreas comuns. Em caso de descumprimento dessa regra, a pousada se reserva o direito de intervir e tomar as medidas necessárias para readequação da ocupação, a fim de preservar a experiência dos demais hóspedes; Saída antecipada: </strong>O pagamento do período integral reservado é devido mesmo que a unidade seja desocupada antes do vencimento do período, sem exceção; Veículo</strong>: não temos estacionamento ou garagem, mas vagas limitadas e rotativas em nosso recuo frontal. Quando as mesmas esgotam-se, é possível estacionar na rua, na calçada em frente ou na lateral da pousada; Objetos esquecidos: </strong>serão guardados por até 90 dias e depois, serão destinados à assistência social do município. Para envio via correios, haverá uma taxa de R$ 70,00 + despesas postais.</p> * Política de Alteração e Cancelamento – </u></strong> por favor ler atentamente antes de efetuar a reserva</u></strong>: TARIFA BASE: para pedidos de alteração/cancelamento de reserva solicitados com até 30 dias de antecedência à chegada não haverá multa e qualquer valor pago será 100% reembolsado. Com menor antecedência do que 30 dias da chegada, em qualquer alteração ou pedido de cancelamento, haverá multa de 50% do valor do pacote com reembolso do saldo, se houver. </u>TARIFA NÃO REEMBOLSÁVEL (20/12 a 31/01/27): não permite alteração ou cancelamento em nenhuma hipótese, multa de 50% do valor do pacote em qualquer prazo.</p>",
+          "zip_code": "11680-000",
+          "address": "Rua Jabuticabeira, 324",
+          "neighborhood": "Praia do Lázaro",
+          "city_id": 5329,
+          "city_name": "Ubatuba",
+          "state_id": 25,
+          "state_name": "São Paulo",
+          "country_id": 76,
+          "country_name": "Brasil",
+          "phone_country_code": null,
+          "phone": "(12) 99784-9716",
+          "cellphone_country_code": null,
+          "cellphone": "0",
+          "currency": "BRL",
+          "uuid": null,
+          "logo_id": 1782,
+          "send_emails": 1,
+          "site": null,
+          "vat": null,
+          "tax": null,
+          "channel_manager": null,
+          "city_tax": null,
+          "adults_only": null,
+          "child_from": 0,
+          "adult_from": 16,
+          "age_boards_adult": 0,
+          "created_at": "2020-05-06T15:44:59.000000Z",
+          "updated_at": "2026-04-14T00:07:09.000000Z",
+          "deleted_at": null,
+          "service_charger": null,
+          "receive_cc": 1,
+          "notify_details": null,
+          "conditions_text": null,
+          "city_tax_type": null,
+          "notify_voucher": null,
+          "cancellation_policy_2": null,
+          "notify_card": null,
+          "cancellation_policy_1": null,
+          "rate_reference": null,
+          "cancellation_policy_3": null,
+          "rate_title": null,
+          "rate_condition": null,
+          "breakfast": null,
+          "stay_max": null,
+          "cancellation_deadline": null,
+          "room_only": null,
+          "adult_breakfast": null,
+          "child_breakfast": null,
+          "half_board": null,
+          "adult_half_board": null,
+          "child_half_board": null,
+          "full_board": null,
+          "adult_full_board": null,
+          "child_full_board": null,
+          "all_included": null,
+          "adult_all_included": null,
+          "child_all_included": null,
+          "accomodation_type": null,
+          "noshow": null,
+          "antecipation_max": null,
+          "prepayment_value": null,
+          "prepayment": null,
+          "auto_confirmation": null,
+          "noshow_fee_value": null,
+          "prepayment_type": null,
+          "refund_type": null,
+          "noshow_fee_type": null,
+          "deadline_cancellation": null,
+          "require_card_cvc": null,
+          "send_email_guest_ota": 1,
+          "user_id": 198,
+          "deadline": 0,
+          "subscribed_for_test_mode": 0,
+          "active_pre_reservation_link": null,
+          "cms_email": 0,
+          "language": "pt-BR",
+          "share_owners_rooms": 0,
+          "show_owners_prices": 1,
+          "change_booking_ota": 1,
+          "attempts_credit_card_fail": 5,
+          "default_color_header": "#586b8e",
+          "gateway_setting": {
+            "property_id": 42,
+            "gateway_id": 1,
+            "version_account": null,
+            "key_public": null
+          },
+          "payment_methods": [
+            "transfer"
+          ],
+          "min_price_installments": 200,
+          "taxes": [],
+          "gateway_settings": [
+            {
+              "property_id": 42,
+              "gateway_id": 1,
+              "version_account": null,
+              "key_public": null
+            }
+          ],
+          "gateway": {
+            "id": 1,
+            "name": "Artax",
+            "currency": "BRL",
+            "tax_ted": null,
+            "created_at": null,
+            "updated_at": null,
+            "deleted_at": null
+          },
+          "profile": {
+            "id": 43,
+            "property_id": 42,
+            "estimated_checkin": 1,
+            "webcheckin": 1,
+            "webcheckin_collect_cc": 1,
+            "webcheckin_collect_cc_partial_payment": 0,
+            "webcheckin_hours": 72,
+            "webcheckin_policies": null,
+            "min_transfer_hour": 24,
+            "room_label": "Quartos",
+            "checkout": 1,
+            "kids": 0,
+            "checkin_label": "Check-in",
+            "checkout_label": "Check-out",
+            "adults_label": "Adultos",
+            "primary": null,
+            "secondary": null,
+            "accent": null,
+            "positive": null,
+            "negative": null,
+            "info": null,
+            "warning": null,
+            "day_use": null,
+            "day_use_text": null,
+            "cost_center_id": 321,
+            "custom_script_approved": 0,
+            "custom_script": "(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':\r\nnew Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],\r\nj=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=\r\n'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);\r\n})(window,document,'script','dataLayer','GTM-5ZDWTH9N');",
+            "custom_no_script": " </iframe>",
+            "custom_no_script_approved": 0,
+            "select_accommodation_label": "Selecione",
+            "accommodation_capacity_label": "Capacidade",
+            "accommodation_price_label": "Preço",
+            "accommodation_details_label": "Escolhas",
+            "enable_multiproperty": 0,
+            "multiproperties": "null",
+            "accept_lgpd_label": "Políticas",
+            "request_card_title": null,
+            "request_card_desc": null,
+            "active_otas_comparation": 1,
+            "default_owner_report_comment": null,
+            "text_owner_panel": null,
+            "survey_rating_satisfaction": 1,
+            "survey_rating_title": "Pode avaliar a sua estadia?",
+            "survey_rating_desc": "Agradecemos por nos escolher para a sua recente estadia! Foi um prazer recebê-los e esperamos que retornem em breve!\r\nSua avaliação é muito importante para nós! Seria possível gastar uns minutos e nos avaliar?",
+            "survey_rating_question": 1,
+            "survey_rating_send": 0,
+            "created_at": "2020-05-06T15:44:59.000000Z",
+            "updated_at": "2025-05-20T01:47:16.000000Z",
+            "disable_fee_in_owner_reports": 0,
+            "consumption_hosted": 1,
+            "additional_information_payment_ebe": "Optando pela transferência bancária, seu prazo será de 60 minutos (1 hora) a partir deste momento para efetuar o depósito ou pix. Por gentileza envie o comprovante ao Whatsapp 012 99784 9716",
+            "daily_summary_schedule": null,
+            "daily_summary_email": null,
+            "daily_summary_email_cc": null,
+            "webcheckin_collect_file_document": 0,
+            "show_ebe_capacity": 1,
+            "default_view_calendar": "CalendarView30",
+            "change_price_mark_calendar": 0,
+            "rm_email_send": null,
+            "default_obs_estimate": null,
+            "ignore_restrictions_create_booking": 1,
+            "checkout_not_payment": 0,
+            "webcheckin_show_total": 1,
+            "start_search_rooms_ebe": 1,
+            "enable_send_whatsapp": 0,
+            "search_document_api": 1,
+            "script_ebe_form_room_type": 0,
+            "nfse_calculation_base": null,
+            "post_checkin_clean_order": 0,
+            "disable_service_in_owner_reports": 0,
+            "enable_ebe_ia": 0,
+            "enable_whats_ia": 0,
+            "default_obs_hosting_extract": null,
+            "default_title_hosting_extract": null,
+            "pause_whats_ia": 0,
+            "sending_receipt": 0,
+            "owner_report_settings": null,
+            "availability_after_check_out": false,
+            "daily_reports_type": [
+              "stock",
+              "daily_summary"
+            ]
+          },
+          "bank_accounts": [
+            {
+              "id": 19,
+              "property_id": 42,
+              "label": "",
+              "type": "conta_corrente",
+              "bank_code": "001",
+              "agencia": "2748",
+              "agencia_dv": "0",
+              "conta": "17700",
+              "conta_dv": "8",
+              "document_number": "09304280/0001-04",
+              "legal_name": "Pousada Chalé das Flores Ltda",
+              "published": 1,
+              "operacao": "",
+              "pix": "CNPJ 09304280/0001-04",
+              "mb_way_code": null,
+              "iban_code": null,
+              "swift_code": null,
+              "bank_transfer_type": null,
+              "bank_transfer_name": null,
+              "routing_number": null,
+              "account_number": null,
+              "beneficiary_name": null,
+              "currency": null,
+              "country_name": null,
+              "intermediary_bank_name": null,
+              "intermediary_swift_code": null,
+              "obs": null,
+              "created_at": "2020-05-06T17:11:32.000000Z",
+              "updated_at": "2021-08-10T14:20:35.000000Z",
+              "deleted_at": null,
+              "bank": {
+                "id": 93,
+                "code": "001",
+                "name": "BANCO DO BRASIL S.A.",
+                "country_id": 76,
+                "created_at": null,
+                "updated_at": null
+              }
+            }
+          ],
+          "boards": [
+            {
+              "id": 1,
+              "name": "Café da manhã",
+              "system_name": "breakfast",
+              "pivot": {
+                "property_id": 42,
+                "board_id": 1,
+                "adult_price": "0.00",
+                "kid_price": "0.00"
+              }
+            },
+            {
+              "id": 2,
+              "name": "Meia Pensão",
+              "system_name": "half_board",
+              "pivot": {
+                "property_id": 42,
+                "board_id": 2,
+                "adult_price": "0.00",
+                "kid_price": "0.00"
+              }
+            },
+            {
+              "id": 3,
+              "name": "Pensão Completa",
+              "system_name": "full_board",
+              "pivot": {
+                "property_id": 42,
+                "board_id": 3,
+                "adult_price": "0.00",
+                "kid_price": "0.00"
+              }
+            },
+            {
+              "id": 4,
+              "name": "All inclusive",
+              "system_name": "all_inclusive",
+              "pivot": {
+                "property_id": 42,
+                "board_id": 4,
+                "adult_price": "0.00",
+                "kid_price": "0.00"
+              }
+            }
+          ],
+          "credit_card_banners": [
+            {
+              "id": 1,
+              "name": "Visa",
+              "system_name": "VISA",
+              "site_image": "img/payment/visa.png",
+              "created_at": null,
+              "updated_at": null,
+              "nfe_banner_id": "01",
+              "pivot": {
+                "property_id": 42,
+                "credit_card_banner_id": 1
+              }
+            },
+            {
+              "id": 2,
+              "name": "Master",
+              "system_name": "MASTERCARD",
+              "site_image": "img/payment/master.png",
+              "created_at": null,
+              "updated_at": null,
+              "nfe_banner_id": "02",
+              "pivot": {
+                "property_id": 42,
+                "credit_card_banner_id": 2
+              }
+            },
+            {
+              "id": 3,
+              "name": "American Express",
+              "system_name": "AMEX",
+              "site_image": "img/payment/amex.png",
+              "created_at": null,
+              "updated_at": null,
+              "nfe_banner_id": "03",
+              "pivot": {
+                "property_id": 42,
+                "credit_card_banner_id": 3
+              }
+            },
+            {
+              "id": 4,
+              "name": "Elo",
+              "system_name": "ELO",
+              "site_image": "img/payment/elo.png",
+              "created_at": null,
+              "updated_at": null,
+              "nfe_banner_id": "99",
+              "pivot": {
+                "property_id": 42,
+                "credit_card_banner_id": 4
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "cart": {
+    "rooms": [],
+    "adults": "2",
+    "kids": "0",
+    "ages": [],
+    "arrival_date": "2026-06-10",
+    "departure_date": "2026-06-15",
+    "coupon": "",
+    "property_id": 42,
+    "id": "e1ce4d00-5ec7-11f1-9399-8d6ebcd2dae8",
+    "updated_at": "2026-06-02T21:13:20.000000Z",
+    "created_at": "2026-06-02T21:13:20.000000Z"
+  },
+  "otas": [
+    {
+      "ota_name": "Expedia",
+      "commission": 20,
+      "logo": "https://pousada-flores-do-lazaro.artaxnet.com/img/otas/expedia.png"
+    },
+    {
+      "ota_name": "Booking",
+      "commission": 15,
+      "logo": "https://pousada-flores-do-lazaro.artaxnet.com/img/otas/booking.png"
+    }
+  ]
+}

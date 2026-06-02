@@ -10,7 +10,8 @@
     "verify:tools": "tsx scripts/verify-agent-tools.ts",
     "verify:tokens": "tsx scripts/verify-token-tracking.ts",
     "e2e": "tsx scripts/e2e-validation.ts",
-    "e2e:vale-orcamento": "tsx scripts/e2e-vale-suico-orcamento.ts"
+    "e2e:vale-orcamento": "tsx scripts/e2e-vale-suico-orcamento.ts",
+    "e2e:flores-orcamento": "tsx scripts/e2e-flores-lazaro-orcamento.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",

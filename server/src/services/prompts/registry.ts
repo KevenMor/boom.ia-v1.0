@@ -89,6 +89,12 @@ import {
   DISPATCHER_PROMPT as REF_DISPATCHER,
   FOLLOWUP_PROMPT as REF_FOLLOWUP,
 } from "./referency.js";
+import {
+  SYSTEM_PROMPT as PFL_SYSTEM,
+  COMMUNICATION_RULES as PFL_COMM_RULES,
+  DISPATCHER_PROMPT as PFL_DISPATCHER,
+  FOLLOWUP_PROMPT as PFL_FOLLOWUP,
+} from "./pousada-flores-do-lazaro.js";
 
 /**
  * Configura?�?�o de prompt por tenant.
@@ -142,6 +148,26 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     skipGreeting: true,
     version: "v1.6.4",
     description: "Amanda — SDR Referency (Concessionária)",
+  },
+  "pousada-flores-do-lazaro": {
+    systemPrompt: PFL_SYSTEM,
+    communicationRules: PFL_COMM_RULES,
+    dispatcherPrompt: PFL_DISPATCHER,
+    followupPrompt: PFL_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    skipGreeting: true,
+    version: "v1.0.0",
+    description: "Marina — Consultora Pousada Flores do Lázaro (Ubatuba/SP)",
+  },
+  "flores-do-lazaro": {
+    systemPrompt: PFL_SYSTEM,
+    communicationRules: PFL_COMM_RULES,
+    dispatcherPrompt: PFL_DISPATCHER,
+    followupPrompt: PFL_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    skipGreeting: true,
+    version: "v1.0.0",
+    description: "Marina — Consultora Pousada Flores do Lázaro (Ubatuba/SP)",
   },
   "instituto-vicentim-maekawa": {
     systemPrompt: IVM_SYSTEM,

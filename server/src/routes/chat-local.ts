@@ -157,6 +157,8 @@ const OMNIBEES_TOOL_NAMES = new Set([
   "consultar_disponibilidade_vale_suico",
   "consultar_disponibilidade",
   "omnibees_availability",
+  "consultar_disponibilidade_flores_lazaro",
+  "artaxnet_availability",
 ]);
 
 function isOmnibeesTool(toolName: string): boolean {

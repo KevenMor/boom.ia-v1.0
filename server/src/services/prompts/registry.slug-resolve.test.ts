@@ -51,4 +51,13 @@ describe("registry — slug aliases (hífen / underscore)", () => {
     expect(prompt).not.toContain("COMPORTAMENTO DE SAUDAÇÃO:");
     expect(prompt).not.toContain("pergunte como pode ajudar o cliente");
   });
+
+  it("resolve pousada-flores-do-lazaro no registry", () => {
+    const cfg = getPromptConfig("pousada-flores-do-lazaro");
+    expect(cfg).not.toBeNull();
+    expect(cfg!.version).toBe("v1.0.0");
+    const prompt = buildSystemPrompt("PROMPT_BANCO_IGNORAR", "pousada-flores-do-lazaro", false);
+    expect(prompt).toContain("Marina");
+    expect(prompt).not.toContain("PROMPT_BANCO_IGNORAR");
+  });
 });

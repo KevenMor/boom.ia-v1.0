@@ -11,6 +11,7 @@ const EXECUTE_TOOL_TEST_TYPES = new Set([
   "nearest_unit",
   "consultar_unidade",
   "omnibees_availability",
+  "artaxnet_availability",
   "suite_gallery_query",
   "marcar_lead",
 ]);
@@ -18,6 +19,7 @@ const EXECUTE_TOOL_TEST_TYPES = new Set([
 const AGENT_REQUIRED_TEST_TYPES = new Set([
   "inventory_query",
   "omnibees_availability",
+  "artaxnet_availability",
   "suite_gallery_query",
   "marcar_lead",
 ]);
