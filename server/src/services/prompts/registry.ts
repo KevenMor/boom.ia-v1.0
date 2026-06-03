@@ -339,8 +339,8 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: DI_DISPATCHER,
     followupPrompt: DI_FOLLOWUP,
     alwaysInjectCommRules: true,
-    version: "v1.0",
-    description: "Camila — Assistente Dr. Iuri (Otomodelação Salvador/BA)",
+    version: "v1.1.1",
+    description: "Camila — Assistente Dr. Iuri (Otomodelação Salvador/BA) — script comercial + handoff humano",
   },
   "biazini": {
     systemPrompt: BZ_SYSTEM,
