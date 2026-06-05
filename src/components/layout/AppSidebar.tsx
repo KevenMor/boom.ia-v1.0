@@ -338,7 +338,7 @@ function SidebarContent({ collapsed = false, onDropdownOpenChange }: { collapsed
 }
 
 export function AppSidebar() {
-  const { collapsed, mobileOpen, setMobileOpen } = useSidebar();
+  const { collapsed, isMobileOpen, setMobileOpen } = useSidebar();
   const isMobile = useIsMobile();
   const [hoveredOpen, setHoveredOpen] = useState(false);
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -369,7 +369,7 @@ export function AppSidebar() {
   if (isMobile) {
     return (
       <>
-        {mobileOpen && (
+        {isMobileOpen && (
           <div
             className="fixed inset-0 z-40 bg-background/80"
             onClick={() => setMobileOpen(false)}
@@ -378,7 +378,7 @@ export function AppSidebar() {
         <aside
           className={cn(
             "fixed inset-y-0 left-0 z-50 w-[220px] transition-transform duration-200 ease-out",
-            mobileOpen ? "translate-x-0" : "-translate-x-full",
+            isMobileOpen ? "translate-x-0" : "-translate-x-full",
           )}
         >
           <SidebarContent />
