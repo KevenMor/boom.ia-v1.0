@@ -3,8 +3,10 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { useAgents } from "@/hooks/useAgents";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { useAgents, useUpdateAgent } from "@/hooks/useAgents";
+import { useModuleActions } from "@/hooks/useModuleActions";
 import { useTenants } from "@/hooks/useTenants";
 import { useTenantContext } from "@/contexts/TenantContext";
 import { CreateAgentDialog } from "@/components/agents/CreateAgentDialog";
@@ -23,9 +25,13 @@ export default function Agents() {
   const { selectedTenantId, scopedTenantDisplayName } = useTenantContext();
   const { data: agents, isLoading, error } = useAgents(selectedTenantId ?? undefined);
   const { data: tenants } = useTenants();
+  const updateAgent = useUpdateAgent();
+  const { can } = useModuleActions();
+  const canEditAgents = can("agents", "edit");
   const [createOpen, setCreateOpen] = useState(false);
   const [editAgent, setEditAgent] = useState<Agent | null>(null);
   const [deleteAgent, setDeleteAgent] = useState<Agent | null>(null);
+  const [togglingAgentId, setTogglingAgentId] = useState<string | null>(null);
 
   useEffect(() => {
     setEditAgent(null);
@@ -41,6 +47,22 @@ export default function Agents() {
   const tenantNameById = new Map((tenants ?? []).map((t) => [t.id, t.name]));
 
   const totalAgents = agents?.length ?? 0;
+
+  const handleToggleAgentStatus = async (agent: Agent, checked: boolean) => {
+    if (!canEditAgents) return;
+    const nextStatus = checked ? "active" : "inactive";
+    if (agent.status === nextStatus) return;
+
+    setTogglingAgentId(agent.id);
+    try {
+      await updateAgent.mutateAsync({ id: agent.id, status: nextStatus });
+      toast.success(checked ? `${agent.name} ativado` : `${agent.name} inativado`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao atualizar status do agente");
+    } finally {
+      setTogglingAgentId(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -102,6 +124,7 @@ export default function Agents() {
           {filtered.map((agent) => {
             const isActive = agent.status === "active";
             const isTest = agent.status === "test";
+            const isToggling = togglingAgentId === agent.id;
             const tenantName =
               relationName(agent.tenants)
               ?? tenantNameById.get(agent.tenant_id)
@@ -136,9 +159,11 @@ export default function Agents() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="truncate text-sm font-medium text-foreground">{agent.name}</span>
-                      <Badge variant={isActive ? "success" : isTest ? "warning" : "secondary"} className="shrink-0">
-                        {isActive ? "ATIVO" : isTest ? "TESTE" : "INATIVO"}
-                      </Badge>
+                      {isTest && (
+                        <span className="shrink-0 rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-warning">
+                          Teste
+                        </span>
+                      )}
                     </div>
                     <p className="mt-0.5 truncate text-xs text-muted-foreground">{tenantName}</p>
                     {agent.model && (
@@ -146,6 +171,28 @@ export default function Agents() {
                         {agent.model}
                       </span>
                     )}
+                  </div>
+
+                  {/* Quick status toggle */}
+                  <div
+                    className="flex shrink-0 flex-col items-end gap-1.5"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Label
+                        htmlFor={`agent-status-${agent.id}`}
+                        className="text-[11px] font-medium text-muted-foreground"
+                      >
+                        {isActive ? "Ativo" : "Inativo"}
+                      </Label>
+                      <Switch
+                        id={`agent-status-${agent.id}`}
+                        checked={isActive}
+                        disabled={!canEditAgents || isToggling}
+                        onCheckedChange={(checked) => void handleToggleAgentStatus(agent, checked)}
+                        aria-label={`${isActive ? "Inativar" : "Ativar"} ${agent.name}`}
+                      />
+                    </div>
                   </div>
                 </div>
 
