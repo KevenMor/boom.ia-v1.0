@@ -10,6 +10,9 @@ import { TenantProvider } from "@/contexts/TenantContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ModuleRoute } from "@/components/ModuleRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { useAuth } from "@/contexts/AuthContext";
+import { useTenantContext } from "@/contexts/TenantContext";
+import { AppLoadingScreen } from "@/components/layout/AppLoadingScreen";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import Tenants from "@/pages/Tenants";
@@ -61,7 +64,18 @@ const queryClient = new QueryClient({
 });
 
 function RootRedirect() {
+  const { user, loading: authLoading } = useAuth();
+  const { bootstrapPending } = useTenantContext();
   const firstRoute = useFirstEnabledRoute();
+
+  if (authLoading || (user && bootstrapPending)) {
+    return <AppLoadingScreen />;
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
   return <Navigate to={firstRoute} replace />;
 }
 

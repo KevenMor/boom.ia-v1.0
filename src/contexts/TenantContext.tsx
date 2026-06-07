@@ -13,6 +13,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { Tenant } from "@/types/database";
 import { nexusDb } from "@/integrations/supabase/nexus-client";
 import { relationName } from "@/lib/utils";
+import {
+  pickSingleAclTenantId,
+  resolveTenantModuleAccess,
+} from "@/lib/resolve-tenant-module-access";
 import { useAuth } from "@/contexts/AuthContext";
 
 type TenantModulesMap = Record<string, boolean>;
@@ -25,6 +29,10 @@ interface TenantContextValue {
   setSelectedTenant: (t: Tenant | null) => void;
   selectedTenantModules: TenantModulesMap | null;
   tenantModulesLoading: boolean;
+  /** Módulos do tenant resolvidos (ou superadmin / sem tenant necessário). */
+  permissionsReady: boolean;
+  /** Bloqueia o shell na primeira entrada até permissões estarem prontas. */
+  bootstrapPending: boolean;
   isModuleEnabled: (moduleKey: string) => boolean;
   /** Nome do tenant selecionado (membership + objeto do switcher); não depende só de useTenants. */
   scopedTenantDisplayName: string | undefined;
@@ -44,8 +52,33 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   });
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
   const [selectedTenantModules, setSelectedTenantModules] = useState<TenantModulesMap | null>(null);
+  const [usesCustomUserAcl, setUsesCustomUserAcl] = useState(false);
   const [tenantModulesLoading, setTenantModulesLoading] = useState(false);
+  const [hasBootstrappedPermissions, setHasBootstrappedPermissions] = useState(false);
   const prevTenantId = useRef(selectedTenantId);
+  const prevUserId = useRef<string | null>(null);
+
+  useEffect(() => {
+    const userId = user?.id ?? null;
+    if (prevUserId.current === userId) return;
+    prevUserId.current = userId;
+
+    setHasBootstrappedPermissions(false);
+    setSelectedTenantModules(null);
+    setUsesCustomUserAcl(false);
+    setSelectedTenant(null);
+
+    if (!userId) {
+      setSelectedTenantIdRaw(null);
+      return;
+    }
+
+    try {
+      setSelectedTenantIdRaw(localStorage.getItem("boomia-selected-tenant") || null);
+    } catch {
+      setSelectedTenantIdRaw(null);
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     if (prevTenantId.current !== selectedTenantId) {
@@ -116,26 +149,86 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
-    if (!selectedTenantId || !user) {
-      setSelectedTenantModules(null);
-      setTenantModulesLoading(false);
+    if (authLoading || !user) {
+      if (!authLoading) {
+        setSelectedTenantModules(null);
+        setUsesCustomUserAcl(false);
+        setTenantModulesLoading(false);
+      }
       return;
     }
 
-    setTenantModulesLoading(true);
+    if (!isSuperAdmin && membershipTenantIds.length > 0) {
+      setTenantModulesLoading(true);
+      setSelectedTenantModules(null);
+    }
+
     void (async () => {
+      let tenantId = selectedTenantId;
+
+      if (!isSuperAdmin && membershipTenantIds.length > 0) {
+        const allowed = new Set(membershipTenantIds);
+        if (!tenantId || !allowed.has(tenantId)) {
+          tenantId = membershipTenantIds[0] ?? null;
+          if (tenantId !== selectedTenantId) {
+            if (cancelled) return;
+            setSelectedTenantIdRaw(tenantId);
+            try {
+              localStorage.setItem("boomia-selected-tenant", tenantId);
+            } catch {
+              /* ignore */
+            }
+            return;
+          }
+        }
+
+        const { data: aclTenantRows } = await nexusDb
+          .from("user_module_acl")
+          .select("tenant_id")
+          .eq("user_id", user.id);
+        if (cancelled) return;
+
+        const preferredTenantId = pickSingleAclTenantId(aclTenantRows ?? []);
+        if (
+          preferredTenantId &&
+          allowed.has(preferredTenantId) &&
+          preferredTenantId !== selectedTenantId
+        ) {
+          setSelectedTenantIdRaw(preferredTenantId);
+          try {
+            localStorage.setItem("boomia-selected-tenant", preferredTenantId);
+          } catch {
+            /* ignore */
+          }
+          return;
+        }
+
+        tenantId = selectedTenantId;
+      }
+
+      if (!tenantId) {
+        if (cancelled) return;
+        setSelectedTenantModules(null);
+        setUsesCustomUserAcl(false);
+        setTenantModulesLoading(false);
+        return;
+      }
+
+      setTenantModulesLoading(true);
+      setSelectedTenantModules(null);
+
       const userId = user.id;
 
       const [{ data: tenantData, error: tenantError }, { data: aclData }] = await Promise.all([
         nexusDb
           .from("tenant_modules")
           .select("module_key, enabled")
-          .eq("tenant_id", selectedTenantId),
+          .eq("tenant_id", tenantId),
         userId
           ? nexusDb
               .from("user_module_acl")
               .select("module_key, enabled")
-              .eq("tenant_id", selectedTenantId)
+              .eq("tenant_id", tenantId)
               .eq("user_id", userId)
           : Promise.resolve({ data: [] as { module_key: string; enabled: boolean }[] }),
       ]);
@@ -143,48 +236,73 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       if (cancelled) return;
       if (tenantError) {
         console.error("Failed to load tenant modules:", tenantError.message);
-        setSelectedTenantModules(null);
+        setSelectedTenantModules({});
+        setUsesCustomUserAcl(false);
         setTenantModulesLoading(false);
         return;
       }
 
-      // Base: tenant-level modules
-      const map: TenantModulesMap = {};
-      for (const row of tenantData ?? []) {
-        const key = String((row as { module_key?: string }).module_key ?? "").trim();
-        if (!key) continue;
-        map[key] = (row as { enabled?: boolean }).enabled !== false;
-      }
-
-      // Override: user-level ACL (only applied when ACL rows exist for this user+tenant)
-      const acl = aclData ?? [];
-      if (acl.length > 0) {
-        for (const row of acl) {
-          const key = String((row as { module_key?: string }).module_key ?? "").trim();
-          if (!key) continue;
-          map[key] = (row as { enabled?: boolean }).enabled !== false;
-        }
-      }
-
-      setSelectedTenantModules(map);
+      const resolved = resolveTenantModuleAccess(tenantData ?? [], aclData ?? []);
+      setSelectedTenantModules(resolved.modules);
+      setUsesCustomUserAcl(resolved.usesCustomUserAcl);
       setTenantModulesLoading(false);
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [selectedTenantId, user]);
+  }, [authLoading, selectedTenantId, user, isSuperAdmin, membershipTenantIds]);
+
+  const permissionsReady = useMemo(() => {
+    if (authLoading || !user) return false;
+    if (isSuperAdmin) return true;
+    if (membershipTenantIds.length === 0) return true;
+    if (!selectedTenantId) return false;
+    return !tenantModulesLoading && selectedTenantModules !== null;
+  }, [
+    authLoading,
+    user,
+    isSuperAdmin,
+    membershipTenantIds.length,
+    selectedTenantId,
+    tenantModulesLoading,
+    selectedTenantModules,
+  ]);
+
+  useEffect(() => {
+    if (!user) {
+      setHasBootstrappedPermissions(false);
+      return;
+    }
+    if (permissionsReady) {
+      setHasBootstrappedPermissions(true);
+    }
+  }, [user, permissionsReady]);
+
+  const bootstrapPending = !!user && !hasBootstrappedPermissions && !permissionsReady;
 
   const isModuleEnabled = useCallback(
     (moduleKey: string) => {
-      if (!isSuperAdmin && membershipTenantIds.length > 0 && !selectedTenantId) {
+      if (isSuperAdmin) return true;
+      if (membershipTenantIds.length > 0 && !selectedTenantId) {
         return false;
       }
       if (!selectedTenantId) return true;
-      if (!selectedTenantModules) return true;
+      if (tenantModulesLoading) return false;
+      if (!selectedTenantModules) return false;
+      if (usesCustomUserAcl) {
+        return selectedTenantModules[moduleKey] === true;
+      }
       return selectedTenantModules[moduleKey] !== false;
     },
-    [isSuperAdmin, membershipTenantIds.length, selectedTenantId, selectedTenantModules]
+    [
+      isSuperAdmin,
+      membershipTenantIds.length,
+      selectedTenantId,
+      selectedTenantModules,
+      tenantModulesLoading,
+      usesCustomUserAcl,
+    ]
   );
 
   const scopedTenantDisplayName = useMemo(() => {
@@ -206,6 +324,8 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         setSelectedTenant,
         selectedTenantModules,
         tenantModulesLoading,
+        permissionsReady,
+        bootstrapPending,
         isModuleEnabled,
         scopedTenantDisplayName,
       }}

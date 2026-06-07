@@ -19,7 +19,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
 
   useEffect(() => {
-    if (user) navigate("/dashboard", { replace: true });
+    if (user) navigate("/", { replace: true });
   }, [user, navigate]);
 
   if (user) return null;
@@ -33,7 +33,7 @@ export default function Login() {
       const msg = error?.message || (error as { error_description?: string })?.error_description || "Erro desconhecido";
       toast.error("Falha no login: " + msg);
     } else {
-      navigate("/dashboard");
+      navigate("/");
     }
   };
 

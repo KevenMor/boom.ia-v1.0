@@ -120,6 +120,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (email: string, password: string) => {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (!error) {
+        try {
+          localStorage.removeItem("boomia-selected-tenant");
+        } catch {
+          /* ignore */
+        }
+      }
       return { error: error as Error | null };
     } catch (e) {
       const raw = e instanceof Error ? e.message : String(e);

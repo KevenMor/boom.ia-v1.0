@@ -35,7 +35,14 @@ export function ModuleRoute({ moduleKey, children, requiredRoles }: ModuleRouteP
   }
 
   if (tenantModulesLoading) {
-    return <div className="text-sm text-muted-foreground">Carregando módulos do tenant...</div>;
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <p className="text-sm text-muted-foreground">Atualizando permissões do workspace…</p>
+        </div>
+      </div>
+    );
   }
 
   if (isSuperAdmin || isModuleEnabled(moduleKey)) {

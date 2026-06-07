@@ -42,6 +42,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useState, useRef, useCallback } from "react";
 import { TenantSwitcher } from "./TenantSwitcher";
 import { BoomIaLogo } from "@/components/brand/BoomIaLogo";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { LucideIcon } from "lucide-react";
 import {
   DropdownMenu,
@@ -178,13 +179,31 @@ function CollapsibleSection({
   );
 }
 
+function SidebarNavSkeleton({ collapsed }: { collapsed: boolean }) {
+  const rows = collapsed ? 6 : 8;
+  return (
+    <div className={cn("space-y-1.5", collapsed && "flex flex-col items-center")}>
+      {Array.from({ length: rows }, (_, i) => (
+        <Skeleton
+          key={i}
+          className={cn(
+            "rounded-md bg-muted/60",
+            collapsed ? "h-9 w-9" : "h-9 w-full",
+          )}
+        />
+      ))}
+    </div>
+  );
+}
+
 function SidebarContent({ collapsed = false, onDropdownOpenChange }: { collapsed?: boolean; onDropdownOpenChange?: (open: boolean) => void }) {
   const navigate = useNavigate();
   const { signOut, user, profile, isSuperAdmin } = useAuth();
   const location = useLocation();
   const isMobile = useIsMobile();
   const { setMobileOpen, toggle } = useSidebar();
-  const { isModuleEnabled } = useTenantContext();
+  const { isModuleEnabled, tenantModulesLoading, bootstrapPending } = useTenantContext();
+  const navLoading = !isSuperAdmin && tenantModulesLoading && !bootstrapPending;
 
   const onLinkClick = isMobile ? () => setMobileOpen(false) : undefined;
   const filteredNavGroups = navGroups
@@ -226,7 +245,9 @@ function SidebarContent({ collapsed = false, onDropdownOpenChange }: { collapsed
 
       {/* Navigation */}
       <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto scrollbar-none">
-        {collapsed ? (
+        {navLoading ? (
+          <SidebarNavSkeleton collapsed={collapsed} />
+        ) : collapsed ? (
           <div className="flex flex-col items-center gap-0.5">
             {filteredNavGroups.flatMap((g) => g.items).map((item) => {
               const isActive = location.pathname.startsWith(item.to);

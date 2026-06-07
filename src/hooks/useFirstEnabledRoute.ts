@@ -5,9 +5,12 @@ import { navGroups } from "@/components/layout/AppSidebar";
 
 export function useFirstEnabledRoute(): string {
   const { isSuperAdmin } = useAuth();
-  const { isModuleEnabled } = useTenantContext();
+  const { isModuleEnabled, permissionsReady } = useTenantContext();
 
   return useMemo(() => {
+    if (!permissionsReady && !isSuperAdmin) {
+      return "/dashboard";
+    }
     for (const group of navGroups) {
       for (const item of group.items) {
         if (isSuperAdmin) return item.to;
@@ -15,5 +18,5 @@ export function useFirstEnabledRoute(): string {
       }
     }
     return "/dashboard";
-  }, [isSuperAdmin, isModuleEnabled]);
+  }, [isSuperAdmin, isModuleEnabled, permissionsReady]);
 }
