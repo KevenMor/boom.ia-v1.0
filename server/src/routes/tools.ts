@@ -657,11 +657,15 @@ export async function toolsRoutes(fastify: FastifyInstance) {
             };
             break;
           }
+          const interest_keywords = Array.isArray(args?.interest_keywords)
+            ? (args.interest_keywords as unknown[]).map(String).filter(Boolean)
+            : undefined;
           const out = await runLodgingConsulta(supabase, {
             tenant_id: tenantId,
             check_in,
             check_out,
             guests,
+            interest_keywords,
           });
           if (!out.ok) {
             result = { status: out.status, ...out.body };

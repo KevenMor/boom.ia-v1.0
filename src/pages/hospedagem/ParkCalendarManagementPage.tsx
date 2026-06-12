@@ -49,7 +49,7 @@ import { Badge } from "@/components/ui/badge";
 
 const col = "mx-auto w-full max-w-[1280px] px-5 sm:px-6 lg:px-8";
 const stitchCard =
-  "rounded-xl border border-[#ccc3d8] bg-white p-5 shadow-sm dark:border-border dark:bg-card sm:p-6";
+  "rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-border dark:bg-card sm:p-6";
 
 const KIND_META: Record<
   LodgingParkDayKind,
@@ -284,14 +284,14 @@ export default function ParkCalendarManagementPage() {
   const weekLabels = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
   return (
-    <div className="-mx-4 flex min-h-[calc(100dvh-6rem)] flex-1 flex-col bg-[#f8f9ff] dark:bg-background md:-mx-6">
+    <div className="-mx-4 flex min-h-[calc(100dvh-6rem)] flex-1 flex-col bg-slate-50 dark:bg-background md:-mx-6">
       <div className={cn(col, "pb-12 pt-6 md:pt-8")}>
         <header className="mb-2">
-          <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#630ed4]">Gestão de reservas</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-3xl">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">Gestão de reservas</p>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900 dark:text-foreground sm:text-3xl">
             Calendário do parque
           </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[#4a4455] dark:text-muted-foreground">
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-muted-foreground">
             Marque se o parque está aberto, fechado ou em manutenção, a etiqueta comercial do dia e, opcionalmente, o texto de valor
             de ingresso por data para o cliente e para o agente de IA quando integrado ao calendário.
             {scopedTenantDisplayName ? (
@@ -310,11 +310,11 @@ export default function ParkCalendarManagementPage() {
             <section className={cn(stitchCard, "space-y-6")}>
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#7c3aed]/10 text-[#630ed4] dark:bg-[#7c3aed]/20 dark:text-[#c4b5fd]">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
                     <CalendarRange className="h-6 w-6" aria-hidden />
                   </div>
                   <div>
-                    <h2 className="text-lg font-semibold text-[#0b1c30] dark:text-foreground">Mês de referência</h2>
+                    <h2 className="text-lg font-semibold text-slate-900 dark:text-foreground">Mês de referência</h2>
                     <p className="text-xs text-muted-foreground">
                       Com pincel ativo clique no dia; sem pincel abre o formulário detalhado.
                     </p>
@@ -331,7 +331,7 @@ export default function ParkCalendarManagementPage() {
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  <span className="min-w-[9rem] text-center text-sm font-semibold capitalize text-[#0b1c30] dark:text-foreground">
+                  <span className="min-w-[9rem] text-center text-sm font-semibold capitalize text-slate-900 dark:text-foreground">
                     {format(view, "MMMM yyyy", { locale: ptBR })}
                   </span>
                   <Button
@@ -346,7 +346,7 @@ export default function ParkCalendarManagementPage() {
                   {canEdit ? (
                     <Button
                       type="button"
-                      className="h-10 gap-2 bg-[#7c3aed] hover:bg-[#630ed4]"
+                      className="h-10 gap-2 bg-blue-700 hover:bg-blue-800"
                       disabled={pendingCount === 0 || bulkUpsert.isPending || delDay.isPending}
                       onClick={() => void flushPending()}
                     >
@@ -375,7 +375,7 @@ export default function ParkCalendarManagementPage() {
                       type="button"
                       size="sm"
                       variant={brush === k ? "default" : "outline"}
-                      className={cn("h-8 rounded-lg text-xs", brush === k ? "bg-[#630ed4]" : "")}
+                      className={cn("h-8 rounded-lg text-xs", brush === k ? "bg-blue-600" : "")}
                       onClick={() => setBrush((b) => (b === k ? null : k))}
                     >
                       {KIND_META[k].label}
@@ -441,7 +441,7 @@ export default function ParkCalendarManagementPage() {
                             "flex h-24 flex-col rounded-lg border p-2 text-left transition hover:brightness-95 dark:hover:brightness-110",
                             borderWeekend,
                             cellCls,
-                            merged.dirty && "ring-2 ring-[#7c3aed]/50",
+                            merged.dirty && "ring-2 ring-blue-500/60",
                           )}
                         >
                           <div className="flex items-start justify-between gap-1">
@@ -617,7 +617,7 @@ export default function ParkCalendarManagementPage() {
               <Button type="button" variant="outline" onClick={() => setDlgOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="button" className="bg-[#7c3aed] hover:bg-[#630ed4]" onClick={saveDlg}>
+              <Button type="button" className="bg-blue-700 hover:bg-blue-800" onClick={saveDlg}>
                 Aplicar à memória
               </Button>
             </DialogFooter>

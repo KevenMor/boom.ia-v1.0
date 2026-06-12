@@ -34,6 +34,7 @@ import {
   COMMUNICATION_RULES as ST_COMM_RULES,
   DISPATCHER_PROMPT as ST_DISPATCHER,
   FOLLOWUP_PROMPT as ST_FOLLOWUP,
+  appendSunsetConversationContext,
 } from "./sunset-thermas.js";
 import {
   SYSTEM_PROMPT as DV_SYSTEM,
@@ -230,7 +231,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: ST_DISPATCHER,
     followupPrompt: ST_FOLLOWUP,
     alwaysInjectCommRules: true,
-    version: "v1.4.0",
+    version: "v1.5.5",
     description: "Julia — Consultora de reservas Sunset Thermas Park",
   },
   "sunset-thermas": {
@@ -239,7 +240,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: ST_DISPATCHER,
     followupPrompt: ST_FOLLOWUP,
     alwaysInjectCommRules: true,
-    version: "v1.4.0",
+    version: "v1.5.5",
     description: "Julia — Consultora de reservas Sunset Thermas Park",
   },
   /** Slugs alinhados ao cabeçalho de durce-vita.ts */
@@ -409,10 +410,22 @@ function resolveTenantPromptConfig(tenantSlug: string | null): TenantPromptConfi
  * 3. Regras de comunicação do tenant (se existir e condições de injeção)
  * 4. Instruções base de saudação (sempre)
  */
+export interface BuildSystemPromptOptions {
+  /** Primeira mensagem do usuário na conversa — usada para contexto dinâmico (ex.: §00d Sunset). */
+  firstUserMessage?: string;
+  /** Histórico completo — qualificação dinâmica Sunset (intenção + período já ditos). */
+  messages?: Array<{ role: string; content?: string }>;
+}
+
+function isSunsetThermasPromptConfig(config: TenantPromptConfig | undefined): boolean {
+  return config?.systemPrompt === ST_SYSTEM;
+}
+
 export function buildSystemPrompt(
   agentSystemPrompt: string,
   tenantSlug: string | null,
   hasInventoryTool: boolean,
+  options?: BuildSystemPromptOptions,
 ): string {
   const config = resolveTenantPromptConfig(tenantSlug);
   const base = config
@@ -429,7 +442,11 @@ export function buildSystemPrompt(
   const todayISO = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(now);
   const dateContext = `\n\n[CONTEXTO TEMPORAL] Agora: ${nowStr} (Bras?�lia). Hoje: ${todayISO}. Use estas datas como refer?�ncia ao falar de "hoje", "amanh?�", dias da semana, etc.`;
 
-  return base + commRules + greeting + dateContext;
+  const sunsetContext = isSunsetThermasPromptConfig(config)
+    ? appendSunsetConversationContext(options?.firstUserMessage, options?.messages)
+    : "";
+
+  return base + commRules + greeting + dateContext + sunsetContext;
 }
 
 /**

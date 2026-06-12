@@ -57,13 +57,14 @@ export function UsageStatsRow({ events, dailySummary = [], loading }: Props) {
   const yesterdayTokens = yesterdayTokensFromSummary > 0 ? yesterdayTokensFromSummary : yesterdayTokensFromEvents;
   const tokensDiff = yesterdayTokens > 0 ? (((todayTokens - yesterdayTokens) / yesterdayTokens) * 100).toFixed(0) : null;
 
-  const convEvents = todayEvents.filter((e) => e.phase === "conversational" && e.latency_ms);
-  const avgLatency = convEvents.length > 0
-    ? Math.round(convEvents.reduce((s, e) => s + (e.latency_ms || 0), 0) / convEvents.length)
+  // Latência: usar todos os eventos com latência (dual_provider, single, conversational)
+  const eventsWithLatency = todayEvents.filter((e) => e.latency_ms);
+  const avgLatency = eventsWithLatency.length > 0
+    ? Math.round(eventsWithLatency.reduce((s, e) => s + (e.latency_ms || 0), 0) / eventsWithLatency.length)
     : 0;
-  const yesterdayConv = yesterdayEvents.filter((e) => e.phase === "conversational" && e.latency_ms);
-  const yesterdayAvgLat = yesterdayConv.length > 0
-    ? Math.round(yesterdayConv.reduce((s, e) => s + (e.latency_ms || 0), 0) / yesterdayConv.length)
+  const yesterdayLatency = yesterdayEvents.filter((e) => e.latency_ms);
+  const yesterdayAvgLat = yesterdayLatency.length > 0
+    ? Math.round(yesterdayLatency.reduce((s, e) => s + (e.latency_ms || 0), 0) / yesterdayLatency.length)
     : 0;
 
   const todayToolCallsFromSummary = todaySummary.reduce((s, d) => s + (d.sum_tool_calls || 0), 0);

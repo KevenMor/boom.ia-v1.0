@@ -14,6 +14,18 @@ import {
 import { formatOmnibeesQuoteForDelivery } from "../utils/omnibees-quote-format.js";
 import { getWelcomeConversationImageMarkdown } from "../utils/suite-gallery-welcome-image.js";
 import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification, buildHandoffNotification, extractClientNameFromMessages, toBrasiliaISO } from "../utils/agendaNotification.js";
+import { formatLodgingConsultaForLlm } from "../utils/lodging-consulta-summary.js";
+import { formatParkDayConsultaForLlm } from "../utils/park-day-consulta-summary.js";
+import {
+  extractSunsetLodgingParams,
+  isSunsetThermasTenantSlug,
+  shouldReinvokeSunsetLodging,
+} from "../utils/sunset-lodging-params.js";
+import {
+  extractSunsetParkParams,
+  hasSunsetParkToolResult,
+  userAsksSunsetParkConsultation,
+} from "../utils/sunset-park-params.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 const MAX_TOOL_ITERATIONS = 5;
@@ -163,6 +175,182 @@ const OMNIBEES_TOOL_NAMES = new Set([
 
 function isOmnibeesTool(toolName: string): boolean {
   return OMNIBEES_TOOL_NAMES.has(toolName);
+}
+
+function isLodgingConsultaTool(tool: ToolDef): boolean {
+  return tool.tool_type === "lodging_consulta";
+}
+
+function isParkConsultaTool(tool: ToolDef): boolean {
+  return tool.tool_type === "park_consulta";
+}
+
+function findParkConsultaTool(nameToTool: Map<string, ToolDef>): ToolDef | undefined {
+  for (const tool of nameToTool.values()) {
+    if (isParkConsultaTool(tool)) return tool;
+  }
+  return undefined;
+}
+
+function findLodgingConsultaTool(nameToTool: Map<string, ToolDef>): ToolDef | undefined {
+  for (const tool of nameToTool.values()) {
+    if (isLodgingConsultaTool(tool)) return tool;
+  }
+  return undefined;
+}
+
+function messageContentLooksLikeLodgingResult(content: string): boolean {
+  return content.includes('"available_accommodations"') || content.includes('"park_closed"');
+}
+
+/** Sunset: se o dispatcher não chamou lodging_consulta mas datas + hóspedes estão no histórico, executa a tool. */
+async function maybeAutoInvokeSunsetLodging(params: {
+  tenantSlug: string | null;
+  messages: Array<{ role: string; content: string }>;
+  conversationalMessages: Array<{ role: string; content?: string; tool_call_id?: string }>;
+  nameToTool: Map<string, ToolDef>;
+  agentId: string;
+}): Promise<
+  Array<{ type: string; tool?: string; args?: Record<string, unknown>; tool_type?: string; preview?: unknown; source?: string }>
+> {
+  const debugEntries: Array<{
+    type: string;
+    tool?: string;
+    args?: Record<string, unknown>;
+    tool_type?: string;
+    preview?: unknown;
+    source?: string;
+  }> = [];
+
+  if (!isSunsetThermasTenantSlug(params.tenantSlug)) return debugEntries;
+
+  const lodgingTool = findLodgingConsultaTool(params.nameToTool);
+  if (!lodgingTool) return debugEntries;
+
+  const lodgingToolContents = params.conversationalMessages
+    .filter(
+      (m) =>
+        m.role === "tool" &&
+        typeof m.content === "string" &&
+        messageContentLooksLikeLodgingResult(m.content)
+    )
+    .map((m) => m.content as string);
+
+  const hasLodgingResult = lodgingToolContents.length > 0;
+  if (hasLodgingResult && !shouldReinvokeSunsetLodging(params.messages, lodgingToolContents)) {
+    return debugEntries;
+  }
+
+  const autoParams = extractSunsetLodgingParams(params.messages);
+  if (!autoParams) return debugEntries;
+
+  if (hasLodgingResult) {
+    for (let i = params.conversationalMessages.length - 1; i >= 0; i--) {
+      const m = params.conversationalMessages[i];
+      if (
+        m.role === "tool" &&
+        typeof m.content === "string" &&
+        messageContentLooksLikeLodgingResult(m.content)
+      ) {
+        params.conversationalMessages.splice(i, 1);
+      }
+    }
+  }
+
+  const source = hasLodgingResult ? "auto_sunset_requote" : "auto_sunset";
+  console.log(`[Chat-Local] Auto lodging_consulta (${source}):`, JSON.stringify(autoParams));
+  const result = await executeTool(lodgingTool, autoParams, params.agentId);
+  const content = buildOmnibeesGuardedContent(lodgingTool.name, result);
+  params.conversationalMessages.push({
+    role: "tool",
+    tool_call_id: "auto-lodging-consulta",
+    content,
+  });
+  debugEntries.push({
+    type: "tool_call",
+    tool: lodgingTool.name,
+    args: autoParams,
+    tool_type: "lodging_consulta",
+    source,
+  });
+  debugEntries.push({
+    type: "tool_result",
+    preview:
+      result.success && typeof result.result === "object"
+        ? result.result
+        : result.success
+          ? { value: String(result.result).slice(0, 500) }
+          : { error: result.error },
+  });
+
+  return debugEntries;
+}
+
+/** Sunset: consulta calendário do parque (ingresso/abertura) quando dispatcher omitir. */
+async function maybeAutoInvokeSunsetPark(params: {
+  tenantSlug: string | null;
+  messages: Array<{ role: string; content: string }>;
+  conversationalMessages: Array<{ role: string; content?: string; tool_call_id?: string }>;
+  nameToTool: Map<string, ToolDef>;
+  agentId: string;
+}): Promise<
+  Array<{ type: string; tool?: string; args?: Record<string, unknown>; tool_type?: string; preview?: unknown; source?: string }>
+> {
+  const debugEntries: Array<{
+    type: string;
+    tool?: string;
+    args?: Record<string, unknown>;
+    tool_type?: string;
+    preview?: unknown;
+    source?: string;
+  }> = [];
+
+  if (!isSunsetThermasTenantSlug(params.tenantSlug)) return debugEntries;
+  if (!userAsksSunsetParkConsultation(params.messages)) return debugEntries;
+
+  const parkTool = findParkConsultaTool(params.nameToTool);
+  if (!parkTool) return debugEntries;
+
+  const parkToolContents = params.conversationalMessages
+    .filter(
+      (m) =>
+        m.role === "tool" &&
+        typeof m.content === "string" &&
+        hasSunsetParkToolResult([m.content])
+    )
+    .map((m) => m.content as string);
+
+  if (parkToolContents.length > 0) return debugEntries;
+
+  const autoParams = extractSunsetParkParams(params.messages);
+  if (!autoParams) return debugEntries;
+
+  console.log(`[Chat-Local] Auto park_consulta (auto_sunset_park):`, JSON.stringify(autoParams));
+  const result = await executeTool(parkTool, autoParams, params.agentId);
+  const content = buildOmnibeesGuardedContent(parkTool.name, result);
+  params.conversationalMessages.push({
+    role: "tool",
+    tool_call_id: "auto-park-consulta",
+    content,
+  });
+  debugEntries.push({
+    type: "tool_call",
+    tool: parkTool.name,
+    args: autoParams,
+    tool_type: "park_consulta",
+    source: "auto_sunset_park",
+  });
+  debugEntries.push({
+    type: "tool_result",
+    preview:
+      result.success && typeof result.result === "object"
+        ? result.result
+        : result.success
+          ? { value: String(result.result).slice(0, 500) }
+          : { error: result.error },
+  });
+
+  return debugEntries;
 }
 
 /**
@@ -470,6 +658,11 @@ function summarizeToolResult(obj: Record<string, unknown>): string {
       return lines.join("\n");
     }
   }
+  // lodging_consulta / consultar_hospedagem_sunset: truncar quebrava orçamentos com 2+ acomodações
+  const lodgingSummary = formatLodgingConsultaForLlm(obj);
+  if (lodgingSummary) return lodgingSummary;
+  const parkSummary = formatParkDayConsultaForLlm(obj);
+  if (parkSummary) return parkSummary;
   return JSON.stringify(obj).slice(0, 300);
 }
 
@@ -875,6 +1068,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const { agent_id, messages, conversation_id, chatwoot_conversation_id, external_user_id, skip_history_persist } = req.body;
+      const requestStartTime = Date.now();
 
       const skipHistoryExplicit =
         skip_history_persist === true ||
@@ -916,10 +1110,13 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       const tools = (toolsData || []) as ToolDef[];
       const hasInventoryTool = tools.some((t) => t.tool_type === "inventory_query");
 
+      const firstUserMessage = messages.find((m) => m.role === "user")?.content;
+
       const systemPrompt = buildSystemPrompt(
         agent.system_prompt || "", // ignorado quando o tenant tem entrada em TENANT_PROMPTS (prompt vem só do projeto)
         tenantSlug,
-        hasInventoryTool
+        hasInventoryTool,
+        { firstUserMessage, messages },
       );
 
 
@@ -1248,6 +1445,23 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           if (appraisalCtx) {
             entityHint += `\n\n[CONTEXTO DE FLUXO] A última mensagem do assistente pedia dados do veículo do CLIENTE (marca, modelo, ano, km). Isso é APPRAISAL (intent A). NÃO chame consultar_fipe — avaliação é feita presencialmente pelo time comercial. Se o cliente já forneceu marca+modelo+ano, chame consultar_agenda com action "check_availability" e date "${todayISO}" para oferecer horários reais ao sugerir visita na loja. NÃO chame consultar_estoque.`;
           }
+          let sunsetLodgingHint = "";
+          let sunsetParkHint = "";
+          if (isSunsetThermasTenantSlug(tenantSlug)) {
+            const parkParamsHint = extractSunsetParkParams(messages);
+            if (parkParamsHint && userAsksSunsetParkConsultation(messages)) {
+              sunsetParkHint = `\n\n[HINT OBRIGATÓRIO — PARQUE SUNSET]\nO cliente perguntou sobre ingresso/valor/abertura do parque. NÃO responda NO_TOOLS_NEEDED para consultar_parque_sunset. Chame a tool agora com date="${parkParamsHint.date}" (YYYY-MM-DD). Use ticket_lines e day_kind retornados — PROIBIDO inventar R$ ou mandar só link do site quando houver valores cadastrados.`;
+            }
+            const lodgingParamsHint = extractSunsetLodgingParams(messages);
+            if (lodgingParamsHint && !userAsksSunsetParkConsultation(messages)) {
+              const interestPart =
+                lodgingParamsHint.interest_keywords?.length
+                  ? `, interest_keywords=${JSON.stringify(lodgingParamsHint.interest_keywords)}`
+                  : "";
+              sunsetLodgingHint = `\n\n[HINT OBRIGATÓRIO — HOSPEDAGEM SUNSET]\nDatas e composição já constam no histórico. NÃO responda NO_TOOLS_NEEDED para consultar_hospedagem_sunset. Chame a tool agora com check_in="${lodgingParamsHint.check_in}", check_out="${lodgingParamsHint.check_out}", guests=${JSON.stringify(lodgingParamsHint.guests)}${interestPart}. Se o cliente perguntou Loft/SPA/hidromassagem, inclua interest_keywords e use total_price retornado — PROIBIDO citar R$ 2.700 da tabela §2.`;
+            }
+          }
+
           if (tenantSlug === "referency" && lastUserMsg) {
             const normalizedUser = lastUserMsg.content.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
             const looksLikeOnlyName = /^\s*(me\s+chamo\s+)?([a-z]{2,})(\s+[a-z]{2,})?\s*$/i.test(normalizedUser);
@@ -1270,7 +1484,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
 
           const dispatcherMessages = toOpenAIMessages(
-            getDispatcherPrompt(tenantSlug) + dispatcherDateContext + entityHint + schedulingHint + referencyInventoryHint,
+            getDispatcherPrompt(tenantSlug) + dispatcherDateContext + entityHint + schedulingHint + referencyInventoryHint + sunsetParkHint + sunsetLodgingHint,
             messages
           );
 
@@ -1544,6 +1758,29 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             sendSse({ debug: debugEntries });
           } else {
             conversationalMessages = toOpenAIMessages(systemPrompt, messages);
+          }
+
+          const autoParkDebugEntries = await maybeAutoInvokeSunsetPark({
+            tenantSlug,
+            messages,
+            conversationalMessages,
+            nameToTool: dispatcherNameToTool,
+            agentId: agent_id,
+          });
+          const autoLodgingDebugEntries = userAsksSunsetParkConsultation(messages)
+            ? []
+            : await maybeAutoInvokeSunsetLodging({
+                tenantSlug,
+                messages,
+                conversationalMessages,
+                nameToTool: dispatcherNameToTool,
+                agentId: agent_id,
+              });
+          const autoSunsetDebugEntries = [...autoParkDebugEntries, ...autoLodgingDebugEntries];
+          if (autoSunsetDebugEntries.length > 0) {
+            if (phase1ToolCalls.length > 0) {
+              sendSse({ debug: autoSunsetDebugEntries });
+            }
           }
 
           // Limpar mensagens para Gemini conversacional: remover tool_calls e mensagens "tool"
@@ -1844,7 +2081,12 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 prompt_tokens: totalPrompt,
                 completion_tokens: totalCompletion,
                 total_tokens: totalPrompt + totalCompletion,
-                metadata: { dispatcher: dispatcherUsage, conversational: conversationalUsage },
+                metadata: {
+                  dispatcher: dispatcherUsage,
+                  conversational: conversationalUsage,
+                  latency_ms: Date.now() - requestStartTime,
+                  tool_calls_count: phase1ToolCalls.length,
+                },
               });
             } catch (dbErr) {
               console.warn("[Chat-Local] Failed to save token usage:", (dbErr as Error)?.message);
@@ -1852,7 +2094,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
 
           if (phase1ToolCalls.length === 0) {
-            sendSse({ debug: [dualSandboxDebugConfig] });
+            sendSse({ debug: [dualSandboxDebugConfig, ...autoLodgingDebugEntries] });
           }
 
           const rawConvAssist = prependWelcomeToAssistantText((convFullContent || "").trim());
@@ -1890,9 +2132,13 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
       let fullContent = "";
       let iteration = 0;
       let singleProviderUsageAccum = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+      let toolCallsAccum: Record<number, { id: string; name: string; args: string }> = {};
 
       while (iteration < MAX_TOOL_ITERATIONS) {
         iteration++;
+
+        // Reset toolCallsAccum para cada iteração
+        toolCallsAccum = {};
 
         const body: Record<string, unknown> = {
           model,
@@ -1937,7 +2183,6 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
         let buf = "";
         let content = "";
         let streamFilterBuffer = "";
-        const toolCallsAccum: Record<number, { id: string; name: string; args: string }> = {};
         let iterUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null = null;
 
         while (true) {
@@ -2072,7 +2317,11 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 prompt_tokens: singleProviderUsageAccum.prompt_tokens,
                 completion_tokens: singleProviderUsageAccum.completion_tokens,
                 total_tokens: singleProviderUsageAccum.total_tokens,
-                metadata: { iterations: iteration },
+                metadata: {
+                  iterations: iteration,
+                  latency_ms: Date.now() - requestStartTime,
+                  tool_calls_count: toolCalls.length,
+                },
               });
             } catch (dbErr) {
               console.warn("[Chat-Local] Failed to save token usage:", (dbErr as Error)?.message);
@@ -2199,6 +2448,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
         }
       }
 
+      const finalToolCallsCount = Object.values(toolCallsAccum).filter((tc: { name: string }) => tc.name).length;
       if (singleProviderUsageAccum.total_tokens > 0) {
         sendSse({ token_usage: { single: { ...singleProviderUsageAccum, model } } });
         try {
@@ -2211,7 +2461,11 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             prompt_tokens: singleProviderUsageAccum.prompt_tokens,
             completion_tokens: singleProviderUsageAccum.completion_tokens,
             total_tokens: singleProviderUsageAccum.total_tokens,
-            metadata: { iterations: iteration },
+            metadata: {
+              iterations: iteration,
+              latency_ms: Date.now() - requestStartTime,
+              tool_calls_count: finalToolCallsCount,
+            },
           });
         } catch (dbErr) {
           console.warn("[Chat-Local] Failed to save token usage:", (dbErr as Error)?.message);

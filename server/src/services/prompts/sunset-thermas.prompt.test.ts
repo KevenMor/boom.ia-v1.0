@@ -1,9 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { COMMUNICATION_RULES, DISPATCHER_PROMPT, SYSTEM_PROMPT } from "./sunset-thermas.js";
+import {
+  appendSunsetConversationContext,
+  COMMUNICATION_RULES,
+  conversationDeclaresLodgingIntent,
+  detectSunsetSiteFormMessage,
+  DISPATCHER_PROMPT,
+  messageDeclaresLodgingIntent,
+  messageDeclaresParkDayVisitQuestion,
+  SUNSET_FORM_DIALOGUE_EXAMPLE,
+  SYSTEM_PROMPT,
+} from "./sunset-thermas.js";
+import { buildSystemPrompt } from "./registry.js";
 
 describe("Sunset Thermas Park — SYSTEM_PROMPT (contratos de negócio)", () => {
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.4\.0/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.5/);
   });
 
   it("mantém regra suprema de valores e vaga (tolerância zero)", () => {
@@ -103,10 +114,10 @@ describe("Sunset Thermas Park — §00d MENSAGEM PADRÃO DO SITE", () => {
     expect(SYSTEM_PROMPT).toMatch(/N[AÃ]O[^\n]*mencione o calend[aá]rio ao cliente|n[aã]o[^\n]*mencionar calend[aá]rio.*cliente/i);
   });
 
-  it("Turno 3: cita valor de UMA única categoria (a mapeada), sem listar várias", () => {
+  it("Turno 3 §00d: cita valor de UMA única categoria (a mapeada do formulário)", () => {
     expect(SYSTEM_PROMPT).toMatch(/Turno 3/i);
     expect(SYSTEM_PROMPT).toMatch(/UMA [uú]nica categoria|uma [uú]nica categoria/);
-    expect(SYSTEM_PROMPT).toMatch(/liste\s*2,\s*3\s*ou\s*todas|liste duas ou mais categorias/i);
+    expect(SYSTEM_PROMPT).toMatch(/SOMENTE no caso §00d|formul[aá]rio com categoria/i);
   });
 
   it("Turno 4: CTA único de reserva, somente após valor / dúvida resolvida", () => {
@@ -141,7 +152,7 @@ describe("Sunset Thermas Park — FILTRO INTERNO de validade/exclusões e cortes
   });
 
   it("só menciona cortesia/validade/exclusões sob pergunta ou quando regra nega/altera a cotação", () => {
-    expect(SYSTEM_PROMPT).toMatch(/sob pergunta|S[oó]\s+(\*\*)?mencione/i);
+    expect(SYSTEM_PROMPT).toMatch(/\*\*S[oó]\*\* mencione|sob pergunta|cliente perguntar/i);
     expect(SYSTEM_PROMPT).toMatch(/negar|nega\/altera|nega[^\n]*cota[cç][aã]o/i);
   });
 
@@ -198,11 +209,11 @@ describe("Sunset Thermas Park — COMMUNICATION_RULES (regras de WhatsApp)", () 
     expect(COMMUNICATION_RULES).toMatch(/21\/12\/2026/);
   });
 
-  it("item 6: validade/exclusões viram FILTRO INTERNO; cota enxuto, menciona só sob pergunta ou quando nega", () => {
-    expect(COMMUNICATION_RULES).toMatch(/Filtro interno antes de cotar|filtro interno/i);
-    expect(COMMUNICATION_RULES).toMatch(/N[aã]o cote|N[aã]o\s+cote\s+\u2014|encaminhe humano/i);
-    expect(COMMUNICATION_RULES).toMatch(/cote enxuto|sem despejar regra de validade/i);
-    expect(COMMUNICATION_RULES).toMatch(/s[oó] sob pergunta|nega\/altera|regra de fato/i);
+  it("item 6: lista fechada de exclusões; Dia dos Namorados não é exclusão; menciona só quando nega", () => {
+    expect(COMMUNICATION_RULES).toMatch(/Filtro interno|lista fechada/i);
+    expect(COMMUNICATION_RULES).toMatch(/Dia dos Namorados.*N[AÃ]O s[aã]o exclus|N[AÃ]O s[aã]o exclus[aã]o.*Dia dos Namorados/i);
+    expect(COMMUNICATION_RULES).toMatch(/encaminhe humano|liste todas as acomoda/i);
+    expect(COMMUNICATION_RULES).toMatch(/nega|s[oó] quando a regra/i);
   });
 
   it("item 12: calendário é interno, NÃO envia link ao cliente e só comunica com fonte registrada", () => {
@@ -283,6 +294,11 @@ describe("Sunset Thermas Park — DISPATCHER_PROMPT (v1.4.0)", () => {
     expect(DISPATCHER_PROMPT).toMatch(/suite_gallery_query/);
   });
 
+  it("rota consultar_parque_sunset para ingresso/valor do parque", () => {
+    expect(DISPATCHER_PROMPT).toMatch(/consultar_parque_sunset/);
+    expect(DISPATCHER_PROMPT).toMatch(/park_consulta|ticket price|ingresso/i);
+  });
+
   it("documenta gatilhos de preço/disponibilidade que disparam a tool", () => {
     expect(DISPATCHER_PROMPT).toMatch(/valor|pre[cç]o|quanto custa|tarifa|pacote/i);
     expect(DISPATCHER_PROMPT).toMatch(/disponibilidade|tem vaga|est[aá] aberto/i);
@@ -314,5 +330,367 @@ describe("Sunset Thermas Park — DISPATCHER_PROMPT (v1.4.0)", () => {
   it("mantém NO_TOOLS_NEEDED para small talk e proíbe gerar texto conversacional", () => {
     expect(DISPATCHER_PROMPT).toMatch(/NO_TOOLS_NEEDED/);
     expect(DISPATCHER_PROMPT).toMatch(/NEVER generate conversational text/i);
+  });
+});
+
+describe("Sunset Thermas Park — regressão v1.4.1 (caso 'dia dos namorados')", () => {
+  it("§00 proíbe também NEGAR vaga sem fonte registrada (não só confirmar)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/n[aã]o confirma disponibilidade/i);
+    expect(SYSTEM_PROMPT).toMatch(
+      /tamb[eé]m n[aã]o nega|n[aã]o nega vaga|n[aã]o[^\n]*nega[cç][aã]o[^\n]*vaga|n[aã]o confirme nem negue/i
+    );
+    expect(SYSTEM_PROMPT).toMatch(/n[aã]o temos|Esgotado|Esgotado|lotou|n[aã]o h[áa] pacotes/i);
+  });
+
+  it("§3 proíbe inferir nº de hóspedes a partir do contexto do cliente", () => {
+    expect(SYSTEM_PROMPT).toMatch(/NUNCA INFERIR|nunca[^\n]*infere[^\n]*h[oó]spedes|N[UÚ]NCA[^\n]*inferir/i);
+    expect(SYSTEM_PROMPT).toMatch(/dia dos namorados/);
+    expect(SYSTEM_PROMPT).toMatch(/lua de mel|minha esposa|sozinho|com a fam[ií]lia/i);
+  });
+
+  it("§3 manda PERGUNTAR composição ao cliente quando só a data veio", () => {
+    expect(SYSTEM_PROMPT).toMatch(/composi[cç][aã]o.*vari[aá]vel independente|composi[cç][aã]o[^\n]*perguntar|antes de qualquer cota[cç][aã]o/i);
+  });
+
+  it("DISPATCHER_PROMPT proíbe chamar a tool sem guests[] explícito (não inferir do contexto)", () => {
+    expect(DISPATCHER_PROMPT).toMatch(/Do NOT infer guests from context|has not provided guest composition/i);
+    expect(DISPATCHER_PROMPT).toMatch(/dia dos namorados|lua de mel|minha esposa|sozinho/i);
+    expect(DISPATCHER_PROMPT).toMatch(/NO_TOOLS_NEEDED/);
+  });
+});
+
+describe("Sunset Thermas Park — regressão v1.4.2 (caso 'Prazer, Keven.hoje?')", () => {
+  it("declara §00c-2 sobre CONTEXTO TEMPORAL como uso interno, não fala do cliente", () => {
+    expect(SYSTEM_PROMPT).toMatch(/00c-2\)/);
+    expect(SYSTEM_PROMPT).toMatch(/CONTEXTO TEMPORAL|USO INTERNO|n[ãa]o [eé] fala do cliente/i);
+  });
+
+  it("proíbe encher linguiça com 'hoje?' ou ganchos inventados a partir do contexto temporal", () => {
+    expect(SYSTEM_PROMPT).toMatch(/N[UÚ]NCA[^\n]*trate esse bloco|n[ãa]o[^\n]*enche[nc]ha?[^\n]*lingui[çc]a|n[ãa]o encha lingui[çc]a/i);
+    expect(SYSTEM_PROMPT).toMatch(/Prazer, Keven[^\n]*hoje\?|hoje\?/);
+  });
+
+  it("Turno 2 sem dados: proíbe inventar gancho e manda descobrir intenção antes de datas", () => {
+    expect(SYSTEM_PROMPT).toMatch(/TURNO 2 SEM DADOS|Turno 2[^\n]*sem dados|Turno 2[^\n]*cliente s[oó] respondeu o nome/i);
+    expect(SYSTEM_PROMPT).toMatch(/N[ÃÃ]O invente gancho|n[ãa]o invente gancho/i);
+    expect(SYSTEM_PROMPT).toMatch(/3a\)|INTEN[ÇC][ÃA]O.*PARQUE|parque.*hospedagem.*ambos/i);
+  });
+
+  it("§3 tem exemplo positivo oi → keven → perguntar intenção (não curtir o parque nem §00d)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Cliente Turno 2: "keven"/i);
+    expect(SYSTEM_PROMPT).toMatch(/parque.*hospedagem.*os dois|hospedagem no hotel.*os dois/i);
+    expect(SYSTEM_PROMPT).toMatch(/ERRADO.*curtir o parque|vi[eé]s s[oó] parque/i);
+    expect(SYSTEM_PROMPT).not.toMatch(/Turno 2 \(CORRETO\)[^\n]*curtir o parque/i);
+  });
+});
+
+describe("Sunset Thermas Park — §3a intenção parque + hospedagem (v1.4.8)", () => {
+  it("declara §3a com três públicos (parque, hospedagem, ambos)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/3a\)/);
+    expect(SYSTEM_PROMPT).toMatch(/s[oó] ingressos|s[oó] o parque/i);
+    expect(SYSTEM_PROMPT).toMatch(/hospedagem no hotel|s[oó] hospedagem/i);
+    expect(SYSTEM_PROMPT).toMatch(/os dois|ambos/i);
+  });
+
+  it("proíbe abrir Turno 2 com 'curtir o parque'", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Proibido no Turno 2|N[aã]o.*curtir o parque/i);
+  });
+
+  it("§0b e §1 cobrem atendimento dual parque + hospedagem", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Dois p[uú]blicos|parque.*hospedagem|hospedagem.*parque/i);
+    expect(SYSTEM_PROMPT).toMatch(/consultora.*Sunset Thermas Park/i);
+  });
+
+  it("COMMUNICATION_RULES reforça intenção antes de datas", () => {
+    expect(COMMUNICATION_RULES).toMatch(/descubra inten[cç][aã]o|inten[cç][aã]o.*§3a/i);
+  });
+});
+
+describe("Sunset Thermas Park — regressão v1.4.3 / v1.4.7 (Dia dos Namorados = 12/06)", () => {
+  it("§3 distingue DADO DO EVENTO (extraível) de DADO DE COMPOSIÇÃO (não extraível)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/DADO DO EVENTO|DIFEREN[ÇC]A ENTRE DADO DO EVENTO/i);
+    expect(SYSTEM_PROMPT).toMatch(/extra[ií]vel|extra[íi]r o que [eé] extra[íi]vel/i);
+  });
+
+  it("tabela de eventos com data fixa nacional reconhece Dia dos Namorados, Natal, Réveillon, Dia das Mães, Carnaval", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Dia dos Namorados[^\n]*12\/06|12\/06[^\n]*Dia dos Namorados/);
+    expect(SYSTEM_PROMPT).toMatch(/Natal[^\n]*25\/12|25\/12[^\n]*Natal/);
+    expect(SYSTEM_PROMPT).toMatch(/R[eé]veillon[^\n]*31\/12|31\/12[^\n]*R[eé]veillon/);
+    expect(SYSTEM_PROMPT).toMatch(/Dia das M[ãa]es[^\n]*2[ºo] domingo|2[ºo] domingo de maio/);
+    expect(SYSTEM_PROMPT).toMatch(/Carnaval/i);
+  });
+
+  it("Dia dos Namorados (12/06) NÃO é exclusão — qualifica e cota, não encaminha humano", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Dia dos Namorados[^\n]*N[ÃA]O [eé] exclus|N[ÃA]O s[aã]o exclus[aã]o[^\n]*Dia dos Namorados/i);
+    expect(SYSTEM_PROMPT).toMatch(/valor do pacote do site n[aã]o se aplica.*proibido|ERRADO.*n[aã]o se aplica/i);
+    expect(SYSTEM_PROMPT).toMatch(/Quantas pessoas v[aã]o/i);
+  });
+
+  it("Carnaval é marcado como exclusão do §00 (não cote, encaminhe humano)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Carnaval[^\n]*exclus[ãa]o|Carnaval[^\n]*n[ãa]o cote|exclus[oõ]es.*Carnaval/i);
+  });
+
+  it("proíbe oferecer 'outra data próxima' quando o cliente trouxe evento com data certa", () => {
+    expect(SYSTEM_PROMPT).toMatch(/N[ÃÃ]O[^\n]*ofere[çc]a[^\n]*outra data pr[óo]xima|n[ãa]o ofere[çc]a[^\n]*outra data pr[óo]xima|outra data pr[óo]xima[^\n]*fric[çc][ãa]o/i);
+  });
+
+  it("composição (nº de pessoas) continua sendo pergunta obrigatória separada do evento", () => {
+    expect(SYSTEM_PROMPT).toMatch(/composi[çc][ãa]o[^\n]*pergunta obrigat[óo]ria|N[ÃÃ]O[^\n]*se extrai[^\n]*composi[çc][ãa]o|composi[çc][ãa]o[^\n]*separada/i);
+  });
+});
+
+describe("Sunset Thermas Park — §3c check-in sexta → checkout domingo (v1.4.9)", () => {
+  it("declara §3c com regra de 2 noites sexta a domingo", () => {
+    expect(SYSTEM_PROMPT).toMatch(/3c\)/);
+    expect(SYSTEM_PROMPT).toMatch(/sexta-feira.*domingo|check-in.*sexta.*check-out.*domingo/i);
+    expect(SYSTEM_PROMPT).toMatch(/2 noites|duas noites/i);
+  });
+
+  it("Dia dos Namorados 12\/06\/2026 como exemplo sexta → 14\/06 domingo", () => {
+    expect(SYSTEM_PROMPT).toMatch(/12\/06\/2026.*2026-06-12|2026-06-12.*2026-06-14/i);
+    expect(SYSTEM_PROMPT).toMatch(/N[aã]o.*12→13|n[aã]o use 12→13/i);
+  });
+
+  it("proíbe assumir 1 noite quando entrada é sexta sem pedido explícito", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Proibido:.*1 noite|n[aã]o assuma pacote de 1 noite/i);
+  });
+
+  it("DISPATCHER aplica checkout domingo em check-in sexta", () => {
+    expect(DISPATCHER_PROMPT).toMatch(/Friday check-in|check-in is a \*\*Friday\*\*/i);
+    expect(DISPATCHER_PROMPT).toMatch(/2026-06-12.*2026-06-14|following Sunday/i);
+  });
+});
+
+describe("Sunset Thermas Park — Loft/SPA reconsulta (v1.5.2)", () => {
+  it("§3b-Loft exige tool e proíbe R$ 2.700 como total de fim de semana", () => {
+    expect(SYSTEM_PROMPT).toMatch(/3b-Loft|LOFT.*SPA.*HIDRO/i);
+    expect(SYSTEM_PROMPT).toMatch(/2\.700,00|2700/);
+    expect(SYSTEM_PROMPT).toMatch(/total_price|n[aã]o.*di[aá]ria isolada/i);
+  });
+
+  it("DISPATCHER reconsulta em pergunta Loft/hidromassagem", () => {
+    expect(DISPATCHER_PROMPT).toMatch(/Category follow-up|Loft.*SPA.*hidromassagem/i);
+    expect(DISPATCHER_PROMPT).toMatch(/interest_keywords/);
+  });
+});
+
+describe("Sunset Thermas Park — anti-alucinação sem tool (v1.5.1)", () => {
+  it("§00e proíbe citar R$ sem resultado da tool no turno", () => {
+    expect(SYSTEM_PROMPT).toMatch(/PROIBIDO ABSOLUTO.*anti-alucina|anti-alucina[cç][aã]o/i);
+    expect(SYSTEM_PROMPT).toMatch(/sem bloco "Resultados obtidos"|n[aã]o houver resultado da tool/i);
+  });
+
+  it("§3b exige tool antes de cotação; fallback §2 só após erro da tool", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Sem resultado da tool neste turno.*PROIBIDO citar R\$/i);
+  });
+
+  it("DISPATCHER chama tool quando cliente responde composição após pergunta de pessoas", () => {
+    expect(DISPATCHER_PROMPT).toMatch(/Composition answer|quantas pessoas/i);
+    expect(DISPATCHER_PROMPT).toMatch(/duas apenas|explicit.*guest count/i);
+  });
+
+  it("COMMUNICATION_RULES item 15 reforça anti-alucinação", () => {
+    expect(COMMUNICATION_RULES).toMatch(/15\./);
+    expect(COMMUNICATION_RULES).toMatch(/sem resultado da tool|Anti-alucina/i);
+  });
+});
+
+describe("Sunset Thermas Park — §3d fechamento aquecido (v1.5.0)", () => {
+  it("declara §3d com tom consultivo e proíbe menu seco de call center", () => {
+    expect(SYSTEM_PROMPT).toMatch(/3d\)/);
+    expect(SYSTEM_PROMPT).toMatch(/FECHAMENTO DE TURNO|CONVERSA AQUECIDA/i);
+    expect(SYSTEM_PROMPT).toMatch(/prefere que eu verifique algo mais/i);
+    expect(SYSTEM_PROMPT).toMatch(/Proibido.*tom seco|menu gen[eé]rico/i);
+  });
+
+  it("§3d manda ancorar gancho no plano do cliente após dúvida", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Gancho leve|gancho leve/i);
+    expect(SYSTEM_PROMPT).toMatch(/retoma.*plano|plano deles/i);
+    expect(SYSTEM_PROMPT).toMatch(/Dia dos Namorados/i);
+  });
+
+  it("COMMUNICATION_RULES item 14 reforça fechamento §3d", () => {
+    expect(COMMUNICATION_RULES).toMatch(/14\./);
+    expect(COMMUNICATION_RULES).toMatch(/§3d|fechamento de turno/i);
+    expect(COMMUNICATION_RULES).toMatch(/verificar algo mais/i);
+  });
+});
+
+describe("Sunset Thermas Park — §3b recotação lista completa (v1.4.9)", () => {
+  it("§3b exige lista completa em recotação quando cliente muda datas", () => {
+    expect(SYSTEM_PROMPT).toMatch(/RECOTA[CÇ][ÃA]O|recota[cç][ãa]o/i);
+    expect(SYSTEM_PROMPT).toMatch(/12 ao 14|chame a tool de novo/i);
+    expect(SYSTEM_PROMPT).toMatch(/TODAS.*available_accommodations|lista completa/i);
+  });
+
+  it("DISPATCHER manda chamar tool de novo em novo período", () => {
+    expect(DISPATCHER_PROMPT).toMatch(/Re-quote|do 12 ao 14/i);
+    expect(DISPATCHER_PROMPT).toMatch(/all.*available_accommodations/i);
+  });
+});
+
+describe("Sunset Thermas Park — §3b listagem de todas as acomodações (v1.4.6)", () => {
+  it("declara §3b com regra de listar todas as opções disponíveis", () => {
+    expect(SYSTEM_PROMPT).toMatch(/3b\)/);
+    expect(SYSTEM_PROMPT).toMatch(/TODAS AS ACOMODA[CÇ][ÕO]ES|TODAS as opções/i);
+    expect(SYSTEM_PROMPT).toMatch(/nunca.*escolha uma.*arbitrariamente|nunca.*escolha uma categoria/i);
+  });
+
+  it("§00e manda listar available_accommodations[] inteiro no fluxo §3", () => {
+    expect(SYSTEM_PROMPT).toMatch(/available_accommodations\[\]/);
+    expect(SYSTEM_PROMPT).toMatch(/apresente \*\*TODAS\*\*|TODAS as entradas/i);
+    expect(SYSTEM_PROMPT).toMatch(/nunca.*escolha uma arbitrariamente|nunca\*\* escolha uma arbitrariamente/i);
+  });
+
+  it("proíbe citar só uma categoria sem o cliente ter pedido (fluxo §3)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Proibido:.*citar Chal[eé].*Su[ií]te Luxo|pular categorias que vieram na tool/i);
+  });
+
+  it("COMMUNICATION_RULES item 13 reforça listar todas e §3c sexta→domingo", () => {
+    expect(COMMUNICATION_RULES).toMatch(/liste \*\*todas\*\*|liste todas/i);
+    expect(COMMUNICATION_RULES).toMatch(/recota[cç][ãa]o|nunca s[oó] uma/i);
+    expect(COMMUNICATION_RULES).toMatch(/sexta.*domingo|§3c/i);
+  });
+});
+
+describe("Sunset Thermas Park — mudança de assunto parque (v1.5.4)", () => {
+  const parkDayQuestion =
+    "legal para passar somente o dia no parque, qual seria o valor do ingresso e funciona de que a hora a que horas?";
+  const parkPriceToday = "qual valor hoje para ir ao park?";
+
+  it("detecta pergunta de day use / ingresso / horário", () => {
+    expect(messageDeclaresParkDayVisitQuestion(parkDayQuestion)).toBe(true);
+    expect(messageDeclaresParkDayVisitQuestion(parkPriceToday)).toBe(true);
+    expect(messageDeclaresParkDayVisitQuestion("quero hospedagem para duas pessoas")).toBe(false);
+  });
+
+  it("§00f documenta consultar_parque_sunset e exemplo sem nome inventado", () => {
+    expect(SYSTEM_PROMPT).toMatch(/00f\)/);
+    expect(SYSTEM_PROMPT).toMatch(/consultar_parque_sunset/);
+    expect(SYSTEM_PROMPT).toMatch(/qual valor hoje para ir ao park/);
+    expect(SYSTEM_PROMPT).toMatch(/PROIBIDO.*Keven|sem o cliente ter dito o nome/i);
+  });
+
+  it("injeta contexto de ingresso na 1ª mensagem sem pedir intenção", () => {
+    const ctx = appendSunsetConversationContext(undefined, [{ role: "user", content: parkPriceToday }]);
+    expect(ctx).toMatch(/PARQUE \/ INGRESSO/i);
+    expect(ctx).toMatch(/consultar_parque_sunset/);
+    expect(ctx).toMatch(/NÃO.*parque\/hospedagem\/ambos/i);
+    expect(ctx).toMatch(/PROIBIDO.*Prazer/i);
+  });
+
+  it("§3e proíbe repetir hospedagem quando cliente pede só parque", () => {
+    expect(SYSTEM_PROMPT).toMatch(/3e\)/);
+    expect(SYSTEM_PROMPT).toMatch(/passar somente o dia no parque|passar s[oó] o dia/i);
+    expect(SYSTEM_PROMPT).toMatch(/PROIBIDO.*repetir.*hospedagem|n[aã]o.*repetir.*hospedagem/i);
+  });
+
+  it("injeta contexto de foco parque sem reler hotel", () => {
+    const msgs = [
+      { role: "user", content: "hospedagem dia dos namorados duas pessoas" },
+      { role: "assistant", content: "Standart R$ 1.104..." },
+      { role: "user", content: parkDayQuestion },
+    ];
+    const ctx = appendSunsetConversationContext(undefined, msgs);
+    expect(ctx).toMatch(/PARQUE \/ INGRESSO/i);
+    expect(ctx).toMatch(/consultar_parque_sunset/);
+    expect(ctx).toMatch(/PROIBIDO.*repetir.*hospedagem/i);
+  });
+
+  it("COMMUNICATION_RULES item 17 reforça §3e", () => {
+    expect(COMMUNICATION_RULES).toMatch(/17\./);
+    expect(COMMUNICATION_RULES).toMatch(/§3e|mudan[cç]a de assunto/i);
+  });
+
+  it("COMMUNICATION_RULES item 18 reforça §00f parque", () => {
+    expect(COMMUNICATION_RULES).toMatch(/18\./);
+    expect(COMMUNICATION_RULES).toMatch(/consultar_parque_sunset|§00f/i);
+  });
+});
+
+describe("Sunset Thermas Park — intenção já declarada (v1.5.3)", () => {
+  it("detecta hospedagem na mensagem do cliente", () => {
+    expect(messageDeclaresLodgingIntent("keven, quero hospedagem para o dia dos namorados")).toBe(true);
+    expect(messageDeclaresLodgingIntent("quero ingresso do parque")).toBe(false);
+  });
+
+  it("§3a proíbe menu parque/hospedagem quando intenção + período já vieram", () => {
+    expect(SYSTEM_PROMPT).toMatch(/INTEN[ÇC][ÃA]O \+ PER[IÍ]ODO J[AÁ] DITOS/i);
+    expect(SYSTEM_PROMPT).toMatch(/keven, quero hospedagem para o dia dos namorados/i);
+    expect(SYSTEM_PROMPT).toMatch(/Quantas pessoas v[aã]o na estadia/);
+  });
+
+  it("injeta contexto: hospedagem + dia dos namorados → só pedir composição", () => {
+    const msgs = [
+      { role: "user", content: "ola" },
+      { role: "assistant", content: "Como prefere ser chamado?" },
+      { role: "user", content: "keven, quero hospedagem para o dia dos namorados" },
+    ];
+    const ctx = appendSunsetConversationContext(undefined, msgs);
+    expect(ctx).toMatch(/j[aá] declarou HOSPEDAGEM/i);
+    expect(ctx).toMatch(/NÃO.*parque.*hospedagem.*ambos/i);
+    expect(ctx).toMatch(/composi[çc][ãa]o|quantas pessoas/i);
+    expect(conversationDeclaresLodgingIntent(msgs)).toBe(true);
+  });
+});
+
+describe("Sunset Thermas Park — detecção formulário do site (runtime §00d)", () => {
+  const formMessage =
+    "Olá! Gostaria de verificar disponibilidade para hospedagem no Hotel Sunset Thermas. Acomodação: Chalé Aconchegante Check-in: 16/05/2026 Check-out: 17/05/2026 Total de noites: 1 noite Adultos: 2 Crianças: 1 (idades: 3 anos)";
+
+  it("detecta mensagem padrão do formulário do site", () => {
+    expect(detectSunsetSiteFormMessage(formMessage)).toBe(true);
+  });
+
+  it("não detecta formulário em oi simples", () => {
+    expect(detectSunsetSiteFormMessage("ola")).toBe(false);
+    expect(detectSunsetSiteFormMessage("keven")).toBe(false);
+  });
+
+  it("injeta contexto negativo quando cliente não veio do formulário", () => {
+    const ctx = appendSunsetConversationContext("ola");
+    expect(ctx).toMatch(/NÃO se aplica/);
+    expect(ctx).toMatch(/inten[çc][ãa]o|§3a/i);
+    expect(ctx).not.toMatch(/Exemplo §00d — ATIVO/);
+  });
+
+  it("injeta exemplo §00d só quando formulário foi detectado", () => {
+    const ctx = appendSunsetConversationContext(formMessage);
+    expect(ctx).toMatch(/Exemplo §00d — ATIVO NESTA CONVERSA/);
+  });
+
+  it("buildSystemPrompt injeta contexto negativo para oi no Sunset Thermas", () => {
+    const prompt = buildSystemPrompt("", "sunset-thermas-park", false, { firstUserMessage: "ola" });
+    expect(prompt).toMatch(/\[CONTEXTO DESTA CONVERSA\]/);
+    expect(prompt).not.toMatch(/Prazer, Marina\. Vi aqui que vocês querem 1 noite/);
+  });
+});
+
+describe("Sunset Thermas Park — regressão v1.4.4 (condicionalidade do §00d)", () => {
+  it("§00d declara no topo que SÓ se aplica quando os gatilhos do formulário foram detectados", () => {
+    expect(SYSTEM_PROMPT).toMatch(/CONDI[ÇC][ÃÃ]O DE APLICA[ÇC][ÃÃ]O DO §00d|ATEN[ÇC][ÃÃ]O[^\n]*CONDI[ÇC][ÃÃ]O|S[ÓO][^\n]*se aplica quando os[^\n]*gatilhos do formul[áa]rio/i);
+  });
+
+  it("§00d manda voltar para §3 quando o cliente não veio do formulário", () => {
+    expect(SYSTEM_PROMPT).toMatch(/VOLTE PARA §3|volte para §3[^\n]*Qualifica[çc][ãa]o/i);
+  });
+
+  it("Turno 2 do §00d é explicitamente condicional, não universal", () => {
+    expect(SYSTEM_PROMPT).toMatch(/TURNO 2[^\n]*S[ÓO] DENTRO DO CASO §00d|S[ÓO] DENTRO DO CASO §00d/);
+    expect(SYSTEM_PROMPT).toMatch(/Se o cliente N[ÃÃ]O veio do formul[áa]rio[^\n]*N[ÃÃ]O se aplica/i);
+  });
+
+  it("Turno 2 do §00d proíbe citar campos que NÃO vieram no formulário", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Se algum campo N[ÃÃ]O veio[^\n]*N[ÃÃ]O cite|algum campo N[ÃÃ]O veio.*N[ÃÃ]O cite/i);
+  });
+
+  it("exemplo '1 noite, 2 adultos, Chalé' está fora do prompt estático (só no bloco injetado §00d)", () => {
+    expect(SYSTEM_PROMPT).not.toMatch(/Prazer, Marina\. Vi aqui que vocês querem 1 noite/);
+    expect(SUNSET_FORM_DIALOGUE_EXAMPLE).toMatch(/Exemplo §00d[^\n]*ATIVO NESTA CONVERSA/i);
+    expect(SUNSET_FORM_DIALOGUE_EXAMPLE).toMatch(/conte[úu]do[^\n]*fict[íi]cio/i);
+  });
+
+  it("§00d proíbe alucinação de turno citando dados que o cliente não trouxe", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Confirmar frases como|alucina[çc][ãa]o de turno.*erro grav[íi]ssimo|1 noite[^\n]*12\/06[^\n]*Chal[ée] Aconchegante/i);
   });
 });

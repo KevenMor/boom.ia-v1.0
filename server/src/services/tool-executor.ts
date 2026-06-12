@@ -13,6 +13,7 @@ import {
   isGalleryExcludedFromClientCatalog,
 } from "../utils/suite-gallery-llm-labels.js";
 import { runLodgingConsulta, type LodgingGuestInput } from "./lodging-consulta.js";
+import { runParkDayConsulta } from "./park-day-consulta.js";
 import {
   classifyVehicleSegments,
   resolveSegmentFilter,
@@ -1679,8 +1680,45 @@ async function executeLodgingConsulta(
   const check_in = String(args?.check_in ?? "").trim();
   const check_out = String(args?.check_out ?? "").trim();
   const guests = normalizeLodgingGuests(args?.guests);
+  const interest_keywords = Array.isArray(args?.interest_keywords)
+    ? (args.interest_keywords as unknown[]).map(String).filter(Boolean)
+    : undefined;
 
-  const out = await runLodgingConsulta(supabase, { tenant_id: tenantId, check_in, check_out, guests });
+  const out = await runLodgingConsulta(supabase, {
+    tenant_id: tenantId,
+    check_in,
+    check_out,
+    guests,
+    interest_keywords,
+  });
+  if (!out.ok) {
+    return { success: false, result: null, error: JSON.stringify(out.body) };
+  }
+  return { success: true, result: out.data };
+}
+
+async function executeParkDayConsulta(
+  supabase: ReturnType<typeof createNexusClient>,
+  tool: { tenant_id?: string },
+  args: Record<string, unknown>,
+  agentId: string
+): Promise<ToolExecutionResult> {
+  let tenantId = tool.tenant_id?.trim() || "";
+  if (!tenantId && agentId) {
+    const { data: agent } = await supabase.from("agents").select("tenant_id").eq("id", agentId).single();
+    tenantId = (agent?.tenant_id as string)?.trim() || "";
+  }
+  if (!tenantId) {
+    return {
+      success: false,
+      result: null,
+      error:
+        "tenant_id não disponível: associe esta ferramenta ao tenant Sunset (não use Global) ou garanta que o agente tenha tenant_id",
+    };
+  }
+
+  const date = String(args?.date ?? "").trim();
+  const out = await runParkDayConsulta(supabase, { tenant_id: tenantId, date });
   if (!out.ok) {
     return { success: false, result: null, error: JSON.stringify(out.body) };
   }
@@ -1743,6 +1781,9 @@ export async function executeTool(
 
     case "lodging_consulta":
       return executeLodgingConsulta(supabase, tool, args, agentId);
+
+    case "park_consulta":
+      return executeParkDayConsulta(supabase, tool, args, agentId);
 
     case "web_scraper":
     case "api_rest":

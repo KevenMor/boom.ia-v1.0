@@ -21,6 +21,8 @@ export type LodgingConsultaOk =
         total_price: number;
         currency: string;
         notes: string | null;
+        /** Ocupação usada na tarifa quando difere da família (ex.: Loft cotado para 6 pessoas). */
+        quoted_for_occupancy?: number;
       }>;
       message: string;
     }
@@ -38,6 +40,66 @@ export type LodgingConsultaErr = { error: string; detail?: string };
  * Consulta interna: calendário do parque + tarifas (módulo hospedagem).
  * Usada pela rota HTTP e pela tool `lodging_consulta` (sem URL externa).
  */
+const LOFT_MIN_GUESTS_FOR_RATE = 6;
+
+type LodgingAccommodationRow = Extract<LodgingConsultaOk, { status: "success" }>["available_accommodations"][number];
+
+async function fetchLoftSupplementalAccommodation(
+  supabase: ReturnType<typeof createNexusClient>,
+  tenant_id: string,
+  nights: number,
+  guestsForPricing: number
+): Promise<LodgingAccommodationRow | null> {
+  const { data: types, error: typesError } = await supabase
+    .from("lodging_accommodation_types")
+    .select("id, name")
+    .eq("tenant_id", tenant_id)
+    .ilike("name", "%LOFT%")
+    .limit(1);
+
+  if (typesError || !types?.length) return null;
+
+  const typeId = types[0].id as string;
+  const typeName = (types[0].name as string) ?? "LOFT";
+
+  const { data: rates, error: ratesError } = await supabase
+    .from("lodging_rate_items")
+    .select("id, guests, nights, price, currency, notes")
+    .eq("tenant_id", tenant_id)
+    .eq("accommodation_type_id", typeId)
+    .eq("guests", LOFT_MIN_GUESTS_FOR_RATE)
+    .eq("nights", nights)
+    .limit(1);
+
+  if (ratesError || !rates?.length) return null;
+
+  const rate = rates[0];
+  const total = parseFloat(String(rate.price));
+  const occupancyNote =
+    `Tarifa cadastrada para até ${LOFT_MIN_GUESTS_FOR_RATE} pessoas (hidromassagem/SPA). ` +
+    `Para ${guestsForPricing} pessoa${guestsForPricing === 1 ? "" : "s"}, confirmar condição com a equipe antes de fechar.`;
+
+  return {
+    id: String(rate.id),
+    name: typeName,
+    guests: LOFT_MIN_GUESTS_FOR_RATE,
+    nights,
+    price_per_night: total / nights,
+    total_price: total,
+    currency: String(rate.currency ?? "BRL"),
+    notes: rate.notes ? `${rate.notes} ${occupancyNote}` : occupancyNote,
+    quoted_for_occupancy: LOFT_MIN_GUESTS_FOR_RATE,
+  };
+}
+
+function wantsLoftOrSpaInterest(interest_keywords: string[] | undefined): boolean {
+  if (!interest_keywords?.length) return false;
+  return interest_keywords.some((k) => {
+    const n = k.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return n.includes("loft") || n.includes("spa") || n.includes("hidro");
+  });
+}
+
 export async function runLodgingConsulta(
   supabase: ReturnType<typeof createNexusClient>,
   params: {
@@ -45,6 +107,7 @@ export async function runLodgingConsulta(
     check_in: string;
     check_out: string;
     guests: LodgingGuestInput[];
+    interest_keywords?: string[];
   }
 ): Promise<{ ok: true; data: LodgingConsultaOk } | { ok: false; status: number; body: LodgingConsultaErr }> {
   const tenant_id = params.tenant_id.trim();
@@ -219,6 +282,18 @@ export async function runLodgingConsulta(
       currency: rate.currency,
       notes: rate.notes,
     }));
+
+    const loftInterest = wantsLoftOrSpaInterest(params.interest_keywords);
+    const hasLoftInList = accommodations.some((a) => /loft|spa/i.test(a.name));
+    if (loftInterest && !hasLoftInList) {
+      const supplemental = await fetchLoftSupplementalAccommodation(
+        supabase,
+        tenant_id,
+        nights,
+        guestsForPricing
+      );
+      if (supplemental) accommodations.push(supplemental);
+    }
 
     const messageKids =
       childrenUnder12.length > 0

@@ -33,7 +33,7 @@ import { toast } from "sonner";
 
 const col = "mx-auto w-full max-w-[1280px] px-5 sm:px-6 lg:px-8";
 const stitchCard =
-  "rounded-xl border border-[#ccc3d8] bg-white p-5 shadow-sm dark:border-border dark:bg-card sm:p-6";
+  "rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-border dark:bg-card sm:p-6";
 
 export default function LodgingPricingPage() {
   const { selectedTenantId, scopedTenantDisplayName } = useTenantContext();
@@ -150,15 +150,15 @@ export default function LodgingPricingPage() {
   }
 
   return (
-    <div className="-mx-4 flex min-h-[calc(100dvh-6rem)] flex-1 flex-col bg-[#f8f9ff] dark:bg-background md:-mx-6">
+    <div className="-mx-4 flex min-h-[calc(100dvh-6rem)] flex-1 flex-col bg-slate-50 dark:bg-background md:-mx-6">
       <div className={cn(col, "pb-12 pt-6 md:pt-8")}>
         <header className="mb-2">
-          <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#630ed4]">Gestão de reservas</p>
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">Gestão de reservas</p>
           <div className="mt-2">
-            <h1 className="text-2xl font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-3xl">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-foreground sm:text-3xl">
               Valores e tarifas
             </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[#4a4455] dark:text-muted-foreground">
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-muted-foreground">
               Tabela de preços por <strong className="font-medium text-foreground/90">categoria de hospedagem</strong>,{" "}
               <strong className="font-medium text-foreground/90">número de pessoas</strong> e{" "}
               <strong className="font-medium text-foreground/90">diárias</strong>. Edite, adicione e remova valores conforme necessário.
@@ -198,7 +198,7 @@ export default function LodgingPricingPage() {
                 const typeName = types.find((t) => t.id === typeId)?.name || typeId;
                 return (
                   <div key={typeId} className="space-y-3">
-                    <h3 className="text-base font-semibold text-[#0b1c30] dark:text-foreground">{typeName}</h3>
+                    <h3 className="text-base font-semibold text-slate-900 dark:text-foreground">{typeName}</h3>
                     <div className={stitchCard}>
                       <div className="overflow-x-auto">
                         <table className="w-full min-w-[500px] border-separate border-spacing-0 text-sm">

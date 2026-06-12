@@ -39,7 +39,7 @@ import { Badge } from "@/components/ui/badge";
 
 const col = "mx-auto w-full max-w-[1280px] px-5 sm:px-6 lg:px-8";
 const stitchCard =
-  "rounded-xl border border-[#ccc3d8] bg-white p-5 shadow-sm dark:border-border dark:bg-card sm:p-6";
+  "rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-border dark:bg-card sm:p-6";
 
 function resStatusBadge(s: string) {
   if (s === "confirmed") return "bg-emerald-500/15 text-emerald-800 dark:text-emerald-400 border-emerald-500/30";
@@ -238,15 +238,15 @@ export default function LodgingRegistryPage() {
   }
 
   return (
-    <div className="-mx-4 flex min-h-[calc(100dvh-6rem)] flex-1 flex-col bg-[#f8f9ff] dark:bg-background md:-mx-6">
+    <div className="-mx-4 flex min-h-[calc(100dvh-6rem)] flex-1 flex-col bg-slate-50 dark:bg-background md:-mx-6">
       <div className={cn(col, "pb-12 pt-6 md:pt-8")}>
         <header className="mb-2">
-          <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#630ed4]">Gestão de reservas</p>
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">Gestão de reservas</p>
           <div className="mt-2">
-            <h1 className="text-2xl font-semibold tracking-tight text-[#0b1c30] dark:text-foreground sm:text-3xl">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-foreground sm:text-3xl">
               Estoque de quartos no parque
             </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[#4a4455] dark:text-muted-foreground">
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-muted-foreground">
               Aqui registra <strong className="font-medium text-foreground/90">o que existe fisicamente</strong>: tipo de hospedagem (categoria) e cada quarto/unidade disponível ou desativado. Serve como inventário para a equipe e base para ferramentas de disponibilidade. Marcar reservas e períodos ocupados é um passo opcional no fim da página quando precisarem bloquear datas.
             </p>
             {scopedTenantDisplayName ? (
@@ -262,29 +262,29 @@ export default function LodgingRegistryPage() {
           <div className={cn(stitchCard, "text-sm text-muted-foreground")}>Selecione um tenant para gerir o estoque de quartos.</div>
         ) : (
           <div className="space-y-8">
-            <section className={cn(stitchCard, "flex flex-col gap-4 border-[#6314d926] bg-[#faf8ff] sm:flex-row sm:items-stretch sm:gap-6 dark:border-border dark:bg-muted/20")}>
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center self-start rounded-xl bg-[#7c3aed]/15 text-[#630ed4] dark:bg-[#7c3aed]/25 dark:text-[#c4b5fd] sm:self-center">
+            <section className={cn(stitchCard, "flex flex-col gap-4 border-slate-200 bg-white sm:flex-row sm:items-stretch sm:gap-6 dark:border-border dark:bg-muted/20")}>
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center self-start rounded-xl bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 sm:self-center">
                 <Package className="h-6 w-6" aria-hidden />
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="text-base font-semibold text-[#0b1c30] dark:text-foreground">Visão rápida do estoque</h2>
+                <h2 className="text-base font-semibold text-slate-900 dark:text-foreground">Visão rápida do estoque</h2>
                 {stockStats.categories === 0 ? (
                   <p className="mt-2 text-sm text-muted-foreground">Ainda não há categorias registradas.</p>
                 ) : (
                   <dl className="mt-3 grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-lg border border-[#e8e4f5] bg-white/70 px-3 py-2.5 dark:border-border dark:bg-card/60">
+                    <div className="rounded-lg border border-slate-200 bg-white/70 px-3 py-2.5 dark:border-border dark:bg-card/60">
                       <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Categorias</dt>
-                      <dd className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-[#0b1c30] dark:text-foreground">
+                      <dd className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-slate-900 dark:text-foreground">
                         {stockStats.categories}
                       </dd>
                     </div>
-                    <div className="rounded-lg border border-[#e8e4f5] bg-white/70 px-3 py-2.5 dark:border-border dark:bg-card/60">
+                    <div className="rounded-lg border border-slate-200 bg-white/70 px-3 py-2.5 dark:border-border dark:bg-card/60">
                       <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Quartos ativos</dt>
                       <dd className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-emerald-700 dark:text-emerald-400">
                         {stockStats.active}
                       </dd>
                     </div>
-                    <div className="rounded-lg border border-[#e8e4f5] bg-white/70 px-3 py-2.5 dark:border-border dark:bg-card/60">
+                    <div className="rounded-lg border border-slate-200 bg-white/70 px-3 py-2.5 dark:border-border dark:bg-card/60">
                       <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Desativados</dt>
                       <dd className="mt-1 flex flex-wrap items-baseline gap-x-2 text-xl font-semibold tabular-nums tracking-tight text-muted-foreground">
                         {stockStats.inactive}
@@ -300,8 +300,8 @@ export default function LodgingRegistryPage() {
 
             <section className={cn(stitchCard, "space-y-4")}>
               <div>
-                <h2 className="flex items-center gap-2 text-base font-semibold text-[#0b1c30] dark:text-foreground">
-                  <BedDouble className="h-5 w-5 text-[#630ed4]" aria-hidden /> Nova categoria de hospedagem
+                <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900 dark:text-foreground">
+                  <BedDouble className="h-5 w-5 text-slate-600" aria-hidden /> Nova categoria de hospedagem
                 </h2>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Agrupa tipos de quarto físicos iguais (ex.: Suíte Luxo, Chalé). Depois pode adicionar cada unidade com o nome ou número da porta.
@@ -324,7 +324,7 @@ export default function LodgingRegistryPage() {
                   <Button
                     type="button"
                     disabled={createType.isPending || !newTypeName.trim()}
-                    className="h-10 w-full shrink-0 bg-[#630ed4] hover:bg-[#6d28d9] sm:w-auto sm:min-w-[7.5rem]"
+                    className="h-10 w-full shrink-0 bg-blue-700 hover:bg-blue-800 sm:w-auto sm:min-w-[7.5rem]"
                     onClick={() => void handleCreateType()}
                   >
                     {createType.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Adicionar
@@ -344,7 +344,7 @@ export default function LodgingRegistryPage() {
                 <Collapsible key={t.id} defaultOpen className={cn(stitchCard, "!overflow-hidden !p-0")}>
                   <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 px-5 py-4 text-start hover:bg-muted/40 sm:px-6">
                     <div className="min-w-0">
-                      <span className="text-base font-semibold text-[#0b1c30] dark:text-foreground">{t.name}</span>
+                      <span className="text-base font-semibold text-slate-900 dark:text-foreground">{t.name}</span>
                       {t.max_occupancy ? (
                         <span className="ml-2 whitespace-nowrap text-xs text-muted-foreground">até {t.max_occupancy} p.</span>
                       ) : null}
@@ -380,7 +380,7 @@ export default function LodgingRegistryPage() {
             <Collapsible defaultOpen={false} className={cn(stitchCard, "!overflow-hidden border-dashed !p-0 dark:opacity-100")}>
               <CollapsibleTrigger className="group flex w-full items-start justify-between gap-4 px-5 py-4 text-start hover:bg-muted/30 sm:items-center sm:px-6">
                 <div className="min-w-0">
-                  <span className="text-base font-semibold text-[#0b1c30] dark:text-foreground">Reservas e períodos ocupados</span>
+                  <span className="text-base font-semibold text-slate-900 dark:text-foreground">Reservas e períodos ocupados</span>
                   <p className="mt-1 text-xs text-muted-foreground">
                     Secção opcional. Reservas pendentes ou confirmadas bloqueiam a unidade em [check-in, check-out).
                   </p>
@@ -524,7 +524,7 @@ export default function LodgingRegistryPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" type="button" onClick={() => setUnitDlg({ type: null })}>Cancelar</Button>
-            <Button className="bg-[#630ed4]" type="button" disabled={createUnit.isPending} onClick={() => void saveNewUnit()}>Guardar</Button>
+            <Button className="bg-blue-700 hover:bg-blue-800" type="button" disabled={createUnit.isPending} onClick={() => void saveNewUnit()}>Guardar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -587,7 +587,7 @@ export default function LodgingRegistryPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" type="button" onClick={() => setResDlgOpen(false)}>Cancelar</Button>
-            <Button className="bg-[#630ed4]" type="button" disabled={createRes.isPending} onClick={() => void saveReservation()}>Guardar</Button>
+            <Button className="bg-blue-700 hover:bg-blue-800" type="button" disabled={createRes.isPending} onClick={() => void saveReservation()}>Guardar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

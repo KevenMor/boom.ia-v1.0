@@ -50,11 +50,52 @@ interface AgentTokenUsageRow {
 const USAGE_SELECT_FULL =
   "id, created_at, agent_id, conversation_id, message_role, model, provider, prompt_tokens, completion_tokens, total_tokens, metadata";
 
+/**
+ * Extrai a contagem de tool calls do metadata.
+ * O backend salva `tool_calls_count` no metadata (top-level) para cada insert.
+ */
 function extractToolCallsCount(metadata: Record<string, unknown> | null, messageRole: string): number {
   if (!metadata) return 0;
-  const dispatcher = metadata.dispatcher as Record<string, unknown> | undefined;
-  if (messageRole === "dual_provider" && dispatcher && typeof dispatcher === "object") return 1;
+
+  // 1) Prioridade: tool_calls_count no top-level do metadata (formato atual do insert)
+  const topLevelCount = metadata.tool_calls_count as number | undefined;
+  if (typeof topLevelCount === "number") return topLevelCount;
+
+  // 2) Para dual_provider: extrair do dispatcher (fallback)
+  if (messageRole === "dual_provider") {
+    const dispatcher = metadata.dispatcher as Record<string, unknown> | undefined;
+    if (dispatcher && typeof dispatcher === "object") {
+      const dispatcherCount = dispatcher.tool_calls_count as number | undefined;
+      if (typeof dispatcherCount === "number") return dispatcherCount;
+    }
+  }
+
+  // 3) Fallback: verificar se há tool_calls como array no metadata
+  const toolCalls = metadata.tool_calls as unknown[];
+  if (Array.isArray(toolCalls)) return toolCalls.length;
+
   return 0;
+}
+
+/**
+ * Extrai a latência em ms do metadata.
+ * O backend salva `latency_ms` no metadata (top-level) para cada insert.
+ */
+function extractLatencyMs(metadata: Record<string, unknown> | null): number | null {
+  if (!metadata) return null;
+
+  // 1) Prioridade: latency_ms no top-level do metadata
+  const topLevelLatency = metadata.latency_ms as number | undefined;
+  if (typeof topLevelLatency === "number") return topLevelLatency;
+
+  // 2) Fallback: pode estar aninhado no dispatcher
+  const dispatcher = metadata.dispatcher as Record<string, unknown> | undefined;
+  if (dispatcher && typeof dispatcher === "object") {
+    const dispatcherLatency = dispatcher.latency_ms as number | undefined;
+    if (typeof dispatcherLatency === "number") return dispatcherLatency;
+  }
+
+  return null;
 }
 
 export function useUsageDailySummary(tenantId?: string | null) {
@@ -154,7 +195,7 @@ export function useRecentUsageEvents(limit = 4000, tenantId?: string | null) {
         prompt_tokens: row.prompt_tokens ?? 0,
         completion_tokens: row.completion_tokens ?? 0,
         total_tokens: row.total_tokens ?? (row.prompt_tokens ?? 0) + (row.completion_tokens ?? 0),
-        latency_ms: null,
+        latency_ms: extractLatencyMs(row.metadata),
         tool_calls_count: extractToolCallsCount(row.metadata, row.message_role ?? ""),
         phase: row.message_role ?? "unknown",
         created_at: row.created_at,
