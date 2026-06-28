@@ -66,15 +66,20 @@
 
   function detectTheme() {
     const html = document.documentElement;
-    // classe dark (Tailwind / Chatwoot padrão)
+    // 1. Classe explícita no html/body (mais confiável — set pelo app)
     if (html.classList.contains("dark") || document.body.classList.contains("dark")) return "dark";
     if (html.getAttribute("data-theme") === "dark" || document.body.getAttribute("data-theme") === "dark") return "dark";
-    // preferência do sistema operacional
-    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
-    // heurística: luminância do fundo
+    if (html.classList.contains("light") || html.getAttribute("data-theme") === "light") return "light";
+    // 2. Luminância do fundo renderizado (reflete o tema real do app)
     const bg = getComputedStyle(document.body).backgroundColor;
     const m = bg.match(/\d+/g);
-    if (m && parseInt(m[0]) + parseInt(m[1]) + parseInt(m[2]) < 300) return "dark";
+    if (m && m.length >= 3) {
+      const lum = parseInt(m[0]) * 0.299 + parseInt(m[1]) * 0.587 + parseInt(m[2]) * 0.114;
+      if (lum < 80) return "dark";
+      if (lum > 140) return "light";
+    }
+    // 3. Preferência do SO — só como último recurso
+    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
     return "light";
   }
 
@@ -149,11 +154,29 @@
   }
 
   function findSidebar() {
+    // Preferir o container completo da sidebar (inclui barra de ícones + navegação textual)
+    // Chatwoot usa <aside> como wrapper de tudo; pegar o elemento mais largo garante o posicionamento correto
+    const candidates = [
+      $("aside"),
+      $('[data-testid="sidebar"]'),
+      $('[data-testid="sidebar-primary"]'),
+      $("aside.primary"),
+      $("nav"),
+    ].filter(Boolean);
+    if (!candidates.length) return null;
+    // Escolhe o mais largo — é o wrapper completo, não só a barra de ícones
+    return candidates.reduce(function (best, el) {
+      return el.getBoundingClientRect().width > best.getBoundingClientRect().width ? el : best;
+    });
+  }
+
+  function findMainContent() {
     return (
-      $('[data-testid="sidebar-primary"]') ||
-      $('[data-testid="sidebar"]') ||
-      $("aside.primary") ||
-      $("aside")
+      $(".view-box") ||
+      $(".main-content") ||
+      $('[data-testid="main-content"]') ||
+      $(".conversations-list-wrap") ||
+      null
     );
   }
 
@@ -212,6 +235,15 @@
 
   function layoutPanel() {
     if (!panel || panel.dataset.visible !== "true") return;
+    // Tenta usar a borda esquerda do conteúdo principal para posicionar com precisão
+    const main = findMainContent();
+    if (main) {
+      const rect = main.getBoundingClientRect();
+      panel.style.left = Math.max(0, rect.left) + "px";
+      panel.style.width = Math.max(320, window.innerWidth - rect.left) + "px";
+      return;
+    }
+    // Fallback: borda direita do sidebar (container completo)
     const sb = findSidebar();
     if (!sb) {
       panel.style.left = "0";
