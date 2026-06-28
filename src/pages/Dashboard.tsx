@@ -3,6 +3,7 @@ import { useTenants } from "@/hooks/useTenants";
 import { useAgents } from "@/hooks/useAgents";
 import { useProviders } from "@/hooks/useProviders";
 import { useUsageDailySummary, useRecentUsageEvents } from "@/hooks/useUsageMetrics";
+import { useConversationGrowth } from "@/hooks/useConversationGrowth";
 import { useTokensByProvider } from "@/hooks/useTokensByProvider";
 import { useTokensByAgent } from "@/hooks/useTokensByAgent";
 import { useTenantContext } from "@/contexts/TenantContext";
@@ -12,7 +13,6 @@ import { TokenUsageChart } from "@/components/dashboard/TokenUsageChart";
 import { ModelBreakdown } from "@/components/dashboard/ModelBreakdown";
 import { AgentTokenBreakdown } from "@/components/dashboard/AgentTokenBreakdown";
 import { CostEstimationCard } from "@/components/dashboard/CostEstimationCard";
-import { LatencyChart } from "@/components/dashboard/LatencyChart";
 import { ProviderTokensCard } from "@/components/dashboard/ProviderTokensCard";
 
 import { RevenueChart } from "@/components/dashboard/RevenueChart";
@@ -30,6 +30,7 @@ const Dashboard = React.forwardRef<HTMLDivElement>(function Dashboard(_props, re
   const { data: recentEvents, isLoading: loadingEvents } = useRecentUsageEvents(8000, selectedTenantId);
   const { data: providerTokens, isLoading: loadingProviderTokens } = useTokensByProvider(selectedTenantId);
   const { data: agentTokens, isLoading: loadingAgentTokens } = useTokensByAgent(7, selectedTenantId);
+  const { data: conversationGrowth, isLoading: loadingConversationGrowth } = useConversationGrowth(selectedTenantId);
 
   const activeTenants = tenants?.filter((t) => t.status === "active").length ?? 0;
   const activeAgents = agents?.filter((a: Agent) => a.status === "active").length ?? 0;
@@ -50,20 +51,21 @@ const Dashboard = React.forwardRef<HTMLDivElement>(function Dashboard(_props, re
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
-        <div className="xl:col-span-5">
+        <div className="xl:col-span-8">
           <AgentTokenBreakdown data={agentTokens ?? []} loading={loadingAgentTokens} />
         </div>
         <div className="xl:col-span-4">
-          <LatencyChart data={dailySummary ?? []} loading={loadingDaily} />
-        </div>
-        <div className="xl:col-span-3">
           <CostEstimationCard events={recentEvents ?? []} loading={loadingEvents} />
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-6 md:grid-cols-2 lg:grid-cols-4">
         <div>
-          <RevenueChart />
+          <RevenueChart
+            monthlyData={conversationGrowth?.monthly ?? []}
+            annualData={conversationGrowth?.annual ?? []}
+            loading={loadingConversationGrowth}
+          />
         </div>
         <div>
           <SprintProgress

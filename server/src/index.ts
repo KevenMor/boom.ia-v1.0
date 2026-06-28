@@ -16,6 +16,7 @@ import { contactsRoutes } from "./routes/contacts.js";
 import { crmContactsRoutes } from "./routes/crm-contacts.js";
 import { calendarServicesRoutes } from "./routes/calendar-services.js";
 import { demoRoutes } from "./routes/demo.js";
+import { embedChatwootRoutes } from "./routes/embed-chatwoot.js";
 import { occurrencesRoutes } from "./routes/occurrences.js";
 import { suiteGalleriesRoutes } from "./routes/suite-galleries.js";
 import { auditRoutes } from "./routes/audit.js";
@@ -178,6 +179,7 @@ async function build() {
   fastify.register(auditRoutes, { prefix: "/api" });
   fastify.register(tenantAiToggleRoutes, { prefix: "/api" });
   fastify.register(demoRoutes, { prefix: "/api" });
+  fastify.register(embedChatwootRoutes, { prefix: "/api" });
 
   fastify.get("/health", async () => ({ ok: true, timestamp: new Date().toISOString() }));
 

@@ -1,0 +1,359 @@
+<!--
+  Boom IA — Dashboard Script (Chatwoot / Mega)
+  ============================================
+
+  O que faz:
+  - Adiciona item "Boom IA — Agente" na sidebar do dashboard.
+  - Abre painel lateral com iframe do espelho read-only (/embed/chatwoot).
+  - Usa account_id da URL (/app/accounts/:id/...) — sem login no painel Boom IA.
+
+  Onde colar:
+  - Mega: Super Admin → App Config → Dashboard Scripts
+          https://SEU-DOMINIO/super_admin/app_config?config=internal
+  - Forks Chatwoot com DASHBOARD_SCRIPTS / InstallationConfig equivalente.
+
+  Antes de colar, edite o bloco CFG abaixo:
+  - BOOM_URL: URL pública do frontend Boom IA (HTTPS em produção)
+  - EMBED_KEY: mesma chave de CHATWOOT_MIRROR_EMBED_KEY no server/.env
+  - TARGET_ACCOUNT_ID: null = todas as contas; ou número ex.: 1
+
+  Pré-requisitos Boom IA:
+  - server/.env → CHATWOOT_MIRROR_EMBED_KEY
+  - Agente com config.chatwoot_account_id = ID da conta Chatwoot
+  - CHATWOOT_EMBED_FRAME_ANCESTORS=https://seu-chatwoot.com (produção)
+
+  Alternativa nativa Chatwoot: scripts/chatwoot-install-dashboard-app.mjs (Dashboard App na conversa)
+-->
+
+<script data-name="boom-ia-agent-mirror">
+(function () {
+  const SCRIPT_KEY = "boom_ia_dashboard_agent_mirror_v1";
+  if (window[SCRIPT_KEY]) return;
+  window[SCRIPT_KEY] = true;
+
+  /** ========== CONFIGURE AQUI ========== */
+  const CFG = {
+    LINK_TEXT: "Boom IA — Agente",
+    LINK_ICON: "🤖",
+    BOOM_URL: "https://painel.boom.ia",
+    EMBED_KEY: "COLE_A_MESMA_CHAVE_DO_SERVER_ENV",
+    TARGET_ACCOUNT_ID: null,
+    POSITION: {
+      mode: "afterLabel", // start | end | index | afterLabel | beforeLabel
+      label: "Conversations", // PT-BR Chatwoot: use "Conversas"
+      index: 0,
+    },
+    PADDING: 0,
+    SHOW_BORDER: true,
+    MOBILE_MAX_WIDTH: 768,
+  };
+  /** ==================================== */
+
+  const $ = (s, r) => {
+    try {
+      return (r || document).querySelector(s);
+    } catch {
+      return null;
+    }
+  };
+  const $$ = (s, r) => {
+    try {
+      return Array.from((r || document).querySelectorAll(s));
+    } catch {
+      return [];
+    }
+  };
+  const on = (el, ev, fn, opts) => {
+    if (el) el.addEventListener(ev, fn, opts);
+  };
+  const normalize = (value) => (value || "").toLowerCase().replace(/\s+/g, " ").trim();
+
+  let panel = null;
+
+  function getAccountIdFromPath() {
+    const match = window.location.pathname.match(/\/app\/accounts\/(\d+)/);
+    return match ? String(match[1]) : null;
+  }
+
+  function isScopeAllowed() {
+    if (CFG.TARGET_ACCOUNT_ID === null || CFG.TARGET_ACCOUNT_ID === "") return true;
+    return getAccountIdFromPath() === String(CFG.TARGET_ACCOUNT_ID);
+  }
+
+  function buildIframeUrl() {
+    const accountId = getAccountIdFromPath();
+    if (!accountId || !CFG.BOOM_URL || !CFG.EMBED_KEY) return null;
+    const base = String(CFG.BOOM_URL).replace(/\/+$/, "");
+    const params = new URLSearchParams({
+      key: CFG.EMBED_KEY,
+      account_id: accountId,
+    });
+    return base + "/embed/chatwoot?" + params.toString();
+  }
+
+  function findSidebar() {
+    return (
+      $('[data-testid="sidebar-primary"]') ||
+      $('[data-testid="sidebar"]') ||
+      $("aside.primary") ||
+      $("aside")
+    );
+  }
+
+  function findAnyList() {
+    const sb = findSidebar();
+    if (!sb) return null;
+    return $("ul", sb) || $$("ul", sb)[0] || null;
+  }
+
+  function findListAndRefByLabel(labelWanted) {
+    const sb = findSidebar();
+    if (!sb) return { list: null, ref: null };
+
+    const wanted = normalize(labelWanted);
+    const uls = $$("ul", sb);
+    for (let i = 0; i < uls.length; i++) {
+      const ul = uls[i];
+      const lis = $$(":scope > li", ul);
+      for (let j = 0; j < lis.length; j++) {
+        const li = lis[j];
+        const text = normalize(li.textContent);
+        if (text === wanted || text.indexOf(wanted) !== -1) {
+          return { list: ul, ref: li };
+        }
+      }
+    }
+    return { list: null, ref: null };
+  }
+
+  function getThemeTokens() {
+    const rootStyle = getComputedStyle(document.documentElement);
+    const bodyStyle = getComputedStyle(document.body);
+    return {
+      background:
+        rootStyle.getPropertyValue("--w-bg-color").trim() ||
+        rootStyle.getPropertyValue("--color-background").trim() ||
+        bodyStyle.backgroundColor,
+      text:
+        rootStyle.getPropertyValue("--w-text-color").trim() ||
+        rootStyle.getPropertyValue("--color-body").trim() ||
+        bodyStyle.color,
+      border:
+        rootStyle.getPropertyValue("--w-border-color").trim() ||
+        "rgba(148, 163, 184, 0.35)",
+    };
+  }
+
+  function applyPanelTheme() {
+    if (!panel) return;
+    const tokens = getThemeTokens();
+    panel.style.background = tokens.background;
+    panel.style.color = tokens.text;
+    panel.style.padding = CFG.PADDING + "px";
+    panel.style.borderLeft = CFG.SHOW_BORDER ? "1px solid " + tokens.border : "0";
+  }
+
+  function layoutPanel() {
+    if (!panel || panel.dataset.visible !== "true") return;
+    const sb = findSidebar();
+    if (!sb) {
+      panel.style.left = "0";
+      panel.style.width = "100%";
+      return;
+    }
+    const rect = sb.getBoundingClientRect();
+    panel.style.left = Math.max(0, rect.right) + "px";
+    panel.style.width = Math.max(320, window.innerWidth - rect.right) + "px";
+  }
+
+  function ensurePanel() {
+    if (panel && document.body.contains(panel)) return panel;
+
+    panel = document.createElement("section");
+    panel.id = "boom-ia-embed-panel";
+    panel.dataset.visible = "false";
+    panel.setAttribute("aria-label", "Boom IA — espelho do agente");
+    panel.style.cssText = [
+      "position:fixed",
+      "top:0",
+      "right:0",
+      "bottom:0",
+      "z-index:9990",
+      "display:none",
+      "overflow:hidden",
+    ].join(";");
+
+    panel.innerHTML =
+      '<iframe id="boom-ia-embed-iframe" title="Boom IA — Agente" style="width:100%;height:100%;border:0;" loading="lazy"></iframe>';
+    document.body.appendChild(panel);
+
+    applyPanelTheme();
+    layoutPanel();
+    return panel;
+  }
+
+  function hidePanel() {
+    if (!panel) return;
+    panel.dataset.visible = "false";
+    panel.style.display = "none";
+    const iframe = $("#boom-ia-embed-iframe");
+    if (iframe) iframe.src = "about:blank";
+    const link = $("#boom-ia-embed-link a");
+    if (link) link.setAttribute("aria-expanded", "false");
+  }
+
+  function showPanel() {
+    if (!isScopeAllowed()) return;
+
+    const iframeUrl = buildIframeUrl();
+    if (!iframeUrl) {
+      console.warn("[Boom IA] account_id ou CFG incompleta — verifique BOOM_URL e EMBED_KEY.");
+      return;
+    }
+
+    ensurePanel();
+    const iframe = $("#boom-ia-embed-iframe");
+    if (iframe && iframe.src !== iframeUrl) iframe.src = iframeUrl;
+
+    panel.dataset.visible = "true";
+    panel.style.display = "block";
+    applyPanelTheme();
+    layoutPanel();
+
+    const link = $("#boom-ia-embed-link a");
+    if (link) link.setAttribute("aria-expanded", "true");
+  }
+
+  function ensureSidebarLink() {
+    if ($("#boom-ia-embed-link")) return;
+
+    const li = document.createElement("li");
+    li.id = "boom-ia-embed-link";
+    li.style.listStyle = "none";
+    li.innerHTML =
+      '<a href="#" data-boom-ia-embed-link="true" aria-expanded="false" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;text-decoration:none;color:inherit;">' +
+      '<span aria-hidden="true">' +
+      CFG.LINK_ICON +
+      "</span><span>" +
+      CFG.LINK_TEXT +
+      "</span></a>";
+
+    const link = $("a", li);
+    let parentList = null;
+    let ref = null;
+
+    if (CFG.POSITION.mode === "afterLabel" || CFG.POSITION.mode === "beforeLabel") {
+      const found = findListAndRefByLabel(CFG.POSITION.label);
+      parentList = found.list;
+      ref = found.ref;
+    }
+
+    if (!parentList) parentList = findAnyList();
+    if (!parentList) return;
+
+    const items = $$(":scope > li", parentList);
+    switch (CFG.POSITION.mode) {
+      case "start":
+        parentList.insertBefore(li, items[0] || null);
+        break;
+      case "index":
+        parentList.insertBefore(
+          li,
+          items[Math.max(0, Math.min(CFG.POSITION.index, items.length))] || null
+        );
+        break;
+      case "afterLabel":
+        if (ref && ref.nextSibling) parentList.insertBefore(li, ref.nextSibling);
+        else parentList.appendChild(li);
+        break;
+      case "beforeLabel":
+        if (ref) parentList.insertBefore(li, ref);
+        else parentList.insertBefore(li, items[0] || null);
+        break;
+      case "end":
+      default:
+        parentList.appendChild(li);
+    }
+
+    on(link, "click", function (event) {
+      event.preventDefault();
+      if (panel && panel.dataset.visible === "true") hidePanel();
+      else showPanel();
+    });
+  }
+
+  function bindSidebarCloseHandler() {
+    const sb = findSidebar();
+    if (!sb || sb.dataset.boomIaEmbedCloseBound === "true") return;
+    sb.dataset.boomIaEmbedCloseBound = "true";
+
+    on(
+      sb,
+      "click",
+      function (event) {
+        const customLink =
+          event.target && event.target.closest && event.target.closest("[data-boom-ia-embed-link]");
+        if (!customLink) hidePanel();
+      },
+      { capture: true, passive: true }
+    );
+  }
+
+  function applyFeature() {
+    if (!isScopeAllowed()) {
+      hidePanel();
+      return;
+    }
+    ensurePanel();
+    ensureSidebarLink();
+    bindSidebarCloseHandler();
+    applyPanelTheme();
+    layoutPanel();
+  }
+
+  function bootstrap() {
+    applyFeature();
+
+    const observer = new MutationObserver(function () {
+      applyFeature();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    const themeObserver = new MutationObserver(function () {
+      applyPanelTheme();
+    });
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class", "data-theme"],
+    });
+    themeObserver.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["class", "data-theme"],
+    });
+
+    on(window, "resize", function () {
+      if (window.innerWidth <= CFG.MOBILE_MAX_WIDTH) {
+        hidePanel();
+      } else {
+        applyPanelTheme();
+        layoutPanel();
+      }
+    });
+
+    on(window, "popstate", function () {
+      hidePanel();
+      applyFeature();
+    });
+
+    setTimeout(function () {
+      observer.disconnect();
+    }, 30000);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bootstrap, { once: true });
+  } else {
+    bootstrap();
+  }
+})();
+</script>

@@ -45,6 +45,7 @@ import ContactProfilePage from "@/pages/ContactProfilePage";
 import FinanceiroPage from "@/pages/FinanceiroPage";
 import TokenAnalytics from "@/pages/TokenAnalytics";
 import PublicSandbox from "@/pages/PublicSandbox";
+import ChatwootEmbedMirror from "@/pages/ChatwootEmbedMirror";
 import NotFound from "@/pages/NotFound";
 import SuiteGalleriesPage from "@/pages/SuiteGalleriesPage";
 import ParkCalendarManagementPage from "@/pages/hospedagem/ParkCalendarManagementPage";
@@ -91,6 +92,7 @@ const App = () => (
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/demo/:agentId" element={<PublicSandbox />} />
+            <Route path="/embed/chatwoot" element={<ChatwootEmbedMirror />} />
             <Route path="/" element={<RootRedirect />} />
             <Route
               element={
