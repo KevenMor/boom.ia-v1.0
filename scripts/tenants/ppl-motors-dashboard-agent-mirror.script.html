@@ -65,7 +65,7 @@
   }
 
   function buildIframeUrl() {
-    const accountId = getAccountIdFromPath() || String(CFG.TARGET_ACCOUNT_ID || "");
+    const accountId = String(CFG.TARGET_ACCOUNT_ID || getAccountIdFromPath() || "");
     if (!accountId || !CFG.EMBED_KEY) {
       console.warn("[Boom IA] account_id ou EMBED_KEY ausente.", { accountId, hasKey: Boolean(CFG.EMBED_KEY) });
       return null;
@@ -74,15 +74,8 @@
       key: CFG.EMBED_KEY,
       account_id: accountId,
     });
-    // Bootstrap via API: grava key no sessionStorage antes do React (mais confiável no Mega)
-    const viewBase = (CFG.EMBED_VIEW_URL || "").replace(/\/+$/, "");
-    if (viewBase) {
-      const url = viewBase + "?" + params.toString();
-      console.info("[Boom IA] iframe:", url);
-      return url;
-    }
-    const appBase = (CFG.EMBED_APP_URL || CFG.BOOM_URL + "/embed/chatwoot").replace(/\/+$/, "");
-    const url = appBase + "#" + params.toString();
+    const viewBase = (CFG.EMBED_VIEW_URL || CFG.BOOM_URL + "/api/embed/chatwoot/view").replace(/\/+$/, "");
+    const url = viewBase + "?" + params.toString();
     console.info("[Boom IA] iframe:", url);
     return url;
   }

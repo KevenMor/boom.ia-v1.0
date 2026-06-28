@@ -1,6 +1,20 @@
-/** Bootstrap do embed: grava credenciais no sessionStorage e abre o React. */
-export function renderChatwootEmbedViewHtml(frontendBase: string): string {
+/** Wrapper HTML: injeta key/account_id no iframe interno (servidor → HTML, sem sessionStorage). */
+export function renderChatwootEmbedViewHtml(
+  frontendBase: string,
+  embedKey: string,
+  accountId: string,
+): string {
   const base = frontendBase.replace(/\/+$/, "");
+  const hash = new URLSearchParams({
+    key: embedKey,
+    account_id: accountId,
+  }).toString();
+  const innerSrc = `${base}/embed/chatwoot#${hash}`;
+  const safeKey = JSON.stringify(embedKey);
+  const safeAccountId = JSON.stringify(accountId);
+  const safeInnerSrc = JSON.stringify(innerSrc);
+  const safeOrigin = JSON.stringify(base);
+
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -8,29 +22,33 @@ export function renderChatwootEmbedViewHtml(frontendBase: string): string {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Boom IA — Agente</title>
   <style>
-    body { margin:0; font:14px system-ui,sans-serif; display:flex; align-items:center; justify-content:center; min-height:100vh; background:#111827; color:#f3f4f6; }
-    .err { color:#fca5a5; padding:16px; text-align:center; }
+    html, body { margin:0; padding:0; height:100%; width:100%; overflow:hidden; background:#0f172a; }
+    iframe { display:block; border:0; width:100%; height:100%; }
+    .err { color:#fca5a5; font:14px system-ui,sans-serif; padding:24px; text-align:center; }
   </style>
 </head>
 <body>
-  <p id="status">Abrindo painel do agente…</p>
+  <iframe id="boom-embed-inner" title="Boom IA — Agente" allow="clipboard-write" src=${safeInnerSrc}></iframe>
   <script>
     (function () {
-      var base = ${JSON.stringify(base)};
-      var p = new URLSearchParams(location.search);
-      var key = (p.get("key") || "").trim();
-      var accountId = (p.get("account_id") || "").trim();
-      if (!key) {
-        document.getElementById("status").outerHTML =
-          '<p class="err">Parâmetro <code>key</code> ausente na URL do bootstrap.</p>';
-        return;
+      var key = ${safeKey};
+      var accountId = ${safeAccountId};
+      var origin = ${safeOrigin};
+      var frame = document.getElementById("boom-embed-inner");
+      function sendInit() {
+        if (!frame || !frame.contentWindow) return;
+        try {
+          frame.contentWindow.postMessage(
+            { type: "boom-ia-embed:init", key: key, account_id: accountId },
+            origin
+          );
+        } catch (e) { console.warn("[Boom IA] postMessage init", e); }
       }
-      try {
-        sessionStorage.setItem("boom_embed_creds", JSON.stringify({ key: key, accountId: accountId }));
-      } catch (e) {
-        console.warn("[Boom IA] sessionStorage indisponível", e);
+      if (frame) {
+        frame.addEventListener("load", sendInit);
+        setTimeout(sendInit, 400);
+        setTimeout(sendInit, 1200);
       }
-      location.replace(base + "/embed/chatwoot");
     })();
   </script>
 </body>

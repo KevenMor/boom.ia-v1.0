@@ -11,30 +11,42 @@ import { parseEmbedCredentialsFromLocation, parseEmbedInitMessage, persistEmbedC
 import { getApiBase } from "@/lib/api-client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
+const EMBED_VERSION = "v3";
+
+function resolveInitialCredentials() {
+  return parseEmbedCredentialsFromLocation();
+}
+
 export default function ChatwootEmbedMirror() {
-  const initial = parseEmbedCredentialsFromLocation();
+  const initial = resolveInitialCredentials();
   const [embedKey, setEmbedKey] = useState(initial.key);
   const [accountId, setAccountId] = useState(initial.accountId);
   const [agents, setAgents] = useState<AgentMirrorPayload[]>([]);
   const [providers, setProviders] = useState<MirrorProviderRow[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(() => {
+    if (!initial.key) {
+      return (
+        "Key ausente. Abra via Mega (Dashboard Script atualizado) ou use: " +
+        "/api/embed/chatwoot/view?key=SUA_CHAVE&account_id=9"
+      );
+    }
+    if (!initial.accountId) {
+      return "account_id ausente. Use account_id=9 para PPL Motors.";
+    }
+    return null;
+  });
+
+  const applyCredentials = useCallback((key?: string, acct?: string) => {
+    if (key) setEmbedKey(key);
+    if (acct) setAccountId(acct);
+    if (key || acct) {
+      persistEmbedCredentials({ key, accountId: acct });
+    }
+  }, []);
 
   const loadMirror = useCallback(async (resolvedAccountId: string, key: string) => {
-    if (!key) {
-      setError(
-        "Parâmetro key ausente. No Mega, recole o Dashboard Script atualizado ou abra: /embed/chatwoot#key=SUA_CHAVE&account_id=" +
-          (resolvedAccountId || "ID"),
-      );
-      setLoading(false);
-      return;
-    }
-    if (!resolvedAccountId) {
-      setError("Aguardando account_id do Chatwoot…");
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     setError(null);
     try {
@@ -50,13 +62,11 @@ export default function ChatwootEmbedMirror() {
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Falha ao carregar agente";
-      if (msg.includes("Chave de espelho")) {
-        setError(
-          `${msg} — confira se a key no script/Dashboard App é igual a CHATWOOT_MIRROR_EMBED_KEY no servidor.`,
-        );
-      } else {
-        setError(msg);
-      }
+      setError(
+        msg.includes("Chave de espelho")
+          ? `${msg} — confira CHATWOOT_MIRROR_EMBED_KEY no Easypanel e EMBED_KEY no script Mega.`
+          : msg,
+      );
       setAgents([]);
     } finally {
       setLoading(false);
@@ -64,35 +74,51 @@ export default function ChatwootEmbedMirror() {
   }, []);
 
   useEffect(() => {
+    const syncFromUrl = () => {
+      const creds = parseEmbedCredentialsFromLocation();
+      if (creds.key || creds.accountId) applyCredentials(creds.key, creds.accountId);
+    };
+    syncFromUrl();
+    window.addEventListener("hashchange", syncFromUrl);
+
     const onMessage = (event: MessageEvent) => {
       const init = parseEmbedInitMessage(event.data);
-      if (init) {
-        persistEmbedCredentials(init);
-        if (init.key) setEmbedKey(init.key);
-        if (init.accountId) setAccountId(init.accountId);
-      }
+      if (init) applyCredentials(init.key, init.accountId);
 
       const parsedId = parseChatwootAccountIdFromMessage(event.data);
       if (parsedId) setAccountId((prev) => prev || parsedId);
     };
     window.addEventListener("message", onMessage);
-    window.parent.postMessage("chatwoot-dashboard-app:fetch-info", "*");
-    return () => window.removeEventListener("message", onMessage);
-  }, []);
+
+    if (window.parent !== window) {
+      window.parent.postMessage("chatwoot-dashboard-app:fetch-info", "*");
+    }
+
+    return () => {
+      window.removeEventListener("hashchange", syncFromUrl);
+      window.removeEventListener("message", onMessage);
+    };
+  }, [applyCredentials]);
 
   useEffect(() => {
-    if (!accountId || !embedKey) {
-      setLoading(false);
-      if (!embedKey) {
-        setError(
-          "Key não recebida no iframe. Recole o Dashboard Script no Mega e redeploy frontend+server. " +
-            "A variável CHATWOOT_MIRROR_EMBED_KEY no Easypanel só vale no backend — a key também precisa ir na URL do iframe.",
-        );
-      }
-      return;
-    }
+    if (!embedKey || !accountId) return;
     void loadMirror(accountId, embedKey);
   }, [accountId, embedKey, loadMirror]);
+
+  useEffect(() => {
+    if (embedKey && accountId) return;
+    const timer = window.setTimeout(() => {
+      if (!embedKey) {
+        setError(
+          "Key não recebida. Recole o script PPL no Mega e faça redeploy frontend+server. " +
+            "Teste: https://ia.agboom.com.br/api/embed/chatwoot/view?key=...&account_id=9",
+        );
+      } else if (!accountId) {
+        setError("account_id ausente — use conta 9 (PPL Motors).");
+      }
+    }, 2000);
+    return () => window.clearTimeout(timer);
+  }, [embedKey, accountId]);
 
   const selectedAgent = useMemo(
     () => agents.find((a) => a.id === selectedId) ?? agents[0] ?? null,
@@ -113,7 +139,9 @@ export default function ChatwootEmbedMirror() {
             </span>
             <div>
               <h1 className="text-base font-semibold">Boom IA — Agente</h1>
-              <p className="text-xs text-muted-foreground">Conta Chatwoot {accountId || "—"}</p>
+              <p className="text-xs text-muted-foreground">
+                Conta Chatwoot {accountId || "—"} · embed {EMBED_VERSION}
+              </p>
             </div>
           </div>
           {agents.length > 1 && (

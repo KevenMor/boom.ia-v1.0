@@ -92,10 +92,8 @@
       key: CFG.EMBED_KEY,
       account_id: accountId,
     });
-    const viewBase = (CFG.EMBED_VIEW_URL || "").replace(/\/+$/, "");
-    if (viewBase) return viewBase + "?" + params.toString();
-    const appBase = (CFG.EMBED_APP_URL || CFG.BOOM_URL + "/embed/chatwoot").replace(/\/+$/, "");
-    return appBase + "#" + params.toString();
+    const viewBase = (CFG.EMBED_VIEW_URL || CFG.BOOM_URL + "/api/embed/chatwoot/view").replace(/\/+$/, "");
+    return viewBase + "?" + params.toString();
   }
 
   function postEmbedInit(iframe) {

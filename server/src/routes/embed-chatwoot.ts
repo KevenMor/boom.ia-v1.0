@@ -142,14 +142,24 @@ async function loadMirrorAgents(
 export async function embedChatwootRoutes(fastify: FastifyInstance) {
   fastify.get(
     "/embed/chatwoot/view",
-    async (req: FastifyRequest, reply: FastifyReply) => {
+    async (
+      req: FastifyRequest<{ Querystring: { account_id?: string; key?: string } }>,
+      reply: FastifyReply,
+    ) => {
       applyEmbedHeaders(reply);
-      if (!getEmbedKey(req)) {
+      if (!assertEmbedKey(req, reply)) return;
+
+      const accountId = req.query.account_id?.trim();
+      if (!accountId) {
         return reply.status(400).type("text/html").send(
-          "<!DOCTYPE html><html><body><p>Parâmetro <code>key</code> ausente na URL.</p></body></html>",
+          "<!DOCTYPE html><html><body><p>Parâmetro <code>account_id</code> ausente na URL.</p></body></html>",
         );
       }
-      return reply.type("text/html; charset=utf-8").send(renderChatwootEmbedViewHtml(publicFrontendBase()));
+
+      const key = getEmbedKey(req)!;
+      return reply
+        .type("text/html; charset=utf-8")
+        .send(renderChatwootEmbedViewHtml(publicFrontendBase(), key, accountId));
     },
   );
 
