@@ -13,8 +13,9 @@
   /** ========== PPL MOTORS (conta 9) ========== */
   const CFG = {
     LINK_TEXT: "PPL Motors — Agente IA",
-    LINK_ICON: "🤖",
+    LINK_ICON: "🔍",
     BOOM_URL: "https://ia.agboom.com.br",
+    EMBED_VIEW_URL: "https://ia.agboom.com.br/api/embed/chatwoot/view",
     EMBED_KEY: "iUDtFP4Rd9FyqNz3nkynZnkW",
     TARGET_ACCOUNT_ID: 9,
     POSITION: {
@@ -61,13 +62,16 @@
 
   function buildIframeUrl() {
     const accountId = getAccountIdFromPath();
-    if (!accountId || !CFG.BOOM_URL || !CFG.EMBED_KEY) return null;
-    const base = String(CFG.BOOM_URL).replace(/\/+$/, "");
+    if (!accountId || !CFG.EMBED_KEY) return null;
     const params = new URLSearchParams({
       key: CFG.EMBED_KEY,
       account_id: accountId,
     });
-    return base + "/embed/chatwoot?" + params.toString();
+    const viewBase = (CFG.EMBED_VIEW_URL || "").replace(/\/+$/, "");
+    if (viewBase) return viewBase + "?" + params.toString();
+    const boomBase = String(CFG.BOOM_URL || "").replace(/\/+$/, "");
+    if (!boomBase) return null;
+    return boomBase + "/embed/chatwoot?" + params.toString();
   }
 
   function findSidebar() {

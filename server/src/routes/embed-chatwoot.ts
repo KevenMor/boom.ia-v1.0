@@ -6,6 +6,7 @@ import {
   type AgentMirrorPayload,
   type MirrorToolRow,
 } from "../services/chatwoot-agent-mirror.js";
+import { renderChatwootEmbedViewHtml } from "../services/chatwoot-embed-view-html.js";
 
 function getEmbedKey(req: FastifyRequest): string | null {
   const q = (req.query as { key?: string })?.key?.trim();
@@ -54,6 +55,19 @@ function applyEmbedHeaders(reply: FastifyReply): void {
 }
 
 export async function embedChatwootRoutes(fastify: FastifyInstance) {
+  fastify.get(
+    "/embed/chatwoot/view",
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      applyEmbedHeaders(reply);
+      if (!getEmbedKey(req)) {
+        return reply.status(400).type("text/html").send(
+          "<!DOCTYPE html><html><body><p>Parâmetro <code>key</code> ausente na URL.</p></body></html>",
+        );
+      }
+      return reply.type("text/html; charset=utf-8").send(renderChatwootEmbedViewHtml());
+    },
+  );
+
   fastify.get(
     "/embed/chatwoot/agents",
     async (req: FastifyRequest<{ Querystring: { account_id?: string; agent_id?: string } }>, reply: FastifyReply) => {

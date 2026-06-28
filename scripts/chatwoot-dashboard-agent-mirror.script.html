@@ -4,7 +4,9 @@
 
   O que faz:
   - Adiciona item "Boom IA — Agente" na sidebar do dashboard.
-  - Abre painel lateral com iframe do espelho read-only (/embed/chatwoot).
+  - Abre painel lateral com iframe do espelho read-only.
+  - Preferir EMBED_VIEW_URL (/api/embed/chatwoot/view) — funciona sem redeploy do frontend React.
+  - Fallback: BOOM_URL + /embed/chatwoot (exige frontend atualizado).
   - Usa account_id da URL (/app/accounts/:id/...) — sem login no painel Boom IA.
 
   Onde colar:
@@ -13,7 +15,8 @@
   - Forks Chatwoot com DASHBOARD_SCRIPTS / InstallationConfig equivalente.
 
   Antes de colar, edite o bloco CFG abaixo:
-  - BOOM_URL: URL pública do frontend Boom IA (HTTPS em produção)
+  - BOOM_URL: URL pública do frontend Boom IA (fallback se EMBED_VIEW_URL vazio)
+  - EMBED_VIEW_URL: URL da página HTML no backend (recomendado), ex. https://ia.agboom.com.br/api/embed/chatwoot/view
   - EMBED_KEY: mesma chave de CHATWOOT_MIRROR_EMBED_KEY no server/.env
   - TARGET_ACCOUNT_ID: null = todas as contas; ou número ex.: 1
 
@@ -36,6 +39,7 @@
     LINK_TEXT: "Boom IA — Agente",
     LINK_ICON: "🤖",
     BOOM_URL: "https://painel.boom.ia",
+    EMBED_VIEW_URL: "https://painel.boom.ia/api/embed/chatwoot/view",
     EMBED_KEY: "COLE_A_MESMA_CHAVE_DO_SERVER_ENV",
     TARGET_ACCOUNT_ID: null,
     POSITION: {
@@ -82,13 +86,16 @@
 
   function buildIframeUrl() {
     const accountId = getAccountIdFromPath();
-    if (!accountId || !CFG.BOOM_URL || !CFG.EMBED_KEY) return null;
-    const base = String(CFG.BOOM_URL).replace(/\/+$/, "");
+    if (!accountId || !CFG.EMBED_KEY) return null;
     const params = new URLSearchParams({
       key: CFG.EMBED_KEY,
       account_id: accountId,
     });
-    return base + "/embed/chatwoot?" + params.toString();
+    const viewBase = (CFG.EMBED_VIEW_URL || "").replace(/\/+$/, "");
+    if (viewBase) return viewBase + "?" + params.toString();
+    const boomBase = String(CFG.BOOM_URL || "").replace(/\/+$/, "");
+    if (!boomBase) return null;
+    return boomBase + "/embed/chatwoot?" + params.toString();
   }
 
   function findSidebar() {
