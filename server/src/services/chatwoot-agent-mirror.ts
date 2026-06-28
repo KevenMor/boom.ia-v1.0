@@ -1,6 +1,6 @@
 import { buildSystemPrompt, getPromptConfig } from "./prompts/registry.js";
 
-const SECRET_KEYS = new Set([
+export const SECRET_KEYS = new Set([
   "chatwoot_api_token",
   "waha_api_key",
   "sandbox_password",

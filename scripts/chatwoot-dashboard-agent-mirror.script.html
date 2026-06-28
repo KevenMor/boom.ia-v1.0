@@ -39,6 +39,7 @@
     LINK_TEXT: "Boom IA — Agente",
     LINK_ICON: "🤖",
     BOOM_URL: "https://painel.boom.ia",
+    EMBED_APP_URL: "https://painel.boom.ia/embed/chatwoot",
     EMBED_VIEW_URL: "https://painel.boom.ia/api/embed/chatwoot/view",
     EMBED_KEY: "COLE_A_MESMA_CHAVE_DO_SERVER_ENV",
     TARGET_ACCOUNT_ID: null,
@@ -91,6 +92,8 @@
       key: CFG.EMBED_KEY,
       account_id: accountId,
     });
+    const appBase = (CFG.EMBED_APP_URL || "").replace(/\/+$/, "");
+    if (appBase) return appBase + "?" + params.toString();
     const viewBase = (CFG.EMBED_VIEW_URL || "").replace(/\/+$/, "");
     if (viewBase) return viewBase + "?" + params.toString();
     const boomBase = String(CFG.BOOM_URL || "").replace(/\/+$/, "");

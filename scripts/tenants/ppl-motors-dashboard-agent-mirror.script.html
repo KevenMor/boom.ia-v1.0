@@ -15,6 +15,7 @@
     LINK_TEXT: "PPL Motors — Agente IA",
     LINK_ICON: "🔍",
     BOOM_URL: "https://ia.agboom.com.br",
+    EMBED_APP_URL: "https://ia.agboom.com.br/embed/chatwoot",
     EMBED_VIEW_URL: "https://ia.agboom.com.br/api/embed/chatwoot/view",
     EMBED_KEY: "iUDtFP4Rd9FyqNz3nkynZnkW",
     TARGET_ACCOUNT_ID: 9,
@@ -67,6 +68,8 @@
       key: CFG.EMBED_KEY,
       account_id: accountId,
     });
+    const appBase = (CFG.EMBED_APP_URL || "").replace(/\/+$/, "");
+    if (appBase) return appBase + "?" + params.toString();
     const viewBase = (CFG.EMBED_VIEW_URL || "").replace(/\/+$/, "");
     if (viewBase) return viewBase + "?" + params.toString();
     const boomBase = String(CFG.BOOM_URL || "").replace(/\/+$/, "");

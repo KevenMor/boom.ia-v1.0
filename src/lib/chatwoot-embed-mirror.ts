@@ -34,9 +34,15 @@ export interface AgentMirrorPayload {
   updated_at: string | null;
 }
 
+export interface MirrorProviderRow {
+  id: string;
+  name: string;
+}
+
 export interface ChatwootMirrorResponse {
   account_id: string;
   agents: AgentMirrorPayload[];
+  providers?: MirrorProviderRow[];
   generated_at?: string;
   message?: string;
 }
@@ -85,4 +91,29 @@ export async function fetchChatwootAgentMirror(
     throw new Error(body.error || `Erro ${res.status} ao carregar espelho do agente`);
   }
   return body;
+}
+
+export async function updateChatwootAgentEmbed(
+  agentId: string,
+  accountId: string,
+  embedKey: string,
+  payload: Record<string, unknown>,
+  apiBase = "/api",
+): Promise<AgentMirrorPayload> {
+  const base = apiBase.replace(/\/+$/, "");
+  const params = new URLSearchParams({
+    account_id: accountId,
+    key: embedKey,
+  });
+  const res = await fetch(`${base}/embed/chatwoot/agents/${encodeURIComponent(agentId)}?${params.toString()}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = (await res.json().catch(() => ({}))) as { error?: string; agent?: AgentMirrorPayload };
+  if (!res.ok) {
+    throw new Error(body.error || `Erro ${res.status} ao salvar agente`);
+  }
+  if (!body.agent) throw new Error("Resposta inválida ao salvar agente");
+  return body.agent;
 }
