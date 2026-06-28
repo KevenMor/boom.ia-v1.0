@@ -64,6 +64,31 @@
     return getAccountIdFromPath() === String(CFG.TARGET_ACCOUNT_ID);
   }
 
+  function detectTheme() {
+    const html = document.documentElement;
+    if (html.classList.contains("dark") || html.getAttribute("data-theme") === "dark") return "dark";
+    if (html.classList.contains("light") || html.getAttribute("data-theme") === "light") return "light";
+    if (document.body.classList.contains("dark")) return "dark";
+    // heurística por cor de fundo
+    const bg = getComputedStyle(document.body).backgroundColor;
+    const m = bg.match(/\d+/g);
+    if (m && parseInt(m[0]) + parseInt(m[1]) + parseInt(m[2]) < 300) return "dark";
+    return "light";
+  }
+
+  function postThemeToEmbed() {
+    const iframe = document.getElementById("boom-ia-embed-iframe");
+    if (!iframe || !iframe.contentWindow) return;
+    try {
+      iframe.contentWindow.postMessage(
+        { type: "boom-ia-embed:theme", theme: detectTheme() },
+        new URL(CFG.BOOM_URL || CFG.EMBED_APP_URL || "https://ia.agboom.com.br").origin,
+      );
+    } catch (err) {
+      console.warn("[Boom IA] postMessage theme falhou:", err);
+    }
+  }
+
   function buildIframeUrl() {
     const accountId = String(CFG.TARGET_ACCOUNT_ID || getAccountIdFromPath() || "");
     if (!accountId || !CFG.EMBED_KEY) {
@@ -73,6 +98,7 @@
     const params = new URLSearchParams({
       key: CFG.EMBED_KEY,
       account_id: accountId,
+      theme: detectTheme(),
     });
     const viewBase = (CFG.EMBED_VIEW_URL || CFG.BOOM_URL + "/api/embed/chatwoot/view").replace(/\/+$/, "");
     const url = viewBase + "?" + params.toString();
@@ -339,6 +365,7 @@
 
     const themeObserver = new MutationObserver(function () {
       applyPanelTheme();
+      postThemeToEmbed();
     });
     themeObserver.observe(document.documentElement, {
       attributes: true,

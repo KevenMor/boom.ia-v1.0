@@ -143,7 +143,7 @@ export async function embedChatwootRoutes(fastify: FastifyInstance) {
   fastify.get(
     "/embed/chatwoot/view",
     async (
-      req: FastifyRequest<{ Querystring: { account_id?: string; key?: string } }>,
+      req: FastifyRequest<{ Querystring: { account_id?: string; key?: string; theme?: string } }>,
       reply: FastifyReply,
     ) => {
       applyEmbedHeaders(reply);
@@ -156,10 +156,12 @@ export async function embedChatwootRoutes(fastify: FastifyInstance) {
         );
       }
 
+      const rawTheme = req.query.theme?.trim().toLowerCase();
+      const theme: "dark" | "light" = rawTheme === "light" ? "light" : "dark";
       const key = getEmbedKey(req)!;
       return reply
         .type("text/html; charset=utf-8")
-        .send(renderChatwootEmbedViewHtml(publicFrontendBase(), key, accountId));
+        .send(renderChatwootEmbedViewHtml(publicFrontendBase(), key, accountId, theme));
     },
   );
 
