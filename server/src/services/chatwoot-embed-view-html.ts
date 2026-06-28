@@ -20,6 +20,7 @@ export function renderChatwootEmbedViewHtml(
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
   <style>
     :root,[data-theme="light"]{
+      --content-max:720px;
       --bg:#ffffff;--page:#ffffff;--surface:#ffffff;--surface-muted:#f8fafc;
       --border:#e5e7eb;--border-input:#d1d5db;--divider:#f1f5f9;
       --text:#111827;--text-secondary:#4b5563;--text-muted:#6b7280;--text-label:#9ca3af;
@@ -54,7 +55,7 @@ export function renderChatwootEmbedViewHtml(
     }
     .cw-topbar-inner{
       display:flex;align-items:center;justify-content:space-between;gap:16px;
-      padding:16px 24px;max-width:960px;
+      padding:16px 24px;max-width:var(--content-max);margin:0 auto;width:100%;
     }
     .cw-topbar-main{display:flex;align-items:center;gap:14px;min-width:0;flex:1;}
     .cw-avatar{
@@ -81,9 +82,11 @@ export function renderChatwootEmbedViewHtml(
     .cw-status-pill.inactive .dot{background:#9ca3af;}
 
     /* ── tabs ── */
+    .cw-tabs-bar{background:var(--surface);border-bottom:1px solid var(--border);}
     .cw-tabs{
-      display:flex;gap:0;background:var(--surface);
-      border-bottom:1px solid var(--border);padding:0 24px;overflow-x:auto;
+      display:flex;gap:0;
+      max-width:var(--content-max);margin:0 auto;width:100%;
+      padding:0 24px;overflow-x:auto;
     }
     .cw-tab{
       padding:14px 16px;border:0;background:none;cursor:pointer;
@@ -96,7 +99,7 @@ export function renderChatwootEmbedViewHtml(
 
     /* ── main content ── */
     .cw-main{flex:1;padding:24px 24px 48px;background:var(--page);}
-    .cw-main-inner{max-width:960px;}
+    .cw-main-inner{max-width:var(--content-max);margin:0 auto;width:100%;}
     .cw-panel{display:none;animation:fadeIn .2s ease;}
     .cw-panel.active{display:block;}
     @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
@@ -126,7 +129,7 @@ export function renderChatwootEmbedViewHtml(
     .cw-input::placeholder,.cw-textarea::placeholder{color:var(--text-label);}
     .cw-hint{font-size:12px;color:var(--text-muted);margin-top:6px;line-height:1.4;}
     .cw-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
-    @media(max-width:640px){.cw-grid{grid-template-columns:1fr;}.cw-topbar-inner{flex-wrap:wrap;padding:12px 16px;}.cw-tabs,.cw-main{padding-left:16px;padding-right:16px;}}
+    @media(max-width:640px){.cw-grid{grid-template-columns:1fr;}.cw-topbar-inner{flex-wrap:wrap;padding:12px 16px;}.cw-tabs,.cw-main{padding-left:16px;padding-right:16px;}:root,[data-theme="light"]{--content-max:100%;}}
 
     /* ── status options ── */
     .cw-status-list{display:flex;flex-direction:column;gap:8px;}
@@ -226,12 +229,14 @@ export function renderChatwootEmbedViewHtml(
     </div>
   </header>
 
+  <div class="cw-tabs-bar">
   <nav class="cw-tabs" id="cw-tabs">
     <button type="button" class="cw-tab active" onclick="switchTab('basic',this)">Informações Básicas</button>
     <button type="button" class="cw-tab" onclick="switchTab('model',this)">Modelo de IA</button>
     <button type="button" class="cw-tab" onclick="switchTab('integ',this)">Integração</button>
     <button type="button" class="cw-tab" onclick="switchTab('sched',this)">Horário e Follow-up</button>
   </nav>
+  </div>
 
   <main class="cw-main">
     <div class="cw-main-inner">
