@@ -2,6 +2,8 @@
   PPL Motors — Dashboard Script
   Conta Chatwoot: 9 (mega.atendai.app) · Agente: Ana Júlia
   Cole em: https://mega.atendai.app/super_admin/app_config?config=internal
+  Se existir Dashboard App antigo "PPL Motors — Agente IA" em Configurações, remova-o
+  (evita 404 com URL velha). Use só este Dashboard Script OU só o Dashboard App atualizado.
 -->
 
 <script data-name="boom-ia-ppl-motors-agent-mirror">
@@ -63,36 +65,38 @@
   }
 
   function buildIframeUrl() {
-    const accountId = getAccountIdFromPath();
+    const accountId = getAccountIdFromPath() || String(CFG.TARGET_ACCOUNT_ID || "");
     if (!accountId || !CFG.EMBED_KEY) {
       console.warn("[Boom IA] account_id ou EMBED_KEY ausente.", { accountId, hasKey: Boolean(CFG.EMBED_KEY) });
       return null;
     }
-    const params = new URLSearchParams({
+    const appBase = (CFG.EMBED_APP_URL || CFG.BOOM_URL + "/embed/chatwoot").replace(/\/+$/, "");
+    // Hash evita que o Mega/Chatwoot remova query params do iframe
+    const hash = new URLSearchParams({
       key: CFG.EMBED_KEY,
       account_id: accountId,
-    });
-    const appBase = (CFG.EMBED_APP_URL || "").replace(/\/+$/, "");
-    if (appBase) {
-      const url = appBase + "?" + params.toString();
-      console.info("[Boom IA] iframe:", url);
-      return url;
+    }).toString();
+    const url = appBase + "#" + hash;
+    console.info("[Boom IA] iframe:", url);
+    return url;
+  }
+
+  function postEmbedInit(iframe) {
+    if (!iframe || !iframe.contentWindow) return;
+    const accountId = getAccountIdFromPath() || String(CFG.TARGET_ACCOUNT_ID || "");
+    if (!accountId || !CFG.EMBED_KEY) return;
+    try {
+      iframe.contentWindow.postMessage(
+        {
+          type: "boom-ia-embed:init",
+          key: CFG.EMBED_KEY,
+          account_id: accountId,
+        },
+        new URL(CFG.BOOM_URL || CFG.EMBED_APP_URL || "https://ia.agboom.com.br").origin,
+      );
+    } catch (err) {
+      console.warn("[Boom IA] postMessage init falhou:", err);
     }
-    const viewBase = (CFG.EMBED_VIEW_URL || "").replace(/\/+$/, "");
-    if (viewBase) {
-      if (!viewBase.includes("/api/embed/chatwoot/view")) {
-        console.error(
-          "[Boom IA] EMBED_VIEW_URL inválida (use /api/embed/chatwoot/view, não /embed/chatwoot/view):",
-          viewBase,
-        );
-      }
-      const url = viewBase + "?" + params.toString();
-      console.info("[Boom IA] iframe:", url);
-      return url;
-    }
-    const boomBase = String(CFG.BOOM_URL || "").replace(/\/+$/, "");
-    if (!boomBase) return null;
-    return boomBase + "/embed/chatwoot?" + params.toString();
   }
 
   function findSidebar() {
@@ -188,7 +192,7 @@
     ].join(";");
 
     panel.innerHTML =
-      '<iframe id="boom-ia-embed-iframe" title="Boom IA — Agente" style="width:100%;height:100%;border:0;" loading="lazy"></iframe>';
+      '<iframe id="boom-ia-embed-iframe" title="Boom IA — Agente" allow="clipboard-write" style="width:100%;height:100%;border:0;" loading="eager"></iframe>';
     document.body.appendChild(panel);
 
     applyPanelTheme();
@@ -217,7 +221,18 @@
 
     ensurePanel();
     const iframe = $("#boom-ia-embed-iframe");
-    if (iframe && iframe.src !== iframeUrl) iframe.src = iframeUrl;
+    if (iframe) {
+      if (!iframe.dataset.boomInitBound) {
+        iframe.dataset.boomInitBound = "true";
+        on(iframe, "load", function () {
+          postEmbedInit(iframe);
+        });
+      }
+      iframe.src = iframeUrl;
+      setTimeout(function () {
+        postEmbedInit(iframe);
+      }, 800);
+    }
 
     panel.dataset.visible = "true";
     panel.style.display = "block";

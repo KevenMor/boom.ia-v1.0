@@ -88,17 +88,24 @@
   function buildIframeUrl() {
     const accountId = getAccountIdFromPath();
     if (!accountId || !CFG.EMBED_KEY) return null;
-    const params = new URLSearchParams({
+    const appBase = (CFG.EMBED_APP_URL || CFG.BOOM_URL + "/embed/chatwoot").replace(/\/+$/, "");
+    const hash = new URLSearchParams({
       key: CFG.EMBED_KEY,
       account_id: accountId,
-    });
-    const appBase = (CFG.EMBED_APP_URL || "").replace(/\/+$/, "");
-    if (appBase) return appBase + "?" + params.toString();
-    const viewBase = (CFG.EMBED_VIEW_URL || "").replace(/\/+$/, "");
-    if (viewBase) return viewBase + "?" + params.toString();
-    const boomBase = String(CFG.BOOM_URL || "").replace(/\/+$/, "");
-    if (!boomBase) return null;
-    return boomBase + "/embed/chatwoot?" + params.toString();
+    }).toString();
+    return appBase + "#" + hash;
+  }
+
+  function postEmbedInit(iframe) {
+    if (!iframe || !iframe.contentWindow) return;
+    const accountId = getAccountIdFromPath();
+    if (!accountId || !CFG.EMBED_KEY) return;
+    try {
+      iframe.contentWindow.postMessage(
+        { type: "boom-ia-embed:init", key: CFG.EMBED_KEY, account_id: accountId },
+        new URL(CFG.BOOM_URL || CFG.EMBED_APP_URL || "https://ia.agboom.com.br").origin,
+      );
+    } catch (_) { /* ignore */ }
   }
 
   function findSidebar() {
@@ -223,7 +230,18 @@
 
     ensurePanel();
     const iframe = $("#boom-ia-embed-iframe");
-    if (iframe && iframe.src !== iframeUrl) iframe.src = iframeUrl;
+    if (iframe) {
+      if (!iframe.dataset.boomInitBound) {
+        iframe.dataset.boomInitBound = "true";
+        on(iframe, "load", function () {
+          postEmbedInit(iframe);
+        });
+      }
+      iframe.src = iframeUrl;
+      setTimeout(function () {
+        postEmbedInit(iframe);
+      }, 800);
+    }
 
     panel.dataset.visible = "true";
     panel.style.display = "block";

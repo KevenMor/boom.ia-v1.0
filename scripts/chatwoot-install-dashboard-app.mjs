@@ -43,8 +43,7 @@ if (!chatwootUrl || !accountId || !token || !boomUrl || !embedKey) {
   process.exit(1);
 }
 
-const iframeUrl = `${boomUrl}/embed/chatwoot?key=${encodeURIComponent(embedKey)}&account_id=${encodeURIComponent(accountId)}`;
-// NÃO usar ${boomUrl}/embed/chatwoot/view — essa rota não existe no frontend (404)
+const iframeUrl = `${boomUrl}/embed/chatwoot#key=${encodeURIComponent(embedKey)}&account_id=${encodeURIComponent(accountId)}`;
 
 const payload = {
   dashboard_app: {

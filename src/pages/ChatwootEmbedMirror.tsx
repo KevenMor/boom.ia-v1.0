@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import { Loader2, Bot, AlertCircle } from "lucide-react";
 import { EmbedAgentEditor } from "@/components/embed/EmbedAgentEditor";
 import {
@@ -8,26 +7,25 @@ import {
   type AgentMirrorPayload,
   type MirrorProviderRow,
 } from "@/lib/chatwoot-embed-mirror";
+import { parseEmbedCredentialsFromLocation, parseEmbedInitMessage } from "@/lib/embed-credentials";
 import { getApiBase } from "@/lib/api-client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function ChatwootEmbedMirror() {
-  const [params] = useSearchParams();
-  const embedKey = params.get("key")?.trim() ?? "";
-  const accountFromUrl = params.get("account_id")?.trim() ?? "";
-
-  const [accountId, setAccountId] = useState(accountFromUrl);
+  const initial = parseEmbedCredentialsFromLocation();
+  const [embedKey, setEmbedKey] = useState(initial.key);
+  const [accountId, setAccountId] = useState(initial.accountId);
   const [agents, setAgents] = useState<AgentMirrorPayload[]>([]);
   const [providers, setProviders] = useState<MirrorProviderRow[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadMirror = useCallback(async (resolvedAccountId: string) => {
-    if (!embedKey) {
+  const loadMirror = useCallback(async (resolvedAccountId: string, key: string) => {
+    if (!key) {
       setError(
-        "Parâmetro key ausente na URL. Abra com: /embed/chatwoot?key=SUA_CHAVE&account_id=" +
-          (resolvedAccountId || "ID_DA_CONTA"),
+        "Parâmetro key ausente. No Mega, recole o Dashboard Script atualizado ou abra: /embed/chatwoot#key=SUA_CHAVE&account_id=" +
+          (resolvedAccountId || "ID"),
       );
       setLoading(false);
       return;
@@ -40,7 +38,7 @@ export default function ChatwootEmbedMirror() {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchChatwootAgentMirror(resolvedAccountId, embedKey, getApiBase());
+      const data = await fetchChatwootAgentMirror(resolvedAccountId, key, getApiBase());
       setAgents(data.agents ?? []);
       setProviders(data.providers ?? []);
       setSelectedId((prev) => {
@@ -54,7 +52,7 @@ export default function ChatwootEmbedMirror() {
       const msg = e instanceof Error ? e.message : "Falha ao carregar agente";
       if (msg.includes("Chave de espelho")) {
         setError(
-          `${msg} — confira se a key na URL é igual a CHATWOOT_MIRROR_EMBED_KEY no servidor (Easypanel).`,
+          `${msg} — confira se a key no script/Dashboard App é igual a CHATWOOT_MIRROR_EMBED_KEY no servidor.`,
         );
       } else {
         setError(msg);
@@ -63,10 +61,14 @@ export default function ChatwootEmbedMirror() {
     } finally {
       setLoading(false);
     }
-  }, [embedKey]);
+  }, []);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
+      const init = parseEmbedInitMessage(event.data);
+      if (init?.key) setEmbedKey(init.key);
+      if (init?.accountId) setAccountId(init.accountId);
+
       const parsedId = parseChatwootAccountIdFromMessage(event.data);
       if (parsedId) setAccountId((prev) => prev || parsedId);
     };
@@ -76,13 +78,17 @@ export default function ChatwootEmbedMirror() {
   }, []);
 
   useEffect(() => {
-    if (accountFromUrl) setAccountId(accountFromUrl);
-  }, [accountFromUrl]);
-
-  useEffect(() => {
-    if (!accountId) return;
-    void loadMirror(accountId);
-  }, [accountId, loadMirror]);
+    if (!accountId || !embedKey) {
+      setLoading(false);
+      if (!embedKey) {
+        setError(
+          "Key não recebida. Se abriu pelo Mega, recole o script em scripts/tenants/ppl-motors-dashboard-agent-mirror.script.html",
+        );
+      }
+      return;
+    }
+    void loadMirror(accountId, embedKey);
+  }, [accountId, embedKey, loadMirror]);
 
   const selectedAgent = useMemo(
     () => agents.find((a) => a.id === selectedId) ?? agents[0] ?? null,

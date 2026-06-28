@@ -14,7 +14,14 @@ export function renderChatwootEmbedViewHtml(frontendBase: string): string {
 <body>
   <p>Abrindo painel do agente…</p>
   <script>
-    location.replace(${JSON.stringify(base)} + "/embed/chatwoot" + location.search);
+    (function () {
+      var p = new URLSearchParams(location.search);
+      var h = new URLSearchParams();
+      if (p.get("key")) h.set("key", p.get("key"));
+      if (p.get("account_id")) h.set("account_id", p.get("account_id"));
+      var hash = h.toString();
+      location.replace(${JSON.stringify(base)} + "/embed/chatwoot" + (hash ? "#" + hash : ""));
+    })();
   </script>
 </body>
 </html>`;
