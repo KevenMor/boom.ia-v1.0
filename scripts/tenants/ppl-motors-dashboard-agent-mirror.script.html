@@ -1,16 +1,20 @@
 <!--
-  PPL Motors — Dashboard Script
+  PPL Motors — Dashboard Script v5
   Conta Chatwoot: 9 (mega.atendai.app) · Agente: Ana Júlia
   Cole em: https://mega.atendai.app/super_admin/app_config?config=internal
+  Após colar: salve, recarregue o Mega (Cmd+Shift+R) e confira no console F12:
+  "[Boom IA] Dashboard Script v5 carregado"
   Se existir Dashboard App antigo "PPL Motors — Agente IA" em Configurações, remova-o
   (evita 404 com URL velha). Use só este Dashboard Script OU só o Dashboard App atualizado.
 -->
 
 <script data-name="boom-ia-ppl-motors-agent-mirror">
 (function () {
-  const SCRIPT_KEY = "boom_ia_ppl_motors_agent_mirror_v1";
+  const SCRIPT_VERSION = "v5";
+  const SCRIPT_KEY = "boom_ia_ppl_motors_agent_mirror_" + SCRIPT_VERSION;
   if (window[SCRIPT_KEY]) return;
   window[SCRIPT_KEY] = true;
+  console.info("[Boom IA] Dashboard Script " + SCRIPT_VERSION + " carregado");
 
   /** ========== PPL MOTORS (conta 9) ========== */
   const CFG = {
@@ -64,22 +68,43 @@
     return getAccountIdFromPath() === String(CFG.TARGET_ACCOUNT_ID);
   }
 
+  function bgLuminance(el) {
+    if (!el) return null;
+    const bg = getComputedStyle(el).backgroundColor;
+    const m = bg.match(/[\d.]+/g);
+    if (!m || m.length < 3) return null;
+    if (bg.indexOf("rgba") !== -1 && parseFloat(m[3]) === 0) return null;
+    return parseFloat(m[0]) * 0.299 + parseFloat(m[1]) * 0.587 + parseFloat(m[2]) * 0.114;
+  }
+
   function detectTheme() {
     const html = document.documentElement;
-    // 1. Classe explícita no html/body (mais confiável — set pelo app)
     if (html.classList.contains("dark") || document.body.classList.contains("dark")) return "dark";
     if (html.getAttribute("data-theme") === "dark" || document.body.getAttribute("data-theme") === "dark") return "dark";
     if (html.classList.contains("light") || html.getAttribute("data-theme") === "light") return "light";
-    // 2. Luminância do fundo renderizado (reflete o tema real do app)
-    const bg = getComputedStyle(document.body).backgroundColor;
-    const m = bg.match(/\d+/g);
-    if (m && m.length >= 3) {
-      const lum = parseInt(m[0]) * 0.299 + parseInt(m[1]) * 0.587 + parseInt(m[2]) * 0.114;
-      if (lum < 80) return "dark";
-      if (lum > 140) return "light";
-    }
-    // 3. Preferência do SO — só como último recurso
-    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
+
+    // Amostra superfícies visíveis do Mega (body costuma ser transparente)
+    const probes = [
+      $('[data-testid="sidebar"]'),
+      $('[data-testid="sidebar-primary"]'),
+      $(".sidebar"),
+      $(".woot-dashboard"),
+      $(".app-wrapper"),
+      $("aside"),
+      document.body,
+    ].filter(Boolean);
+
+    var lightVotes = 0;
+    var darkVotes = 0;
+    probes.forEach(function (el) {
+      var lum = bgLuminance(el);
+      if (lum === null) return;
+      if (lum > 160) lightVotes++;
+      else if (lum < 90) darkVotes++;
+    });
+
+    if (darkVotes > lightVotes) return "dark";
+    // Padrão light — Chatwoot/Mega usa light por padrão; NÃO usar prefers-color-scheme do SO
     return "light";
   }
 
@@ -170,14 +195,28 @@
     });
   }
 
-  function findMainContent() {
-    return (
-      $(".view-box") ||
-      $(".main-content") ||
-      $('[data-testid="main-content"]') ||
-      $(".conversations-list-wrap") ||
-      null
-    );
+  function getNavRightEdge() {
+    var maxRight = 0;
+    var seen = typeof WeakSet !== "undefined" ? new WeakSet() : null;
+    var selectors = [
+      '[data-testid="sidebar-primary"]',
+      '[data-testid="sidebar"]',
+      "aside",
+      ".secondary-sidebar",
+      ".sidebar-wrap",
+      "nav",
+    ];
+    selectors.forEach(function (sel) {
+      $$(sel).forEach(function (el) {
+        if (seen && seen.has(el)) return;
+        if (seen) seen.add(el);
+        var r = el.getBoundingClientRect();
+        if (r.width <= 0 || r.width >= window.innerWidth * 0.5) return;
+        if (r.left >= window.innerWidth * 0.5) return;
+        maxRight = Math.max(maxRight, r.right);
+      });
+    });
+    return maxRight;
   }
 
   function findAnyList() {
@@ -235,24 +274,13 @@
 
   function layoutPanel() {
     if (!panel || panel.dataset.visible !== "true") return;
-    // Tenta usar a borda esquerda do conteúdo principal para posicionar com precisão
-    const main = findMainContent();
-    if (main) {
-      const rect = main.getBoundingClientRect();
-      panel.style.left = Math.max(0, rect.left) + "px";
-      panel.style.width = Math.max(320, window.innerWidth - rect.left) + "px";
-      return;
+    var left = getNavRightEdge();
+    if (left <= 0) {
+      var sb = findSidebar();
+      if (sb) left = sb.getBoundingClientRect().right;
     }
-    // Fallback: borda direita do sidebar (container completo)
-    const sb = findSidebar();
-    if (!sb) {
-      panel.style.left = "0";
-      panel.style.width = "100%";
-      return;
-    }
-    const rect = sb.getBoundingClientRect();
-    panel.style.left = Math.max(0, rect.right) + "px";
-    panel.style.width = Math.max(320, window.innerWidth - rect.right) + "px";
+    panel.style.left = Math.max(0, left) + "px";
+    panel.style.width = Math.max(320, window.innerWidth - left) + "px";
   }
 
   function ensurePanel() {

@@ -157,7 +157,8 @@ export async function embedChatwootRoutes(fastify: FastifyInstance) {
       }
 
       const rawTheme = req.query.theme?.trim().toLowerCase();
-      const theme: "dark" | "light" = rawTheme === "light" ? "light" : "dark";
+      // Padrão light — alinhado ao Chatwoot/Mega; só usa dark se explícito na URL
+      const theme: "dark" | "light" = rawTheme === "dark" ? "dark" : "light";
       const key = getEmbedKey(req)!;
       return reply
         .type("text/html; charset=utf-8")

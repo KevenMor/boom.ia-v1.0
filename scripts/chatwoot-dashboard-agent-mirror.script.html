@@ -30,9 +30,11 @@
 
 <script data-name="boom-ia-agent-mirror">
 (function () {
-  const SCRIPT_KEY = "boom_ia_dashboard_agent_mirror_v1";
+  const SCRIPT_VERSION = "v5";
+  const SCRIPT_KEY = "boom_ia_dashboard_agent_mirror_" + SCRIPT_VERSION;
   if (window[SCRIPT_KEY]) return;
   window[SCRIPT_KEY] = true;
+  console.info("[Boom IA] Dashboard Script " + SCRIPT_VERSION + " carregado");
 
   /** ========== CONFIGURE AQUI ========== */
   const CFG = {
@@ -85,20 +87,41 @@
     return getAccountIdFromPath() === String(CFG.TARGET_ACCOUNT_ID);
   }
 
+  function bgLuminance(el) {
+    if (!el) return null;
+    const bg = getComputedStyle(el).backgroundColor;
+    const m = bg.match(/[\d.]+/g);
+    if (!m || m.length < 3) return null;
+    if (bg.indexOf("rgba") !== -1 && parseFloat(m[3]) === 0) return null;
+    return parseFloat(m[0]) * 0.299 + parseFloat(m[1]) * 0.587 + parseFloat(m[2]) * 0.114;
+  }
+
   function detectTheme() {
     const html = document.documentElement;
     if (html.classList.contains("dark") || document.body.classList.contains("dark")) return "dark";
     if (html.getAttribute("data-theme") === "dark" || document.body.getAttribute("data-theme") === "dark") return "dark";
     if (html.classList.contains("light") || html.getAttribute("data-theme") === "light") return "light";
-    // Luminância real do fundo (antes da preferência do SO)
-    const bg = getComputedStyle(document.body).backgroundColor;
-    const m = bg.match(/\d+/g);
-    if (m && m.length >= 3) {
-      const lum = parseInt(m[0]) * 0.299 + parseInt(m[1]) * 0.587 + parseInt(m[2]) * 0.114;
-      if (lum < 80) return "dark";
-      if (lum > 140) return "light";
-    }
-    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
+
+    const probes = [
+      $('[data-testid="sidebar"]'),
+      $('[data-testid="sidebar-primary"]'),
+      $(".sidebar"),
+      $(".woot-dashboard"),
+      $(".app-wrapper"),
+      $("aside"),
+      document.body,
+    ].filter(Boolean);
+
+    var lightVotes = 0;
+    var darkVotes = 0;
+    probes.forEach(function (el) {
+      var lum = bgLuminance(el);
+      if (lum === null) return;
+      if (lum > 160) lightVotes++;
+      else if (lum < 90) darkVotes++;
+    });
+
+    if (darkVotes > lightVotes) return "dark";
     return "light";
   }
 
@@ -171,14 +194,28 @@
     });
   }
 
-  function findMainContent() {
-    return (
-      $(".view-box") ||
-      $(".main-content") ||
-      $('[data-testid="main-content"]') ||
-      $(".conversations-list-wrap") ||
-      null
-    );
+  function getNavRightEdge() {
+    var maxRight = 0;
+    var seen = typeof WeakSet !== "undefined" ? new WeakSet() : null;
+    var selectors = [
+      '[data-testid="sidebar-primary"]',
+      '[data-testid="sidebar"]',
+      "aside",
+      ".secondary-sidebar",
+      ".sidebar-wrap",
+      "nav",
+    ];
+    selectors.forEach(function (sel) {
+      $$(sel).forEach(function (el) {
+        if (seen && seen.has(el)) return;
+        if (seen) seen.add(el);
+        var r = el.getBoundingClientRect();
+        if (r.width <= 0 || r.width >= window.innerWidth * 0.5) return;
+        if (r.left >= window.innerWidth * 0.5) return;
+        maxRight = Math.max(maxRight, r.right);
+      });
+    });
+    return maxRight;
   }
 
   function findAnyList() {
@@ -236,22 +273,13 @@
 
   function layoutPanel() {
     if (!panel || panel.dataset.visible !== "true") return;
-    const main = findMainContent();
-    if (main) {
-      const rect = main.getBoundingClientRect();
-      panel.style.left = Math.max(0, rect.left) + "px";
-      panel.style.width = Math.max(320, window.innerWidth - rect.left) + "px";
-      return;
+    var left = getNavRightEdge();
+    if (left <= 0) {
+      var sb = findSidebar();
+      if (sb) left = sb.getBoundingClientRect().right;
     }
-    const sb = findSidebar();
-    if (!sb) {
-      panel.style.left = "0";
-      panel.style.width = "100%";
-      return;
-    }
-    const rect = sb.getBoundingClientRect();
-    panel.style.left = Math.max(0, rect.right) + "px";
-    panel.style.width = Math.max(320, window.innerWidth - rect.right) + "px";
+    panel.style.left = Math.max(0, left) + "px";
+    panel.style.width = Math.max(320, window.innerWidth - left) + "px";
   }
 
   function ensurePanel() {
