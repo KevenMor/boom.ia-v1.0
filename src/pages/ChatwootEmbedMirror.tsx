@@ -7,7 +7,7 @@ import {
   type AgentMirrorPayload,
   type MirrorProviderRow,
 } from "@/lib/chatwoot-embed-mirror";
-import { parseEmbedCredentialsFromLocation, parseEmbedInitMessage } from "@/lib/embed-credentials";
+import { parseEmbedCredentialsFromLocation, parseEmbedInitMessage, persistEmbedCredentials } from "@/lib/embed-credentials";
 import { getApiBase } from "@/lib/api-client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -66,8 +66,11 @@ export default function ChatwootEmbedMirror() {
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       const init = parseEmbedInitMessage(event.data);
-      if (init?.key) setEmbedKey(init.key);
-      if (init?.accountId) setAccountId(init.accountId);
+      if (init) {
+        persistEmbedCredentials(init);
+        if (init.key) setEmbedKey(init.key);
+        if (init.accountId) setAccountId(init.accountId);
+      }
 
       const parsedId = parseChatwootAccountIdFromMessage(event.data);
       if (parsedId) setAccountId((prev) => prev || parsedId);
@@ -82,7 +85,8 @@ export default function ChatwootEmbedMirror() {
       setLoading(false);
       if (!embedKey) {
         setError(
-          "Key não recebida. Se abriu pelo Mega, recole o script em scripts/tenants/ppl-motors-dashboard-agent-mirror.script.html",
+          "Key não recebida no iframe. Recole o Dashboard Script no Mega e redeploy frontend+server. " +
+            "A variável CHATWOOT_MIRROR_EMBED_KEY no Easypanel só vale no backend — a key também precisa ir na URL do iframe.",
         );
       }
       return;

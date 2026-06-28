@@ -1,7 +1,16 @@
-import { describe, expect, it } from "vitest";
-import { parseEmbedCredentialsFromLocation, parseEmbedInitMessage } from "./embed-credentials";
+import { describe, expect, it, beforeEach } from "vitest";
+import {
+  EMBED_CREDS_STORAGE_KEY,
+  parseEmbedCredentialsFromLocation,
+  parseEmbedInitMessage,
+  persistEmbedCredentials,
+} from "./embed-credentials";
 
 describe("embed-credentials", () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+  });
+
   it("lê key e account_id do hash", () => {
     const loc = {
       search: "",
@@ -10,12 +19,17 @@ describe("embed-credentials", () => {
     expect(parseEmbedCredentialsFromLocation(loc)).toEqual({ key: "abc", accountId: "9" });
   });
 
-  it("prioriza query string sobre hash", () => {
-    const loc = {
-      search: "?key=query&account_id=1",
-      hash: "#key=hash&account_id=2",
-    } as Location;
-    expect(parseEmbedCredentialsFromLocation(loc)).toEqual({ key: "query", accountId: "1" });
+  it("lê credenciais do sessionStorage após bootstrap", () => {
+    sessionStorage.setItem(EMBED_CREDS_STORAGE_KEY, JSON.stringify({ key: "stored", accountId: "9" }));
+    const loc = { search: "", hash: "" } as Location;
+    expect(parseEmbedCredentialsFromLocation(loc)).toEqual({ key: "stored", accountId: "9" });
+  });
+
+  it("persiste credenciais parciais", () => {
+    persistEmbedCredentials({ key: "k1" });
+    persistEmbedCredentials({ accountId: "9" });
+    const loc = { search: "", hash: "" } as Location;
+    expect(parseEmbedCredentialsFromLocation(loc)).toEqual({ key: "k1", accountId: "9" });
   });
 
   it("parseia postMessage init", () => {

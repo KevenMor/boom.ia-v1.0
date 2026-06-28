@@ -70,13 +70,19 @@
       console.warn("[Boom IA] account_id ou EMBED_KEY ausente.", { accountId, hasKey: Boolean(CFG.EMBED_KEY) });
       return null;
     }
-    const appBase = (CFG.EMBED_APP_URL || CFG.BOOM_URL + "/embed/chatwoot").replace(/\/+$/, "");
-    // Hash evita que o Mega/Chatwoot remova query params do iframe
-    const hash = new URLSearchParams({
+    const params = new URLSearchParams({
       key: CFG.EMBED_KEY,
       account_id: accountId,
-    }).toString();
-    const url = appBase + "#" + hash;
+    });
+    // Bootstrap via API: grava key no sessionStorage antes do React (mais confiável no Mega)
+    const viewBase = (CFG.EMBED_VIEW_URL || "").replace(/\/+$/, "");
+    if (viewBase) {
+      const url = viewBase + "?" + params.toString();
+      console.info("[Boom IA] iframe:", url);
+      return url;
+    }
+    const appBase = (CFG.EMBED_APP_URL || CFG.BOOM_URL + "/embed/chatwoot").replace(/\/+$/, "");
+    const url = appBase + "#" + params.toString();
     console.info("[Boom IA] iframe:", url);
     return url;
   }

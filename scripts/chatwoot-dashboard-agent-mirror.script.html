@@ -88,12 +88,14 @@
   function buildIframeUrl() {
     const accountId = getAccountIdFromPath();
     if (!accountId || !CFG.EMBED_KEY) return null;
-    const appBase = (CFG.EMBED_APP_URL || CFG.BOOM_URL + "/embed/chatwoot").replace(/\/+$/, "");
-    const hash = new URLSearchParams({
+    const params = new URLSearchParams({
       key: CFG.EMBED_KEY,
       account_id: accountId,
-    }).toString();
-    return appBase + "#" + hash;
+    });
+    const viewBase = (CFG.EMBED_VIEW_URL || "").replace(/\/+$/, "");
+    if (viewBase) return viewBase + "?" + params.toString();
+    const appBase = (CFG.EMBED_APP_URL || CFG.BOOM_URL + "/embed/chatwoot").replace(/\/+$/, "");
+    return appBase + "#" + params.toString();
   }
 
   function postEmbedInit(iframe) {

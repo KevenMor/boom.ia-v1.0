@@ -43,7 +43,7 @@ if (!chatwootUrl || !accountId || !token || !boomUrl || !embedKey) {
   process.exit(1);
 }
 
-const iframeUrl = `${boomUrl}/embed/chatwoot#key=${encodeURIComponent(embedKey)}&account_id=${encodeURIComponent(accountId)}`;
+const iframeUrl = `${boomUrl}/api/embed/chatwoot/view?key=${encodeURIComponent(embedKey)}&account_id=${encodeURIComponent(accountId)}`;
 
 const payload = {
   dashboard_app: {
