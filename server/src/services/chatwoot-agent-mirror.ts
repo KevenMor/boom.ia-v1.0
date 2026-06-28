@@ -115,7 +115,16 @@ function resolveRegistryPrompt(tenantSlug: string | null | undefined): MirrorPro
   }
   try {
     const cfg = getPromptConfig(slug);
-    const composed = buildSystemPrompt(slug);
+    if (!cfg) {
+      return {
+        slug,
+        version: null,
+        description: null,
+        uses_registry: false,
+        composed_prompt_preview: null,
+      };
+    }
+    const composed = buildSystemPrompt("", slug, false);
     const preview =
       composed.length > 4000 ? `${composed.slice(0, 4000)}\n\n… [${composed.length - 4000} caracteres omitidos]` : composed;
     return {

@@ -112,17 +112,27 @@ export async function embedChatwootRoutes(fastify: FastifyInstance) {
         return reply.status(500).send({ error: toolsErr.message });
       }
 
+      type ToolJoinRow = {
+        id: string;
+        name: string;
+        tool_type: string;
+        description: string | null;
+      };
+
       for (const link of toolLinks ?? []) {
         const agentId = (link as { agent_id: string }).agent_id;
-        const tool = (link as { tools?: MirrorToolRow | null }).tools;
-        if (!tool) continue;
+        const rawTools = (link as { tools?: ToolJoinRow | ToolJoinRow[] | null }).tools;
+        if (!rawTools) continue;
+        const tools = Array.isArray(rawTools) ? rawTools : [rawTools];
         const list = toolsByAgent.get(agentId) ?? [];
-        list.push({
-          id: tool.id,
-          name: tool.name,
-          tool_type: tool.tool_type,
-          description: tool.description,
-        });
+        for (const tool of tools) {
+          list.push({
+            id: tool.id,
+            name: tool.name,
+            tool_type: tool.tool_type,
+            description: tool.description,
+          });
+        }
         toolsByAgent.set(agentId, list);
       }
 
