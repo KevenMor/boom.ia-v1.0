@@ -3,14 +3,14 @@
   Conta Chatwoot: 9 (mega.atendai.app) · Agente: Ana Júlia
   Cole em: https://mega.atendai.app/super_admin/app_config?config=internal
   Após colar: salve, recarregue o Mega (Cmd+Shift+R) e confira no console F12:
-  "[Boom IA] Dashboard Script v5 carregado"
+  "[Boom IA] Dashboard Script v6 carregado"
   Se existir Dashboard App antigo "PPL Motors — Agente IA" em Configurações, remova-o
   (evita 404 com URL velha). Use só este Dashboard Script OU só o Dashboard App atualizado.
 -->
 
 <script data-name="boom-ia-ppl-motors-agent-mirror">
 (function () {
-  const SCRIPT_VERSION = "v5";
+  const SCRIPT_VERSION = "v6";
   const SCRIPT_KEY = "boom_ia_ppl_motors_agent_mirror_" + SCRIPT_VERSION;
   if (window[SCRIPT_KEY]) return;
   window[SCRIPT_KEY] = true;
@@ -195,28 +195,57 @@
     });
   }
 
-  function getNavRightEdge() {
-    var maxRight = 0;
-    var seen = typeof WeakSet !== "undefined" ? new WeakSet() : null;
-    var selectors = [
-      '[data-testid="sidebar-primary"]',
-      '[data-testid="sidebar"]',
-      "aside",
-      ".secondary-sidebar",
-      ".sidebar-wrap",
-      "nav",
-    ];
-    selectors.forEach(function (sel) {
+  /** Borda direita só da coluna de navegação (não inclui lista de conversas). */
+  function getContentAreaLeft() {
+    var link = $("#boom-ia-embed-link");
+    if (link) {
+      var navAside = link.closest('[data-testid="sidebar"]') || link.closest("aside");
+      if (navAside) {
+        var nr = navAside.getBoundingClientRect();
+        if (nr.width > 0 && nr.width < 420) return nr.right;
+      }
+      var node = link.parentElement;
+      for (var i = 0; i < 12 && node; i++) {
+        var rr = node.getBoundingClientRect();
+        if (rr.left < 80 && rr.width >= 140 && rr.width <= 400) return rr.right;
+        node = node.parentElement;
+      }
+    }
+
+    var edges = [];
+    var primary = $('[data-testid="sidebar-primary"]');
+    var sidebar = $('[data-testid="sidebar"]');
+    if (primary) edges.push(primary.getBoundingClientRect().right);
+    if (sidebar) edges.push(sidebar.getBoundingClientRect().right);
+    if (edges.length) return Math.max.apply(null, edges);
+
+    var bestRight = 0;
+    $$("aside").forEach(function (el) {
+      var r = el.getBoundingClientRect();
+      if (r.left > 60 || r.width > 400 || r.width < 40) return;
+      bestRight = Math.max(bestRight, r.right);
+    });
+    return bestRight;
+  }
+
+  var UNDERLYING_HIDE_SELECTORS = [
+    ".conversations-list",
+    ".conversation-panel",
+    ".conversation-details",
+    ".inbox-view",
+    ".view-box",
+    ".page-content",
+    '[class*="ConversationPanel"]',
+  ];
+
+  function setUnderlyingContentHidden(hidden) {
+    UNDERLYING_HIDE_SELECTORS.forEach(function (sel) {
       $$(sel).forEach(function (el) {
-        if (seen && seen.has(el)) return;
-        if (seen) seen.add(el);
-        var r = el.getBoundingClientRect();
-        if (r.width <= 0 || r.width >= window.innerWidth * 0.5) return;
-        if (r.left >= window.innerWidth * 0.5) return;
-        maxRight = Math.max(maxRight, r.right);
+        if (panel && (panel === el || panel.contains(el))) return;
+        el.style.visibility = hidden ? "hidden" : "";
       });
     });
-    return maxRight;
+    document.body.style.overflow = hidden ? "hidden" : "";
   }
 
   function findAnyList() {
@@ -266,7 +295,7 @@
   function applyPanelTheme() {
     if (!panel) return;
     const tokens = getThemeTokens();
-    panel.style.background = tokens.background;
+    panel.style.background = tokens.background || "#ffffff";
     panel.style.color = tokens.text;
     panel.style.padding = CFG.PADDING + "px";
     panel.style.borderLeft = CFG.SHOW_BORDER ? "1px solid " + tokens.border : "0";
@@ -274,10 +303,13 @@
 
   function layoutPanel() {
     if (!panel || panel.dataset.visible !== "true") return;
-    var left = getNavRightEdge();
+    var left = getContentAreaLeft();
     if (left <= 0) {
       var sb = findSidebar();
-      if (sb) left = sb.getBoundingClientRect().right;
+      if (sb) {
+        var sr = sb.getBoundingClientRect();
+        if (sr.width <= 420) left = sr.right;
+      }
     }
     panel.style.left = Math.max(0, left) + "px";
     panel.style.width = Math.max(320, window.innerWidth - left) + "px";
@@ -295,7 +327,7 @@
       "top:0",
       "right:0",
       "bottom:0",
-      "z-index:9990",
+      "z-index:99999",
       "display:none",
       "overflow:hidden",
     ].join(";");
@@ -313,6 +345,7 @@
     if (!panel) return;
     panel.dataset.visible = "false";
     panel.style.display = "none";
+    setUnderlyingContentHidden(false);
     const iframe = $("#boom-ia-embed-iframe");
     if (iframe) iframe.src = "about:blank";
     const link = $("#boom-ia-embed-link a");
@@ -347,6 +380,7 @@
     panel.style.display = "block";
     applyPanelTheme();
     layoutPanel();
+    setUnderlyingContentHidden(true);
 
     const link = $("#boom-ia-embed-link a");
     if (link) link.setAttribute("aria-expanded", "true");
