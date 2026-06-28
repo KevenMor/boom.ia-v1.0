@@ -25,7 +25,10 @@ export default function ChatwootEmbedMirror() {
 
   const loadMirror = useCallback(async (resolvedAccountId: string) => {
     if (!embedKey) {
-      setError("Parâmetro key ausente na URL do embed.");
+      setError(
+        "Parâmetro key ausente na URL. Abra com: /embed/chatwoot?key=SUA_CHAVE&account_id=" +
+          (resolvedAccountId || "ID_DA_CONTA"),
+      );
       setLoading(false);
       return;
     }
@@ -48,7 +51,14 @@ export default function ChatwootEmbedMirror() {
         setError(data.message ?? "Nenhum agente vinculado a esta conta Chatwoot.");
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Falha ao carregar agente");
+      const msg = e instanceof Error ? e.message : "Falha ao carregar agente";
+      if (msg.includes("Chave de espelho")) {
+        setError(
+          `${msg} — confira se a key na URL é igual a CHATWOOT_MIRROR_EMBED_KEY no servidor (Easypanel).`,
+        );
+      } else {
+        setError(msg);
+      }
       setAgents([]);
     } finally {
       setLoading(false);

@@ -16,6 +16,7 @@
     LINK_ICON: "🔍",
     BOOM_URL: "https://ia.agboom.com.br",
     EMBED_APP_URL: "https://ia.agboom.com.br/embed/chatwoot",
+    // Deve começar com /api/ — NÃO use https://ia.agboom.com.br/embed/chatwoot/view (404 no React)
     EMBED_VIEW_URL: "https://ia.agboom.com.br/api/embed/chatwoot/view",
     EMBED_KEY: "iUDtFP4Rd9FyqNz3nkynZnkW",
     TARGET_ACCOUNT_ID: 9,
@@ -63,15 +64,32 @@
 
   function buildIframeUrl() {
     const accountId = getAccountIdFromPath();
-    if (!accountId || !CFG.EMBED_KEY) return null;
+    if (!accountId || !CFG.EMBED_KEY) {
+      console.warn("[Boom IA] account_id ou EMBED_KEY ausente.", { accountId, hasKey: Boolean(CFG.EMBED_KEY) });
+      return null;
+    }
     const params = new URLSearchParams({
       key: CFG.EMBED_KEY,
       account_id: accountId,
     });
     const appBase = (CFG.EMBED_APP_URL || "").replace(/\/+$/, "");
-    if (appBase) return appBase + "?" + params.toString();
+    if (appBase) {
+      const url = appBase + "?" + params.toString();
+      console.info("[Boom IA] iframe:", url);
+      return url;
+    }
     const viewBase = (CFG.EMBED_VIEW_URL || "").replace(/\/+$/, "");
-    if (viewBase) return viewBase + "?" + params.toString();
+    if (viewBase) {
+      if (!viewBase.includes("/api/embed/chatwoot/view")) {
+        console.error(
+          "[Boom IA] EMBED_VIEW_URL inválida (use /api/embed/chatwoot/view, não /embed/chatwoot/view):",
+          viewBase,
+        );
+      }
+      const url = viewBase + "?" + params.toString();
+      console.info("[Boom IA] iframe:", url);
+      return url;
+    }
     const boomBase = String(CFG.BOOM_URL || "").replace(/\/+$/, "");
     if (!boomBase) return null;
     return boomBase + "/embed/chatwoot?" + params.toString();

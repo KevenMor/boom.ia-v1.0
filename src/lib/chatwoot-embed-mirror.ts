@@ -85,7 +85,9 @@ export async function fetchChatwootAgentMirror(
     account_id: accountId,
     key: embedKey,
   });
-  const res = await fetch(`${base}/embed/chatwoot/agents?${params.toString()}`);
+  const res = await fetch(`${base}/embed/chatwoot/agents?${params.toString()}`, {
+    headers: { "x-chatwoot-mirror-key": embedKey },
+  });
   const body = (await res.json().catch(() => ({}))) as { error?: string } & ChatwootMirrorResponse;
   if (!res.ok) {
     throw new Error(body.error || `Erro ${res.status} ao carregar espelho do agente`);
@@ -107,7 +109,10 @@ export async function updateChatwootAgentEmbed(
   });
   const res = await fetch(`${base}/embed/chatwoot/agents/${encodeURIComponent(agentId)}?${params.toString()}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "x-chatwoot-mirror-key": embedKey,
+    },
     body: JSON.stringify(payload),
   });
   const body = (await res.json().catch(() => ({}))) as { error?: string; agent?: AgentMirrorPayload };
