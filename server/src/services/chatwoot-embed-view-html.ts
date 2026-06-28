@@ -49,7 +49,7 @@ export function renderChatwootEmbedViewHtml(
       --toggle-off:#3f4347;
     }
     *{box-sizing:border-box;margin:0;padding:0;}
-    html,body{height:100%;background:var(--bg);color:var(--text);
+    html,body{height:100%;min-height:100%;background:var(--bg);color:var(--text);
       font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
       transition:background .2s,color .2s;}
     /* ── header ─────────────────────────────────────────────── */
@@ -416,16 +416,22 @@ var API_BASE="/api";
 /* ── tema ─────────────────────────────────────────────────── */
 function applyTheme(t,colors){
   document.documentElement.setAttribute("data-theme",t==="dark"?"dark":"light");
-  if(colors){
-    var r=document.documentElement.style;
-    if(colors.bg)      r.setProperty("--bg",colors.bg);
-    if(colors.surface) r.setProperty("--surface",colors.surface);
-    if(colors.surface2)r.setProperty("--surface2",colors.surface2);
-    if(colors.border)  r.setProperty("--border",colors.border);
-    if(colors.text)    r.setProperty("--text",colors.text);
-    if(colors.muted)   r.setProperty("--muted",colors.muted);
-    if(colors.brand)   r.setProperty("--brand",colors.brand);
-  }
+  var solidLight={bg:"#fafafa",surface:"#ffffff",text:"#3c4858"};
+  var solidDark={bg:"#151718",surface:"#1c1f20",text:"#d4d6da"};
+  var base=t==="dark"?solidDark:solidLight;
+  document.documentElement.style.setProperty("--bg",base.bg);
+  document.documentElement.style.setProperty("--surface",base.surface);
+  document.documentElement.style.setProperty("--text",base.text);
+  if(!colors) return;
+  function opaque(c){if(!c||c==="transparent")return false;var m=String(c).match(/rgba?\(([^)]+)\)/);if(!m)return true;var p=m[1].split(",");if(p.length===4&&parseFloat(p[3])===0)return false;return true;}
+  var r=document.documentElement.style;
+  if(opaque(colors.bg))      r.setProperty("--bg",colors.bg);
+  if(opaque(colors.surface)) r.setProperty("--surface",colors.surface);
+  if(opaque(colors.surface2))r.setProperty("--surface2",colors.surface2);
+  if(opaque(colors.border))  r.setProperty("--border",colors.border);
+  if(opaque(colors.text))    r.setProperty("--text",colors.text);
+  if(opaque(colors.muted))   r.setProperty("--muted",colors.muted);
+  if(opaque(colors.brand))   r.setProperty("--brand",colors.brand);
 }
 applyTheme(${safeTheme},null);
 
