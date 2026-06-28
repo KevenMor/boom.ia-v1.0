@@ -2,10 +2,12 @@
 import { FOLLOWUP_PROMPT, SYSTEM_PROMPT } from "./autoescola-ideal.js";
 
 describe("Autoescola Ideal — SYSTEM_PROMPT (contratos de negócio)", () => {
-  it("define exame prático de moto na Alameda do Horto, 144, e não na pista", () => {
-    expect(SYSTEM_PROMPT).toMatch(/Alameda do Horto,\s*144/i);
+  it("define exame prático de moto na Rua Maria Augusta Martin (Mineirão), e não na pista", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Maria Augusta Martin/i);
+    expect(SYSTEM_PROMPT).toMatch(/Mineir[aã]o/i);
     expect(SYSTEM_PROMPT).toMatch(/exame pr[aá]tico de moto|exame de moto/i);
     expect(SYSTEM_PROMPT).toMatch(/n[aã]o[^.\n]{0,80}na pista|n[aã]o [eé] na pista/i);
+    expect(SYSTEM_PROMPT).toMatch(/SAAE|TUIK/i);
   });
 
   it("mantém pista Elias Abud Dib apenas para treino / aulas de moto", () => {
@@ -20,7 +22,13 @@ describe("Autoescola Ideal — SYSTEM_PROMPT (contratos de negócio)", () => {
   });
 
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v8\.13/);
+    expect(SYSTEM_PROMPT).toMatch(/v8\.14/);
+  });
+
+  it("primeira habilitação: exame toxicológico obrigatório", () => {
+    expect(SYSTEM_PROMPT).toMatch(/toxicol[oó]gico/i);
+    expect(SYSTEM_PROMPT).toMatch(/1[aª] habilita[cç][aã]o|primeira habilita[cç][aã]o/i);
+    expect(SYSTEM_PROMPT).toMatch(/m[eé]dico, psicot[eé]cnico, toxicol[oó]gico e te[oó]rico/i);
   });
 
   it("adição de categoria: médico obrigatório; teórico e psicotécnico não necessários", () => {
