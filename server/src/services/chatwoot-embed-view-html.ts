@@ -28,15 +28,17 @@ export function renderChatwootEmbedViewHtml(
       --success:#22c55e;--success-soft:#dcfce7;--success-text:#15803d;
       --warn-soft:#fef9c3;--warn-text:#854d0e;--muted-soft:#f3f4f6;--muted-text:#6b7280;
       --err:#ef4444;--shadow-sm:0 1px 2px rgba(0,0,0,.04);
+      --input-bg:#ffffff;
     }
     [data-theme="dark"]{
-      --bg:#111827;--page:#111827;--surface:#1f2937;--surface-muted:#1a2332;
-      --border:#374151;--border-input:#4b5563;--divider:#1f2937;
-      --text:#f9fafb;--text-secondary:#d1d5db;--text-muted:#9ca3af;--text-label:#6b7280;
-      --brand:#3b9eff;--brand-hover:#60a5fa;--brand-soft:#1e3a5f;--brand-ring:rgba(59,158,255,.3);
-      --success:#4ade80;--success-soft:#14532d;--success-text:#86efac;
-      --warn-soft:#422006;--warn-text:#fde68a;--muted-soft:#374151;--muted-text:#9ca3af;
-      --err:#f87171;--shadow-sm:0 1px 2px rgba(0,0,0,.3);
+      --bg:#0f1419;--page:#0f1419;--surface:#1a1f26;--surface-muted:#232a33;
+      --border:#2d3748;--border-input:#4a5568;--divider:#252d38;
+      --text:#f3f4f6;--text-secondary:#e5e7eb;--text-muted:#9ca3af;--text-label:#6b7280;
+      --brand:#3b9eff;--brand-hover:#60a5fa;--brand-soft:rgba(59,158,255,.12);--brand-ring:rgba(59,158,255,.35);
+      --success:#4ade80;--success-soft:rgba(74,222,128,.12);--success-text:#86efac;
+      --warn-soft:rgba(251,191,36,.12);--warn-text:#fde68a;--muted-soft:#2d3748;--muted-text:#9ca3af;
+      --err:#f87171;--shadow-sm:0 1px 3px rgba(0,0,0,.45);
+      --input-bg:#1a1f26;
     }
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
     html,body{height:100%;min-height:100%;}
@@ -55,7 +57,7 @@ export function renderChatwootEmbedViewHtml(
     }
     .cw-topbar-inner{
       display:flex;align-items:center;justify-content:space-between;gap:16px;
-      padding:16px 24px;max-width:var(--content-max);margin:0 auto;width:100%;
+      padding:16px 24px;width:100%;
     }
     .cw-topbar-main{display:flex;align-items:center;gap:14px;min-width:0;flex:1;}
     .cw-avatar{
@@ -63,11 +65,9 @@ export function renderChatwootEmbedViewHtml(
       background:var(--surface-muted);border:2px solid var(--border);
     }
     .cw-topbar-text{min-width:0;}
-    .cw-topbar-text h1{
-      font-size:20px;font-weight:600;line-height:1.25;color:var(--text);
-      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-    }
-    .cw-topbar-text p{font-size:13px;color:var(--text-muted);margin-top:2px;}
+    .cw-topbar-text h1{font-size:20px;font-weight:600;line-height:1.25;color:var(--text);}
+    .cw-topbar-text p{font-size:13px;color:var(--text-muted);margin-top:2px;word-break:break-word;}
+    .cw-topbar-title-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
     .cw-topbar-actions{display:flex;align-items:center;gap:12px;flex-shrink:0;}
     .cw-status-pill{
       display:inline-flex;align-items:center;gap:6px;padding:4px 10px;
@@ -81,21 +81,27 @@ export function renderChatwootEmbedViewHtml(
     .cw-status-pill.inactive{background:var(--muted-soft);color:var(--muted-text);}
     .cw-status-pill.inactive .dot{background:#9ca3af;}
 
-    /* ── tabs ── */
+    /* ── tabs (full-width, alinhadas à esquerda) ── */
     .cw-tabs-bar{background:var(--surface);border-bottom:1px solid var(--border);}
     .cw-tabs{
-      display:flex;gap:0;
-      max-width:var(--content-max);margin:0 auto;width:100%;
-      padding:0 24px;overflow-x:auto;
+      display:flex;gap:4px;width:100%;padding:0 24px;
+      overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;
+      scrollbar-width:none;
     }
+    .cw-tabs::-webkit-scrollbar{display:none;}
     .cw-tab{
-      padding:14px 16px;border:0;background:none;cursor:pointer;
+      padding:12px 16px;border:0;background:none;cursor:pointer;flex-shrink:0;
       font:inherit;font-size:14px;font-weight:500;color:var(--text-muted);
-      border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;
-      transition:color .15s,border-color .15s;
+      border-bottom:3px solid transparent;margin-bottom:-1px;white-space:nowrap;
+      border-radius:8px 8px 0 0;min-height:44px;
+      transition:color .15s,background .15s,border-color .15s;
     }
-    .cw-tab:hover{color:var(--text-secondary);}
-    .cw-tab.active{color:var(--brand);border-bottom-color:var(--brand);}
+    .cw-tab:hover{color:var(--text-secondary);background:var(--surface-muted);}
+    .cw-tab.active{
+      color:var(--brand);font-weight:600;
+      border-bottom-color:var(--brand);
+      background:var(--brand-soft);
+    }
 
     /* ── main content ── */
     .cw-main{flex:1;padding:24px 24px 48px;background:var(--page);}
@@ -118,7 +124,7 @@ export function renderChatwootEmbedViewHtml(
     }
     .cw-input,.cw-select,.cw-textarea{
       width:100%;height:40px;padding:0 12px;border-radius:8px;
-      border:1px solid var(--border-input);background:var(--surface);
+      border:1px solid var(--border-input);background:var(--input-bg,var(--surface));
       color:var(--text);font:inherit;font-size:14px;
       transition:border-color .15s,box-shadow .15s;
     }
@@ -129,7 +135,6 @@ export function renderChatwootEmbedViewHtml(
     .cw-input::placeholder,.cw-textarea::placeholder{color:var(--text-label);}
     .cw-hint{font-size:12px;color:var(--text-muted);margin-top:6px;line-height:1.4;}
     .cw-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
-    @media(max-width:640px){.cw-grid{grid-template-columns:1fr;}.cw-topbar-inner{flex-wrap:wrap;padding:12px 16px;}.cw-tabs,.cw-main{padding-left:16px;padding-right:16px;}:root,[data-theme="light"]{--content-max:100%;}}
 
     /* ── status options ── */
     .cw-status-list{display:flex;flex-direction:column;gap:8px;}
@@ -139,7 +144,7 @@ export function renderChatwootEmbedViewHtml(
       background:var(--surface);transition:background .12s,border-color .12s;
     }
     .cw-status-opt:hover{background:var(--surface-muted);}
-    .cw-status-opt.sel{background:var(--brand-soft);border-color:var(--brand);}
+    .cw-status-opt.sel{background:var(--brand-soft);border-color:var(--brand);box-shadow:0 0 0 1px var(--brand);}
     .cw-status-opt input{margin-top:3px;accent-color:var(--brand);flex-shrink:0;}
     .cw-status-title{font-size:14px;font-weight:600;color:var(--text);}
     .cw-status-desc{font-size:13px;color:var(--text-muted);margin-top:2px;line-height:1.4;}
@@ -179,16 +184,52 @@ export function renderChatwootEmbedViewHtml(
     /* ── button ── */
     .cw-btn{
       display:inline-flex;align-items:center;justify-content:center;gap:8px;
-      height:40px;padding:0 20px;border:0;border-radius:8px;
+      min-height:44px;padding:0 22px;border:0;border-radius:8px;
       font:inherit;font-size:14px;font-weight:600;cursor:pointer;
-      transition:background .15s,opacity .15s,transform .05s;
+      transition:background .15s,box-shadow .15s,transform .05s,opacity .15s;
     }
     .cw-btn:active{transform:scale(.98);}
     .cw-btn-primary{background:var(--brand);color:#fff;}
     .cw-btn-primary:hover:not(:disabled){background:var(--brand-hover);}
-    .cw-btn-primary:disabled{opacity:.45;cursor:not-allowed;}
-    .cw-save-ok{font-size:13px;font-weight:500;color:var(--success);}
-    .cw-save-err{font-size:13px;color:var(--err);}
+    .cw-btn-primary:disabled{opacity:.4;cursor:not-allowed;box-shadow:none!important;}
+    .cw-btn-primary:not(:disabled){
+      box-shadow:0 1px 2px rgba(0,0,0,.08),0 4px 14px rgba(31,147,255,.35);
+    }
+    [data-theme="dark"] .cw-btn-primary:not(:disabled){
+      box-shadow:0 4px 16px rgba(59,158,255,.28);
+    }
+    .cw-btn-primary.cw-btn-ready:not(:disabled){
+      animation:pulse-save 2s ease-in-out infinite;
+    }
+    @keyframes pulse-save{0%,100%{box-shadow:0 1px 2px rgba(0,0,0,.08),0 4px 14px rgba(31,147,255,.35)}50%{box-shadow:0 2px 8px rgba(0,0,0,.1),0 6px 20px rgba(31,147,255,.5)}}
+    .cw-save-ok{font-size:13px;font-weight:600;color:var(--success);}
+    .cw-save-err{font-size:13px;font-weight:500;color:var(--err);}
+
+    /* ── mobile ── */
+    @media(max-width:768px){
+      :root,[data-theme="light"],[data-theme="dark"]{--content-max:100%;}
+      .cw-topbar-inner{flex-direction:column;align-items:stretch;padding:12px 16px;gap:12px;}
+      .cw-avatar{width:44px;height:44px;}
+      .cw-topbar-text h1{font-size:18px;}
+      .cw-topbar-actions{
+        width:100%;flex-wrap:wrap;gap:8px;
+        padding-top:4px;border-top:1px solid var(--divider);
+      }
+      .cw-btn-primary{flex:1;min-width:140px;}
+      .cw-save-ok,.cw-save-err{flex:1 1 100%;text-align:center;}
+      .cw-tabs{padding:0 12px;}
+      .cw-tab{padding:10px 12px;font-size:13px;}
+      .cw-main{padding:16px 16px 32px;}
+      .cw-grid{grid-template-columns:1fr;gap:16px;}
+      .cw-block{padding-bottom:22px;margin-bottom:22px;}
+      .cw-status-opt{padding:12px 14px;}
+      .cw-row{flex-direction:column;align-items:flex-start;gap:10px;}
+      .cw-switch{align-self:flex-end;}
+    }
+    @media(max-width:480px){
+      .cw-topbar-main{gap:10px;}
+      .cw-btn-primary{width:100%;}
+    }
 
     /* ── alerts / loading ── */
     .cw-alert{padding:12px 14px;border-radius:10px;font-size:13px;margin-bottom:20px;line-height:1.4;}
@@ -197,8 +238,11 @@ export function renderChatwootEmbedViewHtml(
     [data-theme="dark"] .cw-alert-warn{background:#422006;border-color:#92400e;color:#fde68a;}
     [data-theme="dark"] .cw-alert-err{background:#450a0a;border-color:#991b1b;color:#fca5a5;}
     .cw-registry{
-      padding:12px 14px;border-radius:10px;font-size:13px;margin-bottom:16px;
+      padding:12px 14px;border-radius:10px;font-size:13px;margin-bottom:16px;line-height:1.45;
       background:var(--brand-soft);border:1px solid var(--brand);color:var(--brand);
+    }
+    [data-theme="dark"] .cw-registry{
+      background:rgba(59,158,255,.1);border-color:rgba(59,158,255,.45);color:#93c5fd;
     }
     .cw-loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 0;gap:12px;color:var(--text-muted);}
     .cw-spinner{
@@ -216,10 +260,12 @@ export function renderChatwootEmbedViewHtml(
       <div class="cw-topbar-main">
         <img id="agent-avatar" class="cw-avatar" src="" alt="" onerror="this.style.visibility='hidden'"/>
         <div class="cw-topbar-text">
-          <h1 id="header-title">Agente IA</h1>
+          <div class="cw-topbar-title-row">
+            <h1 id="header-title">Agente IA</h1>
+            <span id="header-badge"></span>
+          </div>
           <p id="agent-meta">Carregando…</p>
         </div>
-        <span id="header-badge"></span>
       </div>
       <div class="cw-topbar-actions">
         <span id="save-ok" class="cw-save-ok"></span>
@@ -442,7 +488,9 @@ function switchTab(n,btn){
 }
 function markDirty(){
   STATE.dirty=true;
-  document.getElementById("save-btn").disabled=false;
+  var btn=document.getElementById("save-btn");
+  btn.disabled=false;
+  btn.classList.add("cw-btn-ready");
   document.getElementById("save-ok").textContent="";
 }
 function setStatus(v){
@@ -534,7 +582,8 @@ function saveAgent(){
     .then(function(res){
       btn.textContent="Salvar alterações";
       if(!res.ok){btn.disabled=false;err.textContent=res.j.error||"Erro ao salvar";return;}
-      STATE.dirty=false; ok.textContent="Salvo ✓"; setTimeout(function(){ok.textContent="";},3000);
+      STATE.dirty=false; btn.disabled=true; btn.classList.remove("cw-btn-ready");
+      ok.textContent="Salvo ✓"; setTimeout(function(){ok.textContent="";},3000);
       if(res.j.agent) fillForm(res.j.agent);
     })
     .catch(function(e){btn.textContent="Salvar alterações";btn.disabled=false;err.textContent=e.message||"Erro de rede";});
