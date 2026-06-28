@@ -275,6 +275,31 @@
     if (link) link.setAttribute("aria-expanded", "true");
   }
 
+  const COLLAPSED_SIDEBAR_WIDTH = 80;
+
+  function isSidebarCollapsed() {
+    const sb = findSidebar();
+    if (!sb) return false;
+    return sb.getBoundingClientRect().width < COLLAPSED_SIDEBAR_WIDTH;
+  }
+
+  function syncLinkCollapsed() {
+    const link = $("#boom-ia-embed-link a");
+    const textSpan = $("#boom-ia-embed-link-text");
+    if (!link) return;
+    if (isSidebarCollapsed()) {
+      link.style.justifyContent = "center";
+      link.style.padding = "8px 0";
+      link.title = CFG.LINK_TEXT;
+      if (textSpan) textSpan.style.display = "none";
+    } else {
+      link.style.justifyContent = "";
+      link.style.padding = "8px 12px";
+      link.title = "";
+      if (textSpan) textSpan.style.display = "";
+    }
+  }
+
   function ensureSidebarLink() {
     if ($("#boom-ia-embed-link")) return;
 
@@ -283,9 +308,9 @@
     li.style.listStyle = "none";
     li.innerHTML =
       '<a href="#" data-boom-ia-embed-link="true" aria-expanded="false" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;text-decoration:none;color:inherit;">' +
-      '<span aria-hidden="true">' +
+      '<span aria-hidden="true" style="font-size:18px;line-height:1;flex-shrink:0;">' +
       CFG.LINK_ICON +
-      "</span><span>" +
+      '</span><span id="boom-ia-embed-link-text">' +
       CFG.LINK_TEXT +
       "</span></a>";
 
@@ -331,6 +356,8 @@
       if (panel && panel.dataset.visible === "true") hidePanel();
       else showPanel();
     });
+
+    syncLinkCollapsed();
   }
 
   function bindSidebarCloseHandler() {
@@ -360,6 +387,7 @@
     bindSidebarCloseHandler();
     applyPanelTheme();
     layoutPanel();
+    syncLinkCollapsed();
   }
 
   function bootstrap() {
@@ -383,12 +411,26 @@
       attributeFilter: ["class", "data-theme"],
     });
 
+    if (typeof ResizeObserver !== "undefined") {
+      const sidebarRO = new ResizeObserver(function () {
+        syncLinkCollapsed();
+        layoutPanel();
+      });
+      const sbEl = findSidebar();
+      if (sbEl) sidebarRO.observe(sbEl);
+      setTimeout(function () {
+        const sbNew = findSidebar();
+        if (sbNew && sbNew !== sbEl) sidebarRO.observe(sbNew);
+      }, 5000);
+    }
+
     on(window, "resize", function () {
       if (window.innerWidth <= CFG.MOBILE_MAX_WIDTH) {
         hidePanel();
       } else {
         applyPanelTheme();
         layoutPanel();
+        syncLinkCollapsed();
       }
     });
 
