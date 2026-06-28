@@ -66,14 +66,36 @@
 
   function detectTheme() {
     const html = document.documentElement;
-    if (html.classList.contains("dark") || html.getAttribute("data-theme") === "dark") return "dark";
-    if (html.classList.contains("light") || html.getAttribute("data-theme") === "light") return "light";
-    if (document.body.classList.contains("dark")) return "dark";
-    // heurística por cor de fundo
+    // classe dark (Tailwind / Chatwoot padrão)
+    if (html.classList.contains("dark") || document.body.classList.contains("dark")) return "dark";
+    if (html.getAttribute("data-theme") === "dark" || document.body.getAttribute("data-theme") === "dark") return "dark";
+    // preferência do sistema operacional
+    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
+    // heurística: luminância do fundo
     const bg = getComputedStyle(document.body).backgroundColor;
     const m = bg.match(/\d+/g);
     if (m && parseInt(m[0]) + parseInt(m[1]) + parseInt(m[2]) < 300) return "dark";
     return "light";
+  }
+
+  /** Extrai tokens de cor reais do Mega para replicar o tema exatamente. */
+  function extractMegaColors() {
+    const cs = getComputedStyle(document.documentElement);
+    const bs = getComputedStyle(document.body);
+    function v(prop) { return cs.getPropertyValue(prop).trim() || null; }
+    return {
+      bg:      v("--color-background")      || v("--bg-color")          || bs.backgroundColor || null,
+      surface: v("--color-white")           || v("--surface-color")     || null,
+      surface2:v("--color-background-light")|| null,
+      border:  v("--color-border")          || v("--border-color")      || null,
+      text:    v("--color-heading")         || v("--text-color")        || bs.color           || null,
+      muted:   v("--color-body")            || v("--secondary-color")   || null,
+      brand:   v("--color-woot-500")        || v("--color-brand-primary")|| v("--brand-color") || null,
+    };
+  }
+
+  function embedOrigin() {
+    return new URL(CFG.BOOM_URL || CFG.EMBED_APP_URL || "https://ia.agboom.com.br").origin;
   }
 
   function postThemeToEmbed() {
@@ -81,8 +103,8 @@
     if (!iframe || !iframe.contentWindow) return;
     try {
       iframe.contentWindow.postMessage(
-        { type: "boom-ia-embed:theme", theme: detectTheme() },
-        new URL(CFG.BOOM_URL || CFG.EMBED_APP_URL || "https://ia.agboom.com.br").origin,
+        { type: "boom-ia-embed:theme", theme: detectTheme(), colors: extractMegaColors() },
+        embedOrigin(),
       );
     } catch (err) {
       console.warn("[Boom IA] postMessage theme falhou:", err);
@@ -116,8 +138,10 @@
           type: "boom-ia-embed:init",
           key: CFG.EMBED_KEY,
           account_id: accountId,
+          theme: detectTheme(),
+          colors: extractMegaColors(),
         },
-        new URL(CFG.BOOM_URL || CFG.EMBED_APP_URL || "https://ia.agboom.com.br").origin,
+        embedOrigin(),
       );
     } catch (err) {
       console.warn("[Boom IA] postMessage init falhou:", err);
