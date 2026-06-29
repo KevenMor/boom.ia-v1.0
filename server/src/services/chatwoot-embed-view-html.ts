@@ -13,7 +13,7 @@ export function renderChatwootEmbedViewHtml(
 <html lang="pt-BR" data-theme="${theme}">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
   <title>Agente IA</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -48,8 +48,9 @@ export function renderChatwootEmbedViewHtml(
       background:var(--page);color:var(--text);
       font:14px/1.5 "Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
       -webkit-font-smoothing:antialiased;
+      -webkit-text-size-adjust:100%;
     }
-    .cw-app{min-height:100%;display:flex;flex-direction:column;background:var(--page);}
+    .cw-app{min-height:100%;min-height:100dvh;display:flex;flex-direction:column;background:var(--page);}
 
     /* ── topbar (estilo settings Chatwoot) ── */
     .cw-topbar{
@@ -201,18 +202,22 @@ export function renderChatwootEmbedViewHtml(
     /* ── mobile ── */
     @media(max-width:768px){
       :root,[data-theme="light"],[data-theme="dark"]{--content-max:100%;}
-      .cw-topbar-inner{flex-direction:column;align-items:stretch;padding:12px 16px;gap:12px;}
-      .cw-avatar{width:44px;height:44px;}
-      .cw-topbar-text h1{font-size:18px;}
-      .cw-topbar-actions{
-        width:100%;flex-wrap:wrap;gap:8px;
-        padding-top:4px;border-top:1px solid var(--divider);
+      .cw-topbar-inner{
+        flex-direction:row;flex-wrap:wrap;align-items:center;
+        padding:12px 16px;padding-top:max(12px,env(safe-area-inset-top,0));gap:10px;
       }
-      .cw-btn-primary{flex:1;min-width:140px;}
+      .cw-topbar-main{flex:1 1 auto;min-width:0;}
+      .cw-avatar{width:44px;height:44px;}
+      .cw-topbar-text h1{font-size:17px;}
+      .cw-topbar-actions{
+        width:100%;flex-wrap:nowrap;gap:8px;
+        padding-top:10px;border-top:1px solid var(--divider);
+      }
+      .cw-btn-primary{flex:1;min-width:0;}
       .cw-save-ok,.cw-save-err{flex:1 1 100%;text-align:center;}
-      .cw-tabs{padding:0 12px;}
-      .cw-tab{padding:10px 12px;font-size:13px;}
-      .cw-main{padding:16px 16px 32px;}
+      .cw-tabs{padding:0 12px;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+      .cw-tab{padding:10px 12px;font-size:13px;white-space:nowrap;}
+      .cw-main{padding:16px 16px max(32px,env(safe-area-inset-bottom,0));}
       .cw-grid{grid-template-columns:1fr;gap:16px;}
       .cw-block{padding-bottom:22px;margin-bottom:22px;}
       .cw-status-opt{padding:12px 14px;}
