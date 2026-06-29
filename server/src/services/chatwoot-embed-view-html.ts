@@ -25,6 +25,7 @@ export function renderChatwootEmbedViewHtml(
       --border:#e5e7eb;--border-input:#d1d5db;--divider:#f1f5f9;
       --text:#111827;--text-secondary:#4b5563;--text-muted:#6b7280;--text-label:#9ca3af;
       --brand:#1f93ff;--brand-hover:#1781e3;--brand-soft:#eff6ff;--brand-ring:rgba(31,147,255,.25);
+      --action:#1f93ff;--action-hover:#1781e3;--action-text:#ffffff;--action-off:#cbd5e1;
       --success:#22c55e;--success-soft:#dcfce7;--success-text:#15803d;
       --warn-soft:#fef9c3;--warn-text:#854d0e;--muted-soft:#f3f4f6;--muted-text:#6b7280;
       --err:#ef4444;--shadow-sm:0 1px 2px rgba(0,0,0,.04);
@@ -35,6 +36,7 @@ export function renderChatwootEmbedViewHtml(
       --border:#2d3748;--border-input:#4a5568;--divider:#252d38;
       --text:#f3f4f6;--text-secondary:#e5e7eb;--text-muted:#9ca3af;--text-label:#6b7280;
       --brand:#3b9eff;--brand-hover:#60a5fa;--brand-soft:rgba(59,158,255,.12);--brand-ring:rgba(59,158,255,.35);
+      --action:#3b9eff;--action-hover:#60a5fa;--action-text:#ffffff;--action-off:#4b5563;
       --success:#4ade80;--success-soft:rgba(74,222,128,.12);--success-text:#86efac;
       --warn-soft:rgba(251,191,36,.12);--warn-text:#fde68a;--muted-soft:#2d3748;--muted-text:#9ca3af;
       --err:#f87171;--shadow-sm:0 1px 3px rgba(0,0,0,.45);
@@ -159,15 +161,15 @@ export function renderChatwootEmbedViewHtml(
     .cw-switch{position:relative;width:42px;height:24px;flex-shrink:0;}
     .cw-switch input{opacity:0;width:0;height:0;position:absolute;}
     .cw-switch-track{
-      position:absolute;inset:0;background:#d1d5db;border-radius:12px;cursor:pointer;transition:.2s;
+      position:absolute;inset:0;background:var(--action-off);border-radius:12px;cursor:pointer;transition:background .2s;
     }
-    [data-theme="dark"] .cw-switch-track{background:#4b5563;}
     .cw-switch-track::after{
       content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;
-      background:#fff;border-radius:50%;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.15);
+      background:#fff;border-radius:50%;transition:transform .2s;box-shadow:0 1px 2px rgba(0,0,0,.2);
     }
-    .cw-switch input:checked+.cw-switch-track{background:var(--brand);}
+    .cw-switch input:checked+.cw-switch-track{background:var(--action);}
     .cw-switch input:checked+.cw-switch-track::after{transform:translateX(18px);}
+    .cw-switch input:focus-visible+.cw-switch-track{outline:2px solid var(--action);outline-offset:2px;}
 
     /* ── tools ── */
     .cw-tool{
@@ -189,19 +191,10 @@ export function renderChatwootEmbedViewHtml(
       transition:background .15s,box-shadow .15s,transform .05s,opacity .15s;
     }
     .cw-btn:active{transform:scale(.98);}
-    .cw-btn-primary{background:var(--brand);color:#fff;}
-    .cw-btn-primary:hover:not(:disabled){background:var(--brand-hover);}
-    .cw-btn-primary:disabled{opacity:.4;cursor:not-allowed;box-shadow:none!important;}
-    .cw-btn-primary:not(:disabled){
-      box-shadow:0 1px 2px rgba(0,0,0,.08),0 4px 14px rgba(31,147,255,.35);
-    }
-    [data-theme="dark"] .cw-btn-primary:not(:disabled){
-      box-shadow:0 4px 16px rgba(59,158,255,.28);
-    }
-    .cw-btn-primary.cw-btn-ready:not(:disabled){
-      animation:pulse-save 2s ease-in-out infinite;
-    }
-    @keyframes pulse-save{0%,100%{box-shadow:0 1px 2px rgba(0,0,0,.08),0 4px 14px rgba(31,147,255,.35)}50%{box-shadow:0 2px 8px rgba(0,0,0,.1),0 6px 20px rgba(31,147,255,.5)}}
+    .cw-btn-primary{background:var(--action);color:var(--action-text);}
+    .cw-btn-primary:hover:not(:disabled){background:var(--action-hover);}
+    .cw-btn-primary:disabled{background:var(--action-off);color:#fff;opacity:1;cursor:not-allowed;}
+    [data-theme="dark"] .cw-btn-primary:disabled{color:rgba(255,255,255,.55);}
     .cw-save-ok{font-size:13px;font-weight:600;color:var(--success);}
     .cw-save-err{font-size:13px;font-weight:500;color:var(--err);}
 
@@ -469,6 +462,7 @@ function applyTheme(t,colors){
   if(opaque(colors.text))     r.setProperty("--text",colors.text);
   if(opaque(colors.muted))    r.setProperty("--text-muted",colors.muted);
   if(opaque(colors.brand))    r.setProperty("--brand",colors.brand);
+  /* --action/--action-hover ficam fixos: botão Salvar e toggles sempre com cor sólida legível */
 }
 applyTheme(${safeTheme},null);
 
@@ -490,7 +484,6 @@ function markDirty(){
   STATE.dirty=true;
   var btn=document.getElementById("save-btn");
   btn.disabled=false;
-  btn.classList.add("cw-btn-ready");
   document.getElementById("save-ok").textContent="";
 }
 function setStatus(v){
@@ -582,7 +575,7 @@ function saveAgent(){
     .then(function(res){
       btn.textContent="Salvar alterações";
       if(!res.ok){btn.disabled=false;err.textContent=res.j.error||"Erro ao salvar";return;}
-      STATE.dirty=false; btn.disabled=true; btn.classList.remove("cw-btn-ready");
+      STATE.dirty=false; btn.disabled=true;
       ok.textContent="Salvo ✓"; setTimeout(function(){ok.textContent="";},3000);
       if(res.j.agent) fillForm(res.j.agent);
     })
