@@ -17,7 +17,7 @@ export function renderChatwootEmbedViewHtml(
   <title>Agente IA</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
   <style>
     :root,[data-theme="light"]{
       --content-max:720px;
@@ -244,6 +244,68 @@ export function renderChatwootEmbedViewHtml(
     }
     @keyframes spin{to{transform:rotate(360deg)}}
     .cw-empty{font-size:14px;color:var(--text-muted);}
+
+    /* ── prompt preview (code reader) ── */
+    .cw-prompt-info{
+      display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:12px;
+      margin-bottom:20px;background:var(--surface-muted);border:1px solid var(--border);
+      border-left:3px solid var(--brand);font-size:13px;line-height:1.55;color:var(--text-secondary);
+    }
+    .cw-prompt-info--muted{border-left-color:var(--text-muted);}
+    .cw-prompt-info-icon{
+      width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;
+      justify-content:center;background:var(--brand-soft);color:var(--brand);font-size:13px;font-weight:700;
+    }
+    .cw-prompt-info-body{min-width:0;flex:1;}
+    .cw-prompt-info-badge{
+      display:inline-block;padding:2px 8px;border-radius:6px;margin:0 6px 6px 0;
+      font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;font-weight:600;
+      background:var(--brand-soft);color:var(--brand);vertical-align:middle;
+    }
+    .cw-prompt-info code{
+      font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px;padding:1px 5px;
+      border-radius:4px;background:rgba(0,0,0,.05);color:var(--text);
+    }
+    [data-theme="dark"] .cw-prompt-info code{background:rgba(255,255,255,.08);}
+    .cw-code-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;flex-wrap:wrap;}
+    .cw-code-toolbar .cw-label{margin-bottom:0;}
+    .cw-btn-ghost{
+      display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:0 14px;
+      border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);
+      font:inherit;font-size:13px;font-weight:500;cursor:pointer;transition:background .15s,color .15s;
+    }
+    .cw-btn-ghost:hover{background:var(--surface-muted);color:var(--text);}
+    .cw-code-preview{
+      width:100%;min-height:min(480px,52vh);max-height:72vh;padding:16px 18px;border-radius:12px;
+      border:1px solid var(--border);background:var(--surface-muted);color:var(--text);
+      font:13px/1.7 "JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+      resize:vertical;overflow:auto;white-space:pre-wrap;word-break:break-word;tab-size:2;
+      -webkit-font-smoothing:antialiased;
+    }
+    [data-theme="dark"] .cw-code-preview{background:#12171e;border-color:#2d3748;}
+    .cw-modal{
+      position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;
+      padding:16px;background:rgba(15,20,25,.58);backdrop-filter:blur(2px);
+    }
+    .cw-modal.open{display:flex;}
+    .cw-modal-panel{
+      width:min(960px,100%);max-height:min(92vh,920px);display:flex;flex-direction:column;
+      background:var(--surface);border-radius:14px;border:1px solid var(--border);
+      box-shadow:0 24px 48px rgba(0,0,0,.2);overflow:hidden;
+    }
+    .cw-modal-head{
+      display:flex;align-items:center;justify-content:space-between;gap:12px;
+      padding:14px 18px;border-bottom:1px solid var(--divider);flex-shrink:0;
+    }
+    .cw-modal-head h2{font-size:15px;font-weight:600;color:var(--text);}
+    .cw-code-preview--modal{
+      flex:1;min-height:0;max-height:none;border:0;border-radius:0;resize:none;margin:0;
+    }
+    @media(max-width:768px){
+      .cw-code-preview{min-height:min(360px,45vh);font-size:12px;padding:14px;}
+      .cw-modal{padding:8px;}
+      .cw-modal-panel{max-height:96vh;border-radius:12px;}
+    }
   </style>
 </head>
 <body>
@@ -358,10 +420,13 @@ export function renderChatwootEmbedViewHtml(
           <div class="cw-block">
             <div class="cw-block-title">Prompt em produção</div>
             <div class="cw-block-desc">Texto usado pelo motor de IA, definido no código do tenant. Somente leitura neste painel.</div>
-            <div id="prompt-registry-note" style="display:none" class="cw-alert cw-alert-warn"></div>
+            <div id="prompt-registry-note" style="display:none" class="cw-prompt-info"></div>
             <div class="cw-field">
-              <label class="cw-label" for="f-prompt-preview">Preview montado pelo servidor</label>
-              <textarea class="cw-textarea" id="f-prompt-preview" readonly style="opacity:.85;font-family:ui-monospace,monospace;font-size:12px;min-height:200px;"></textarea>
+              <div class="cw-code-toolbar">
+                <label class="cw-label" for="f-prompt-preview">Preview montado pelo servidor</label>
+                <button type="button" class="cw-btn-ghost" id="prompt-expand-btn" onclick="openPromptModal()" style="display:none">Expandir</button>
+              </div>
+              <textarea class="cw-code-preview" id="f-prompt-preview" readonly spellcheck="false"></textarea>
               <div class="cw-hint">Bloco do tenant + regras globais, idioma e data. No chat pode variar conforme ferramentas e calendário. Alterações exigem deploy do servidor.</div>
             </div>
           </div>
@@ -452,6 +517,16 @@ export function renderChatwootEmbedViewHtml(
   </main>
 </div>
 
+<div id="prompt-modal" class="cw-modal" onclick="if(event.target===this)closePromptModal()">
+  <div class="cw-modal-panel" role="dialog" aria-modal="true" aria-labelledby="prompt-modal-title">
+    <div class="cw-modal-head">
+      <h2 id="prompt-modal-title">Prompt em produção</h2>
+      <button type="button" class="cw-btn-ghost" onclick="closePromptModal()">Fechar</button>
+    </div>
+    <textarea class="cw-code-preview cw-code-preview--modal" id="f-prompt-preview-modal" readonly spellcheck="false"></textarea>
+  </div>
+</div>
+
 <script>
 var STATE={agent:null,providers:[],dirty:false,currentStatus:"inactive"};
 var KEY=${safeKey};
@@ -532,6 +607,35 @@ function syncDispatcherModelVisibility(){
   if(wrap&&sel) wrap.style.display=sel.value?"block":"none";
 }
 function onDispatcherProviderChange(){ syncDispatcherModelVisibility(); }
+function formatPromptVersion(v){
+  if(v==null||v==="") return "?";
+  var s=String(v);
+  return s.charAt(0)==="v"?s:"v"+s;
+}
+function resizePromptPreview(){
+  var el=document.getElementById("f-prompt-preview");
+  if(!el||!el.value) return;
+  el.style.height="auto";
+  var target=Math.min(Math.max(el.scrollHeight+4,Math.min(480,window.innerHeight*0.52)),window.innerHeight*0.72);
+  el.style.height=target+"px";
+}
+function openPromptModal(){
+  var src=document.getElementById("f-prompt-preview");
+  var dst=document.getElementById("f-prompt-preview-modal");
+  var modal=document.getElementById("prompt-modal");
+  if(!src||!dst||!modal||!src.value) return;
+  dst.value=src.value;
+  modal.classList.add("open");
+  document.body.style.overflow="hidden";
+}
+function closePromptModal(){
+  var modal=document.getElementById("prompt-modal");
+  if(modal) modal.classList.remove("open");
+  document.body.style.overflow="";
+}
+document.addEventListener("keydown",function(e){
+  if(e.key==="Escape") closePromptModal();
+});
 
 function fillForm(agent){
   STATE.agent=agent;
@@ -553,15 +657,20 @@ function fillForm(agent){
   var topk=cfg("top_k",40); document.getElementById("f-topk").value=topk; document.getElementById("lbl-topk").textContent=topk;
   var pNote=document.getElementById("prompt-registry-note");
   var pPreview=document.getElementById("f-prompt-preview");
+  var pExpand=document.getElementById("prompt-expand-btn");
   if(agent.prompt&&agent.prompt.uses_registry){
-    pNote.style.display="block";
-    pNote.textContent="Prompt no repositório: "+(agent.prompt.slug||"")+" v"+(agent.prompt.version||"?")+". O campo system_prompt do banco não é usado em produção.";
+    pNote.style.display="flex";
+    pNote.className="cw-prompt-info";
+    pNote.innerHTML='<span class="cw-prompt-info-icon" aria-hidden="true">i</span><div class="cw-prompt-info-body"><span class="cw-prompt-info-badge">'+esc(agent.prompt.slug||"")+" "+esc(formatPromptVersion(agent.prompt.version))+'</span> Prompt definido no código do repositório. O campo <code>system_prompt</code> do banco não é usado em produção.</div>';
     pPreview.value=agent.prompt.composed_prompt_preview||"";
   } else {
-    pNote.style.display="block";
-    pNote.textContent="Este tenant não tem entrada no registry de prompts. Gerencie o prompt no painel Boom IA.";
+    pNote.style.display="flex";
+    pNote.className="cw-prompt-info cw-prompt-info--muted";
+    pNote.innerHTML='<span class="cw-prompt-info-icon" aria-hidden="true">i</span><div class="cw-prompt-info-body">Este tenant não tem entrada no registry de prompts. Gerencie o prompt no painel Boom IA.</div>';
     pPreview.value="";
   }
+  if(pExpand) pExpand.style.display=pPreview.value?"inline-flex":"none";
+  resizePromptPreview();
   document.getElementById("f-cw-url").value=String(cfg("chatwoot_url",""));
   document.getElementById("f-cw-acct").value=String(cfg("chatwoot_account_id",""));
   document.getElementById("f-cw-token").value=String(cfg("chatwoot_api_token",""));

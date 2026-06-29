@@ -3,6 +3,7 @@ import {
   Brain,
   Clock,
   Loader2,
+  Maximize2,
   Plug,
   Save,
   SlidersHorizontal,
@@ -18,6 +19,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { AgentAvatarUpload } from "@/components/agents/AgentAvatarUpload";
 import { AgentStatusField } from "@/components/agents/AgentStatusField";
 import { ChatwootConfigSection } from "@/components/agents/ChatwootConfigSection";
@@ -43,8 +50,16 @@ const fld =
   "w-full min-w-0 rounded-md border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-foreground/30 focus:ring-1 focus:ring-foreground/20 dark:bg-card";
 const stitchLbl = "mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground";
 const stitchCard = "rounded-lg border border-border bg-card p-4 sm:p-6";
+const codePreviewFld =
+  "min-h-[min(480px,52vh)] max-h-[72vh] resize-y overflow-auto whitespace-pre-wrap break-words rounded-xl border border-border bg-muted/40 px-4 py-4 font-mono text-[13px] leading-relaxed text-foreground dark:bg-[#12171e] dark:border-border";
+
 const sliderTouch =
   "box-border w-full min-w-0 max-w-full touch-pan-y py-2 sm:py-1.5 [&>span.block]:h-5 [&>span.block]:w-5 sm:[&>span.block]:h-4 sm:[&>span.block]:w-4";
+
+function formatPromptVersion(version: string | null | undefined): string {
+  if (!version) return "?";
+  return version.startsWith("v") ? version : `v${version}`;
+}
 
 const TABS: { id: EmbedAgentTab; label: string; icon: LucideIcon }[] = [
   { id: "basic", label: "Informações Básicas", icon: User },
@@ -66,6 +81,7 @@ interface Props {
 export function EmbedAgentEditor({ agent, providers, accountId, embedKey, apiBase, onSaved }: Props) {
   const [tab, setTab] = useState<EmbedAgentTab>("basic");
   const [saving, setSaving] = useState(false);
+  const [promptExpanded, setPromptExpanded] = useState(false);
   const [state, setState] = useState<EmbedAgentFormState>(() => buildEmbedFormState(agent));
 
   useEffect(() => {
@@ -292,22 +308,72 @@ export function EmbedAgentEditor({ agent, providers, accountId, embedKey, apiBas
                 </div>
 
                 {agent.prompt.uses_registry ? (
-                  <div className="space-y-2 rounded-lg border border-amber-200/90 bg-amber-50/90 p-3 text-xs text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
-                    Prompt definido no código: {agent.prompt.slug} v{agent.prompt.version ?? "?"}. Alterações exigem deploy do servidor — não é editável neste painel.
+                  <div className="flex gap-3 rounded-xl border border-border border-l-[3px] border-l-primary bg-muted/40 p-4 text-sm leading-relaxed text-muted-foreground">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                      i
+                    </span>
+                    <div className="min-w-0">
+                      <Badge variant="secondary" className="mb-2 font-mono text-[11px]">
+                        {agent.prompt.slug} {formatPromptVersion(agent.prompt.version)}
+                      </Badge>
+                      <p>
+                        Prompt definido no código do repositório. O campo{" "}
+                        <code className="rounded bg-black/[0.06] px-1 py-0.5 font-mono text-xs dark:bg-white/10">
+                          system_prompt
+                        </code>{" "}
+                        do banco não é usado em produção.
+                      </p>
+                    </div>
                   </div>
                 ) : (
-                  <div className="space-y-2 rounded-lg border border-amber-200/90 bg-amber-50/90 p-3 text-xs text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
-                    Este tenant não tem prompt no registry. Gerencie o prompt no painel Boom IA.
+                  <div className="flex gap-3 rounded-xl border border-border border-l-[3px] border-l-muted-foreground/40 bg-muted/40 p-4 text-sm leading-relaxed text-muted-foreground">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold">
+                      i
+                    </span>
+                    <p>Este tenant não tem prompt no registry. Gerencie o prompt no painel Boom IA.</p>
                   </div>
                 )}
 
                 {agent.prompt.composed_prompt_preview ? (
-                  <div className="space-y-1.5">
-                    <Label className={stitchLbl}>Preview montado pelo servidor</Label>
-                    <Textarea readOnly rows={10} value={agent.prompt.composed_prompt_preview} className={cn(fld, "min-h-[200px] resize-y bg-muted/50 font-mono text-xs")} />
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <Label className={cn(stitchLbl, "!mb-0")}>Preview montado pelo servidor</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-1.5"
+                        onClick={() => setPromptExpanded(true)}
+                      >
+                        <Maximize2 className="h-3.5 w-3.5" />
+                        Expandir
+                      </Button>
+                    </div>
+                    <Textarea
+                      readOnly
+                      spellCheck={false}
+                      value={agent.prompt.composed_prompt_preview}
+                      className={cn(codePreviewFld, "cursor-default focus-visible:ring-0")}
+                    />
                     <p className="text-xs text-muted-foreground">
                       Bloco do tenant + regras globais, idioma e data. No chat pode variar conforme ferramentas e calendário.
                     </p>
+                    <Dialog open={promptExpanded} onOpenChange={setPromptExpanded}>
+                      <DialogContent className="flex max-h-[92vh] max-w-4xl flex-col gap-0 overflow-hidden p-0">
+                        <DialogHeader className="border-b border-border px-5 py-4">
+                          <DialogTitle>Prompt em produção</DialogTitle>
+                        </DialogHeader>
+                        <Textarea
+                          readOnly
+                          spellCheck={false}
+                          value={agent.prompt.composed_prompt_preview}
+                          className={cn(
+                            codePreviewFld,
+                            "min-h-[min(70vh,640px)] max-h-none flex-1 resize-none rounded-none border-0 bg-muted/30 focus-visible:ring-0",
+                          )}
+                        />
+                      </DialogContent>
+                    </Dialog>
                   </div>
                 ) : null}
               </section>

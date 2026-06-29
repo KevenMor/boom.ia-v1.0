@@ -125,8 +125,11 @@ function resolveRegistryPrompt(tenantSlug: string | null | undefined): MirrorPro
       };
     }
     const composed = buildSystemPrompt("", slug, false);
+    const previewMax = 48_000;
     const preview =
-      composed.length > 4000 ? `${composed.slice(0, 4000)}\n\n… [${composed.length - 4000} caracteres omitidos]` : composed;
+      composed.length > previewMax
+        ? `${composed.slice(0, previewMax)}\n\n… [${(composed.length - previewMax).toLocaleString("pt-BR")} caracteres omitidos — prompt completo no repositório]`
+        : composed;
     return {
       slug,
       version: cfg.version ?? null,
