@@ -1,16 +1,16 @@
 <!--
-  PPL Motors — Dashboard Script v8
+  PPL Motors — Dashboard Script v9
   Conta Chatwoot: 9 (mega.atendai.app) · Agente: Ana Júlia
   Cole em: https://mega.atendai.app/super_admin/app_config?config=internal
   Após colar: salve, recarregue o Mega (Cmd+Shift+R) e confira no console F12:
-  "[Boom IA] Dashboard Script v8 carregado"
+  "[Boom IA] Dashboard Script v9 carregado"
   Se existir Dashboard App antigo "PPL Motors — Agente IA" em Configurações, remova-o
   (evita 404 com URL velha). Use só este Dashboard Script OU só o Dashboard App atualizado.
 -->
 
 <script data-name="boom-ia-ppl-motors-agent-mirror">
 (function () {
-  const SCRIPT_VERSION = "v8";
+  const SCRIPT_VERSION = "v9";
   const SCRIPT_KEY = "boom_ia_ppl_motors_agent_mirror_" + SCRIPT_VERSION;
   if (window[SCRIPT_KEY]) return;
   window[SCRIPT_KEY] = true;
@@ -34,6 +34,7 @@
     PADDING: 0,
     SHOW_BORDER: true,
     MOBILE_MAX_WIDTH: 768,
+    MOBILE_BOTTOM_NAV_FALLBACK: 60,
   };
   /** ==================================== */
 
@@ -234,6 +235,66 @@
     return window.innerWidth <= CFG.MOBILE_MAX_WIDTH;
   }
 
+  function findMobileBottomNav() {
+    if (!isMobileViewport()) return null;
+
+    var byTestId =
+      $('[data-testid="mobile-bottom-nav"]') ||
+      $('[data-testid="bottom-nav"]') ||
+      $('[data-testid="sidebar-bottom-nav"]');
+    if (byTestId) return byTestId;
+
+    var vh = window.innerHeight;
+    var vw = window.innerWidth;
+    var best = null;
+    var bestScore = 0;
+
+    $$("nav, footer, [role='navigation'], div, ul").forEach(function (el) {
+      if (el === panel || (panel && panel.contains(el))) return;
+      var st = window.getComputedStyle(el);
+      if (st.display === "none" || st.visibility === "hidden") return;
+      if (st.position !== "fixed" && st.position !== "sticky") return;
+      var r = el.getBoundingClientRect();
+      if (r.height < 36 || r.height > 130) return;
+      if (Math.abs(r.bottom - vh) > 10) return;
+      if (r.width < vw * 0.55) return;
+
+      var txt = normalize(el.textContent || "");
+      var score = r.width;
+      if (/conversas/.test(txt)) score += 1000;
+      if (/contatos/.test(txt)) score += 500;
+      if (/pesquisar|menu/.test(txt)) score += 300;
+      if (score > bestScore) {
+        bestScore = score;
+        best = el;
+      }
+    });
+    return best;
+  }
+
+  function getMobileBottomInset() {
+    if (!isMobileViewport()) return 0;
+    var nav = findMobileBottomNav();
+    if (nav) {
+      var h = Math.ceil(nav.getBoundingClientRect().height);
+      if (h > 0) return h;
+    }
+    return CFG.MOBILE_BOTTOM_NAV_FALLBACK || 60;
+  }
+
+  function syncMobileBottomNav(open) {
+    if (!isMobileViewport()) return;
+    var nav = findMobileBottomNav();
+    if (!nav) return;
+    if (open) {
+      nav.dataset.boomIaNav = "1";
+      nav.style.setProperty("z-index", "2147483647", "important");
+    } else if (nav.dataset.boomIaNav) {
+      nav.style.removeProperty("z-index");
+      delete nav.dataset.boomIaNav;
+    }
+  }
+
   function ensurePageStyles() {
     var css =
       "html.boom-ia-page-open,html.boom-ia-page-open body{overflow:hidden!important;}" +
@@ -243,9 +304,10 @@
       "html.boom-ia-page-open:not(.boom-ia-page-open-mobile) [data-testid=sidebar]{position:relative;z-index:100001!important;}" +
       "html.boom-ia-page-open-mobile #boom-ia-embed-panel{" +
       "left:0!important;right:0!important;width:100%!important;max-width:100vw!important;" +
-      "height:100dvh!important;min-height:-webkit-fill-available!important;" +
-      "padding:env(safe-area-inset-top,0) env(safe-area-inset-right,0) env(safe-area-inset-bottom,0) env(safe-area-inset-left,0)!important;" +
-      "z-index:2147483646!important;}";
+      "top:0!important;height:auto!important;" +
+      "padding-top:env(safe-area-inset-top,0)!important;" +
+      "padding-left:env(safe-area-inset-left,0)!important;padding-right:env(safe-area-inset-right,0)!important;" +
+      "padding-bottom:0!important;z-index:99999!important;}";
     var s = $("#boom-ia-page-styles");
     if (s) {
       s.textContent = css;
@@ -266,6 +328,7 @@
     document.documentElement.classList.toggle("boom-ia-page-open", open);
     document.documentElement.classList.toggle("boom-ia-page-open-mobile", open && isMobileViewport());
     document.body.style.overflow = open ? "hidden" : "";
+    syncMobileBottomNav(open);
   }
 
   function findAnyList() {
@@ -308,11 +371,19 @@
   function layoutPanel() {
     if (!panel || panel.dataset.visible !== "true") return;
     if (isMobileViewport()) {
+      var bottomInset = getMobileBottomInset();
       panel.style.left = "0";
       panel.style.right = "0";
       panel.style.width = "100%";
+      panel.style.top = "0";
+      panel.style.bottom = bottomInset + "px";
+      panel.style.height = "auto";
+      syncMobileBottomNav(true);
       return;
     }
+    panel.style.top = "0";
+    panel.style.bottom = "0";
+    panel.style.height = "";
     var left = getContentAreaLeft();
     if (left <= 0) {
       var sb = findSidebar();
@@ -392,6 +463,8 @@
     setPageMode(true);
     applyPanelTheme();
     layoutPanel();
+    setTimeout(layoutPanel, 120);
+    setTimeout(layoutPanel, 600);
 
     const link = $("#boom-ia-embed-link a");
     if (link) link.setAttribute("aria-expanded", "true");

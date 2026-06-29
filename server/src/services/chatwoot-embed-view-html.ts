@@ -203,30 +203,32 @@ export function renderChatwootEmbedViewHtml(
     @media(max-width:768px){
       :root,[data-theme="light"],[data-theme="dark"]{--content-max:100%;}
       .cw-topbar-inner{
-        flex-direction:row;flex-wrap:wrap;align-items:center;
-        padding:12px 16px;padding-top:max(12px,env(safe-area-inset-top,0));gap:10px;
+        flex-direction:column;align-items:stretch;gap:12px;
+        padding:12px 16px;padding-top:max(12px,env(safe-area-inset-top,0));
       }
-      .cw-topbar-main{flex:1 1 auto;min-width:0;}
-      .cw-avatar{width:44px;height:44px;}
+      .cw-topbar-main{
+        display:flex;flex-direction:row;align-items:center;gap:12px;
+        width:100%;min-width:0;
+      }
       .cw-topbar-text h1{font-size:17px;}
+      .cw-avatar{width:44px;height:44px;flex-shrink:0;}
       .cw-topbar-actions{
-        width:100%;flex-wrap:nowrap;gap:8px;
-        padding-top:10px;border-top:1px solid var(--divider);
+        width:100%;display:flex;flex-direction:column;align-items:stretch;gap:8px;
+        padding-top:12px;border-top:1px solid var(--divider);
       }
-      .cw-btn-primary{flex:1;min-width:0;}
-      .cw-save-ok,.cw-save-err{flex:1 1 100%;text-align:center;}
+      .cw-btn-primary{
+        width:100%;flex:none;min-height:46px;font-size:15px;
+        white-space:nowrap;padding:0 16px;
+      }
+      .cw-save-ok,.cw-save-err{text-align:center;flex:none;font-size:12px;}
       .cw-tabs{padding:0 12px;overflow-x:auto;-webkit-overflow-scrolling:touch;}
       .cw-tab{padding:10px 12px;font-size:13px;white-space:nowrap;}
-      .cw-main{padding:16px 16px max(32px,env(safe-area-inset-bottom,0));}
+      .cw-main{padding:16px 16px 32px;}
       .cw-grid{grid-template-columns:1fr;gap:16px;}
       .cw-block{padding-bottom:22px;margin-bottom:22px;}
       .cw-status-opt{padding:12px 14px;}
       .cw-row{flex-direction:column;align-items:flex-start;gap:10px;}
       .cw-switch{align-self:flex-end;}
-    }
-    @media(max-width:480px){
-      .cw-topbar-main{gap:10px;}
-      .cw-btn-primary{width:100%;}
     }
 
     /* ── alerts / loading ── */
