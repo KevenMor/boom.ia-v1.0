@@ -274,6 +274,7 @@ export function renderChatwootEmbedViewHtml(
     <button type="button" class="cw-tab" onclick="switchTab('model',this)">Modelo de IA</button>
     <button type="button" class="cw-tab" onclick="switchTab('integ',this)">Integração</button>
     <button type="button" class="cw-tab" onclick="switchTab('sched',this)">Horário e Follow-up</button>
+    <button type="button" class="cw-tab" onclick="switchTab('advanced',this)">Avançados</button>
   </nav>
   </div>
 
@@ -391,6 +392,23 @@ export function renderChatwootEmbedViewHtml(
           </div>
         </div>
 
+        <div id="panel-advanced" class="cw-panel">
+          <div class="cw-block">
+            <div class="cw-block-title">Dispatcher (Phase 1)</div>
+            <div class="cw-block-desc">Modelo que decide quando acionar ferramentas (tool calling). O prompt do dispatcher é definido no código do tenant.</div>
+            <div class="cw-field">
+              <label class="cw-label" for="f-dispatcher-provider">Provedor do dispatcher</label>
+              <select class="cw-select" id="f-dispatcher-provider" onchange="onDispatcherProviderChange();markDirty()"></select>
+              <div class="cw-hint">Dual-provider: este modelo roteia tools; o modelo conversacional responde ao cliente.</div>
+            </div>
+            <div class="cw-field" id="dispatcher-model-wrap" style="display:none">
+              <label class="cw-label" for="f-dispatcher-model">Modelo do dispatcher</label>
+              <input class="cw-input" id="f-dispatcher-model" oninput="markDirty()" placeholder="ex: gpt-4o (vazio = padrão do provedor)"/>
+              <div class="cw-hint">Deixe vazio para usar o padrão (geralmente gpt-4o).</div>
+            </div>
+          </div>
+        </div>
+
         <div id="panel-sched" class="cw-panel">
           <div class="cw-block">
             <div class="cw-block-title">Horário comercial</div>
@@ -500,6 +518,20 @@ function showAlert(msg,type){
   document.getElementById("alert-area").innerHTML='<div class="cw-alert cw-alert-'+(type||"warn")+'">'+esc(msg)+"</div>";
 }
 function cfg(k,fb){var c=STATE.agent?(STATE.agent.config||{}):{};return c[k]!=null?c[k]:(fb!==undefined?fb:"");}
+function fillProviderSelect(elId,selectedId,includeNone){
+  var ps=document.getElementById(elId); if(!ps) return;
+  ps.innerHTML=includeNone?'<option value="">Nenhum (desabilitado)</option>':"";
+  STATE.providers.forEach(function(p){
+    var o=document.createElement("option"); o.value=p.id; o.textContent=p.name||p.id;
+    if(p.id===selectedId) o.selected=true; ps.appendChild(o);
+  });
+}
+function syncDispatcherModelVisibility(){
+  var wrap=document.getElementById("dispatcher-model-wrap");
+  var sel=document.getElementById("f-dispatcher-provider");
+  if(wrap&&sel) wrap.style.display=sel.value?"block":"none";
+}
+function onDispatcherProviderChange(){ syncDispatcherModelVisibility(); }
 
 function fillForm(agent){
   STATE.agent=agent;
@@ -510,8 +542,10 @@ function fillForm(agent){
   document.getElementById("f-name").value=agent.name||"";
   document.getElementById("f-desc").value=agent.description||"";
   setStatus(agent.status||"inactive"); STATE.currentStatus=agent.status||"inactive";
-  var ps=document.getElementById("f-provider"); ps.innerHTML="";
-  STATE.providers.forEach(function(p){var o=document.createElement("option");o.value=p.id;o.textContent=p.name;if(p.id===agent.provider_id)o.selected=true;ps.appendChild(o);});
+  fillProviderSelect("f-provider",agent.provider_id||"",false);
+  fillProviderSelect("f-dispatcher-provider",String(cfg("dispatcher_provider_id","")),true);
+  document.getElementById("f-dispatcher-model").value=String(cfg("dispatcher_model",""));
+  syncDispatcherModelVisibility();
   document.getElementById("f-model").value=agent.model||"";
   var temp=agent.temperature!=null?agent.temperature:0.7;
   document.getElementById("f-temp").value=temp; document.getElementById("lbl-temp").textContent=parseFloat(temp).toFixed(2);
@@ -554,6 +588,8 @@ function buildPayload(){
     temperature:parseFloat(document.getElementById("f-temp").value),
     config:Object.assign({},STATE.agent?(STATE.agent.config||{}):{},{
       top_p:parseFloat(document.getElementById("f-topp").value),top_k:parseInt(document.getElementById("f-topk").value,10),
+      dispatcher_provider_id:document.getElementById("f-dispatcher-provider").value||undefined,
+      dispatcher_model:document.getElementById("f-dispatcher-model").value.trim()||undefined,
       chatwoot_url:document.getElementById("f-cw-url").value||undefined,
       chatwoot_account_id:document.getElementById("f-cw-acct").value||undefined,
       chatwoot_api_token:document.getElementById("f-cw-token").value||undefined,

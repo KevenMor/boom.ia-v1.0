@@ -1,7 +1,7 @@
 import type { AgentMirrorPayload } from "@/lib/chatwoot-embed-mirror";
 import { DEFAULT_BUSINESS_HOURS, type BusinessHours } from "@/components/agents/BusinessHoursSection";
 
-export type EmbedAgentTab = "basic" | "model" | "integration" | "schedule";
+export type EmbedAgentTab = "basic" | "model" | "integration" | "schedule" | "advanced";
 
 export interface EmbedAgentFormState {
   name: string;
@@ -13,6 +13,8 @@ export interface EmbedAgentFormState {
   temperature: number;
   topP: number;
   topK: number;
+  dispatcherProviderId: string;
+  dispatcherModel: string;
   chatwootUrl: string;
   chatwootApiToken: string;
   chatwootAccountId: string;
@@ -51,6 +53,8 @@ export function buildEmbedFormState(agent: AgentMirrorPayload): EmbedAgentFormSt
     temperature: agent.temperature,
     topP: Number(cfg(agent, "top_p", 0.8)),
     topK: Number(cfg(agent, "top_k", 40)),
+    dispatcherProviderId: String(cfg(agent, "dispatcher_provider_id", "")),
+    dispatcherModel: String(cfg(agent, "dispatcher_model", "")),
     chatwootUrl: String(cfg(agent, "chatwoot_url", "")),
     chatwootApiToken: String(cfg(agent, "chatwoot_api_token", "")),
     chatwootAccountId: String(cfg(agent, "chatwoot_account_id", "")),
@@ -89,6 +93,8 @@ export function buildEmbedUpdatePayload(agent: AgentMirrorPayload, state: EmbedA
       ...currentConfig,
       top_p: state.topP,
       top_k: state.topK,
+      dispatcher_provider_id: state.dispatcherProviderId || undefined,
+      dispatcher_model: state.dispatcherModel || undefined,
       chatwoot_url: state.chatwootUrl || undefined,
       chatwoot_api_token: state.chatwootApiToken || undefined,
       chatwoot_account_id: state.chatwootAccountId || undefined,

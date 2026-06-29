@@ -5,6 +5,7 @@ import {
   Loader2,
   Plug,
   Save,
+  SlidersHorizontal,
   User,
   Wrench,
 } from "lucide-react";
@@ -50,6 +51,7 @@ const TABS: { id: EmbedAgentTab; label: string; icon: LucideIcon }[] = [
   { id: "model", label: "Modelo de IA", icon: Brain },
   { id: "integration", label: "Integração", icon: Plug },
   { id: "schedule", label: "Horário e Follow-up", icon: Clock },
+  { id: "advanced", label: "Avançados", icon: SlidersHorizontal },
 ];
 
 interface Props {
@@ -79,6 +81,12 @@ export function EmbedAgentEditor({ agent, providers, accountId, embedKey, apiBas
     [providers, state.providerId],
   );
   const models = getModelsForProvider(selectedProvider?.name);
+
+  const dispatcherProvider = useMemo(
+    () => providers.find((p) => p.id === state.dispatcherProviderId),
+    [providers, state.dispatcherProviderId],
+  );
+  const dispatcherModels = getModelsForProvider(dispatcherProvider?.name);
 
   const statusLabel =
     state.status === "active" ? "Ativo" : state.status === "test" ? "Teste" : "Inativo";
@@ -359,6 +367,70 @@ export function EmbedAgentEditor({ agent, providers, accountId, embedKey, apiBas
                   )}
                 </section>
               </>
+            )}
+
+            {tab === "advanced" && (
+              <section className={cn(stitchCard, "space-y-5")}>
+                <div>
+                  <h3 className="text-base font-semibold">Dispatcher (Phase 1)</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Modelo que decide quando acionar ferramentas. O prompt do dispatcher é definido no código do tenant.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className={stitchLbl}>Provedor do dispatcher</Label>
+                  <Select
+                    value={state.dispatcherProviderId || "_none"}
+                    onValueChange={(v) => patch("dispatcherProviderId", v === "_none" ? "" : v)}
+                  >
+                    <SelectTrigger className={fld}>
+                      <SelectValue placeholder="Nenhum (desabilitado)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">Nenhum (desabilitado)</SelectItem>
+                      {providers.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Dual-provider: este modelo roteia tools; o modelo conversacional responde ao cliente.
+                  </p>
+                </div>
+                {state.dispatcherProviderId ? (
+                  <div className="space-y-1.5">
+                    <Label className={stitchLbl}>Modelo do dispatcher</Label>
+                    {dispatcherModels.length > 0 ? (
+                      <Select
+                        value={state.dispatcherModel || "_default"}
+                        onValueChange={(v) => patch("dispatcherModel", v === "_default" ? "" : v)}
+                      >
+                        <SelectTrigger className={fld}>
+                          <SelectValue placeholder="Padrão do provedor" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="_default">Padrão (gpt-4o)</SelectItem>
+                          {dispatcherModels.map((m) => (
+                            <SelectItem key={m.value} value={m.value}>
+                              {m.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        value={state.dispatcherModel}
+                        onChange={(e) => patch("dispatcherModel", e.target.value)}
+                        className={cn(fld, "font-mono")}
+                        placeholder="ex: gpt-4o (vazio = padrão)"
+                      />
+                    )}
+                    <p className="text-xs text-muted-foreground">Deixe vazio para usar o padrão (geralmente gpt-4o).</p>
+                  </div>
+                ) : null}
+              </section>
             )}
 
             {tab === "schedule" && (
