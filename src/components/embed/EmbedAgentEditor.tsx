@@ -50,8 +50,10 @@ const fld =
   "w-full min-w-0 rounded-md border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-foreground/30 focus:ring-1 focus:ring-foreground/20 dark:bg-card";
 const stitchLbl = "mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground";
 const stitchCard = "rounded-lg border border-border bg-card p-4 sm:p-6";
-const codePreviewFld =
-  "min-h-[min(480px,52vh)] max-h-[72vh] resize-y overflow-auto whitespace-pre-wrap break-words rounded-xl border border-border bg-muted/40 px-4 py-4 font-mono text-[13px] leading-relaxed text-foreground dark:bg-[#12171e] dark:border-border";
+const promptPreviewFld =
+  "min-h-[min(420px,48vh)] max-h-[68vh] resize-y overflow-auto whitespace-pre-wrap break-words rounded-xl border border-border bg-muted/30 px-5 py-4 text-[14px] leading-[1.75] text-foreground/90 font-sans dark:bg-muted/20";
+const promptModalReader =
+  "max-w-[72ch] whitespace-pre-wrap break-words text-[15px] leading-[1.8] text-muted-foreground sm:text-base";
 
 const sliderTouch =
   "box-border w-full min-w-0 max-w-full touch-pan-y py-2 sm:py-1.5 [&>span.block]:h-5 [&>span.block]:w-5 sm:[&>span.block]:h-4 sm:[&>span.block]:w-4";
@@ -353,25 +355,20 @@ export function EmbedAgentEditor({ agent, providers, accountId, embedKey, apiBas
                       readOnly
                       spellCheck={false}
                       value={agent.prompt.composed_prompt_preview}
-                      className={cn(codePreviewFld, "cursor-default focus-visible:ring-0")}
+                      className={cn(promptPreviewFld, "cursor-default focus-visible:ring-0")}
                     />
                     <p className="text-xs text-muted-foreground">
                       Bloco do tenant + regras globais, idioma e data. No chat pode variar conforme ferramentas e calendário.
                     </p>
                     <Dialog open={promptExpanded} onOpenChange={setPromptExpanded}>
-                      <DialogContent className="flex max-h-[92vh] max-w-4xl flex-col gap-0 overflow-hidden p-0">
-                        <DialogHeader className="border-b border-border px-5 py-4">
+                      <DialogContent className="flex h-[min(90vh,860px)] max-h-[92vh] max-w-3xl flex-col gap-0 overflow-hidden p-0">
+                        <DialogHeader className="shrink-0 border-b border-border px-6 py-4 text-left">
                           <DialogTitle>Prompt em produção</DialogTitle>
+                          <p className="text-xs text-muted-foreground">Somente leitura — role para ver o texto completo</p>
                         </DialogHeader>
-                        <Textarea
-                          readOnly
-                          spellCheck={false}
-                          value={agent.prompt.composed_prompt_preview}
-                          className={cn(
-                            codePreviewFld,
-                            "min-h-[min(70vh,640px)] max-h-none flex-1 resize-none rounded-none border-0 bg-muted/30 focus-visible:ring-0",
-                          )}
-                        />
+                        <div className="min-h-0 flex-1 overflow-y-auto bg-muted/20 px-6 py-5 dark:bg-background/60">
+                          <div className={promptModalReader}>{agent.prompt.composed_prompt_preview}</div>
+                        </div>
                       </DialogContent>
                     </Dialog>
                   </div>

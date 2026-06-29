@@ -17,7 +17,7 @@ export function renderChatwootEmbedViewHtml(
   <title>Agente IA</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
   <style>
     :root,[data-theme="light"]{
       --content-max:720px;
@@ -245,7 +245,7 @@ export function renderChatwootEmbedViewHtml(
     @keyframes spin{to{transform:rotate(360deg)}}
     .cw-empty{font-size:14px;color:var(--text-muted);}
 
-    /* ── prompt preview (code reader) ── */
+    /* ── prompt preview (leitura) ── */
     .cw-prompt-info{
       display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:12px;
       margin-bottom:20px;background:var(--surface-muted);border:1px solid var(--border);
@@ -259,11 +259,11 @@ export function renderChatwootEmbedViewHtml(
     .cw-prompt-info-body{min-width:0;flex:1;}
     .cw-prompt-info-badge{
       display:inline-block;padding:2px 8px;border-radius:6px;margin:0 6px 6px 0;
-      font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;font-weight:600;
+      font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;font-weight:600;
       background:var(--brand-soft);color:var(--brand);vertical-align:middle;
     }
     .cw-prompt-info code{
-      font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px;padding:1px 5px;
+      font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;padding:1px 5px;
       border-radius:4px;background:rgba(0,0,0,.05);color:var(--text);
     }
     [data-theme="dark"] .cw-prompt-info code{background:rgba(255,255,255,.08);}
@@ -275,36 +275,46 @@ export function renderChatwootEmbedViewHtml(
       font:inherit;font-size:13px;font-weight:500;cursor:pointer;transition:background .15s,color .15s;
     }
     .cw-btn-ghost:hover{background:var(--surface-muted);color:var(--text);}
-    .cw-code-preview{
-      width:100%;min-height:min(480px,52vh);max-height:72vh;padding:16px 18px;border-radius:12px;
-      border:1px solid var(--border);background:var(--surface-muted);color:var(--text);
-      font:13px/1.7 "JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-      resize:vertical;overflow:auto;white-space:pre-wrap;word-break:break-word;tab-size:2;
-      -webkit-font-smoothing:antialiased;
+    .cw-prompt-preview,.cw-prompt-reader{
+      width:100%;color:var(--text);
+      font:14px/1.75 "Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      white-space:pre-wrap;word-break:break-word;-webkit-font-smoothing:antialiased;
     }
-    [data-theme="dark"] .cw-code-preview{background:#12171e;border-color:#2d3748;}
+    .cw-prompt-preview{
+      min-height:min(420px,48vh);max-height:68vh;padding:18px 20px;border-radius:12px;
+      border:1px solid var(--border);background:var(--surface-muted);
+      resize:vertical;overflow:auto;
+    }
+    [data-theme="dark"] .cw-prompt-preview{background:#1a1f26;border-color:#2d3748;}
     .cw-modal{
       position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;
-      padding:16px;background:rgba(15,20,25,.58);backdrop-filter:blur(2px);
+      padding:20px;background:rgba(15,20,25,.45);backdrop-filter:blur(4px);
     }
     .cw-modal.open{display:flex;}
     .cw-modal-panel{
-      width:min(960px,100%);max-height:min(92vh,920px);display:flex;flex-direction:column;
-      background:var(--surface);border-radius:14px;border:1px solid var(--border);
-      box-shadow:0 24px 48px rgba(0,0,0,.2);overflow:hidden;
+      width:min(880px,100%);height:min(90vh,860px);display:flex;flex-direction:column;
+      background:var(--surface);border-radius:16px;border:1px solid var(--border);
+      box-shadow:0 20px 60px rgba(0,0,0,.18);overflow:hidden;
     }
     .cw-modal-head{
-      display:flex;align-items:center;justify-content:space-between;gap:12px;
-      padding:14px 18px;border-bottom:1px solid var(--divider);flex-shrink:0;
+      display:flex;align-items:flex-start;justify-content:space-between;gap:16px;
+      padding:18px 22px;border-bottom:1px solid var(--divider);flex-shrink:0;background:var(--surface);
     }
-    .cw-modal-head h2{font-size:15px;font-weight:600;color:var(--text);}
-    .cw-code-preview--modal{
-      flex:1;min-height:0;max-height:none;border:0;border-radius:0;resize:none;margin:0;
+    .cw-modal-head-text{min-width:0;}
+    .cw-modal-head h2{font-size:16px;font-weight:600;color:var(--text);line-height:1.3;}
+    .cw-modal-sub{font-size:12px;color:var(--text-muted);margin-top:4px;line-height:1.4;}
+    .cw-modal-body{
+      flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;
+      padding:22px 26px 28px;background:var(--page);
     }
+    .cw-prompt-reader{font-size:15px;line-height:1.8;color:var(--text-secondary);max-width:72ch;}
+    [data-theme="dark"] .cw-modal-body{background:var(--bg);}
     @media(max-width:768px){
-      .cw-code-preview{min-height:min(360px,45vh);font-size:12px;padding:14px;}
-      .cw-modal{padding:8px;}
-      .cw-modal-panel{max-height:96vh;border-radius:12px;}
+      .cw-prompt-preview{min-height:min(320px,42vh);font-size:13px;padding:16px;}
+      .cw-modal{padding:12px;}
+      .cw-modal-panel{height:min(94vh,100%);border-radius:14px;}
+      .cw-modal-body{padding:18px 16px 24px;}
+      .cw-prompt-reader{font-size:14px;line-height:1.75;}
     }
   </style>
 </head>
@@ -426,7 +436,7 @@ export function renderChatwootEmbedViewHtml(
                 <label class="cw-label" for="f-prompt-preview">Preview montado pelo servidor</label>
                 <button type="button" class="cw-btn-ghost" id="prompt-expand-btn" onclick="openPromptModal()" style="display:none">Expandir</button>
               </div>
-              <textarea class="cw-code-preview" id="f-prompt-preview" readonly spellcheck="false"></textarea>
+              <textarea class="cw-prompt-preview" id="f-prompt-preview" readonly spellcheck="false"></textarea>
               <div class="cw-hint">Bloco do tenant + regras globais, idioma e data. No chat pode variar conforme ferramentas e calendário. Alterações exigem deploy do servidor.</div>
             </div>
           </div>
@@ -520,10 +530,15 @@ export function renderChatwootEmbedViewHtml(
 <div id="prompt-modal" class="cw-modal" onclick="if(event.target===this)closePromptModal()">
   <div class="cw-modal-panel" role="dialog" aria-modal="true" aria-labelledby="prompt-modal-title">
     <div class="cw-modal-head">
-      <h2 id="prompt-modal-title">Prompt em produção</h2>
+      <div class="cw-modal-head-text">
+        <h2 id="prompt-modal-title">Prompt em produção</h2>
+        <p class="cw-modal-sub">Somente leitura — role para ver o texto completo</p>
+      </div>
       <button type="button" class="cw-btn-ghost" onclick="closePromptModal()">Fechar</button>
     </div>
-    <textarea class="cw-code-preview cw-code-preview--modal" id="f-prompt-preview-modal" readonly spellcheck="false"></textarea>
+    <div class="cw-modal-body" id="prompt-modal-body">
+      <div class="cw-prompt-reader" id="f-prompt-preview-modal"></div>
+    </div>
   </div>
 </div>
 
@@ -616,17 +631,19 @@ function resizePromptPreview(){
   var el=document.getElementById("f-prompt-preview");
   if(!el||!el.value) return;
   el.style.height="auto";
-  var target=Math.min(Math.max(el.scrollHeight+4,Math.min(480,window.innerHeight*0.52)),window.innerHeight*0.72);
+  var target=Math.min(Math.max(el.scrollHeight+4,Math.min(420,window.innerHeight*0.48)),window.innerHeight*0.68);
   el.style.height=target+"px";
 }
 function openPromptModal(){
   var src=document.getElementById("f-prompt-preview");
   var dst=document.getElementById("f-prompt-preview-modal");
+  var body=document.getElementById("prompt-modal-body");
   var modal=document.getElementById("prompt-modal");
   if(!src||!dst||!modal||!src.value) return;
-  dst.value=src.value;
+  dst.textContent=src.value;
   modal.classList.add("open");
   document.body.style.overflow="hidden";
+  if(body) body.scrollTop=0;
 }
 function closePromptModal(){
   var modal=document.getElementById("prompt-modal");
