@@ -283,28 +283,25 @@ export function EmbedAgentEditor({ agent, providers, accountId, embedKey, apiBas
                   </div>
                 </div>
 
-                {agent.prompt.uses_registry && (
+                {agent.prompt.uses_registry ? (
                   <div className="space-y-2 rounded-lg border border-amber-200/90 bg-amber-50/90 p-3 text-xs text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
-                    Prompt principal no código: {agent.prompt.slug} v{agent.prompt.version ?? "?"}. O campo abaixo é complementar.
+                    Prompt definido no código: {agent.prompt.slug} v{agent.prompt.version ?? "?"}. Alterações exigem deploy do servidor — não é editável neste painel.
+                  </div>
+                ) : (
+                  <div className="space-y-2 rounded-lg border border-amber-200/90 bg-amber-50/90 p-3 text-xs text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+                    Este tenant não tem prompt no registry. Gerencie o prompt no painel Boom IA.
                   </div>
                 )}
 
-                {agent.prompt.composed_prompt_preview && (
+                {agent.prompt.composed_prompt_preview ? (
                   <div className="space-y-1.5">
-                    <Label className={stitchLbl}>Prompt em produção (preview)</Label>
-                    <Textarea readOnly rows={8} value={agent.prompt.composed_prompt_preview} className={cn(fld, "min-h-[160px] resize-y bg-muted/50 font-mono text-xs")} />
+                    <Label className={stitchLbl}>Preview montado pelo servidor</Label>
+                    <Textarea readOnly rows={10} value={agent.prompt.composed_prompt_preview} className={cn(fld, "min-h-[200px] resize-y bg-muted/50 font-mono text-xs")} />
+                    <p className="text-xs text-muted-foreground">
+                      Bloco do tenant + regras globais, idioma e data. No chat pode variar conforme ferramentas e calendário.
+                    </p>
                   </div>
-                )}
-
-                <div className="space-y-1.5">
-                  <Label className={stitchLbl}>System prompt do agente (override opcional)</Label>
-                  <Textarea
-                    value={state.systemPrompt}
-                    onChange={(e) => patch("systemPrompt", e.target.value)}
-                    rows={6}
-                    className={cn(fld, "min-h-[140px] resize-y font-mono text-sm")}
-                  />
-                </div>
+                ) : null}
               </section>
             )}
 

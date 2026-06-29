@@ -10,7 +10,6 @@ export interface EmbedAgentFormState {
   avatarUrl: string | null;
   providerId: string;
   model: string;
-  systemPrompt: string;
   temperature: number;
   topP: number;
   topK: number;
@@ -49,7 +48,6 @@ export function buildEmbedFormState(agent: AgentMirrorPayload): EmbedAgentFormSt
     avatarUrl: agent.avatar_url,
     providerId: agent.provider_id ?? "",
     model: agent.model ?? "",
-    systemPrompt: agent.system_prompt ?? "",
     temperature: agent.temperature,
     topP: Number(cfg(agent, "top_p", 0.8)),
     topK: Number(cfg(agent, "top_k", 40)),
@@ -86,7 +84,6 @@ export function buildEmbedUpdatePayload(agent: AgentMirrorPayload, state: EmbedA
     avatar_url: state.avatarUrl,
     provider_id: state.providerId || null,
     model: state.model || null,
-    system_prompt: state.systemPrompt.trim() || null,
     temperature: state.temperature,
     config: {
       ...currentConfig,

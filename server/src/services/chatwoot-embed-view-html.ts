@@ -355,17 +355,13 @@ export function renderChatwootEmbedViewHtml(
             </div>
           </div>
           <div class="cw-block">
-            <div class="cw-block-title">Prompt do sistema</div>
-            <div class="cw-block-desc">Complemento ao prompt definido no registry de produção.</div>
-            <div id="registry-warn" style="display:none" class="cw-registry"></div>
+            <div class="cw-block-title">Prompt em produção</div>
+            <div class="cw-block-desc">Texto usado pelo motor de IA, definido no código do tenant. Somente leitura neste painel.</div>
+            <div id="prompt-registry-note" style="display:none" class="cw-alert cw-alert-warn"></div>
             <div class="cw-field">
-              <label class="cw-label" for="f-prompt-preview">Preview em produção</label>
-              <textarea class="cw-textarea" id="f-prompt-preview" readonly style="opacity:.7;font-family:ui-monospace,monospace;font-size:12px;"></textarea>
-            </div>
-            <div class="cw-field">
-              <label class="cw-label" for="f-system-prompt">Override / complemento</label>
-              <textarea class="cw-textarea" id="f-system-prompt" oninput="markDirty()"></textarea>
-              <div class="cw-hint">Aplicado em adição ao prompt do registry. Pode ficar vazio.</div>
+              <label class="cw-label" for="f-prompt-preview">Preview montado pelo servidor</label>
+              <textarea class="cw-textarea" id="f-prompt-preview" readonly style="opacity:.85;font-family:ui-monospace,monospace;font-size:12px;min-height:200px;"></textarea>
+              <div class="cw-hint">Bloco do tenant + regras globais, idioma e data. No chat pode variar conforme ferramentas e calendário. Alterações exigem deploy do servidor.</div>
             </div>
           </div>
         </div>
@@ -521,11 +517,16 @@ function fillForm(agent){
   document.getElementById("f-temp").value=temp; document.getElementById("lbl-temp").textContent=parseFloat(temp).toFixed(2);
   var topp=cfg("top_p",0.8); document.getElementById("f-topp").value=topp; document.getElementById("lbl-topp").textContent=parseFloat(topp).toFixed(2);
   var topk=cfg("top_k",40); document.getElementById("f-topk").value=topk; document.getElementById("lbl-topk").textContent=topk;
-  document.getElementById("f-system-prompt").value=agent.system_prompt||"";
+  var pNote=document.getElementById("prompt-registry-note");
+  var pPreview=document.getElementById("f-prompt-preview");
   if(agent.prompt&&agent.prompt.uses_registry){
-    var rw=document.getElementById("registry-warn"); rw.style.display="block";
-    rw.textContent="Prompt em produção: "+esc(agent.prompt.slug||"")+" v"+(agent.prompt.version||"?");
-    document.getElementById("f-prompt-preview").value=agent.prompt.composed_prompt_preview||"";
+    pNote.style.display="block";
+    pNote.textContent="Prompt no repositório: "+(agent.prompt.slug||"")+" v"+(agent.prompt.version||"?")+". O campo system_prompt do banco não é usado em produção.";
+    pPreview.value=agent.prompt.composed_prompt_preview||"";
+  } else {
+    pNote.style.display="block";
+    pNote.textContent="Este tenant não tem entrada no registry de prompts. Gerencie o prompt no painel Boom IA.";
+    pPreview.value="";
   }
   document.getElementById("f-cw-url").value=String(cfg("chatwoot_url",""));
   document.getElementById("f-cw-acct").value=String(cfg("chatwoot_account_id",""));
@@ -549,7 +550,7 @@ function buildPayload(){
   var iv=document.getElementById("f-fu-intervals").value.split(",").map(function(x){return parseInt(x.trim(),10);}).filter(function(n){return!isNaN(n);});
   return{name:document.getElementById("f-name").value.trim(),description:document.getElementById("f-desc").value.trim()||null,
     status:STATE.currentStatus||"inactive",provider_id:document.getElementById("f-provider").value||null,
-    model:document.getElementById("f-model").value.trim()||null,system_prompt:document.getElementById("f-system-prompt").value.trim()||null,
+    model:document.getElementById("f-model").value.trim()||null,
     temperature:parseFloat(document.getElementById("f-temp").value),
     config:Object.assign({},STATE.agent?(STATE.agent.config||{}):{},{
       top_p:parseFloat(document.getElementById("f-topp").value),top_k:parseInt(document.getElementById("f-topk").value,10),
