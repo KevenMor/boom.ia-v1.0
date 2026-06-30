@@ -4,10 +4,8 @@
 
   O que faz:
   - Na sidebar DIREITA do chat (painel do contato): botão "Transformar em cliente"
-    quando o contato ainda não é cliente no CRM.
-  - Na área do chat (abaixo do cabeçalho da conversa): botão "Abrir cadastro do cliente"
-    quando já convertido.
-  - Abre painel lateral com iframe do cadastro (/api/embed/chatwoot/crm/view?contact_id=...).
+    quando o contato ainda não é cliente no CRM, ou "Abrir cadastro do cliente" se já for cliente.
+  - Abre o CRM na própria coluna da sidebar (/api/embed/chatwoot/crm/view?contact_id=...).
 
   NÃO adiciona item na sidebar esquerda.
 
@@ -29,7 +27,7 @@
 
 <script data-name="boom-ia-client-crm-conversation">
 (function () {
-  const SCRIPT_VERSION = "v17";
+  const SCRIPT_VERSION = "v18";
   const SCRIPT_KEY = "boom_ia_client_crm_conversation_" + SCRIPT_VERSION;
   if (window[SCRIPT_KEY]) return;
   window[SCRIPT_KEY] = true;
@@ -162,7 +160,6 @@
       ".boom-ia-crm-btn-primary{color:#fff;}" +
       ".boom-ia-crm-btn-ghost{background:transparent;border:1px solid var(--color-border,#e5e7eb);color:var(--color-heading,#111);}" +
       ".boom-ia-crm-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:#dcfce7;color:#166534;}" +
-      "#boom-ia-crm-chat-bar{display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--color-border,#e5e7eb);background:var(--color-background-light,#f9fafb);}" +
       ".boom-ia-crm-host{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;width:100%;overflow:hidden;background:var(--color-background-light,#fff);}" +
       ".boom-ia-crm-host iframe{flex:1 1 auto;min-height:240px;border:0;width:100%;background:#fff!important;display:block;}" +
       "#boom-ia-crm-panel-header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid var(--color-border,#e5e7eb);background:var(--color-background-light,#f9fafb);flex-shrink:0;}" +
@@ -300,36 +297,6 @@
     return sidebar.firstElementChild;
   }
 
-  function findChatHeaderAnchor() {
-    const direct =
-      $('[data-testid="conversation-header"]') ||
-      $(".conversation-header") ||
-      $(".conversation-details__header") ||
-      $(".header-title-wrap")?.closest("div") ||
-      $(".conversation-panel .header") ||
-      $(".messages-wrap")?.previousElementSibling;
-    if (direct) return direct;
-
-    const resolver = [...$$("button, a")].find((el) => /resolver|resolve/i.test(el.textContent || ""));
-    if (resolver) {
-      let node = resolver.parentElement;
-      for (let i = 0; i < 6 && node; i++) {
-        const r = node.getBoundingClientRect();
-        if (r.width > 300 && r.height < 120 && r.top < 120) return node;
-        node = node.parentElement;
-      }
-    }
-
-    const messages = $(".messages-wrap") || $('[data-testid="message-list"]') || $(".message-content");
-    if (messages?.parentElement) return messages.parentElement.firstElementChild;
-
-    const centerCols = $$("div, main, section").filter((el) => {
-      const r = el.getBoundingClientRect();
-      return r.width > 400 && r.left > 200 && r.left < window.innerWidth * 0.55 && r.top < 100 && r.height < 100;
-    });
-    return centerCols[0] || null;
-  }
-
   function extractPhoneDigits(sidebar) {
     if (!sidebar) return null;
     const tel = $('a[href^="tel:"]', sidebar);
@@ -463,31 +430,8 @@
     return true;
   }
 
-  function removeChatBar() {
+  function removeLegacyChatBar() {
     $("#boom-ia-crm-chat-bar")?.remove();
-  }
-
-  function injectChatBar() {
-    if (crm.state !== "client" || !crm.contactId) {
-      removeChatBar();
-      return;
-    }
-    const anchor = findChatHeaderAnchor();
-    if (!anchor) return;
-    ensureStyles();
-    let bar = $("#boom-ia-crm-chat-bar");
-    if (!bar) {
-      bar = document.createElement("div");
-      bar.id = "boom-ia-crm-chat-bar";
-      anchor.insertAdjacentElement("afterend", bar);
-    }
-    const color = brandColor();
-    bar.innerHTML =
-      '<button type="button" class="boom-ia-crm-btn boom-ia-crm-btn-primary" data-action="open" style="background:' +
-      color +
-      ';width:auto;padding:6px 14px;">Abrir cadastro do cliente</button>' +
-      (crm.contactName ? '<span style="font-size:12px;color:var(--color-body,#6b7280)">' + crm.contactName + "</span>" : "");
-    on(bar.querySelector('[data-action="open"]'), "click", () => openClientPanel(crm.contactId));
   }
 
   function buildHostInnerHtml(contactId) {
@@ -618,7 +562,6 @@
     } finally {
       crm.promoting = false;
       injectSidebarCta();
-      injectChatBar();
     }
   }
 
@@ -632,7 +575,7 @@
       crm.contactId = null;
       crm.phoneDigits = null;
       crm.error = null;
-      removeChatBar();
+      removeLegacyChatBar();
     }
 
     const sidebar = findContactSidebar();
@@ -644,13 +587,12 @@
       crm.phoneDigits = null;
       crm.loading = false;
       injectSidebarCta();
-      removeChatBar();
+      removeLegacyChatBar();
       return;
     }
 
     if (phone === crm.phoneDigits && crm.state && !crm.error) {
       injectSidebarCta();
-      injectChatBar();
       return;
     }
 
@@ -672,7 +614,6 @@
     } finally {
       crm.loading = false;
       injectSidebarCta();
-      injectChatBar();
     }
   }
 
@@ -683,7 +624,7 @@
 
   function cleanup() {
     $("#boom-ia-crm-sidebar-box")?.remove();
-    removeChatBar();
+    removeLegacyChatBar();
     closeClientPanel();
     lastConversationKey = null;
     crm.loading = false;
