@@ -658,6 +658,13 @@
     crm.error = null;
     injectSidebarCta();
 
+    if (!CFG.EMBED_KEY || CFG.EMBED_KEY.includes("COLE_A_MESMA")) {
+      crm.loading = false;
+      crm.error = "EMBED_KEY não configurada no Dashboard Script (Super Admin → App Config)";
+      injectSidebarCta();
+      return;
+    }
+
     try {
       const res = await apiLookup(phone);
       crm.state = res.state;

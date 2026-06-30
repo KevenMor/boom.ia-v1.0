@@ -43,8 +43,8 @@
     /** true = modal centralizado com blur; false = sidebar nativa (legado) */
     USE_MODAL: true,
     API_BASE: "https://ia.agboom.com.br/api",
-    EMBED_KEY: "COLE_A_MESMA_CHAVE_DO_SERVER_ENV",
-    TARGET_ACCOUNT_ID: null,
+    EMBED_KEY: "iUDtFP4Rd9FyqNz3nkynZnkW",
+    TARGET_ACCOUNT_ID: 9,
     MOBILE_MAX_WIDTH: 768,
   };
   /** ==================================== */
@@ -657,6 +657,13 @@
     crm.loading = true;
     crm.error = null;
     injectSidebarCta();
+
+    if (!CFG.EMBED_KEY || CFG.EMBED_KEY.includes("COLE_A_MESMA")) {
+      crm.loading = false;
+      crm.error = "EMBED_KEY não configurada no Dashboard Script (Super Admin → App Config)";
+      injectSidebarCta();
+      return;
+    }
 
     try {
       const res = await apiLookup(phone);
