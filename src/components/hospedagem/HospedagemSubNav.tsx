@@ -1,21 +1,25 @@
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { useEmbedHospedagemOptional } from "@/contexts/EmbedHospedagemContext";
 
-const TABS = [
-  { to: "/hospedagem/calendario-parque", label: "Calendário do parque" },
-  { to: "/hospedagem/cadastro", label: "Estoque de quartos" },
-  { to: "/hospedagem/valores", label: "Valores" },
+const TAB_DEFS = [
+  { segment: "calendario-parque", label: "Calendário do parque" },
+  { segment: "cadastro", label: "Estoque de quartos" },
+  { segment: "valores", label: "Valores" },
 ] as const;
 
 export function HospedagemSubNav() {
   const { pathname } = useLocation();
+  const embed = useEmbedHospedagemOptional();
+  const base = embed?.basePath ?? "/hospedagem";
+  const tabs = TAB_DEFS.map((t) => ({ ...t, to: `${base}/${t.segment}` }));
 
   return (
     <nav
       className="-mx-px mt-6 flex gap-6 overflow-x-auto border-b border-slate-200 dark:border-border [-ms-overflow-style:none] [scrollbar-width:none] sm:gap-8 md:gap-10 [&::-webkit-scrollbar]:hidden"
       aria-label="Seções de gestão de reservas"
     >
-      {TABS.map((t) => {
+      {tabs.map((t) => {
         const active = pathname === t.to || pathname.startsWith(`${t.to}/`);
         return (
           <NavLink

@@ -13,8 +13,7 @@ import { ptBR } from "date-fns/locale";
 import { CalendarRange, ChevronLeft, ChevronRight, Loader2, Paintbrush, Plus, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HospedagemSubNav } from "@/components/hospedagem/HospedagemSubNav";
-import { useTenantContext } from "@/contexts/TenantContext";
-import { useAuth } from "@/contexts/AuthContext";
+import { useHospedagemTenantScope } from "@/hooks/useHospedagemTenantScope";
 import { cn } from "@/lib/utils";
 import {
   useBulkUpsertParkDays,
@@ -87,9 +86,7 @@ function iso(d: Date) {
 }
 
 export default function ParkCalendarManagementPage() {
-  const { selectedTenantId, scopedTenantDisplayName } = useTenantContext();
-  const { isSuperAdmin, isTenantAdmin } = useAuth();
-  const canEdit = Boolean(selectedTenantId && (isSuperAdmin || isTenantAdmin(selectedTenantId)));
+  const { selectedTenantId, scopedTenantDisplayName, canEdit } = useHospedagemTenantScope();
 
   const [view, setView] = useState(() => startOfMonth(new Date()));
   const year = view.getFullYear();

@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CircleDollarSign, Plus, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HospedagemSubNav } from "@/components/hospedagem/HospedagemSubNav";
-import { useTenantContext } from "@/contexts/TenantContext";
-import { useAuth } from "@/contexts/AuthContext";
+import { useHospedagemTenantScope } from "@/hooks/useHospedagemTenantScope";
 import { cn } from "@/lib/utils";
 import {
   useLodgingAccommodationTypes,
@@ -36,9 +35,7 @@ const stitchCard =
   "rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-border dark:bg-card sm:p-6";
 
 export default function LodgingPricingPage() {
-  const { selectedTenantId, scopedTenantDisplayName } = useTenantContext();
-  const { isSuperAdmin, isTenantAdmin } = useAuth();
-  const canManage = Boolean(selectedTenantId && (isSuperAdmin || isTenantAdmin(selectedTenantId)));
+  const { selectedTenantId, scopedTenantDisplayName, canManage } = useHospedagemTenantScope();
 
   const { data: typesQ } = useLodgingAccommodationTypes(selectedTenantId ?? undefined);
   const { data: ratesQ, isLoading: ratesLoading } = useLodgingRates(selectedTenantId ?? undefined);

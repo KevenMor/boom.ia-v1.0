@@ -6,6 +6,7 @@ import {
   canManageTenant,
   requireAuthenticated,
 } from "../services/authorization.js";
+import { authorizeHospedagem } from "./hospedagem-embed-auth.js";
 import { runLodgingConsulta } from "../services/lodging-consulta.js";
 
 const MODULE_KEY = "hospedagem";
@@ -94,15 +95,12 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const auth = await requireAuthenticated(req, reply);
-      if (!auth) return;
       const tenant_id = req.query.tenant_id?.trim();
       const yearStr = req.query.year?.trim();
       const monthStr = req.query.month?.trim();
 
       if (!tenant_id) return reply.status(400).send({ error: "tenant_id is required" });
-      if (!canAccessTenant(auth, tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
-      if (await denyIfDisabled(supabase, tenant_id, reply)) return;
+      if (!(await authorizeHospedagem(req, reply, supabase, tenant_id, "read", denyIfDisabled))) return;
 
       const year = parseInt(yearStr ?? "", 10);
       const month = parseInt(monthStr ?? "", 10);
@@ -144,13 +142,10 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const auth = await requireAuthenticated(req, reply);
-      if (!auth) return;
       const tenant_id = req.body.tenant_id?.trim();
       const days = req.body.days;
       if (!tenant_id) return reply.status(400).send({ error: "tenant_id is required" });
-      if (!canManageTenant(auth, tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
-      if (await denyIfDisabled(supabase, tenant_id, reply)) return;
+      if (!(await authorizeHospedagem(req, reply, supabase, tenant_id, "manage", denyIfDisabled))) return;
       if (!Array.isArray(days) || days.length === 0) {
         return reply.status(400).send({ error: "days array required" });
       }
@@ -194,8 +189,6 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
   fastify.delete(
     "/hospedagem/park-days/:id",
     async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-      const auth = await requireAuthenticated(req, reply);
-      if (!auth) return;
       const { id } = req.params;
 
       const { data: row, error: e1 } = await supabase.from("lodging_park_days").select("tenant_id").eq("id", id).maybeSingle();
@@ -203,8 +196,7 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
       if (!row) return reply.status(404).send({ error: "not_found" });
       const tenant_id = row.tenant_id as string;
 
-      if (!canManageTenant(auth, tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
-      if (await denyIfDisabled(supabase, tenant_id, reply)) return;
+      if (!(await authorizeHospedagem(req, reply, supabase, tenant_id, "manage", denyIfDisabled))) return;
 
       const { error: e2 } = await supabase.from("lodging_park_days").delete().eq("id", id);
       if (e2) throw e2;
@@ -216,12 +208,9 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
   fastify.get(
     "/hospedagem/accommodation-types",
     async (req: FastifyRequest<{ Querystring: { tenant_id?: string } }>, reply: FastifyReply) => {
-      const auth = await requireAuthenticated(req, reply);
-      if (!auth) return;
       const tenant_id = req.query.tenant_id?.trim();
       if (!tenant_id) return reply.status(400).send({ error: "tenant_id is required" });
-      if (!canAccessTenant(auth, tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
-      if (await denyIfDisabled(supabase, tenant_id, reply)) return;
+      if (!(await authorizeHospedagem(req, reply, supabase, tenant_id, "read", denyIfDisabled))) return;
 
       const { data, error } = await supabase
         .from("lodging_accommodation_types")
@@ -249,13 +238,10 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const auth = await requireAuthenticated(req, reply);
-      if (!auth) return;
       const tenant_id = req.body.tenant_id?.trim();
       const name = req.body.name?.trim();
       if (!tenant_id || !name) return reply.status(400).send({ error: "tenant_id and name required" });
-      if (!canManageTenant(auth, tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
-      if (await denyIfDisabled(supabase, tenant_id, reply)) return;
+      if (!(await authorizeHospedagem(req, reply, supabase, tenant_id, "manage", denyIfDisabled))) return;
 
       const { data, error } = await supabase
         .from("lodging_accommodation_types")
@@ -283,8 +269,6 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const auth = await requireAuthenticated(req, reply);
-      if (!auth) return;
       const { id } = req.params;
 
       const { data: existing, error: e1 } = await supabase
@@ -295,8 +279,7 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
       if (e1) throw e1;
       if (!existing) return reply.status(404).send({ error: "not_found" });
       const tenant_id = existing.tenant_id as string;
-      if (!canManageTenant(auth, tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
-      if (await denyIfDisabled(supabase, tenant_id, reply)) return;
+      if (!(await authorizeHospedagem(req, reply, supabase, tenant_id, "manage", denyIfDisabled))) return;
 
       const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
       if (req.body.name !== undefined) updates.name = req.body.name.trim();
@@ -313,8 +296,6 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
   fastify.delete(
     "/hospedagem/accommodation-types/:id",
     async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-      const auth = await requireAuthenticated(req, reply);
-      if (!auth) return;
       const { id } = req.params;
 
       const { data: existing, error: e1 } = await supabase
@@ -325,8 +306,7 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
       if (e1) throw e1;
       if (!existing) return reply.status(404).send({ error: "not_found" });
       const tenant_id = existing.tenant_id as string;
-      if (!canManageTenant(auth, tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
-      if (await denyIfDisabled(supabase, tenant_id, reply)) return;
+      if (!(await authorizeHospedagem(req, reply, supabase, tenant_id, "manage", denyIfDisabled))) return;
 
       const { error } = await supabase.from("lodging_accommodation_types").delete().eq("id", id);
       if (error) throw error;
@@ -341,14 +321,11 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
       req: FastifyRequest<{ Querystring: { tenant_id?: string; accommodation_type_id?: string } }>,
       reply: FastifyReply
     ) => {
-      const auth = await requireAuthenticated(req, reply);
-      if (!auth) return;
       const tenant_id = req.query.tenant_id?.trim();
       const type_id = req.query.accommodation_type_id?.trim();
 
       if (!tenant_id) return reply.status(400).send({ error: "tenant_id is required" });
-      if (!canAccessTenant(auth, tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
-      if (await denyIfDisabled(supabase, tenant_id, reply)) return;
+      if (!(await authorizeHospedagem(req, reply, supabase, tenant_id, "read", denyIfDisabled))) return;
 
       let q = supabase.from("lodging_units").select("*, lodging_accommodation_types ( id, name )").eq("tenant_id", tenant_id);
       if (type_id) q = q.eq("accommodation_type_id", type_id);
@@ -372,8 +349,6 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const auth = await requireAuthenticated(req, reply);
-      if (!auth) return;
       const tenant_id = req.body.tenant_id?.trim();
       const accommodation_type_id = req.body.accommodation_type_id?.trim();
       const name = req.body.name?.trim();
@@ -385,8 +360,7 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
       if (!(UNIT_STATUSES as readonly string[]).includes(status)) {
         return reply.status(400).send({ error: "invalid_unit_status" });
       }
-      if (!canManageTenant(auth, tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
-      if (await denyIfDisabled(supabase, tenant_id, reply)) return;
+      if (!(await authorizeHospedagem(req, reply, supabase, tenant_id, "manage", denyIfDisabled))) return;
 
       const { data: tRow, error: te } = await supabase
         .from("lodging_accommodation_types")
@@ -424,16 +398,13 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const auth = await requireAuthenticated(req, reply);
-      if (!auth) return;
       const { id } = req.params;
 
       const { data: existing, error: e1 } = await supabase.from("lodging_units").select("tenant_id").eq("id", id).maybeSingle();
       if (e1) throw e1;
       if (!existing) return reply.status(404).send({ error: "not_found" });
       const tenant_id = existing.tenant_id as string;
-      if (!canManageTenant(auth, tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
-      if (await denyIfDisabled(supabase, tenant_id, reply)) return;
+      if (!(await authorizeHospedagem(req, reply, supabase, tenant_id, "manage", denyIfDisabled))) return;
 
       const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
       if (req.body.name !== undefined) updates.name = req.body.name.trim();
@@ -465,16 +436,13 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
   fastify.delete(
     "/hospedagem/units/:id",
     async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-      const auth = await requireAuthenticated(req, reply);
-      if (!auth) return;
       const { id } = req.params;
 
       const { data: existing, error: e1 } = await supabase.from("lodging_units").select("tenant_id").eq("id", id).maybeSingle();
       if (e1) throw e1;
       if (!existing) return reply.status(404).send({ error: "not_found" });
       const tenant_id = existing.tenant_id as string;
-      if (!canManageTenant(auth, tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
-      if (await denyIfDisabled(supabase, tenant_id, reply)) return;
+      if (!(await authorizeHospedagem(req, reply, supabase, tenant_id, "manage", denyIfDisabled))) return;
 
       const { error } = await supabase.from("lodging_units").delete().eq("id", id);
       if (error) throw error;
@@ -486,13 +454,10 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
   fastify.get(
     "/hospedagem/reservations",
     async (req: FastifyRequest<{ Querystring: { tenant_id?: string } }>, reply: FastifyReply) => {
-      const auth = await requireAuthenticated(req, reply);
-      if (!auth) return;
       const tenant_id = req.query.tenant_id?.trim();
 
       if (!tenant_id) return reply.status(400).send({ error: "tenant_id is required" });
-      if (!canAccessTenant(auth, tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
-      if (await denyIfDisabled(supabase, tenant_id, reply)) return;
+      if (!(await authorizeHospedagem(req, reply, supabase, tenant_id, "read", denyIfDisabled))) return;
 
       const q = supabase
         .from("lodging_reservations")
@@ -513,8 +478,6 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
       req: FastifyRequest<{ Querystring: { tenant_id?: string; check_in?: string; check_out?: string } }>,
       reply: FastifyReply
     ) => {
-      const auth = await requireAuthenticated(req, reply);
-      if (!auth) return;
       const tenant_id = req.query.tenant_id?.trim();
       const check_in = req.query.check_in?.trim();
       const check_out = req.query.check_out?.trim();
@@ -522,8 +485,7 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
       if (!tenant_id || !check_in || !check_out) {
         return reply.status(400).send({ error: "tenant_id, check_in, check_out required" });
       }
-      if (!canAccessTenant(auth, tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
-      if (await denyIfDisabled(supabase, tenant_id, reply)) return;
+      if (!(await authorizeHospedagem(req, reply, supabase, tenant_id, "read", denyIfDisabled))) return;
       if (check_out <= check_in) return reply.status(400).send({ error: "check_out_must_be_after_check_in" });
 
       const { data: units, error: ue } = await supabase
@@ -567,8 +529,6 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const auth = await requireAuthenticated(req, reply);
-      if (!auth) return;
       const tenant_id = req.body.tenant_id?.trim();
       const unit_id = req.body.unit_id?.trim();
       const check_in = req.body.check_in?.trim();
@@ -579,8 +539,7 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ error: "tenant_id, unit_id, check_in, check_out required" });
       }
       if (check_out <= check_in) return reply.status(400).send({ error: "check_out_must_be_after_check_in" });
-      if (!canManageTenant(auth, tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
-      if (await denyIfDisabled(supabase, tenant_id, reply)) return;
+      if (!(await authorizeHospedagem(req, reply, supabase, tenant_id, "manage", denyIfDisabled))) return;
 
       const { data: uRow, error: ue } = await supabase.from("lodging_units").select("tenant_id").eq("id", unit_id).maybeSingle();
       if (ue) throw ue;
@@ -638,8 +597,6 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const auth = await requireAuthenticated(req, reply);
-      if (!auth) return;
       const { id } = req.params;
 
       const { data: existing, error: e1 } = await supabase
@@ -651,8 +608,7 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
       if (!existing) return reply.status(404).send({ error: "not_found" });
       const tenant_id = existing.tenant_id as string;
 
-      if (!canManageTenant(auth, tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
-      if (await denyIfDisabled(supabase, tenant_id, reply)) return;
+      if (!(await authorizeHospedagem(req, reply, supabase, tenant_id, "manage", denyIfDisabled))) return;
 
       const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
       if (req.body.notes !== undefined) updates.notes = req.body.notes;
@@ -721,17 +677,13 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
   fastify.delete(
     "/hospedagem/reservations/:id",
     async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-      const auth = await requireAuthenticated(req, reply);
-      if (!auth) return;
       const { id } = req.params;
 
       const { data: existing, error: e1 } = await supabase.from("lodging_reservations").select("tenant_id").eq("id", id).maybeSingle();
       if (e1) throw e1;
       if (!existing) return reply.status(404).send({ error: "not_found" });
-      if (!canManageTenant(auth, existing.tenant_id as string)) {
-        return reply.status(403).send({ error: "forbidden_tenant_access" });
-      }
-      if (await denyIfDisabled(supabase, existing.tenant_id as string, reply)) return;
+      const tenant_id = existing.tenant_id as string;
+      if (!(await authorizeHospedagem(req, reply, supabase, tenant_id, "manage", denyIfDisabled))) return;
 
       const { error } = await supabase.from("lodging_reservations").delete().eq("id", id);
       if (error) throw error;
@@ -748,12 +700,9 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const auth = await requireAuthenticated(req, reply);
-      if (!auth) return;
       const tenant_id = req.query.tenant_id?.trim();
       if (!tenant_id) return reply.status(400).send({ error: "tenant_id is required" });
-      if (!canAccessTenant(auth, tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
-      if (await denyIfDisabled(supabase, tenant_id, reply)) return;
+      if (!(await authorizeHospedagem(req, reply, supabase, tenant_id, "read", denyIfDisabled))) return;
 
       let q = supabase
         .from("lodging_rate_items")
@@ -791,14 +740,10 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const auth = await requireAuthenticated(req, reply);
-      if (!auth) return;
-
       const { tenant_id, accommodation_type_id, guests, nights, price, currency, valid_from, valid_to, notes } = req.body;
       if (!tenant_id || !accommodation_type_id || guests <= 0 || nights <= 0 || price == null)
         return reply.status(400).send({ error: "missing_required_fields" });
-      if (!canManageTenant(auth, tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
-      if (await denyIfDisabled(supabase, tenant_id, reply)) return;
+      if (!(await authorizeHospedagem(req, reply, supabase, tenant_id, "manage", denyIfDisabled))) return;
 
       const { data, error } = await supabase
         .from("lodging_rate_items")
@@ -819,13 +764,9 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const auth = await requireAuthenticated(req, reply);
-      if (!auth) return;
-
       const { id } = req.params;
       const { tenant_id, patch } = req.body;
-      if (!canManageTenant(auth, tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
-      if (await denyIfDisabled(supabase, tenant_id, reply)) return;
+      if (!(await authorizeHospedagem(req, reply, supabase, tenant_id, "manage", denyIfDisabled))) return;
 
       const { data: existing, error: e1 } = await supabase.from("lodging_rate_items").select("tenant_id").eq("id", id).maybeSingle();
       if (e1 || !existing) throw e1 || new Error("Rate not found");
@@ -846,13 +787,9 @@ export async function hospedagemRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const auth = await requireAuthenticated(req, reply);
-      if (!auth) return;
-
       const tenant_id = req.query.tenant_id?.trim();
       if (!tenant_id) return reply.status(400).send({ error: "tenant_id is required" });
-      if (!canManageTenant(auth, tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
-      if (await denyIfDisabled(supabase, tenant_id, reply)) return;
+      if (!(await authorizeHospedagem(req, reply, supabase, tenant_id, "manage", denyIfDisabled))) return;
 
       const { id } = req.params;
       const { data: existing, error: e1 } = await supabase.from("lodging_rate_items").select("tenant_id").eq("id", id).maybeSingle();

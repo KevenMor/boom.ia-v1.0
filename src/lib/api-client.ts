@@ -1,7 +1,9 @@
 import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
 import { embedCrmFetch, type EmbedCrmCredentials } from "@/lib/embed-crm-api";
+import { embedHospedagemFetch, type EmbedHospedagemCredentials } from "@/lib/embed-hospedagem-api";
 
 let activeEmbedCrm: EmbedCrmCredentials | null = null;
+let activeEmbedHospedagem: EmbedHospedagemCredentials | null = null;
 
 export function setActiveEmbedCrm(creds: EmbedCrmCredentials | null): void {
   activeEmbedCrm = creds;
@@ -9,6 +11,14 @@ export function setActiveEmbedCrm(creds: EmbedCrmCredentials | null): void {
 
 export function getActiveEmbedCrm(): EmbedCrmCredentials | null {
   return activeEmbedCrm;
+}
+
+export function setActiveEmbedHospedagem(creds: EmbedHospedagemCredentials | null): void {
+  activeEmbedHospedagem = creds;
+}
+
+export function getActiveEmbedHospedagem(): EmbedHospedagemCredentials | null {
+  return activeEmbedHospedagem;
 }
 
 // Em dev (localhost) usa /api relativo (proxy do Vite); em produção usa origem atual.
@@ -31,6 +41,10 @@ export async function callAPI<T = unknown>(
 ): Promise<T> {
   if (activeEmbedCrm && endpoint.startsWith("/crm-contacts")) {
     return embedCrmFetch<T>(endpoint, activeEmbedCrm, options);
+  }
+
+  if (activeEmbedHospedagem && endpoint.startsWith("/hospedagem")) {
+    return embedHospedagemFetch<T>(endpoint, activeEmbedHospedagem, options);
   }
 
   const { method = "POST", body, headers = {} } = options;

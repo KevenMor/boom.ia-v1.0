@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { BedDouble, ChevronDown, Loader2, Package, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HospedagemSubNav } from "@/components/hospedagem/HospedagemSubNav";
-import { useTenantContext } from "@/contexts/TenantContext";
-import { useAuth } from "@/contexts/AuthContext";
+import { useHospedagemTenantScope } from "@/hooks/useHospedagemTenantScope";
 import { cn } from "@/lib/utils";
 import {
   useCreateAccommodationType,
@@ -63,9 +62,7 @@ function resStatusLabel(s: string): string {
 }
 
 export default function LodgingRegistryPage() {
-  const { selectedTenantId, scopedTenantDisplayName } = useTenantContext();
-  const { isSuperAdmin, isTenantAdmin } = useAuth();
-  const canManage = Boolean(selectedTenantId && (isSuperAdmin || isTenantAdmin(selectedTenantId)));
+  const { selectedTenantId, scopedTenantDisplayName, canManage } = useHospedagemTenantScope();
 
   const { data: typesQ } = useLodgingAccommodationTypes(selectedTenantId ?? undefined);
   const { data: unitsQ } = useLodgingUnits(selectedTenantId ?? undefined);
