@@ -44,7 +44,7 @@ export function renderChatwootCrmEmbedViewHtml(
     .cw-tab-ico{width:13px;height:13px;opacity:.55;flex-shrink:0;}
     .cw-tab.active .cw-tab-ico{opacity:1;}
     .cw-body{flex:1;overflow:auto;padding:0;min-height:0;}
-    .cw-section{padding:16px 16px 0;}
+    .cw-section{padding:16px 20px 0;}
     .cw-section-head{display:flex;align-items:center;gap:8px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);}
     .cw-section-head span{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-subtle);}
     .cw-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 12px;}
@@ -58,7 +58,7 @@ export function renderChatwootCrmEmbedViewHtml(
     .cw-field textarea{min-height:72px;resize:vertical;}
     .cw-field-row{display:grid;grid-template-columns:1fr 56px;gap:0 10px;}
     .cw-field-row3{display:grid;grid-template-columns:1fr 56px 100px;gap:0 10px;}
-    .cw-form-footer{padding:12px 16px;border-top:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:10px;flex-wrap:wrap;position:sticky;bottom:0;}
+    .cw-form-footer{padding:12px 20px;border-top:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:10px;flex-wrap:wrap;position:sticky;bottom:0;}
     .cw-btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:7px 14px;border-radius:6px;border:0;font:inherit;font-size:13px;font-weight:600;cursor:pointer;background:var(--brand);color:#fff;transition:background .12s,opacity .12s;}
     .cw-btn:hover{background:var(--brand-hover);}
     .cw-btn:disabled{opacity:.55;cursor:not-allowed;}
@@ -66,8 +66,9 @@ export function renderChatwootCrmEmbedViewHtml(
     .cw-btn-ghost{background:var(--surface);border:1px solid var(--border);color:var(--text-muted);}
     .cw-btn-ghost:hover{color:var(--text);background:var(--surface-muted);}
     .cw-btn-danger{background:var(--surface);border:1px solid var(--danger);color:var(--danger);}
-    .cw-card{margin-bottom:10px;padding:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface-muted);}
+    .cw-card{margin-bottom:10px;padding:12px 16px;border:1px solid var(--border);border-radius:6px;background:var(--surface-muted);}
     .cw-card h3{font-size:13px;font-weight:600;margin-bottom:10px;}
+    .cw-panel{padding:16px 20px 0;}
     .cw-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;}
     .cw-toolbar p{font-size:12px;color:var(--text-muted);}
     .cw-table{width:100%;border-collapse:collapse;font-size:13px;}
@@ -75,8 +76,9 @@ export function renderChatwootCrmEmbedViewHtml(
     .cw-table td{padding:9px 10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle;}
     .cw-table tr:last-child td{border-bottom:0;}
     .cw-table tr:hover td{background:var(--surface-muted);}
-    .cw-empty{padding:32px 20px;text-align:center;color:var(--text-muted);font-size:13px;}
-    .cw-empty-ico{font-size:28px;opacity:.35;margin-bottom:8px;}
+    .cw-empty{padding:36px 20px;text-align:center;color:var(--text-muted);font-size:13px;}
+    .cw-empty-ico{display:flex;align-items:center;justify-content:center;margin:0 auto 10px;width:40px;height:40px;border-radius:10px;background:var(--surface-muted);color:var(--text-subtle);}
+    .cw-empty-ico svg{width:20px;height:20px;opacity:.7;}
     .cw-pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;}
     .cw-pill-green{background:var(--success-bg);color:var(--success-text);border:1px solid var(--success-border);}
     .cw-pill-yellow{background:var(--warn-bg);color:var(--warn-text);border:1px solid var(--warn-border);}
@@ -200,7 +202,7 @@ export function renderChatwootCrmEmbedViewHtml(
   }
 
   function emptyState(msg){
-    return '<div class="cw-empty"><div class="cw-empty-ico">📋</div>'+esc(msg||"Nenhum registro.")+"</div>";
+    return '<div class="cw-empty"><div class="cw-empty-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg></div>'+esc(msg||"Nenhum registro.")+"</div>";
   }
 
   function tableHtml(rows,head,mapFn,actions){
@@ -232,7 +234,7 @@ export function renderChatwootCrmEmbedViewHtml(
       var list=tableHtml(rows,["Descrição","Valor","Vencimento","Status"],function(r){
         return "<tr><td>"+esc(r.description||"—")+"</td><td>"+money(r.amount)+"</td><td>"+fmtDay(r.due_date)+"</td><td>"+statusPill(r.status)+'</td><td><div class="cw-actions"><button type="button" class="cw-btn cw-btn-sm cw-btn-ghost" data-edit-inv="'+esc(r.id)+'">Editar</button><button type="button" class="cw-btn cw-btn-sm cw-btn-danger" data-del-inv="'+esc(r.id)+'">Excluir</button></div></td></tr>';
       },true);
-      bindPanel(el,form+'<div class="cw-toolbar"><p>'+rows.length+' fatura(s)</p></div>'+list,function(root){
+      bindPanel(el,'<div class="cw-panel">'+form+'<div class="cw-toolbar"><p>'+rows.length+' fatura(s)</p></div>'+list+"</div>",function(root){
         if(ed){var sel=root.querySelector("#inv-status");if(sel)sel.value=ed.status||"pending";}
         root.querySelector("#form-invoice").addEventListener("submit",function(ev){
           ev.preventDefault();
@@ -265,7 +267,7 @@ export function renderChatwootCrmEmbedViewHtml(
       var list=tableHtml(rows,["Nome","Status","Valor","Período"],function(r){
         return "<tr><td>"+esc(r.name)+"</td><td>"+statusPill(r.status)+"</td><td>"+(r.price!=null?money(r.price):"—")+"</td><td>"+fmtDay(r.start_date)+" – "+fmtDay(r.end_date)+'</td><td><div class="cw-actions"><button type="button" class="cw-btn cw-btn-sm cw-btn-ghost" data-edit-pkg="'+esc(r.id)+'">Editar</button><button type="button" class="cw-btn cw-btn-sm cw-btn-danger" data-del-pkg="'+esc(r.id)+'">Excluir</button></div></td></tr>';
       },true);
-      bindPanel(el,form+'<div class="cw-toolbar"><p>'+rows.length+' pacote(s)</p></div>'+list,function(root){
+      bindPanel(el,'<div class="cw-panel">'+form+'<div class="cw-toolbar"><p>'+rows.length+' pacote(s)</p></div>'+list+"</div>",function(root){
         if(ed){var s=root.querySelector("#pkg-status");if(s)s.value=ed.status||"active";}
         root.querySelector("#form-pkg").addEventListener("submit",function(ev){
           ev.preventDefault();
@@ -300,7 +302,7 @@ export function renderChatwootCrmEmbedViewHtml(
       var list=tableHtml(rows,["Título","Status","Valor","Período"],function(r){
         return "<tr><td>"+esc(r.title||"—")+"</td><td>"+statusPill(r.status)+"</td><td>"+(r.value!=null?money(r.value):"—")+"</td><td>"+fmtDay(r.start_date)+" – "+fmtDay(r.end_date)+'</td><td><div class="cw-actions"><button type="button" class="cw-btn cw-btn-sm cw-btn-ghost" data-edit-ctr="'+esc(r.id)+'">Editar</button><button type="button" class="cw-btn cw-btn-sm cw-btn-danger" data-del-ctr="'+esc(r.id)+'">Excluir</button></div></td></tr>';
       },true);
-      bindPanel(el,form+'<div class="cw-toolbar"><p>'+rows.length+' contrato(s)</p></div>'+list,function(root){
+      bindPanel(el,'<div class="cw-panel">'+form+'<div class="cw-toolbar"><p>'+rows.length+' contrato(s)</p></div>'+list+"</div>",function(root){
         if(ed){var s=root.querySelector("#ctr-status");if(s)s.value=ed.status||"draft";}
         root.querySelector("#form-ctr").addEventListener("submit",function(ev){
           ev.preventDefault();
@@ -331,7 +333,7 @@ export function renderChatwootCrmEmbedViewHtml(
         var link=r.file_url?'<a href="'+esc(r.file_url)+'" target="_blank" rel="noopener">'+esc(r.name)+"</a>":esc(r.name);
         return "<tr><td>"+link+'</td><td><span class="cw-pill">'+esc(r.category)+"</span></td><td>"+fmtDay(r.created_at)+'</td><td><button type="button" class="cw-btn cw-btn-sm cw-btn-danger" data-del-doc="'+esc(r.id)+'">Excluir</button></td></tr>';
       },true);
-      bindPanel(el,form+'<div class="cw-toolbar"><p>'+rows.length+' arquivo(s)</p></div>'+list,function(root){
+      bindPanel(el,'<div class="cw-panel">'+form+'<div class="cw-toolbar"><p>'+rows.length+' arquivo(s)</p></div>'+list+"</div>",function(root){
         var fileInput=root.querySelector("#doc-file");
         fileInput.addEventListener("change",function(){var f=fileInput.files&&fileInput.files[0];if(f&&!val("doc-name"))document.getElementById("doc-name").value=f.name.replace(/\\.[^.]+$/,"");});
         root.querySelector("#form-doc").addEventListener("submit",function(ev){
@@ -372,7 +374,7 @@ export function renderChatwootCrmEmbedViewHtml(
       var list=tableHtml(rows,["Título","Início","Fim","Descrição"],function(r){
         return "<tr><td>"+esc(r.title||"—")+"</td><td>"+fmtDate(r.start_at)+"</td><td>"+fmtDate(r.end_at)+"</td><td>"+esc(r.description||"—")+'</td><td><button type="button" class="cw-btn cw-btn-sm cw-btn-danger" data-del-ag="'+esc(r.id)+'">Remover</button></td></tr>';
       },true);
-      bindPanel(el,form+calHint+'<div class="cw-toolbar"><p>'+rows.length+' evento(s)</p></div>'+list,function(root){
+      bindPanel(el,'<div class="cw-panel">'+form+calHint+'<div class="cw-toolbar"><p>'+rows.length+' evento(s)</p></div>'+list+"</div>",function(root){
         root.querySelector("#form-ag").addEventListener("submit",function(ev){
           ev.preventDefault();
           var cal=val("ag-cal"),start=val("ag-start"),end=val("ag-end"),msg=root.querySelector("#ag-msg");
