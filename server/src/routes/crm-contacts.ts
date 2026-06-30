@@ -995,4 +995,309 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
       }
     }
   );
+
+  // --- Documentos (arquivos do cliente) ---
+  type DocumentCategory = "geral" | "contrato" | "identidade" | "comprovante" | "outro";
+  const DOCUMENT_CATEGORIES: DocumentCategory[] = ["geral", "contrato", "identidade", "comprovante", "outro"];
+
+  fastify.get(
+    "/crm-contacts/:id/documents",
+    async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
+        const { id: contactId } = req.params;
+        const { data: contact, error: contactErr } = await supabase
+          .from("contacts")
+          .select("id, tenant_id")
+          .eq("id", contactId)
+          .maybeSingle();
+        if (contactErr || !contact) return reply.status(404).send({ error: "Contato não encontrado" });
+        if (!canAccessTenant(auth, contact.tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
+        const { data, error } = await supabase
+          .from("contact_documents")
+          .select("*")
+          .eq("contact_id", contactId)
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        return reply.send({ data: data ?? [] });
+      } catch (err: unknown) {
+        return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  );
+
+  fastify.post(
+    "/crm-contacts/:id/documents",
+    async (req: FastifyRequest<{ Params: { id: string }; Body: Record<string, unknown> }>, reply: FastifyReply) => {
+      try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
+        const { id: contactId } = req.params;
+        const body = req.body as Record<string, unknown>;
+        const { data: contact, error: contactErr } = await supabase
+          .from("contacts")
+          .select("id, tenant_id")
+          .eq("id", contactId)
+          .maybeSingle();
+        if (contactErr || !contact) return reply.status(404).send({ error: "Contato não encontrado" });
+        if (!canManageTenant(auth, contact.tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
+        const name = String(body.name ?? "").trim();
+        const fileUrl = String(body.file_url ?? "").trim();
+        if (!name || !fileUrl) return reply.status(400).send({ error: "name e file_url são obrigatórios" });
+        let category: DocumentCategory = "geral";
+        if (DOCUMENT_CATEGORIES.includes(body.category as DocumentCategory)) {
+          category = body.category as DocumentCategory;
+        }
+        const record: Record<string, unknown> = {
+          contact_id: contactId,
+          tenant_id: contact.tenant_id,
+          name,
+          category,
+          file_url: fileUrl,
+          file_type: body.file_type ?? null,
+          file_size: body.file_size != null ? Number(body.file_size) : null,
+          notes: body.notes ?? null,
+          metadata: typeof body.metadata === "string" ? body.metadata : JSON.stringify(body.metadata ?? {}),
+        };
+        const { data, error } = await supabase.from("contact_documents").insert(record).select().single();
+        if (error) throw error;
+        return reply.send(data);
+      } catch (err: unknown) {
+        return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  );
+
+  fastify.patch(
+    "/crm-contacts/:contactId/documents/:documentId",
+    async (
+      req: FastifyRequest<{ Params: { contactId: string; documentId: string }; Body: Record<string, unknown> }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
+        const { contactId, documentId } = req.params;
+        const body = req.body as Record<string, unknown>;
+        const { data: existing, error: fetchErr } = await supabase
+          .from("contact_documents")
+          .select("id, tenant_id, contact_id")
+          .eq("id", documentId)
+          .eq("contact_id", contactId)
+          .maybeSingle();
+        if (fetchErr || !existing) return reply.status(404).send({ error: "Documento não encontrado" });
+        if (!canManageTenant(auth, existing.tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
+        const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        if (body.name !== undefined) updates.name = String(body.name).trim();
+        if (body.category !== undefined && DOCUMENT_CATEGORIES.includes(body.category as DocumentCategory)) {
+          updates.category = body.category;
+        }
+        if (body.notes !== undefined) updates.notes = body.notes;
+        if (body.metadata !== undefined) {
+          updates.metadata = typeof body.metadata === "string" ? body.metadata : JSON.stringify(body.metadata ?? {});
+        }
+        const { data, error } = await supabase
+          .from("contact_documents")
+          .update(updates)
+          .eq("id", documentId)
+          .eq("contact_id", contactId)
+          .select()
+          .single();
+        if (error) throw error;
+        return reply.send(data);
+      } catch (err: unknown) {
+        return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  );
+
+  fastify.delete(
+    "/crm-contacts/:contactId/documents/:documentId",
+    async (
+      req: FastifyRequest<{ Params: { contactId: string; documentId: string } }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
+        const { contactId, documentId } = req.params;
+        const { data: existing } = await supabase
+          .from("contact_documents")
+          .select("tenant_id")
+          .eq("id", documentId)
+          .eq("contact_id", contactId)
+          .maybeSingle();
+        if (!existing) return reply.status(404).send({ error: "Documento não encontrado" });
+        if (!canManageTenant(auth, existing.tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
+        const { error } = await supabase.from("contact_documents").delete().eq("id", documentId).eq("contact_id", contactId);
+        if (error) throw error;
+        return reply.send({ success: true });
+      } catch (err: unknown) {
+        return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  );
+
+  // --- Contratos ---
+  type ContractStatus = "draft" | "active" | "expired" | "cancelled" | "suspended";
+  const CONTRACT_STATUSES: ContractStatus[] = ["draft", "active", "expired", "cancelled", "suspended"];
+
+  fastify.get(
+    "/crm-contacts/:id/contracts",
+    async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
+        const { id: contactId } = req.params;
+        const { data: contact, error: contactErr } = await supabase
+          .from("contacts")
+          .select("id, tenant_id")
+          .eq("id", contactId)
+          .maybeSingle();
+        if (contactErr || !contact) return reply.status(404).send({ error: "Contato não encontrado" });
+        if (!canAccessTenant(auth, contact.tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
+        const { data, error } = await supabase
+          .from("contact_contracts")
+          .select("*")
+          .eq("contact_id", contactId)
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        return reply.send({ data: data ?? [] });
+      } catch (err: unknown) {
+        return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  );
+
+  fastify.post(
+    "/crm-contacts/:id/contracts",
+    async (req: FastifyRequest<{ Params: { id: string }; Body: Record<string, unknown> }>, reply: FastifyReply) => {
+      try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
+        const { id: contactId } = req.params;
+        const body = req.body as Record<string, unknown>;
+        const { data: contact, error: contactErr } = await supabase
+          .from("contacts")
+          .select("id, tenant_id")
+          .eq("id", contactId)
+          .maybeSingle();
+        if (contactErr || !contact) return reply.status(404).send({ error: "Contato não encontrado" });
+        if (!canManageTenant(auth, contact.tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
+        const title = String(body.title ?? "").trim();
+        if (!title) return reply.status(400).send({ error: "title é obrigatório" });
+        let status: ContractStatus = "draft";
+        if (CONTRACT_STATUSES.includes(body.status as ContractStatus)) {
+          status = body.status as ContractStatus;
+        }
+        const record: Record<string, unknown> = {
+          contact_id: contactId,
+          tenant_id: contact.tenant_id,
+          title,
+          status,
+          contract_number: body.contract_number ?? null,
+          start_date: body.start_date ?? null,
+          end_date: body.end_date ?? null,
+          value: body.value != null && body.value !== "" ? Number(body.value) : null,
+          payment_terms: body.payment_terms ?? null,
+          description: body.description ?? null,
+          document_url: body.document_url ?? null,
+          metadata: typeof body.metadata === "string" ? body.metadata : JSON.stringify(body.metadata ?? {}),
+        };
+        const { data, error } = await supabase.from("contact_contracts").insert(record).select().single();
+        if (error) throw error;
+        return reply.send(data);
+      } catch (err: unknown) {
+        return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  );
+
+  fastify.patch(
+    "/crm-contacts/:contactId/contracts/:contractId",
+    async (
+      req: FastifyRequest<{ Params: { contactId: string; contractId: string }; Body: Record<string, unknown> }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
+        const { contactId, contractId } = req.params;
+        const body = req.body as Record<string, unknown>;
+        const { data: existing, error: fetchErr } = await supabase
+          .from("contact_contracts")
+          .select("id, tenant_id, contact_id")
+          .eq("id", contractId)
+          .eq("contact_id", contactId)
+          .maybeSingle();
+        if (fetchErr || !existing) return reply.status(404).send({ error: "Contrato não encontrado" });
+        if (!canManageTenant(auth, existing.tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
+        const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        const allowed = [
+          "title",
+          "status",
+          "contract_number",
+          "start_date",
+          "end_date",
+          "value",
+          "payment_terms",
+          "description",
+          "document_url",
+          "metadata",
+        ];
+        for (const key of allowed) {
+          if (body[key] === undefined) continue;
+          if (key === "status" && !CONTRACT_STATUSES.includes(body.status as ContractStatus)) continue;
+          if (key === "value") {
+            updates.value = body.value != null && body.value !== "" ? Number(body.value) : null;
+            continue;
+          }
+          if (key === "metadata") {
+            updates.metadata = typeof body.metadata === "string" ? body.metadata : JSON.stringify(body.metadata ?? {});
+            continue;
+          }
+          updates[key] = body[key];
+        }
+        const { data, error } = await supabase
+          .from("contact_contracts")
+          .update(updates)
+          .eq("id", contractId)
+          .eq("contact_id", contactId)
+          .select()
+          .single();
+        if (error) throw error;
+        return reply.send(data);
+      } catch (err: unknown) {
+        return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  );
+
+  fastify.delete(
+    "/crm-contacts/:contactId/contracts/:contractId",
+    async (
+      req: FastifyRequest<{ Params: { contactId: string; contractId: string } }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
+        const { contactId, contractId } = req.params;
+        const { data: existing } = await supabase
+          .from("contact_contracts")
+          .select("tenant_id")
+          .eq("id", contractId)
+          .eq("contact_id", contactId)
+          .maybeSingle();
+        if (!existing) return reply.status(404).send({ error: "Contrato não encontrado" });
+        if (!canManageTenant(auth, existing.tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
+        const { error } = await supabase.from("contact_contracts").delete().eq("id", contractId).eq("contact_id", contactId);
+        if (error) throw error;
+        return reply.send({ success: true });
+      } catch (err: unknown) {
+        return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  );
 }

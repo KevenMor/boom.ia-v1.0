@@ -9,6 +9,14 @@ export type LodgingAccommodationLine = {
   rooms_count?: number;
 };
 
+export type LodgingGalleryPhotoLine = {
+  accommodationName: string;
+  displayLabel: string;
+  galleryName: string;
+  imageUrl: string;
+  photoMarkdown: string;
+};
+
 function formatCurrencyBR(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
@@ -109,6 +117,22 @@ export function formatLodgingConsultaForLlm(obj: Record<string, unknown>): strin
   lines.push(
     "FORMATO AO CLIENTE: §3b-formato — sem emoji; seções *Resumo*, *Opções*, *Incluso*, *Horários*, *Pagamento*; cada acomodação em UMA linha (*Nome amigável* — R$ total_price). Mapear STANDART→Chalé, LUXO DUPLO→Suíte Luxo, LUXO COM VARANDA→Suíte com Varanda. PROIBIDO STANDART/LUXO DUPLO crus."
   );
+
+  const galleryPhotos = Array.isArray(obj.gallery_photos)
+    ? (obj.gallery_photos as LodgingGalleryPhotoLine[])
+    : [];
+  if (galleryPhotos.length > 0) {
+    lines.push(
+      "FOTOS NO ORÇAMENTO (OBRIGATÓRIO): imediatamente ANTES de cada linha de preço da acomodação, inclua o photos_markdown correspondente (uma foto por quarto):"
+    );
+    for (const p of galleryPhotos) {
+      lines.push(`- ${p.displayLabel} (${p.accommodationName}): ${p.photoMarkdown}`);
+    }
+    lines.push(
+      "Ordem no WhatsApp (OBRIGATÓRIO): **uma bolha por acomodação** — foto do quarto e, na mesma mensagem (legenda), a linha *Nome* — R$ valor; depois a próxima foto + próximo preço; por último o rodapé (Incluso, Horários, Pagamento). **Proibido** agrupar todas as fotos num bloco antes da lista de preços."
+    );
+  }
+
   for (const acc of sorted) {
     const name = acc.name ?? "Acomodação";
     const total = acc.total_price != null ? formatCurrencyBR(acc.total_price) : "?";

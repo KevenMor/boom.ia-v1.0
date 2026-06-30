@@ -7,6 +7,14 @@ import { emitMediaCommandsSseIfNeeded } from "../utils/extract-media-commands.js
 import { injectSuiteGalleryMarkdownIfMissing, injectSuiteGalleryVideosIfMissing } from "../utils/suite-gallery-markdown-inject.js";
 import { injectOmnibeesQuotePhotosIfMissing } from "../utils/omnibees-photo-markdown.js";
 import {
+  collectSunsetLodgingGalleryPhotosFromToolResults,
+  injectSunsetLodgingQuotePhotosIfMissing,
+} from "../utils/sunset-lodging-gallery-photos.js";
+import {
+  formatSunsetLodgingQuoteForDelivery,
+  isSunsetLodgingQuoteContext,
+} from "../utils/sunset-lodging-quote-format.js";
+import {
   injectInventoryPhotosIfMissing,
   reorderInventoryPhotosBeforeText,
   sanitizeInvalidInventoryPhotoAttempt,
@@ -1338,14 +1346,17 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         lastUserMessage: string
       ): string => {
         let text = assistantText;
-        const galleryInject = injectSuiteGalleryMarkdownIfMissing({
-          assistantText: text,
-          toolResultStrings,
-          lastUserMessage,
-        });
-        if (galleryInject) {
-          console.log("[Chat-Local] Injetando photos_markdown suite_gallery (omissão do modelo)");
-          text = galleryInject.fullText;
+        const skipSuiteGalleryBulkInject = isSunsetLodgingQuoteContext(text, toolResultStrings);
+        if (!skipSuiteGalleryBulkInject) {
+          const galleryInject = injectSuiteGalleryMarkdownIfMissing({
+            assistantText: text,
+            toolResultStrings,
+            lastUserMessage,
+          });
+          if (galleryInject) {
+            console.log("[Chat-Local] Injetando photos_markdown suite_gallery (omissão do modelo)");
+            text = galleryInject.fullText;
+          }
         }
         const videoInject = injectSuiteGalleryVideosIfMissing({
           assistantText: text,
@@ -1361,7 +1372,16 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           console.log("[Chat-Local] Injetando fotos cover Omnibees no orçamento (omissão do modelo)");
           text = omnibeesPhotoInject.fullText;
         }
+        const sunsetLodgingPhotoInject = injectSunsetLodgingQuotePhotosIfMissing(
+          text,
+          collectSunsetLodgingGalleryPhotosFromToolResults(toolResultStrings)
+        );
+        if (sunsetLodgingPhotoInject) {
+          console.log("[Chat-Local] Injetando fotos galeria Sunset no orçamento (omissão do modelo)");
+          text = sunsetLodgingPhotoInject.fullText;
+        }
         text = formatOmnibeesQuoteForDelivery(text, toolResultStrings);
+        text = formatSunsetLodgingQuoteForDelivery(text, toolResultStrings);
         const inventoryPhotoInject = injectInventoryPhotosIfMissing({
           assistantText: text,
           toolResultStrings,

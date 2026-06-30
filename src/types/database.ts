@@ -161,6 +161,52 @@ export interface ContactSummary {
   upcoming_appointments: number;
 }
 
+export type ContactDocumentCategory = "geral" | "contrato" | "identidade" | "comprovante" | "outro";
+
+export interface ContactDocument {
+  id: string;
+  contact_id: string;
+  tenant_id: string;
+  name: string;
+  category: ContactDocumentCategory;
+  file_url: string;
+  file_type: string | null;
+  file_size: number | null;
+  notes: string | null;
+  metadata?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ContactContractStatus = "draft" | "active" | "expired" | "cancelled" | "suspended";
+
+export interface ContactContract {
+  id: string;
+  contact_id: string;
+  tenant_id: string;
+  contract_number: string | null;
+  title: string;
+  status: ContactContractStatus;
+  start_date: string | null;
+  end_date: string | null;
+  value: number | null;
+  payment_terms: string | null;
+  description: string | null;
+  document_url: string | null;
+  metadata?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Campos extras em `contacts.metadata` para gestão de clientes. */
+export interface ContactClientMetadata {
+  client_status?: "active" | "inactive" | "at_risk";
+  company_name?: string;
+  complementary_info?: string;
+  profession?: string;
+  birth_date?: string;
+}
+
 export type CatalogItemType = "service" | "product";
 export type CatalogItemStatus = "active" | "inactive" | "coming_soon";
 export type CatalogAttendanceType = "individual" | "group";

@@ -22,6 +22,7 @@ import {
 } from "../lib/vehicle-segments.js";
 import { buildInventoryPhotosMarkdown, filterValidInventoryPhotoUrls } from "../lib/inventory-photo-url.js";
 import { decodeHtmlEntities } from "../lib/html-entities.js";
+import { fetchSunsetLodgingGalleryPhotos } from "../utils/sunset-lodging-gallery-photos.js";
 
 export interface ToolExecutionResult {
   success: boolean;
@@ -1694,7 +1695,18 @@ async function executeLodgingConsulta(
   if (!out.ok) {
     return { success: false, result: null, error: JSON.stringify(out.body) };
   }
-  return { success: true, result: out.data };
+  const data = (out.data ?? {}) as Record<string, unknown>;
+  const accommodations = Array.isArray(data.available_accommodations)
+    ? (data.available_accommodations as Array<{ name?: string }>)
+    : [];
+  const accNames = accommodations.map((a) => String(a.name ?? "").trim()).filter(Boolean);
+  if (accNames.length > 0) {
+    const galleryPhotos = await fetchSunsetLodgingGalleryPhotos(supabase, tenantId, accNames);
+    if (galleryPhotos.length > 0) {
+      return { success: true, result: { ...data, gallery_photos: galleryPhotos } };
+    }
+  }
+  return { success: true, result: data };
 }
 
 async function executeParkDayConsulta(

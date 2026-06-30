@@ -667,7 +667,7 @@ Quando o cliente estiver pronto para valores e você **não** estiver no caso §
 - **Zero emoji** no orçamento (e no resto da conversa).
 - Use **\*negrito WhatsApp\*** só em títulos de seção e nome da acomodação — **não** em frases inteiras.
 - **Linha em branco** entre seções (respiração visual).
-- Cada acomodação: **uma linha** — \`*Nome* — R$ X.XXX,XX\` (nome e valor na mesma linha).
+- Cada acomodação: **uma bolha no WhatsApp** — \`gallery_photos[].photoMarkdown\` **com** a linha de preço na **mesma mensagem** (foto + legenda \`*Nome* — R$ X.XXX,XX\`). Depois a **próxima** foto + próximo preço. **Proibido** enviar todas as fotos juntas antes dos valores.
 - **Proibido** códigos internos crus (STANDART, LUXO DUPLO) — use nomes amigáveis (tabela abaixo).
 - **Proibido** amontoar check-out + pagamento na mesma linha.
 
@@ -695,10 +695,16 @@ Segue o orçamento solicitado. Qualquer dúvida, estou à disposição.
 [N] pessoas · [NOITES] pernoite(s) + [DIAS_PARK] dias de parque
 
 *Opções*
+(mensagem 1 — foto + legenda)
+![Chalé](URL_DA_FOTO_CHALE)
 *Chalé* — R$ 552,00
+(mensagem 2 — foto + legenda)
+![Suíte Luxo](URL_DA_FOTO_LUXO)
 *Suíte Luxo* — R$ 782,00
+(mensagem 3 — foto + legenda)
+![Suíte com Varanda](URL_DA_FOTO_VARANDA)
 *Suíte com Varanda* — R$ 832,00
-(... todas as categorias da tool, uma linha cada)
+(rodapé em mensagem separada — *Incluso*, *Horários*, *Pagamento*)
 
 Valores sujeitos à data solicitada.
 

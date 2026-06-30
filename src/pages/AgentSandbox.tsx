@@ -635,9 +635,31 @@ export default function AgentSandbox() {
 
             if (typeof parsed.repaired_assistant === "string" && parsed.repaired_assistant.trim()) {
               hasAssistantContent = true;
-              streamAccum = parsed.repaired_assistant;
-              applyAccumulatedWithSplit();
-              updateStreamingMessage();
+              const repaired = parsed.repaired_assistant as string;
+              streamAccum = "";
+              const segments = repaired
+                .split(MSG_SPLIT)
+                .map((s) => s.trim())
+                .filter(Boolean);
+              setMessages((prev) => {
+                let lastUserIdx = -1;
+                for (let i = prev.length - 1; i >= 0; i--) {
+                  if (prev[i].role === "user") {
+                    lastUserIdx = i;
+                    break;
+                  }
+                }
+                const base = lastUserIdx >= 0 ? prev.slice(0, lastUserIdx + 1) : prev;
+                const ts = new Date();
+                const assistantMsgs = segments.map((content) => ({
+                  role: "assistant" as const,
+                  content,
+                  timestamp: ts,
+                  debug: debugData,
+                  edgeLogs: edgeLogsData,
+                }));
+                return [...base, ...assistantMsgs];
+              });
               continue;
             }
 

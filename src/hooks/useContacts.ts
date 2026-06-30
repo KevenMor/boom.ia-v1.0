@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { callAPI } from "@/lib/api-client";
-import type { Contact, ContactType, ContactInvoice, ContactPackage, ContactSummary } from "@/types/database";
+import type { Contact, ContactType, ContactInvoice, ContactPackage, ContactSummary, ContactDocument, ContactContract } from "@/types/database";
 import type { CalendarEvent } from "@/types/calendar";
 
 interface ContactsListParams {
@@ -348,5 +348,114 @@ export function useUnlinkContactAppointment(contactId: string | null) {
       qc.invalidateQueries({ queryKey: ["crm-contacts", contactId, "appointments"] });
       qc.invalidateQueries({ queryKey: ["crm-contacts", contactId, "summary"] });
     },
+  });
+}
+
+// --- Documentos ---
+export function useContactDocuments(contactId: string | null) {
+  return useQuery({
+    queryKey: ["crm-contacts", contactId, "documents"],
+    queryFn: async () => {
+      const res = await callAPI<{ data: ContactDocument[] }>(
+        `/crm-contacts/${contactId}/documents`,
+        { method: "GET" }
+      );
+      return res.data;
+    },
+    enabled: !!contactId,
+  });
+}
+
+export function useCreateContactDocument(contactId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (item: {
+      name: string;
+      file_url: string;
+      category?: string;
+      file_type?: string | null;
+      file_size?: number | null;
+      notes?: string | null;
+    }) => {
+      return callAPI<ContactDocument>(`/crm-contacts/${contactId}/documents`, {
+        method: "POST",
+        body: item,
+      });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-contacts", contactId, "documents"] }),
+  });
+}
+
+export function useUpdateContactDocument(contactId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ documentId, ...updates }: Partial<ContactDocument> & { documentId: string }) => {
+      return callAPI<ContactDocument>(`/crm-contacts/${contactId}/documents/${documentId}`, {
+        method: "PATCH",
+        body: updates,
+      });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-contacts", contactId, "documents"] }),
+  });
+}
+
+export function useDeleteContactDocument(contactId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (documentId: string) => {
+      await callAPI(`/crm-contacts/${contactId}/documents/${documentId}`, { method: "DELETE" });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-contacts", contactId, "documents"] }),
+  });
+}
+
+// --- Contratos ---
+export function useContactContracts(contactId: string | null) {
+  return useQuery({
+    queryKey: ["crm-contacts", contactId, "contracts"],
+    queryFn: async () => {
+      const res = await callAPI<{ data: ContactContract[] }>(
+        `/crm-contacts/${contactId}/contracts`,
+        { method: "GET" }
+      );
+      return res.data;
+    },
+    enabled: !!contactId,
+  });
+}
+
+export function useCreateContactContract(contactId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (item: Partial<ContactContract>) => {
+      return callAPI<ContactContract>(`/crm-contacts/${contactId}/contracts`, {
+        method: "POST",
+        body: item,
+      });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-contacts", contactId, "contracts"] }),
+  });
+}
+
+export function useUpdateContactContract(contactId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ contractId, ...updates }: Partial<ContactContract> & { contractId: string }) => {
+      return callAPI<ContactContract>(`/crm-contacts/${contactId}/contracts/${contractId}`, {
+        method: "PATCH",
+        body: updates,
+      });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-contacts", contactId, "contracts"] }),
+  });
+}
+
+export function useDeleteContactContract(contactId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (contractId: string) => {
+      await callAPI(`/crm-contacts/${contactId}/contracts/${contractId}`, { method: "DELETE" });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-contacts", contactId, "contracts"] }),
   });
 }

@@ -90,4 +90,22 @@ describe("formatLodgingConsultaForLlm", () => {
     expect(standartIdx).toBeLessThan(luxoDuploIdx);
     expect(luxoDuploIdx).toBeLessThan(luxoVarandaIdx);
   });
+
+  it("inclui instruções de foto por acomodação quando gallery_photos está presente", () => {
+    const summary = formatLodgingConsultaForLlm({
+      ...SUNSET_THREE_OPTIONS,
+      gallery_photos: [
+        {
+          accommodationName: "STANDART",
+          displayLabel: "Chalé",
+          galleryName: "Chalé",
+          imageUrl: "https://cdn.example/chale.jpg",
+          photoMarkdown: "![Chalé](https://cdn.example/chale.jpg)",
+        },
+      ],
+    });
+    expect(summary).toMatch(/FOTOS NO ORÇAMENTO/i);
+    expect(summary).toContain("![Chalé](https://cdn.example/chale.jpg)");
+    expect(summary).toMatch(/foto.*linha/i);
+  });
 });
