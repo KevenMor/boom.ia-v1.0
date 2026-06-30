@@ -193,6 +193,60 @@ export default function AgentSandbox() {
   /** ID da conversa atual no servidor — atualizado assim que o SSE envia conversation_id (antes do [DONE]). */
   const conversationIdRef = useRef<string | null>(null);
   const hydratedAgentRef = useRef<string | null>(null);
+  const messagesRef = useRef<Msg[]>([]);
+  const chatAbortRef = useRef<AbortController | null>(null);
+  const persistDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
+
+  const persistSnapshot = useCallback(
+    (msgs: Msg[], convId: string | null) => {
+      if (!agentId || msgs.length === 0) return;
+      writeSandboxMemorySnapshot(agentId, {
+        conversationId: convId,
+        messages: serializeSandboxMessages(msgs),
+      });
+    },
+    [agentId]
+  );
+
+  const flushPersist = useCallback(() => {
+    if (persistDebounceRef.current) {
+      clearTimeout(persistDebounceRef.current);
+      persistDebounceRef.current = null;
+    }
+    persistSnapshot(messagesRef.current, conversationIdRef.current);
+  }, [persistSnapshot]);
+
+  const schedulePersist = useCallback(
+    (msgs: Msg[], convId: string | null, immediate = false) => {
+      if (!agentId || loadingHistory) return;
+      messagesRef.current = msgs;
+      if (immediate) {
+        if (persistDebounceRef.current) clearTimeout(persistDebounceRef.current);
+        persistSnapshot(msgs, convId);
+        return;
+      }
+      if (persistDebounceRef.current) clearTimeout(persistDebounceRef.current);
+      persistDebounceRef.current = setTimeout(() => persistSnapshot(msgs, convId), 400);
+    },
+    [agentId, loadingHistory, persistSnapshot]
+  );
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    const onPageHide = () => flushPersist();
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      mountedRef.current = false;
+      window.removeEventListener("pagehide", onPageHide);
+      chatAbortRef.current?.abort();
+      flushPersist();
+    };
+  }, [flushPersist]);
 
   useEffect(() => {
     const id = requestAnimationFrame(() => {
@@ -205,15 +259,15 @@ export default function AgentSandbox() {
     conversationIdRef.current = conversationId;
   }, [conversationId]);
 
-  /** Persiste snapshot após interação (não a cada token do SSE). */
+  /** Persiste em memória + sessionStorage (debounce no stream; imediato ao terminar). */
   useEffect(() => {
-    if (!agentId || loadingHistory || isLoading) return;
-    writeSandboxMemorySnapshot(agentId, {
-      conversationId,
-      messages: serializeSandboxMessages(messages),
-    });
+    schedulePersist(messages, conversationId, !isLoading);
+  }, [messages, conversationId, isLoading, schedulePersist]);
+
+  useEffect(() => {
+    if (!agentId || !conversationId) return;
     writeSandboxConversationId(agentId, conversationId);
-  }, [agentId, conversationId, messages, loadingHistory, isLoading]);
+  }, [agentId, conversationId]);
 
   const loadConversations = useCallback(async () => {
     if (!agentId) return;
@@ -292,7 +346,14 @@ export default function AgentSandbox() {
       setConversationId(convId);
       setShowHistory(false);
     } catch {
-      toast.error("Erro ao carregar conversa");
+      if (mountedRef.current) toast.error("Erro ao carregar conversa do servidor");
+      const cached = readSandboxMemorySnapshot(agentId);
+      if (cached?.messages.length) {
+        setMessages(deserializeSandboxMessages(cached.messages));
+        setConversationId(cached.conversationId);
+        conversationIdRef.current = cached.conversationId;
+        return;
+      }
       clearSandboxSession(agentId);
       conversationIdRef.current = null;
       setConversationId(null);
@@ -316,6 +377,10 @@ export default function AgentSandbox() {
       setMessages(deserializeSandboxMessages(cached.messages));
       setConversationId(cached.conversationId);
       conversationIdRef.current = cached.conversationId;
+      const lastRole = cached.messages[cached.messages.length - 1]?.role;
+      if (cached.conversationId && lastRole === "user") {
+        void loadConversation(cached.conversationId);
+      }
       return;
     }
 
@@ -435,6 +500,8 @@ export default function AgentSandbox() {
       userAttachments: userAttachmentsMeta.length > 0 ? userAttachmentsMeta : undefined,
     };
     setMessages((prev) => [...prev, userMsg]);
+    const convIdNow = conversationIdRef.current ?? conversationId;
+    schedulePersist([...messages, userMsg], convIdNow, true);
     setInput("");
     setAttachments([]);
     setIsLoading(true);
@@ -445,6 +512,7 @@ export default function AgentSandbox() {
     const allMessages = [...messages, userMsg];
 
     const controller = new AbortController();
+    chatAbortRef.current = controller;
     const timeoutId = setTimeout(() => controller.abort(), 90000);
 
     try {
@@ -543,8 +611,10 @@ export default function AgentSandbox() {
             const parsed = JSON.parse(jsonStr);
 
             if (parsed.conversation_id) {
-              conversationIdRef.current = parsed.conversation_id as string;
-              setConversationId(parsed.conversation_id as string);
+              const newConvId = parsed.conversation_id as string;
+              conversationIdRef.current = newConvId;
+              setConversationId(newConvId);
+              if (agentId) writeSandboxConversationId(agentId, newConvId);
               continue;
             }
 
@@ -578,7 +648,9 @@ export default function AgentSandbox() {
                 ...prev,
                 { role: "assistant", content: `⚠️ Erro: ${errMsg}`, timestamp: new Date() },
               ]);
-              toast.error("O agente retornou um erro. Verifique os logs.");
+              if (mountedRef.current) {
+                toast.error("O agente retornou um erro. Verifique os logs.");
+              }
               continue;
             }
 
@@ -677,7 +749,9 @@ export default function AgentSandbox() {
           ...prev,
           { role: "assistant", content: "⚠️ O servidor não retornou texto. Pode ter havido timeout ou falha no provedor de IA; tente novamente.", timestamp: new Date() },
         ]);
-        toast.error("Nenhuma resposta do agente. Verifique o console (F12) para detalhes.");
+        if (mountedRef.current) {
+          toast.error("Nenhuma resposta do agente. Verifique o console (F12) para detalhes.");
+        }
       }
 
       loadConversations();
@@ -691,18 +765,21 @@ export default function AgentSandbox() {
         (e?.name === "TypeError" && /fetch|network|aborted/i.test(String(e?.message || "")));
 
       if (isAbort) {
+        if (!mountedRef.current) return;
         setMessages((prev) => [
           ...prev,
           { role: "assistant", content: "⚠️ A resposta demorou muito e foi cancelada. Tente novamente ou simplifique a pergunta.", timestamp: new Date() },
         ]);
         toast.error("Tempo esgotado. Tente novamente.");
       } else if (isNetworkError) {
+        if (!mountedRef.current) return;
         setMessages((prev) => [
           ...prev,
           { role: "assistant", content: "⚠️ Conexão interrompida ou servidor indisponível. Verifique sua rede e se o servidor está rodando; tente enviar novamente.", timestamp: new Date() },
         ]);
         toast.error("Erro de conexão. Tente novamente.");
       } else {
+        if (!mountedRef.current) return;
         toast.error(e.message || "Erro ao enviar mensagem");
         if (!hasAssistantContent) {
           setMessages((prev) => prev.slice(0, -1));

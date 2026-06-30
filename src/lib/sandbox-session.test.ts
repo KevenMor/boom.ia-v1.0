@@ -37,6 +37,16 @@ describe("sandbox-session", () => {
     expect(readSandboxMemorySnapshot("agent-b")).toBeUndefined();
   });
 
+  it("grava snapshot completo em sessionStorage", () => {
+    writeSandboxMemorySnapshot("agent-a", {
+      conversationId: "conv-2",
+      messages: [{ role: "user", content: "teste" }],
+    });
+    expect(readSandboxConversationId("agent-a")).toBe("conv-2");
+    const raw = sessionStorage.getItem("sandbox_snapshot_agent-a");
+    expect(raw).toContain("teste");
+  });
+
   it("clearSandboxSession limpa memória e sessionStorage", () => {
     writeSandboxConversationId("agent-a", "conv-1");
     writeSandboxMemorySnapshot("agent-a", {
@@ -46,5 +56,6 @@ describe("sandbox-session", () => {
     clearSandboxSession("agent-a");
     expect(readSandboxConversationId("agent-a")).toBeNull();
     expect(readSandboxMemorySnapshot("agent-a")).toBeUndefined();
+    expect(sessionStorage.getItem("sandbox_snapshot_agent-a")).toBeNull();
   });
 });
