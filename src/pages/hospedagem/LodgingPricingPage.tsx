@@ -3,6 +3,7 @@ import { CircleDollarSign, Plus, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HospedagemSubNav } from "@/components/hospedagem/HospedagemSubNav";
 import { useHospedagemTenantScope } from "@/hooks/useHospedagemTenantScope";
+import { useEmbedHospedagemOptional } from "@/contexts/EmbedHospedagemContext";
 import { cn } from "@/lib/utils";
 import {
   useLodgingAccommodationTypes,
@@ -36,6 +37,7 @@ const stitchCard =
 
 export default function LodgingPricingPage() {
   const { selectedTenantId, scopedTenantDisplayName, canManage } = useHospedagemTenantScope();
+  const isEmbed = Boolean(useEmbedHospedagemOptional()?.ready);
 
   const { data: typesQ } = useLodgingAccommodationTypes(selectedTenantId ?? undefined);
   const { data: ratesQ, isLoading: ratesLoading } = useLodgingRates(selectedTenantId ?? undefined);
@@ -150,8 +152,10 @@ export default function LodgingPricingPage() {
     <div className="-mx-4 flex min-h-[calc(100dvh-6rem)] flex-1 flex-col bg-slate-50 dark:bg-background md:-mx-6">
       <div className={cn(col, "pb-12 pt-6 md:pt-8")}>
         <header className="mb-2">
-          <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">Gestão de reservas</p>
-          <div className="mt-2">
+          {!isEmbed ? (
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">Gestão de reservas</p>
+          ) : null}
+          <div className={!isEmbed ? "mt-2" : undefined}>
             <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-foreground sm:text-3xl">
               Valores e tarifas
             </h1>
@@ -160,13 +164,13 @@ export default function LodgingPricingPage() {
               <strong className="font-medium text-foreground/90">número de pessoas</strong> e{" "}
               <strong className="font-medium text-foreground/90">diárias</strong>. Edite, adicione e remova valores conforme necessário.
             </p>
-            {scopedTenantDisplayName ? (
+            {!isEmbed && scopedTenantDisplayName ? (
               <p className="mt-2 text-[13px] text-muted-foreground">
                 Tenant: <span className="font-medium text-foreground/80">{scopedTenantDisplayName}</span>
               </p>
             ) : null}
           </div>
-          <HospedagemSubNav />
+          {!isEmbed ? <HospedagemSubNav /> : null}
         </header>
 
         {!selectedTenantId ? (

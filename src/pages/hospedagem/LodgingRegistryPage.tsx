@@ -3,6 +3,7 @@ import { BedDouble, ChevronDown, Loader2, Package, Plus, Trash2 } from "lucide-r
 import { Button } from "@/components/ui/button";
 import { HospedagemSubNav } from "@/components/hospedagem/HospedagemSubNav";
 import { useHospedagemTenantScope } from "@/hooks/useHospedagemTenantScope";
+import { useEmbedHospedagemOptional } from "@/contexts/EmbedHospedagemContext";
 import { cn } from "@/lib/utils";
 import {
   useCreateAccommodationType,
@@ -63,6 +64,7 @@ function resStatusLabel(s: string): string {
 
 export default function LodgingRegistryPage() {
   const { selectedTenantId, scopedTenantDisplayName, canManage } = useHospedagemTenantScope();
+  const isEmbed = Boolean(useEmbedHospedagemOptional()?.ready);
 
   const { data: typesQ } = useLodgingAccommodationTypes(selectedTenantId ?? undefined);
   const { data: unitsQ } = useLodgingUnits(selectedTenantId ?? undefined);
@@ -238,21 +240,23 @@ export default function LodgingRegistryPage() {
     <div className="-mx-4 flex min-h-[calc(100dvh-6rem)] flex-1 flex-col bg-slate-50 dark:bg-background md:-mx-6">
       <div className={cn(col, "pb-12 pt-6 md:pt-8")}>
         <header className="mb-2">
-          <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">Gestão de reservas</p>
-          <div className="mt-2">
+          {!isEmbed ? (
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">Gestão de reservas</p>
+          ) : null}
+          <div className={!isEmbed ? "mt-2" : undefined}>
             <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-foreground sm:text-3xl">
               Estoque de quartos no parque
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-muted-foreground">
               Aqui registra <strong className="font-medium text-foreground/90">o que existe fisicamente</strong>: tipo de hospedagem (categoria) e cada quarto/unidade disponível ou desativado. Serve como inventário para a equipe e base para ferramentas de disponibilidade. Marcar reservas e períodos ocupados é um passo opcional no fim da página quando precisarem bloquear datas.
             </p>
-            {scopedTenantDisplayName ? (
+            {!isEmbed && scopedTenantDisplayName ? (
               <p className="mt-2 text-[13px] text-muted-foreground">
                 Tenant: <span className="font-medium text-foreground/80">{scopedTenantDisplayName}</span>
               </p>
             ) : null}
           </div>
-          <HospedagemSubNav />
+          {!isEmbed ? <HospedagemSubNav /> : null}
         </header>
 
         {!selectedTenantId ? (

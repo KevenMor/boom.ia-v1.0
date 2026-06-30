@@ -8,7 +8,7 @@ const TAB_DEFS = [
   { segment: "valores", label: "Valores" },
 ] as const;
 
-export function HospedagemSubNav() {
+export function HospedagemSubNav({ className }: { className?: string }) {
   const { pathname } = useLocation();
   const embed = useEmbedHospedagemOptional();
   const base = embed?.basePath ?? "/hospedagem";
@@ -16,7 +16,11 @@ export function HospedagemSubNav() {
 
   return (
     <nav
-      className="-mx-px mt-6 flex gap-6 overflow-x-auto border-b border-slate-200 dark:border-border [-ms-overflow-style:none] [scrollbar-width:none] sm:gap-8 md:gap-10 [&::-webkit-scrollbar]:hidden"
+      className={cn(
+        "-mx-px flex gap-6 overflow-x-auto border-b border-slate-200 dark:border-border [-ms-overflow-style:none] [scrollbar-width:none] sm:gap-8 md:gap-10 [&::-webkit-scrollbar]:hidden",
+        embed?.ready ? "mt-3" : "mt-6",
+        className,
+      )}
       aria-label="Seções de gestão de reservas"
     >
       {tabs.map((t) => {

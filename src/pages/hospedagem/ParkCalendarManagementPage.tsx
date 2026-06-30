@@ -14,6 +14,7 @@ import { CalendarRange, ChevronLeft, ChevronRight, Loader2, Paintbrush, Plus, Sa
 import { Button } from "@/components/ui/button";
 import { HospedagemSubNav } from "@/components/hospedagem/HospedagemSubNav";
 import { useHospedagemTenantScope } from "@/hooks/useHospedagemTenantScope";
+import { useEmbedHospedagemOptional } from "@/contexts/EmbedHospedagemContext";
 import { cn } from "@/lib/utils";
 import {
   useBulkUpsertParkDays,
@@ -87,6 +88,7 @@ function iso(d: Date) {
 
 export default function ParkCalendarManagementPage() {
   const { selectedTenantId, scopedTenantDisplayName, canEdit } = useHospedagemTenantScope();
+  const isEmbed = Boolean(useEmbedHospedagemOptional()?.ready);
 
   const [view, setView] = useState(() => startOfMonth(new Date()));
   const year = view.getFullYear();
@@ -284,20 +286,22 @@ export default function ParkCalendarManagementPage() {
     <div className="-mx-4 flex min-h-[calc(100dvh-6rem)] flex-1 flex-col bg-slate-50 dark:bg-background md:-mx-6">
       <div className={cn(col, "pb-12 pt-6 md:pt-8")}>
         <header className="mb-2">
-          <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">Gestão de reservas</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900 dark:text-foreground sm:text-3xl">
+          {!isEmbed ? (
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">Gestão de reservas</p>
+          ) : null}
+          <h1 className={cn("text-2xl font-semibold tracking-tight text-slate-900 dark:text-foreground sm:text-3xl", !isEmbed && "mt-2")}>
             Calendário do parque
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-muted-foreground">
             Marque se o parque está aberto, fechado ou em manutenção, a etiqueta comercial do dia e, opcionalmente, o texto de valor
             de ingresso por data para o cliente e para o agente de IA quando integrado ao calendário.
-            {scopedTenantDisplayName ? (
+            {!isEmbed && scopedTenantDisplayName ? (
               <span className="block pt-2 text-[13px] text-muted-foreground">
                 Tenant: <span className="font-medium text-foreground/80">{scopedTenantDisplayName}</span>
               </span>
             ) : null}
           </p>
-          <HospedagemSubNav />
+          {!isEmbed ? <HospedagemSubNav /> : null}
         </header>
 
         {!selectedTenantId ? (

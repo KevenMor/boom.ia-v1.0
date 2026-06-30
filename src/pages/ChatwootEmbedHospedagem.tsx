@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, AlertCircle, Building2 } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { parseEmbedCredentialsFromLocation, parseEmbedInitMessage, persistEmbedCredentials } from "@/lib/embed-credentials";
 import { bootstrapEmbedHospedagem } from "@/lib/embed-hospedagem-api";
 import { setActiveEmbedHospedagem } from "@/lib/api-client";
 import { EmbedHospedagemProvider } from "@/contexts/EmbedHospedagemContext";
+import { HospedagemSubNav } from "@/components/hospedagem/HospedagemSubNav";
 import ParkCalendarManagementPage from "@/pages/hospedagem/ParkCalendarManagementPage";
 import LodgingRegistryPage from "@/pages/hospedagem/LodgingRegistryPage";
 import LodgingPricingPage from "@/pages/hospedagem/LodgingPricingPage";
 
-const EMBED_VERSION = "v1";
 const BASE_PATH = "/embed/chatwoot/hospedagem";
 
 export default function ChatwootEmbedHospedagem() {
@@ -130,18 +130,18 @@ export default function ChatwootEmbedHospedagem() {
 
   return (
     <EmbedHospedagemProvider value={embedValue}>
-      <div className="min-h-[100dvh] bg-background font-sans text-foreground">
-        <header className="border-b border-border bg-card px-4 py-3 sm:px-6">
-          <div className="mx-auto flex max-w-[1280px] items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-muted">
-              <Building2 className="h-4 w-4 text-primary" />
-            </span>
-            <div>
-              <h1 className="text-base font-semibold">{tenantName} — Reservas</h1>
-              <p className="text-xs text-muted-foreground">
-                Conta Chatwoot {accountId} · embed {EMBED_VERSION}
+      <div className="ds-chatwoot min-h-[100dvh] bg-slate-50 font-sans text-foreground dark:bg-background">
+        <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur dark:border-border dark:bg-background/95">
+          <div className="mx-auto w-full max-w-[1280px] px-5 sm:px-6 lg:px-8">
+            <div className="pt-4 pb-1">
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-muted-foreground">
+                {tenantName}
               </p>
+              <h1 className="mt-1 text-xl font-semibold tracking-tight text-slate-900 dark:text-foreground sm:text-2xl">
+                Reservas
+              </h1>
             </div>
+            <HospedagemSubNav />
           </div>
         </header>
 
