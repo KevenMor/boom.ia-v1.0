@@ -82,9 +82,7 @@ export function renderChatwootCrmEmbedViewHtml(
         <div class="cw-title"><h1 id="c-name">—</h1><p id="c-phone">—</p><span class="cw-badge">Cliente CRM</span></div>
       </header>
       <nav class="cw-tabs" id="tabs">
-        <button type="button" class="cw-tab active" data-tab="overview">Visão geral</button>
-        <button type="button" class="cw-tab" data-tab="edit">Cadastro</button>
-        <button type="button" class="cw-tab" data-tab="history">Conversas</button>
+        <button type="button" class="cw-tab active" data-tab="edit">Cadastro</button>
         <button type="button" class="cw-tab" data-tab="invoices">Faturas</button>
         <button type="button" class="cw-tab" data-tab="packages">Pacotes</button>
         <button type="button" class="cw-tab" data-tab="contracts">Contratos</button>
@@ -92,8 +90,7 @@ export function renderChatwootCrmEmbedViewHtml(
         <button type="button" class="cw-tab" data-tab="agenda">Agenda</button>
       </nav>
       <main class="cw-body" id="tab-body">
-        <section id="tab-overview"><div class="cw-grid" id="metrics"></div><p id="c-notes-preview" style="margin-top:14px;color:var(--text-muted);font-size:13px;"></p></section>
-        <section id="tab-edit" class="cw-hidden"><form id="edit-form">
+        <section id="tab-edit"><form id="edit-form">
           <div class="cw-field"><label>Nome</label><input id="f-name"/></div>
           <div class="cw-field"><label>E-mail</label><input id="f-email" type="email"/></div>
           <div class="cw-field"><label>Telefone</label><input id="f-phone"/></div>
@@ -105,7 +102,6 @@ export function renderChatwootCrmEmbedViewHtml(
           <button type="submit" class="cw-btn" id="save-btn">Salvar cadastro</button>
           <div id="save-ok" class="cw-msg-ok"></div><div id="save-err" class="cw-msg-err"></div>
         </form></section>
-        <section id="tab-history" class="cw-hidden"><div id="history-full"></div></section>
         <section id="tab-invoices" class="cw-hidden"><div id="panel-invoices"></div></section>
         <section id="tab-packages" class="cw-hidden"><div id="panel-packages"></div></section>
         <section id="tab-contracts" class="cw-hidden"><div id="panel-contracts"></div></section>
@@ -117,8 +113,8 @@ export function renderChatwootCrmEmbedViewHtml(
   <script>
 (function(){
   var API_BASE=${safeApi}, KEY=${safeKey}, ACCOUNT_ID=${safeAccountId}, CONTACT_ID=${safeContactId}, THEME=${safeTheme};
-  var STATE={contact:null,summary:null,calendars:[],editing:{}};
-  var TAB_IDS=["overview","edit","history","invoices","packages","contracts","documents","agenda"];
+  var STATE={contact:null,calendars:[],editing:{}};
+  var TAB_IDS=["edit","invoices","packages","contracts","documents","agenda"];
 
   function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
   function money(n){return "R$ "+Number(n||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -134,29 +130,12 @@ export function renderChatwootCrmEmbedViewHtml(
 
   function showError(msg){document.getElementById("loading-wrap").classList.add("cw-hidden");document.getElementById("app-wrap").classList.add("cw-hidden");var el=document.getElementById("error-wrap");el.classList.remove("cw-hidden");el.innerHTML='<div class="cw-alert">'+esc(msg)+"</div>";}
   function initials(n){return String(n||"?").trim().split(/\\s+/).slice(0,2).map(function(p){return p[0]||"";}).join("").toUpperCase();}
-  function refreshSummary(){return api(base("/summary")).then(function(res){if(res.ok)STATE.summary=res.j;fillOverview();});}
-
-  function renderChat(target,data){
-    var msgs=(data&&data.messages)||[];
-    if(!msgs.length){target.innerHTML='<div class="cw-empty">Nenhuma mensagem no histórico deste telefone.</div>';return;}
-    target.innerHTML=msgs.map(function(m){
-      var out=m.role==="assistant"||m.role==="agent";
-      var text=String(m.content||"").replace(/^\\[Atendente:[^\\]]*\\]\\s*/,"").trim();
-      if(!text)return "";
-      return '<div class="cw-bubble '+(out?"out":"in")+'">'+esc(text)+'<time>'+esc(fmtDate(m.created_at))+'</time></div>';
-    }).filter(Boolean).join("");
-  }
 
   function fillHeader(){
     var c=STATE.contact,w=document.getElementById("avatar-wrap");
     w.innerHTML=c.avatar_url?'<img class="cw-avatar" src="'+esc(c.avatar_url)+'" alt=""/>':'<div class="cw-avatar-fallback">'+esc(initials(c.name))+"</div>";
     document.getElementById("c-name").textContent=c.name||"Sem nome";
     document.getElementById("c-phone").textContent=c.phone?("+"+String(c.phone).replace(/^\\+/,"")):"Sem telefone";
-  }
-  function fillOverview(){
-    var s=STATE.summary||{};
-    document.getElementById("metrics").innerHTML=[["Faturado",money(s.total_invoiced)],["Pago",money(s.total_paid)],["Em atraso",money(s.total_overdue)],["Faturas",String(s.invoice_count||0)],["Pacotes ativos",String(s.active_packages||0)],["Próximos agend.",String(s.upcoming_appointments||0)]].map(function(r){return '<div class="cw-metric"><span>'+esc(r[0])+'</span><strong>'+esc(r[1])+"</strong></div>";}).join("");
-    document.getElementById("c-notes-preview").textContent=(STATE.contact.notes||"").trim()||"Sem observações cadastradas.";
   }
   function fillForm(){
     var c=STATE.contact;
@@ -206,11 +185,11 @@ export function renderChatwootCrmEmbedViewHtml(
           ev.preventDefault();
           var body={description:val("inv-desc")||null,amount:Number(val("inv-amount")),due_date:val("inv-due"),status:val("inv-status")||"pending"};
           var p=ed?api(base("/invoices/"+ed.id),{method:"PATCH",body:JSON.stringify(body)}):api(base("/invoices"),{method:"POST",body:JSON.stringify(body)});
-          p.then(function(r){if(!r.ok){root.querySelector("#inv-msg").textContent=r.j.error||"Erro";return;}STATE.editing.invoices=null;refreshSummary();renderInvoices();});
+          p.then(function(r){if(!r.ok){root.querySelector("#inv-msg").textContent=r.j.error||"Erro";return;}STATE.editing.invoices=null;renderInvoices();});
         });
         var cancel=root.querySelector("#inv-cancel");if(cancel)cancel.addEventListener("click",function(){STATE.editing.invoices=null;renderInvoices();});
         root.querySelectorAll("[data-edit-inv]").forEach(function(btn){btn.addEventListener("click",function(){var id=btn.getAttribute("data-edit-inv");STATE.editing.invoices=rows.find(function(x){return x.id===id;})||null;renderInvoices();});});
-        root.querySelectorAll("[data-del-inv]").forEach(function(btn){btn.addEventListener("click",function(){if(!confirm("Excluir esta fatura?"))return;api(base("/invoices/"+btn.getAttribute("data-del-inv")),{method:"DELETE"}).then(function(){refreshSummary();renderInvoices();});});});
+        root.querySelectorAll("[data-del-inv]").forEach(function(btn){btn.addEventListener("click",function(){if(!confirm("Excluir esta fatura?"))return;api(base("/invoices/"+btn.getAttribute("data-del-inv")),{method:"DELETE"}).then(function(){renderInvoices();});});});
       });
     });
   }
@@ -239,11 +218,11 @@ export function renderChatwootCrmEmbedViewHtml(
           ev.preventDefault();
           var body={name:val("pkg-name"),description:val("pkg-desc")||null,status:val("pkg-status")||"active",price:val("pkg-price")?Number(val("pkg-price")):null,sessions_total:val("pkg-sessions")?Number(val("pkg-sessions")):null,start_date:val("pkg-start")||null,end_date:val("pkg-end")||null};
           var p=ed?api(base("/packages/"+ed.id),{method:"PATCH",body:JSON.stringify(body)}):api(base("/packages"),{method:"POST",body:JSON.stringify(body)});
-          p.then(function(r){if(!r.ok)return;STATE.editing.packages=null;refreshSummary();renderPackages();});
+          p.then(function(r){if(!r.ok)return;STATE.editing.packages=null;renderPackages();});
         });
         var c=root.querySelector("#pkg-cancel");if(c)c.addEventListener("click",function(){STATE.editing.packages=null;renderPackages();});
         root.querySelectorAll("[data-edit-pkg]").forEach(function(btn){btn.addEventListener("click",function(){STATE.editing.packages=rows.find(function(x){return x.id===btn.getAttribute("data-edit-pkg");})||null;renderPackages();});});
-        root.querySelectorAll("[data-del-pkg]").forEach(function(btn){btn.addEventListener("click",function(){if(!confirm("Excluir pacote?"))return;api(base("/packages/"+btn.getAttribute("data-del-pkg")),{method:"DELETE"}).then(function(){refreshSummary();renderPackages();});});});
+        root.querySelectorAll("[data-del-pkg]").forEach(function(btn){btn.addEventListener("click",function(){if(!confirm("Excluir pacote?"))return;api(base("/packages/"+btn.getAttribute("data-del-pkg")),{method:"DELETE"}).then(function(){renderPackages();});});});
       });
     });
   }
@@ -345,15 +324,14 @@ export function renderChatwootCrmEmbedViewHtml(
           var cal=val("ag-cal"),start=val("ag-start"),end=val("ag-end"),msg=root.querySelector("#ag-msg");
           if(!cal||!start){msg.textContent="Calendário e início são obrigatórios";return;}
           var body={title:val("ag-title")||"Agendamento",description:val("ag-desc")||null,calendar_id:cal,start_at:new Date(start).toISOString(),end_at:end?new Date(end).toISOString():new Date(new Date(start).getTime()+3600000).toISOString()};
-          api(base("/appointments"),{method:"POST",body:JSON.stringify(body)}).then(function(r){if(!r.ok){msg.textContent=r.j.error||"Erro";return;}refreshSummary();renderAgenda();});
+          api(base("/appointments"),{method:"POST",body:JSON.stringify(body)}).then(function(r){if(!r.ok){msg.textContent=r.j.error||"Erro";return;}renderAgenda();});
         });
-        root.querySelectorAll("[data-del-ag]").forEach(function(btn){btn.addEventListener("click",function(){if(!confirm("Remover vínculo deste agendamento?"))return;api(base("/appointments/"+btn.getAttribute("data-del-ag")),{method:"DELETE"}).then(function(){refreshSummary();renderAgenda();});});});
+        root.querySelectorAll("[data-del-ag]").forEach(function(btn){btn.addEventListener("click",function(){if(!confirm("Remover vínculo deste agendamento?"))return;api(base("/appointments/"+btn.getAttribute("data-del-ag")),{method:"DELETE"}).then(function(){renderAgenda();});});});
       });
     });
   }
 
   function loadTab(tab){
-    if(tab==="history")return api(base("/conversation-preview")).then(function(res){renderChat(document.getElementById("history-full"),res.ok?res.j:{messages:[]});});
     if(tab==="invoices")return renderInvoices();
     if(tab==="packages")return renderPackages();
     if(tab==="contracts")return renderContracts();
@@ -378,7 +356,7 @@ export function renderChatwootCrmEmbedViewHtml(
       api(base(""),{method:"PATCH",body:JSON.stringify(body)}).then(function(res){
         btn.disabled=false;
         if(!res.ok){err.textContent=res.j.error||"Erro ao salvar";return;}
-        STATE.contact=res.j;fillHeader();fillOverview();fillForm();ok.textContent="Salvo com sucesso";setTimeout(function(){ok.textContent="";},2500);
+        STATE.contact=res.j;fillHeader();fillForm();ok.textContent="Salvo com sucesso";setTimeout(function(){ok.textContent="";},2500);
       }).catch(function(e){btn.disabled=false;err.textContent=e.message||"Erro de rede";});
     });
   }
@@ -387,14 +365,14 @@ export function renderChatwootCrmEmbedViewHtml(
     document.getElementById("loading-wrap").classList.add("cw-hidden");
     document.getElementById("error-wrap").classList.add("cw-hidden");
     var app=document.getElementById("app-wrap");app.classList.remove("cw-hidden");app.style.display="flex";
-    fillHeader();fillOverview();fillForm();bindTabs();bindSave();
+    fillHeader();fillForm();bindTabs();bindSave();
   }
 
   function load(){
     if(!KEY||!ACCOUNT_ID||!CONTACT_ID){showError("Parâmetros key, account_id ou contact_id ausentes.");return;}
-    Promise.all([api(base("")),api(base("/summary"))]).then(function(r){
-      if(!r[0].ok){showError(r[0].j.error||"Contato não encontrado");return;}
-      STATE.contact=r[0].j;STATE.summary=r[1].ok?r[1].j:{};showApp();
+    api(base("")).then(function(r){
+      if(!r.ok){showError(r.j.error||"Contato não encontrado");return;}
+      STATE.contact=r.j;showApp();
     }).catch(function(e){showError(e.message||"Falha ao carregar CRM");});
   }
   load();
