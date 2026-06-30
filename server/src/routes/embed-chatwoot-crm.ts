@@ -39,7 +39,7 @@ export async function embedChatwootCrmRoutes(fastify: FastifyInstance) {
     "/embed/chatwoot/crm/view",
     async (
       req: FastifyRequest<{
-        Querystring: { account_id?: string; contact_id?: string; key?: string; theme?: string; native?: string };
+        Querystring: { account_id?: string; contact_id?: string; key?: string; theme?: string; native?: string; modal?: string };
       }>,
       reply: FastifyReply,
     ) => {
