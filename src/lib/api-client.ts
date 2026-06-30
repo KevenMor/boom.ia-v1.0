@@ -1,4 +1,15 @@
 import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
+import { embedCrmFetch, type EmbedCrmCredentials } from "@/lib/embed-crm-api";
+
+let activeEmbedCrm: EmbedCrmCredentials | null = null;
+
+export function setActiveEmbedCrm(creds: EmbedCrmCredentials | null): void {
+  activeEmbedCrm = creds;
+}
+
+export function getActiveEmbedCrm(): EmbedCrmCredentials | null {
+  return activeEmbedCrm;
+}
 
 // Em dev (localhost) usa /api relativo (proxy do Vite); em produção usa origem atual.
 const isLocalhost =
@@ -18,6 +29,10 @@ export async function callAPI<T = unknown>(
   endpoint: string,
   options: { method?: string; body?: unknown; headers?: Record<string, string> } = {}
 ): Promise<T> {
+  if (activeEmbedCrm && endpoint.startsWith("/crm-contacts")) {
+    return embedCrmFetch<T>(endpoint, activeEmbedCrm, options);
+  }
+
   const { method = "POST", body, headers = {} } = options;
   const url = endpoint.startsWith("http") ? endpoint : `${getApiBase()}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
   const resolvedHeaders: Record<string, string> = {

@@ -62,6 +62,7 @@ interface IdentityHeaderProps {
   isLoading: boolean;
   listPath: string;
   listLabel: string;
+  hideBackLink?: boolean;
   onAvatarUploaded: (url: string | null) => Promise<void>;
   getInitials: (name: string) => string;
 }
@@ -71,6 +72,7 @@ export function ProfileIdentityHeader({
   isLoading,
   listPath,
   listLabel,
+  hideBackLink,
   onAvatarUploaded,
   getInitials,
 }: IdentityHeaderProps) {
@@ -125,12 +127,14 @@ export function ProfileIdentityHeader({
             ) : null}
           </div>
         </div>
+        {!hideBackLink && (
         <Button variant="outline" size="sm" className="shrink-0 self-start sm:self-center" asChild>
           <Link to={listPath}>
             <ArrowLeft className="h-3.5 w-3.5 mr-1.5 opacity-70" />
             {listLabel}
           </Link>
         </Button>
+        )}
       </div>
     </div>
   );

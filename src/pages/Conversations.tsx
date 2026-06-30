@@ -56,6 +56,7 @@ import { useContacts, useCreateContact, useUpdateContact } from "@/hooks/useCont
 import { useNavigate } from "react-router-dom";
 import { format, isToday, isYesterday } from "date-fns";
 import { cn, relationName } from "@/lib/utils";
+import { normalizeBrazilPhoneDigits, crmPhoneMatchesConversation } from "@/lib/crm-phone-match";
 import { dedupeAndSortConversationMessages, shouldShowChatMessage } from "@/lib/chatMessageDisplay";
 
 const AVATAR_COLORS = ["#019FA2", "#0d9488", "#0ea5e9", "#64748b", "#14b8a6", "#475569"];
@@ -159,20 +160,6 @@ function extractEmailFromExternalUserId(ext: string | null | undefined): string 
     }
   }
   return null;
-}
-
-/** Alinha com a normalização usada em crm-contacts (conversation-preview). */
-function normalizeBrazilPhoneDigits(digits: string): string {
-  const d = digits.replace(/\D/g, "");
-  if (d.length < 10) return d;
-  return d.startsWith("55") && d.length >= 12 ? d : `55${d}`;
-}
-
-function crmPhoneMatchesConversation(convDigits: string | null, contactPhone: string | null): boolean {
-  if (!convDigits || convDigits.length < 10) return false;
-  const a = normalizeBrazilPhoneDigits(convDigits);
-  const b = normalizeBrazilPhoneDigits((contactPhone ?? "").replace(/\D/g, ""));
-  return a.length >= 12 && b.length >= 12 && a === b;
 }
 
 function ConversationContactPanel(props: {

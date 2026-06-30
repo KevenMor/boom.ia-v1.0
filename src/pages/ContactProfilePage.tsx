@@ -76,6 +76,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useMemo, useState } from "react";
 import type { Contact, ContactClientMetadata } from "@/types/database";
+import { useEmbedCrm } from "@/contexts/EmbedCrmContext";
 
 const editSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
@@ -163,6 +164,8 @@ export default function ContactProfilePage() {
   const { contactId } = useParams<{ contactId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const embedCrm = useEmbedCrm();
+  const isEmbed = Boolean(embedCrm?.isEmbed);
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromUrl = searchParams.get("tab");
   const activeTab: ProfileTab = isProfileTab(tabFromUrl) ? tabFromUrl : "about";
@@ -281,36 +284,39 @@ export default function ContactProfilePage() {
     }
   };
 
-  const isClientRoute = location.pathname.startsWith("/clients/");
-  const isClient = contact?.contact_type === "client";
+  const isClientRoute = isEmbed || location.pathname.startsWith("/clients/");
+  const isClient = contact?.contact_type === "client" || isEmbed;
   const listPath = isClient ? "/clients" : "/contacts";
   const listLabel = isClient ? "Clientes" : "Leads";
 
-  // Rota /clients/:id é exclusiva para clientes — lead acessando redireciona
+  // Rota /clients/:id é exclusiva para clientes — lead acessando redireciona (exceto embed)
   useEffect(() => {
+    if (isEmbed) return;
     if (!isLoading && contact && isClientRoute && !isClient) {
       navigate(`/contacts/${contactId}`, { replace: true });
     }
-  }, [isLoading, contact, isClientRoute, isClient, contactId, navigate]);
+  }, [isLoading, contact, isClientRoute, isClient, contactId, navigate, isEmbed]);
 
   if (!contactId) {
-    navigate(listPath);
+    if (!isEmbed) navigate(listPath);
     return null;
   }
 
   if (error || (!isLoading && !contact)) {
     return (
-      <div className="min-h-[calc(100vh-4rem)] w-full bg-muted/30 flex items-center justify-center">
+      <div className={`${isEmbed ? "min-h-[100dvh]" : "min-h-[calc(100vh-4rem)]"} w-full bg-muted/30 flex items-center justify-center`}>
         <Card className="max-w-md w-full mx-4">
           <CardContent className="pt-6">
             <p className="text-center text-muted-foreground">
               {error ? `Erro: ${(error as Error).message}` : "Contato não encontrado."}
             </p>
-            <Button variant="outline" className="w-full mt-4" asChild>
-              <Link to={isClientRoute ? "/clients" : "/contacts"}>
-                Voltar
-              </Link>
-            </Button>
+            {!isEmbed && (
+              <Button variant="outline" className="w-full mt-4" asChild>
+                <Link to={isClientRoute ? "/clients" : "/contacts"}>
+                  Voltar
+                </Link>
+              </Button>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -318,8 +324,9 @@ export default function ContactProfilePage() {
   }
 
   return (
-    <div className="ds-chatwoot font-cw min-h-[calc(100vh-4rem)] w-full bg-[hsl(var(--cw-surface,0_0%_98%))] dark:bg-background">
-      <div className="w-full max-w-[1200px] mx-auto px-4 py-6 sm:px-6 lg:px-8 space-y-5">
+    <div className={`ds-chatwoot font-cw ${isEmbed ? "min-h-[100dvh]" : "min-h-[calc(100vh-4rem)]"} w-full bg-[hsl(var(--cw-surface,0_0%_98%))] dark:bg-background`}>
+      <div className={`w-full max-w-[1200px] mx-auto px-4 py-6 sm:px-6 lg:px-8 space-y-5`}>
+        {!isEmbed && (
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>
@@ -339,9 +346,10 @@ export default function ContactProfilePage() {
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
+        )}
 
         {/* Lead view — perfil completo só para clientes */}
-        {!isClient && contact && (
+        {!isClient && !isEmbed && contact && (
             <Card className="border border-border rounded-2xl overflow-hidden shadow-none max-w-2xl">
               <CardContent className="p-6">
                 <div className="flex flex-col sm:flex-row gap-6 items-start">
@@ -406,6 +414,7 @@ export default function ContactProfilePage() {
               isLoading={isLoading}
               listPath={listPath}
               listLabel={listLabel}
+              hideBackLink={isEmbed}
               getInitials={getInitials}
               onAvatarUploaded={async (url) => {
                 await updateContact.mutateAsync({ id: contact.id, avatar_url: url });

@@ -1,0 +1,374 @@
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { createNexusClient } from "../services/supabase.js";
+import {
+  assertContactBelongsToTenant,
+  getContactSummary,
+  resolveTenantFromChatwootAccount,
+} from "../services/chatwoot-crm-embed.js";
+import { applyEmbedHeaders, assertEmbedKey } from "./embed-auth.js";
+
+type InvoiceStatus = "pending" | "paid" | "overdue" | "cancelled";
+
+async function embedContactContext(
+  accountId: string,
+  contactId: string,
+): Promise<{ tenantId: string }> {
+  const supabase = createNexusClient();
+  const resolved = await resolveTenantFromChatwootAccount(supabase, accountId);
+  if (!resolved) throw Object.assign(new Error("Conta Chatwoot não vinculada"), { status: 404 });
+  await assertContactBelongsToTenant(supabase, contactId, resolved.tenantId);
+  return { tenantId: resolved.tenantId };
+}
+
+function parseSubPath(wildcard: string | undefined): { resource: string; resourceId?: string } {
+  const parts = (wildcard ?? "").split("/").filter(Boolean);
+  return { resource: parts[0] ?? "", resourceId: parts[1] };
+}
+
+function sendErr(reply: FastifyReply, e: unknown) {
+  const msg = e instanceof Error ? e.message : String(e);
+  const status = (e as { status?: number }).status ?? (msg.includes("não encontrado") ? 404 : 500);
+  return reply.status(status).send({ error: msg });
+}
+
+export async function embedChatwootCrmResourceRoutes(fastify: FastifyInstance) {
+  fastify.route({
+    method: ["GET", "POST", "PATCH", "DELETE"],
+    url: "/embed/chatwoot/crm/contacts/:contactId/*",
+    handler: async (
+      req: FastifyRequest<{
+        Params: { contactId: string; "*"?: string };
+        Querystring: { account_id?: string; key?: string; upcoming?: string };
+        Body: Record<string, unknown>;
+      }>,
+      reply: FastifyReply,
+    ) => {
+      applyEmbedHeaders(reply);
+      if (!assertEmbedKey(req, reply)) return;
+
+      const accountId = req.query.account_id?.trim();
+      if (!accountId) return reply.status(400).send({ error: "account_id é obrigatório" });
+
+      const contactId = req.params.contactId;
+      const { resource, resourceId } = parseSubPath(req.params["*"]);
+      const method = req.method;
+      const supabase = createNexusClient();
+
+      try {
+        const { tenantId } = await embedContactContext(accountId, contactId);
+
+        if (resource === "summary" && method === "GET") {
+          const summary = await getContactSummary(supabase, contactId);
+          return reply.send(summary);
+        }
+
+        if (resource === "invoices") {
+          if (method === "GET" && !resourceId) {
+            const { data, error } = await supabase
+              .from("contact_invoices")
+              .select("*")
+              .eq("contact_id", contactId)
+              .order("due_date", { ascending: false });
+            if (error) throw error;
+            return reply.send({ data: data ?? [] });
+          }
+          if (method === "POST" && !resourceId) {
+            const body = req.body ?? {};
+            const amount = Number(body.amount);
+            const dueDate = String(body.due_date || "").trim();
+            if (!dueDate || isNaN(amount) || amount < 0) {
+              return reply.status(400).send({ error: "amount e due_date são obrigatórios" });
+            }
+            let status: InvoiceStatus = "pending";
+            if (["pending", "paid", "overdue", "cancelled"].includes(String(body.status || ""))) {
+              status = body.status as InvoiceStatus;
+            }
+            const record: Record<string, unknown> = {
+              contact_id: contactId,
+              tenant_id: tenantId,
+              amount,
+              due_date: dueDate,
+              status,
+              description: body.description ?? null,
+              metadata: typeof body.metadata === "string" ? body.metadata : JSON.stringify(body.metadata ?? {}),
+            };
+            if (status === "paid" && body.paid_at) record.paid_at = body.paid_at;
+            const { data, error } = await supabase.from("contact_invoices").insert(record).select().single();
+            if (error) throw error;
+            return reply.send(data);
+          }
+          if (method === "PATCH" && resourceId) {
+            const body = req.body ?? {};
+            const allowed = ["amount", "due_date", "paid_at", "status", "description", "metadata"];
+            const updates: Record<string, unknown> = {};
+            for (const key of allowed) {
+              if (body[key] !== undefined) {
+                updates[key] =
+                  key === "metadata" && typeof body[key] !== "string"
+                    ? JSON.stringify(body[key] ?? {})
+                    : body[key];
+              }
+            }
+            const { data, error } = await supabase
+              .from("contact_invoices")
+              .update(updates)
+              .eq("id", resourceId)
+              .eq("contact_id", contactId)
+              .select()
+              .single();
+            if (error) throw error;
+            return reply.send(data);
+          }
+          if (method === "DELETE" && resourceId) {
+            const { error } = await supabase
+              .from("contact_invoices")
+              .delete()
+              .eq("id", resourceId)
+              .eq("contact_id", contactId);
+            if (error) throw error;
+            return reply.send({ success: true });
+          }
+        }
+
+        if (resource === "packages" && method === "GET" && !resourceId) {
+          const { data, error } = await supabase
+            .from("contact_packages")
+            .select("*")
+            .eq("contact_id", contactId)
+            .order("created_at", { ascending: false });
+          if (error) throw error;
+          return reply.send({ data: data ?? [] });
+        }
+
+        if (resource === "packages" && method === "POST" && !resourceId) {
+          const body = req.body ?? {};
+          const { data, error } = await supabase
+            .from("contact_packages")
+            .insert({ ...body, contact_id: contactId, tenant_id: tenantId })
+            .select()
+            .single();
+          if (error) throw error;
+          return reply.send(data);
+        }
+
+        if (resource === "packages" && resourceId) {
+          if (method === "PATCH") {
+            const { data, error } = await supabase
+              .from("contact_packages")
+              .update(req.body ?? {})
+              .eq("id", resourceId)
+              .eq("contact_id", contactId)
+              .select()
+              .single();
+            if (error) throw error;
+            return reply.send(data);
+          }
+          if (method === "DELETE") {
+            const { error } = await supabase
+              .from("contact_packages")
+              .delete()
+              .eq("id", resourceId)
+              .eq("contact_id", contactId);
+            if (error) throw error;
+            return reply.send({ success: true });
+          }
+        }
+
+        if (resource === "appointments") {
+          if (method === "GET" && !resourceId) {
+            const upcoming = req.query.upcoming === "true";
+            let q = supabase.from("calendar_events").select("*").eq("contact_id", contactId);
+            if (upcoming) q = q.gte("start_at", new Date().toISOString());
+            const { data, error } = await q.order("start_at", { ascending: true });
+            if (error) throw error;
+            return reply.send({ data: data ?? [] });
+          }
+          if (method === "POST" && !resourceId) {
+            const body = req.body ?? {};
+            const { data, error } = await supabase
+              .from("calendar_events")
+              .insert({ ...body, contact_id: contactId, tenant_id: tenantId })
+              .select()
+              .single();
+            if (error) throw error;
+            return reply.send(data);
+          }
+          if (method === "DELETE" && resourceId) {
+            const { error } = await supabase
+              .from("calendar_events")
+              .update({ contact_id: null })
+              .eq("id", resourceId)
+              .eq("contact_id", contactId);
+            if (error) throw error;
+            return reply.send({ success: true });
+          }
+        }
+
+        if (resource === "documents") {
+          if (method === "GET" && !resourceId) {
+            const { data, error } = await supabase
+              .from("contact_documents")
+              .select("*")
+              .eq("contact_id", contactId)
+              .order("created_at", { ascending: false });
+            if (error) throw error;
+            return reply.send({ data: data ?? [] });
+          }
+          if (method === "POST" && !resourceId) {
+            const body = req.body ?? {};
+            const { data, error } = await supabase
+              .from("contact_documents")
+              .insert({ ...body, contact_id: contactId, tenant_id: tenantId })
+              .select()
+              .single();
+            if (error) throw error;
+            return reply.send(data);
+          }
+          if (resourceId && method === "PATCH") {
+            const { data, error } = await supabase
+              .from("contact_documents")
+              .update(req.body ?? {})
+              .eq("id", resourceId)
+              .eq("contact_id", contactId)
+              .select()
+              .single();
+            if (error) throw error;
+            return reply.send(data);
+          }
+          if (resourceId && method === "DELETE") {
+            const { error } = await supabase
+              .from("contact_documents")
+              .delete()
+              .eq("id", resourceId)
+              .eq("contact_id", contactId);
+            if (error) throw error;
+            return reply.send({ success: true });
+          }
+        }
+
+        if (resource === "contracts") {
+          if (method === "GET" && !resourceId) {
+            const { data, error } = await supabase
+              .from("contact_contracts")
+              .select("*")
+              .eq("contact_id", contactId)
+              .order("created_at", { ascending: false });
+            if (error) throw error;
+            return reply.send({ data: data ?? [] });
+          }
+          if (method === "POST" && !resourceId) {
+            const body = req.body ?? {};
+            const { data, error } = await supabase
+              .from("contact_contracts")
+              .insert({ ...body, contact_id: contactId, tenant_id: tenantId })
+              .select()
+              .single();
+            if (error) throw error;
+            return reply.send(data);
+          }
+          if (resourceId && method === "PATCH") {
+            const { data, error } = await supabase
+              .from("contact_contracts")
+              .update(req.body ?? {})
+              .eq("id", resourceId)
+              .eq("contact_id", contactId)
+              .select()
+              .single();
+            if (error) throw error;
+            return reply.send(data);
+          }
+          if (resourceId && method === "DELETE") {
+            const { error } = await supabase
+              .from("contact_contracts")
+              .delete()
+              .eq("id", resourceId)
+              .eq("contact_id", contactId);
+            if (error) throw error;
+            return reply.send({ success: true });
+          }
+        }
+
+        if (resource === "conversation-preview" && method === "GET") {
+          const { data: contact } = await supabase
+            .from("contacts")
+            .select("id, tenant_id, name, phone")
+            .eq("id", contactId)
+            .single();
+
+          const phoneRaw = (contact?.phone || "").trim();
+          const phoneDigits = phoneRaw.replace(/\D/g, "");
+          if (phoneDigits.length < 10) {
+            return reply.send({ messages: [], chatwoot_url: null, agent_name: null, agent_avatar_url: null });
+          }
+
+          const phoneNorm =
+            phoneDigits.startsWith("55") && phoneDigits.length >= 12 ? phoneDigits : "55" + phoneDigits;
+
+          const { data: agents } = await supabase.from("agents").select("id, name, avatar_url, config").eq("tenant_id", tenantId);
+          let bestConv: {
+            id: string;
+            agent_id: string;
+            agent_name: string;
+            agent_avatar_url: string | null;
+            chatwoot_conversation_id: number | null;
+            config: Record<string, unknown>;
+          } | null = null;
+
+          for (const agent of agents ?? []) {
+            const agentId = (agent as { id: string }).id;
+            const { data: convs } = await supabase.rpc("list_agent_conversations", {
+              p_agent_id: agentId,
+              p_limit: 200,
+              p_offset: 0,
+            });
+            for (const c of (convs ?? []) as Array<Record<string, unknown>>) {
+              const ext = String(c.external_user_id ?? "").replace(/\D/g, "");
+              const extNorm = ext.startsWith("55") && ext.length >= 12 ? ext : ext.length >= 10 ? "55" + ext : ext;
+              if (extNorm !== phoneNorm) continue;
+              const cfg = ((agent as { config?: Record<string, unknown> }).config ?? {}) as Record<string, unknown>;
+              const row = {
+                id: String(c.id),
+                agent_id: agentId,
+                agent_name: String((agent as { name: string }).name),
+                agent_avatar_url: (agent as { avatar_url: string | null }).avatar_url,
+                chatwoot_conversation_id: c.chatwoot_conversation_id as number | null,
+                config: cfg,
+              };
+              if (!bestConv) bestConv = row;
+              if (c.chatwoot_conversation_id != null) bestConv = row;
+            }
+          }
+
+          if (!bestConv) {
+            return reply.send({ messages: [], chatwoot_url: null, agent_name: null, agent_avatar_url: null });
+          }
+
+          const { data: msgs } = await supabase.rpc("load_conversation_messages", {
+            p_agent_id: bestConv.agent_id,
+            p_conversation_id: bestConv.id,
+            p_limit: 80,
+          });
+
+          let chatwootUrl: string | null = null;
+          const cfg = bestConv.config;
+          if (bestConv.chatwoot_conversation_id && cfg.chatwoot_url && cfg.chatwoot_account_id) {
+            const base = String(cfg.chatwoot_url).replace(/\/+$/, "");
+            chatwootUrl = `${base}/app/accounts/${cfg.chatwoot_account_id}/conversations/${bestConv.chatwoot_conversation_id}`;
+          }
+
+          return reply.send({
+            messages: msgs ?? [],
+            chatwoot_url: chatwootUrl,
+            agent_name: bestConv.agent_name,
+            agent_avatar_url: bestConv.agent_avatar_url,
+          });
+        }
+
+        return reply.status(404).send({ error: `Recurso embed não suportado: ${resource}` });
+      } catch (e) {
+        fastify.log.error({ err: e }, "[embed-crm] resource error");
+        return sendErr(reply, e);
+      }
+    },
+  });
+}
