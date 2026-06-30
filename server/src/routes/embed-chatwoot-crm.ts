@@ -9,7 +9,16 @@ import {
   promoteOrCreateClient,
   resolveTenantFromChatwootAccount,
 } from "../services/chatwoot-crm-embed.js";
-import { applyEmbedHeaders, assertEmbedKey } from "./embed-auth.js";
+import { renderChatwootCrmEmbedViewHtml } from "../services/chatwoot-crm-embed-view-html.js";
+import { applyEmbedHeaders, assertEmbedKey, getEmbedKey } from "./embed-auth.js";
+
+function publicApiBase(): string {
+  return (
+    process.env.PUBLIC_API_URL?.trim() ||
+    process.env.API_PUBLIC_URL?.trim() ||
+    "http://127.0.0.1:3001/api"
+  ).replace(/\/+$/, "");
+}
 
 const PATCH_ALLOWED = [
   "name",
@@ -26,6 +35,56 @@ const PATCH_ALLOWED = [
 ] as const;
 
 export async function embedChatwootCrmRoutes(fastify: FastifyInstance) {
+  fastify.get(
+    "/embed/chatwoot/crm/view",
+    async (
+      req: FastifyRequest<{
+        Querystring: { account_id?: string; contact_id?: string; key?: string; theme?: string };
+      }>,
+      reply: FastifyReply,
+    ) => {
+      applyEmbedHeaders(reply);
+      if (!assertEmbedKey(req, reply)) return;
+
+      const accountId = req.query.account_id?.trim();
+      const contactId = req.query.contact_id?.trim();
+      if (!accountId) {
+        return reply.status(400).type("text/html").send(
+          "<!DOCTYPE html><html><body><p>Parâmetro <code>account_id</code> ausente na URL.</p></body></html>",
+        );
+      }
+      if (!contactId) {
+        return reply.status(400).type("text/html").send(
+          "<!DOCTYPE html><html><body><p>Parâmetro <code>contact_id</code> ausente na URL.</p></body></html>",
+        );
+      }
+
+      try {
+        const supabase = createNexusClient();
+        const resolved = await resolveTenantFromChatwootAccount(supabase, accountId);
+        if (!resolved) {
+          return reply.status(404).type("text/html").send(
+            "<!DOCTYPE html><html><body><p>Nenhum agente Boom IA vinculado a esta conta Chatwoot.</p></body></html>",
+          );
+        }
+        await assertContactBelongsToTenant(supabase, contactId, resolved.tenantId);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        const status = msg.includes("não encontrado") ? 404 : msg.includes("não pertence") ? 403 : 500;
+        return reply.status(status).type("text/html").send(
+          `<!DOCTYPE html><html><body><p>${msg}</p></body></html>`,
+        );
+      }
+
+      const rawTheme = req.query.theme?.trim().toLowerCase();
+      const theme: "dark" | "light" = rawTheme === "dark" ? "dark" : "light";
+      const key = getEmbedKey(req)!;
+      return reply
+        .type("text/html; charset=utf-8")
+        .send(renderChatwootCrmEmbedViewHtml(publicApiBase(), key, accountId, contactId, theme));
+    },
+  );
+
   fastify.get(
     "/embed/chatwoot/crm/lookup",
     async (

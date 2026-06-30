@@ -1,7 +1,7 @@
 <!--
-  PPL Motors — Cliente CRM na conversa v12
-  Conta Chatwoot: 9 · Cole em Super Admin → Dashboard Scripts
-  Console esperado: "[Boom IA] Cliente CRM conversa v12 carregado"
+  PPL Motors — Cliente CRM na conversa v13
+  Iframe usa /api/embed/chatwoot/crm/view (mesmo padrão do Agente IA)
+  Console: "[Boom IA] Cliente CRM conversa v13 carregado"
 -->
 <!--
   Boom IA — Dashboard Script · Cliente CRM na conversa (Chatwoot / Mega)
@@ -12,7 +12,7 @@
     quando o contato ainda não é cliente no CRM.
   - Na área do chat (abaixo do cabeçalho da conversa): botão "Abrir cadastro do cliente"
     quando já convertido.
-  - Abre painel lateral com iframe do cadastro (/embed/chatwoot/client?contact_id=...).
+  - Abre painel lateral com iframe do cadastro (/api/embed/chatwoot/crm/view?contact_id=...).
 
   NÃO adiciona item na sidebar esquerda.
 
@@ -34,7 +34,7 @@
 
 <script data-name="boom-ia-client-crm-conversation">
 (function () {
-  const SCRIPT_VERSION = "v12";
+  const SCRIPT_VERSION = "v13";
   const SCRIPT_KEY = "boom_ia_client_crm_conversation_" + SCRIPT_VERSION;
   if (window[SCRIPT_KEY]) return;
   window[SCRIPT_KEY] = true;
@@ -44,6 +44,7 @@
   const CFG = {
     BOOM_URL: "https://ia.agboom.com.br",
     EMBED_CLIENT_URL: "https://ia.agboom.com.br/embed/chatwoot/client",
+    EMBED_CLIENT_VIEW_URL: "https://ia.agboom.com.br/api/embed/chatwoot/crm/view",
     API_BASE: "https://ia.agboom.com.br/api",
     EMBED_KEY: "iUDtFP4Rd9FyqNz3nkynZnkW",
     TARGET_ACCOUNT_ID: 9,
@@ -453,8 +454,17 @@
       key: CFG.EMBED_KEY,
       account_id: accountId,
       contact_id: contactId,
+      theme: detectTheme(),
     });
-    return (CFG.EMBED_CLIENT_URL || CFG.BOOM_URL + "/embed/chatwoot/client") + "?" + params.toString();
+    const viewBase = (CFG.EMBED_CLIENT_VIEW_URL || CFG.API_BASE + "/embed/chatwoot/crm/view").replace(/\/+$/, "");
+    return viewBase + "?" + params.toString();
+  }
+
+  function detectTheme() {
+    const html = document.documentElement;
+    if (html.classList.contains("dark") || document.body.classList.contains("dark")) return "dark";
+    if (html.getAttribute("data-theme") === "dark" || document.body.getAttribute("data-theme") === "dark") return "dark";
+    return "light";
   }
 
   function closeClientPanel() {

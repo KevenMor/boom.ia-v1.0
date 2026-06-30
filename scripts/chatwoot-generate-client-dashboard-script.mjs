@@ -46,6 +46,10 @@ content = content.replace(
   /EMBED_CLIENT_URL:\s*"[^"]*"/,
   `EMBED_CLIENT_URL: "${boomUrl}/embed/chatwoot/client"`,
 );
+content = content.replace(
+  /EMBED_CLIENT_VIEW_URL:\s*"[^"]*"/,
+  `EMBED_CLIENT_VIEW_URL: "${boomUrl}/api/embed/chatwoot/crm/view"`,
+);
 content = content.replace(/API_BASE:\s*"[^"]*"/, `API_BASE: "${boomUrl}/api"`);
 content = content.replace(/EMBED_KEY:\s*"[^"]*"/, `EMBED_KEY: "${embedKey.replace(/"/g, '\\"')}"`);
 
