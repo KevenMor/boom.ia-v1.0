@@ -1,0 +1,648 @@
+<!--
+  Sunset Thermas Park — Dashboard Script (espelho agente)
+  Conta Chatwoot: CONFIGURE account-id (mega.atendai.app) · Agente: Julia
+  Cole em: https://mega.atendai.app/super_admin/app_config?config=internal
+  Após colar: salve, recarregue o Mega (Cmd+Shift+R) e confira no console F12:
+  "[Boom IA] Dashboard Script v9 carregado"
+-->
+
+<script data-name="boom-ia-sunset_thermas_park-agent-mirror">
+(function () {
+  const SCRIPT_VERSION = "v9";
+  const SCRIPT_KEY = "boom_ia_sunset_thermas_park_agent_mirror_" + SCRIPT_VERSION;
+  if (window[SCRIPT_KEY]) return;
+  window[SCRIPT_KEY] = true;
+  console.info("[Boom IA] Dashboard Script " + SCRIPT_VERSION + " carregado");
+
+  /** ========== SUNSET THERMAS PARK ========== */
+  const CFG = {
+    LINK_TEXT: "Sunset Thermas Park — Agente IA",
+    LINK_ICON: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="13" rx="3"/><path d="M12 8V5"/><circle cx="12" cy="4" r="1" fill="currentColor" stroke="none"/><circle cx="9" cy="14" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="14" r="1" fill="currentColor" stroke="none"/><path d="M9.5 17.5h5"/></svg>',
+    BOOM_URL: "https://ia.agboom.com.br",
+    EMBED_APP_URL: "https://ia.agboom.com.br/embed/chatwoot",
+    // Deve começar com /api/ — NÃO use https://ia.agboom.com.br/embed/chatwoot/view (404 no React)
+    EMBED_VIEW_URL: "https://ia.agboom.com.br/api/embed/chatwoot/view",
+    EMBED_KEY: "iUDtFP4Rd9FyqNz3nkynZnkW",
+    TARGET_ACCOUNT_ID: null,
+    POSITION: {
+      mode: "afterLabel",
+      label: "Conversas",
+      index: 0,
+    },
+    PADDING: 0,
+    SHOW_BORDER: true,
+    MOBILE_MAX_WIDTH: 768,
+    MOBILE_BOTTOM_NAV_FALLBACK: 60,
+  };
+  /** ==================================== */
+
+  const $ = (s, r) => {
+    try {
+      return (r || document).querySelector(s);
+    } catch {
+      return null;
+    }
+  };
+  const $$ = (s, r) => {
+    try {
+      return Array.from((r || document).querySelectorAll(s));
+    } catch {
+      return [];
+    }
+  };
+  const on = (el, ev, fn, opts) => {
+    if (el) el.addEventListener(ev, fn, opts);
+  };
+  const normalize = (value) => (value || "").toLowerCase().replace(/\s+/g, " ").trim();
+
+  let panel = null;
+
+  function getAccountIdFromPath() {
+    const match = window.location.pathname.match(/\/app\/accounts\/(\d+)/);
+    return match ? String(match[1]) : null;
+  }
+
+  function isScopeAllowed() {
+    if (CFG.TARGET_ACCOUNT_ID === null || CFG.TARGET_ACCOUNT_ID === "") return true;
+    return getAccountIdFromPath() === String(CFG.TARGET_ACCOUNT_ID);
+  }
+
+  function bgLuminance(el) {
+    if (!el) return null;
+    const bg = getComputedStyle(el).backgroundColor;
+    const m = bg.match(/[\d.]+/g);
+    if (!m || m.length < 3) return null;
+    if (bg.indexOf("rgba") !== -1 && parseFloat(m[3]) === 0) return null;
+    return parseFloat(m[0]) * 0.299 + parseFloat(m[1]) * 0.587 + parseFloat(m[2]) * 0.114;
+  }
+
+  function detectTheme() {
+    const html = document.documentElement;
+    if (html.classList.contains("dark") || document.body.classList.contains("dark")) return "dark";
+    if (html.getAttribute("data-theme") === "dark" || document.body.getAttribute("data-theme") === "dark") return "dark";
+    if (html.classList.contains("light") || html.getAttribute("data-theme") === "light") return "light";
+
+    // Amostra superfícies visíveis do Mega (body costuma ser transparente)
+    const probes = [
+      $('[data-testid="sidebar"]'),
+      $('[data-testid="sidebar-primary"]'),
+      $(".sidebar"),
+      $(".woot-dashboard"),
+      $(".app-wrapper"),
+      $("aside"),
+      document.body,
+    ].filter(Boolean);
+
+    var lightVotes = 0;
+    var darkVotes = 0;
+    probes.forEach(function (el) {
+      var lum = bgLuminance(el);
+      if (lum === null) return;
+      if (lum > 160) lightVotes++;
+      else if (lum < 90) darkVotes++;
+    });
+
+    if (darkVotes > lightVotes) return "dark";
+    // Padrão light — Chatwoot/Mega usa light por padrão; NÃO usar prefers-color-scheme do SO
+    return "light";
+  }
+
+  /** Extrai tokens de cor reais do Mega para replicar o tema exatamente. */
+  function extractMegaColors() {
+    const cs = getComputedStyle(document.documentElement);
+    const bs = getComputedStyle(document.body);
+    function v(prop) { return cs.getPropertyValue(prop).trim() || null; }
+    return {
+      bg:      v("--color-background")      || v("--bg-color")          || bs.backgroundColor || null,
+      surface: v("--color-white")           || v("--surface-color")     || null,
+      surface2:v("--color-background-light")|| null,
+      border:  v("--color-border")          || v("--border-color")      || null,
+      text:    v("--color-heading")         || v("--text-color")        || bs.color           || null,
+      muted:   v("--color-body")            || v("--secondary-color")   || null,
+      brand:   v("--color-woot-500")        || v("--color-brand-primary")|| v("--brand-color") || null,
+    };
+  }
+
+  function embedOrigin() {
+    return new URL(CFG.BOOM_URL || CFG.EMBED_APP_URL || "https://ia.agboom.com.br").origin;
+  }
+
+  function postThemeToEmbed() {
+    const iframe = document.getElementById("boom-ia-embed-iframe");
+    if (!iframe || !iframe.contentWindow) return;
+    try {
+      iframe.contentWindow.postMessage(
+        { type: "boom-ia-embed:theme", theme: detectTheme(), colors: extractMegaColors() },
+        embedOrigin(),
+      );
+    } catch (err) {
+      console.warn("[Boom IA] postMessage theme falhou:", err);
+    }
+  }
+
+  function buildIframeUrl() {
+    const accountId = String(CFG.TARGET_ACCOUNT_ID || getAccountIdFromPath() || "");
+    if (!accountId || !CFG.EMBED_KEY) {
+      console.warn("[Boom IA] account_id ou EMBED_KEY ausente.", { accountId, hasKey: Boolean(CFG.EMBED_KEY) });
+      return null;
+    }
+    const params = new URLSearchParams({
+      key: CFG.EMBED_KEY,
+      account_id: accountId,
+      theme: detectTheme(),
+    });
+    const viewBase = (CFG.EMBED_VIEW_URL || CFG.BOOM_URL + "/api/embed/chatwoot/view").replace(/\/+$/, "");
+    const url = viewBase + "?" + params.toString();
+    console.info("[Boom IA] iframe:", url);
+    return url;
+  }
+
+  function postEmbedInit(iframe) {
+    if (!iframe || !iframe.contentWindow) return;
+    const accountId = getAccountIdFromPath() || String(CFG.TARGET_ACCOUNT_ID || "");
+    if (!accountId || !CFG.EMBED_KEY) return;
+    try {
+      iframe.contentWindow.postMessage(
+        {
+          type: "boom-ia-embed:init",
+          key: CFG.EMBED_KEY,
+          account_id: accountId,
+          theme: detectTheme(),
+          colors: extractMegaColors(),
+        },
+        embedOrigin(),
+      );
+    } catch (err) {
+      console.warn("[Boom IA] postMessage init falhou:", err);
+    }
+  }
+
+  function findSidebar() {
+    // Preferir o container completo da sidebar (inclui barra de ícones + navegação textual)
+    // Chatwoot usa <aside> como wrapper de tudo; pegar o elemento mais largo garante o posicionamento correto
+    const candidates = [
+      $("aside"),
+      $('[data-testid="sidebar"]'),
+      $('[data-testid="sidebar-primary"]'),
+      $("aside.primary"),
+      $("nav"),
+    ].filter(Boolean);
+    if (!candidates.length) return null;
+    // Escolhe o mais largo — é o wrapper completo, não só a barra de ícones
+    return candidates.reduce(function (best, el) {
+      return el.getBoundingClientRect().width > best.getBoundingClientRect().width ? el : best;
+    });
+  }
+
+  /** Borda direita só da coluna de navegação (não inclui lista de conversas). */
+  function getContentAreaLeft() {
+    var link = $("#boom-ia-embed-link");
+    if (link) {
+      var navAside = link.closest('[data-testid="sidebar"]') || link.closest("aside");
+      if (navAside) {
+        var nr = navAside.getBoundingClientRect();
+        if (nr.width > 0 && nr.width < 420) return nr.right;
+      }
+      var node = link.parentElement;
+      for (var i = 0; i < 12 && node; i++) {
+        var rr = node.getBoundingClientRect();
+        if (rr.left < 80 && rr.width >= 140 && rr.width <= 400) return rr.right;
+        node = node.parentElement;
+      }
+    }
+
+    var edges = [];
+    var primary = $('[data-testid="sidebar-primary"]');
+    var sidebar = $('[data-testid="sidebar"]');
+    if (primary) edges.push(primary.getBoundingClientRect().right);
+    if (sidebar) edges.push(sidebar.getBoundingClientRect().right);
+    if (edges.length) return Math.max.apply(null, edges);
+
+    var bestRight = 0;
+    $$("aside").forEach(function (el) {
+      var r = el.getBoundingClientRect();
+      if (r.left > 60 || r.width > 400 || r.width < 40) return;
+      bestRight = Math.max(bestRight, r.right);
+    });
+    return bestRight;
+  }
+
+  var PAGE_BG = { light: "#ffffff", dark: "#151718" };
+
+  function isMobileViewport() {
+    return window.innerWidth <= CFG.MOBILE_MAX_WIDTH;
+  }
+
+  function findMobileBottomNav() {
+    if (!isMobileViewport()) return null;
+
+    var byTestId =
+      $('[data-testid="mobile-bottom-nav"]') ||
+      $('[data-testid="bottom-nav"]') ||
+      $('[data-testid="sidebar-bottom-nav"]');
+    if (byTestId) return byTestId;
+
+    var vh = window.innerHeight;
+    var vw = window.innerWidth;
+    var best = null;
+    var bestScore = 0;
+
+    $$("nav, footer, [role='navigation'], div, ul").forEach(function (el) {
+      if (el === panel || (panel && panel.contains(el))) return;
+      var st = window.getComputedStyle(el);
+      if (st.display === "none" || st.visibility === "hidden") return;
+      if (st.position !== "fixed" && st.position !== "sticky") return;
+      var r = el.getBoundingClientRect();
+      if (r.height < 36 || r.height > 130) return;
+      if (Math.abs(r.bottom - vh) > 10) return;
+      if (r.width < vw * 0.55) return;
+
+      var txt = normalize(el.textContent || "");
+      var score = r.width;
+      if (/conversas/.test(txt)) score += 1000;
+      if (/contatos/.test(txt)) score += 500;
+      if (/pesquisar|menu/.test(txt)) score += 300;
+      if (score > bestScore) {
+        bestScore = score;
+        best = el;
+      }
+    });
+    return best;
+  }
+
+  function getMobileBottomInset() {
+    if (!isMobileViewport()) return 0;
+    var nav = findMobileBottomNav();
+    if (nav) {
+      var h = Math.ceil(nav.getBoundingClientRect().height);
+      if (h > 0) return h;
+    }
+    return CFG.MOBILE_BOTTOM_NAV_FALLBACK || 60;
+  }
+
+  function syncMobileBottomNav(open) {
+    if (!isMobileViewport()) return;
+    var nav = findMobileBottomNav();
+    if (!nav) return;
+    if (open) {
+      nav.dataset.boomIaNav = "1";
+      nav.style.setProperty("z-index", "2147483647", "important");
+    } else if (nav.dataset.boomIaNav) {
+      nav.style.removeProperty("z-index");
+      delete nav.dataset.boomIaNav;
+    }
+  }
+
+  function ensurePageStyles() {
+    var css =
+      "html.boom-ia-page-open,html.boom-ia-page-open body{overflow:hidden!important;}" +
+      "#boom-ia-embed-panel{background:#ffffff!important;}" +
+      "#boom-ia-embed-iframe{width:100%!important;height:100%!important;border:0!important;background:#ffffff!important;display:block!important;}" +
+      "html.boom-ia-page-open:not(.boom-ia-page-open-mobile) [data-testid=sidebar-primary]," +
+      "html.boom-ia-page-open:not(.boom-ia-page-open-mobile) [data-testid=sidebar]{position:relative;z-index:100001!important;}" +
+      "html.boom-ia-page-open-mobile #boom-ia-embed-panel{" +
+      "left:0!important;right:0!important;width:100%!important;max-width:100vw!important;" +
+      "top:0!important;height:auto!important;" +
+      "padding-top:env(safe-area-inset-top,0)!important;" +
+      "padding-left:env(safe-area-inset-left,0)!important;padding-right:env(safe-area-inset-right,0)!important;" +
+      "padding-bottom:0!important;z-index:99999!important;}";
+    var s = $("#boom-ia-page-styles");
+    if (s) {
+      s.textContent = css;
+      return;
+    }
+    s = document.createElement("style");
+    s.id = "boom-ia-page-styles";
+    s.textContent = css;
+    document.head.appendChild(s);
+  }
+
+  function solidPageBg() {
+    return detectTheme() === "dark" ? PAGE_BG.dark : PAGE_BG.light;
+  }
+
+  function setPageMode(open) {
+    ensurePageStyles();
+    document.documentElement.classList.toggle("boom-ia-page-open", open);
+    document.documentElement.classList.toggle("boom-ia-page-open-mobile", open && isMobileViewport());
+    document.body.style.overflow = open ? "hidden" : "";
+    syncMobileBottomNav(open);
+  }
+
+  function findAnyList() {
+    const sb = findSidebar();
+    if (!sb) return null;
+    return $("ul", sb) || $$("ul", sb)[0] || null;
+  }
+
+  function findListAndRefByLabel(labelWanted) {
+    const sb = findSidebar();
+    if (!sb) return { list: null, ref: null };
+
+    const wanted = normalize(labelWanted);
+    const uls = $$("ul", sb);
+    for (let i = 0; i < uls.length; i++) {
+      const ul = uls[i];
+      const lis = $$(":scope > li", ul);
+      for (let j = 0; j < lis.length; j++) {
+        const li = lis[j];
+        const text = normalize(li.textContent);
+        if (text === wanted || text.indexOf(wanted) !== -1) {
+          return { list: ul, ref: li };
+        }
+      }
+    }
+    return { list: null, ref: null };
+  }
+
+  function applyPanelTheme() {
+    if (!panel) return;
+    var bg = solidPageBg();
+    panel.style.background = bg;
+    panel.style.padding = "0";
+    panel.style.borderLeft = "0";
+    panel.style.boxShadow = "none";
+    var iframe = $("#boom-ia-embed-iframe");
+    if (iframe) iframe.style.background = bg;
+  }
+
+  function layoutPanel() {
+    if (!panel || panel.dataset.visible !== "true") return;
+    if (isMobileViewport()) {
+      var bottomInset = getMobileBottomInset();
+      panel.style.left = "0";
+      panel.style.right = "0";
+      panel.style.width = "100%";
+      panel.style.top = "0";
+      panel.style.bottom = bottomInset + "px";
+      panel.style.height = "auto";
+      syncMobileBottomNav(true);
+      return;
+    }
+    panel.style.top = "0";
+    panel.style.bottom = "0";
+    panel.style.height = "";
+    var left = getContentAreaLeft();
+    if (left <= 0) {
+      var sb = findSidebar();
+      if (sb) {
+        var sr = sb.getBoundingClientRect();
+        if (sr.width <= 420) left = sr.right;
+      }
+    }
+    panel.style.left = Math.max(0, left) + "px";
+    panel.style.width = Math.max(320, window.innerWidth - left) + "px";
+  }
+
+  function ensurePanel() {
+    if (panel && document.body.contains(panel)) return panel;
+
+    panel = document.createElement("section");
+    panel.id = "boom-ia-embed-panel";
+    panel.dataset.visible = "false";
+    panel.setAttribute("aria-label", "Boom IA — espelho do agente");
+    panel.style.cssText = [
+      "position:fixed",
+      "top:0",
+      "right:0",
+      "bottom:0",
+      "z-index:99999",
+      "display:none",
+      "overflow:hidden",
+      "background:#ffffff",
+    ].join(";");
+
+    panel.innerHTML =
+      '<iframe id="boom-ia-embed-iframe" title="Boom IA — Agente" allow="clipboard-write" style="width:100%;height:100%;border:0;background:#ffffff;display:block;" loading="eager"></iframe>';
+    document.body.appendChild(panel);
+
+    applyPanelTheme();
+    layoutPanel();
+    return panel;
+  }
+
+  function hidePanel() {
+    if (!panel) return;
+    panel.dataset.visible = "false";
+    panel.style.display = "none";
+    setPageMode(false);
+    const iframe = $("#boom-ia-embed-iframe");
+    if (iframe) iframe.src = "about:blank";
+    const link = $("#boom-ia-embed-link a");
+    if (link) link.setAttribute("aria-expanded", "false");
+  }
+
+  function showPanel() {
+    if (!isScopeAllowed()) return;
+
+    const iframeUrl = buildIframeUrl();
+    if (!iframeUrl) {
+      console.warn("[Boom IA] account_id ou CFG incompleta — verifique BOOM_URL e EMBED_KEY.");
+      return;
+    }
+
+    ensurePanel();
+    const iframe = $("#boom-ia-embed-iframe");
+    if (iframe) {
+      if (!iframe.dataset.boomInitBound) {
+        iframe.dataset.boomInitBound = "true";
+        on(iframe, "load", function () {
+          postEmbedInit(iframe);
+        });
+      }
+      iframe.src = iframeUrl;
+      setTimeout(function () {
+        postEmbedInit(iframe);
+      }, 800);
+    }
+
+    panel.dataset.visible = "true";
+    panel.style.display = "block";
+    setPageMode(true);
+    applyPanelTheme();
+    layoutPanel();
+    setTimeout(layoutPanel, 120);
+    setTimeout(layoutPanel, 600);
+
+    const link = $("#boom-ia-embed-link a");
+    if (link) link.setAttribute("aria-expanded", "true");
+  }
+
+  /** Limiar em px abaixo do qual a sidebar é considerada recolhida */
+  const COLLAPSED_SIDEBAR_WIDTH = 80;
+
+  function isSidebarCollapsed() {
+    const sb = findSidebar();
+    if (!sb) return false;
+    return sb.getBoundingClientRect().width < COLLAPSED_SIDEBAR_WIDTH;
+  }
+
+  function syncLinkCollapsed() {
+    const link = $("#boom-ia-embed-link a");
+    const textSpan = $("#boom-ia-embed-link-text");
+    if (!link) return;
+    if (isSidebarCollapsed()) {
+      link.style.justifyContent = "center";
+      link.style.padding = "8px 0";
+      link.title = CFG.LINK_TEXT;
+      if (textSpan) textSpan.style.display = "none";
+    } else {
+      link.style.justifyContent = "";
+      link.style.padding = "8px 12px";
+      link.title = "";
+      if (textSpan) textSpan.style.display = "";
+    }
+  }
+
+  function ensureSidebarLink() {
+    if ($("#boom-ia-embed-link")) return;
+
+    const li = document.createElement("li");
+    li.id = "boom-ia-embed-link";
+    li.style.listStyle = "none";
+    li.innerHTML =
+      '<a href="#" data-boom-ia-embed-link="true" aria-expanded="false" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;text-decoration:none;color:inherit;">' +
+      '<span aria-hidden="true" style="display:flex;align-items:center;flex-shrink:0;">' +
+      CFG.LINK_ICON +
+      '</span><span id="boom-ia-embed-link-text">' +
+      CFG.LINK_TEXT +
+      "</span></a>";
+
+    const link = $("a", li);
+    let parentList = null;
+    let ref = null;
+
+    if (CFG.POSITION.mode === "afterLabel" || CFG.POSITION.mode === "beforeLabel") {
+      const found = findListAndRefByLabel(CFG.POSITION.label);
+      parentList = found.list;
+      ref = found.ref;
+    }
+
+    if (!parentList) parentList = findAnyList();
+    if (!parentList) return;
+
+    const items = $$(":scope > li", parentList);
+    switch (CFG.POSITION.mode) {
+      case "start":
+        parentList.insertBefore(li, items[0] || null);
+        break;
+      case "index":
+        parentList.insertBefore(
+          li,
+          items[Math.max(0, Math.min(CFG.POSITION.index, items.length))] || null
+        );
+        break;
+      case "afterLabel":
+        if (ref && ref.nextSibling) parentList.insertBefore(li, ref.nextSibling);
+        else parentList.appendChild(li);
+        break;
+      case "beforeLabel":
+        if (ref) parentList.insertBefore(li, ref);
+        else parentList.insertBefore(li, items[0] || null);
+        break;
+      case "end":
+      default:
+        parentList.appendChild(li);
+    }
+
+    on(link, "click", function (event) {
+      event.preventDefault();
+      if (panel && panel.dataset.visible === "true") hidePanel();
+      else showPanel();
+    });
+
+    syncLinkCollapsed();
+  }
+
+  function bindSidebarCloseHandler() {
+    const sb = findSidebar();
+    if (!sb || sb.dataset.boomIaEmbedCloseBound === "true") return;
+    sb.dataset.boomIaEmbedCloseBound = "true";
+
+    on(
+      sb,
+      "click",
+      function (event) {
+        const customLink =
+          event.target && event.target.closest && event.target.closest("[data-boom-ia-embed-link]");
+        if (!customLink) hidePanel();
+      },
+      { capture: true, passive: true }
+    );
+  }
+
+  function applyFeature() {
+    if (!isScopeAllowed()) {
+      hidePanel();
+      return;
+    }
+    ensurePanel();
+    ensureSidebarLink();
+    bindSidebarCloseHandler();
+    applyPanelTheme();
+    layoutPanel();
+    syncLinkCollapsed();
+  }
+
+  function bootstrap() {
+    applyFeature();
+
+    const observer = new MutationObserver(function () {
+      applyFeature();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    const themeObserver = new MutationObserver(function () {
+      applyPanelTheme();
+      postThemeToEmbed();
+    });
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class", "data-theme"],
+    });
+    themeObserver.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["class", "data-theme"],
+    });
+
+    // ResizeObserver na sidebar para detectar recolhimento/expansão
+    if (typeof ResizeObserver !== "undefined") {
+      const sidebarRO = new ResizeObserver(function () {
+        syncLinkCollapsed();
+        layoutPanel();
+      });
+      const sbEl = findSidebar();
+      if (sbEl) sidebarRO.observe(sbEl);
+      // Reanexar se a sidebar for recriada pelo SPA
+      setTimeout(function () {
+        const sbNew = findSidebar();
+        if (sbNew && sbNew !== sbEl) sidebarRO.observe(sbNew);
+      }, 5000);
+    }
+
+    on(window, "resize", function () {
+      if (panel && panel.dataset.visible === "true") {
+        setPageMode(true);
+        layoutPanel();
+        applyPanelTheme();
+      }
+      syncLinkCollapsed();
+    });
+
+    on(window, "popstate", function () {
+      hidePanel();
+      applyFeature();
+    });
+
+    setTimeout(function () {
+      observer.disconnect();
+    }, 30000);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bootstrap, { once: true });
+  } else {
+    bootstrap();
+  }
+})();
+</script>
