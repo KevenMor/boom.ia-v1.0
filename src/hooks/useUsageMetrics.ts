@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { nexusDb } from "@/integrations/supabase/nexus-client";
 import { fetchAgentTenantMap, fetchAgentTokenUsageInRange } from "@/lib/fetch-agent-token-usage";
 
@@ -98,6 +98,12 @@ function extractLatencyMs(metadata: Record<string, unknown> | null): number | nu
   return null;
 }
 
+const DASHBOARD_QUERY_OPTS = {
+  staleTime: 1000 * 60 * 5,
+  refetchIntervalInBackground: false,
+  placeholderData: keepPreviousData,
+} as const;
+
 export function useUsageDailySummary(tenantId?: string | null) {
   return useQuery({
     queryKey: ["usage-daily-summary", tenantId ?? "all"],
@@ -153,7 +159,8 @@ export function useUsageDailySummary(tenantId?: string | null) {
 
       return Array.from(byKey.values()).sort((a, b) => b.day.localeCompare(a.day));
     },
-    refetchInterval: 30000,
+    refetchInterval: 60_000,
+    ...DASHBOARD_QUERY_OPTS,
   });
 }
 
@@ -203,6 +210,7 @@ export function useRecentUsageEvents(limit = 4000, tenantId?: string | null) {
 
       return events;
     },
-    refetchInterval: 10000,
+    refetchInterval: 60_000,
+    ...DASHBOARD_QUERY_OPTS,
   });
 }

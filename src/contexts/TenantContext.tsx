@@ -17,6 +17,11 @@ import {
   pickSingleAclTenantId,
   resolveTenantModuleAccess,
 } from "@/lib/resolve-tenant-module-access";
+import {
+  clearTenantModulesCacheForUser,
+  readTenantModulesCache,
+  writeTenantModulesCache,
+} from "@/lib/tenant-modules-cache";
 import { useAuth } from "@/contexts/AuthContext";
 
 type TenantModulesMap = Record<string, boolean>;
@@ -61,12 +66,14 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const userId = user?.id ?? null;
     if (prevUserId.current === userId) return;
+    const prev = prevUserId.current;
     prevUserId.current = userId;
 
     setHasBootstrappedPermissions(false);
     setSelectedTenantModules(null);
     setUsesCustomUserAcl(false);
     setSelectedTenant(null);
+    if (prev) clearTenantModulesCacheForUser(prev);
 
     if (!userId) {
       setSelectedTenantIdRaw(null);
@@ -112,6 +119,8 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     () => memberships.map((m) => m.tenant_id).filter(Boolean),
     [memberships]
   );
+  const membershipTenantKey = membershipTenantIds.join("|");
+  const userId = user?.id;
 
   useLayoutEffect(() => {
     if (authLoading || isSuperAdmin) return;
@@ -149,7 +158,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
-    if (authLoading || !user) {
+    if (authLoading || !userId) {
       if (!authLoading) {
         setSelectedTenantModules(null);
         setUsesCustomUserAcl(false);
@@ -158,10 +167,13 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (!isSuperAdmin && membershipTenantIds.length > 0) {
-      setTenantModulesLoading(true);
-      setSelectedTenantModules(null);
-    }
+    const hydrateFromCache = (tenantId: string): boolean => {
+      const cached = readTenantModulesCache(userId, tenantId);
+      if (!cached) return false;
+      setSelectedTenantModules(cached.modules);
+      setUsesCustomUserAcl(cached.usesCustomUserAcl);
+      return true;
+    };
 
     void (async () => {
       let tenantId = selectedTenantId;
@@ -185,7 +197,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         const { data: aclTenantRows } = await nexusDb
           .from("user_module_acl")
           .select("tenant_id")
-          .eq("user_id", user.id);
+          .eq("user_id", userId);
         if (cancelled) return;
 
         const preferredTenantId = pickSingleAclTenantId(aclTenantRows ?? []);
@@ -214,30 +226,31 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      setTenantModulesLoading(true);
-      setSelectedTenantModules(null);
-
-      const userId = user.id;
+      const hasCachedModules = hydrateFromCache(tenantId);
+      if (!hasCachedModules) {
+        setTenantModulesLoading(true);
+        setSelectedTenantModules(null);
+      }
 
       const [{ data: tenantData, error: tenantError }, { data: aclData }] = await Promise.all([
         nexusDb
           .from("tenant_modules")
           .select("module_key, enabled")
           .eq("tenant_id", tenantId),
-        userId
-          ? nexusDb
-              .from("user_module_acl")
-              .select("module_key, enabled")
-              .eq("tenant_id", tenantId)
-              .eq("user_id", userId)
-          : Promise.resolve({ data: [] as { module_key: string; enabled: boolean }[] }),
+        nexusDb
+          .from("user_module_acl")
+          .select("module_key, enabled")
+          .eq("tenant_id", tenantId)
+          .eq("user_id", userId),
       ]);
 
       if (cancelled) return;
       if (tenantError) {
         console.error("Failed to load tenant modules:", tenantError.message);
-        setSelectedTenantModules({});
-        setUsesCustomUserAcl(false);
+        if (!hasCachedModules) {
+          setSelectedTenantModules({});
+          setUsesCustomUserAcl(false);
+        }
         setTenantModulesLoading(false);
         return;
       }
@@ -245,13 +258,14 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       const resolved = resolveTenantModuleAccess(tenantData ?? [], aclData ?? []);
       setSelectedTenantModules(resolved.modules);
       setUsesCustomUserAcl(resolved.usesCustomUserAcl);
+      writeTenantModulesCache(userId, tenantId, resolved.modules, resolved.usesCustomUserAcl);
       setTenantModulesLoading(false);
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [authLoading, selectedTenantId, user, isSuperAdmin, membershipTenantIds]);
+  }, [authLoading, selectedTenantId, userId, isSuperAdmin, membershipTenantKey]);
 
   const permissionsReady = useMemo(() => {
     if (authLoading || !user) return false;

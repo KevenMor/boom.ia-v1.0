@@ -23,14 +23,23 @@ import type { Agent } from "@/types/database";
 
 const Dashboard = React.forwardRef<HTMLDivElement>(function Dashboard(_props, ref) {
   const { selectedTenantId } = useTenantContext();
-  const { data: tenants, isLoading: loadingTenants } = useTenants();
-  const { data: agents, isLoading: loadingAgents } = useAgents(selectedTenantId ?? undefined);
+  const { data: tenants, isLoading: loadingTenantsRaw } = useTenants();
+  const { data: agents, isLoading: loadingAgentsRaw } = useAgents(selectedTenantId ?? undefined);
   const { data: providers } = useProviders();
-  const { data: dailySummary, isLoading: loadingDaily } = useUsageDailySummary(selectedTenantId);
-  const { data: recentEvents, isLoading: loadingEvents } = useRecentUsageEvents(8000, selectedTenantId);
-  const { data: providerTokens, isLoading: loadingProviderTokens } = useTokensByProvider(selectedTenantId);
-  const { data: agentTokens, isLoading: loadingAgentTokens } = useTokensByAgent(7, selectedTenantId);
-  const { data: conversationGrowth, isLoading: loadingConversationGrowth } = useConversationGrowth(selectedTenantId);
+  const { data: dailySummary, isLoading: loadingDailyRaw } = useUsageDailySummary(selectedTenantId);
+  const { data: recentEvents, isLoading: loadingEventsRaw } = useRecentUsageEvents(8000, selectedTenantId);
+  const { data: providerTokens, isLoading: loadingProviderTokensRaw } = useTokensByProvider(selectedTenantId);
+  const { data: agentTokens, isLoading: loadingAgentTokensRaw } = useTokensByAgent(7, selectedTenantId);
+  const { data: conversationGrowth, isLoading: loadingConversationGrowthRaw } =
+    useConversationGrowth(selectedTenantId);
+
+  const loadingTenants = loadingTenantsRaw && !tenants;
+  const loadingAgents = loadingAgentsRaw && !agents;
+  const loadingDaily = loadingDailyRaw && !dailySummary;
+  const loadingEvents = loadingEventsRaw && !recentEvents;
+  const loadingProviderTokens = loadingProviderTokensRaw && !providerTokens;
+  const loadingAgentTokens = loadingAgentTokensRaw && !agentTokens;
+  const loadingConversationGrowth = loadingConversationGrowthRaw && !conversationGrowth;
 
   const activeTenants = tenants?.filter((t) => t.status === "active").length ?? 0;
   const activeAgents = agents?.filter((a: Agent) => a.status === "active").length ?? 0;

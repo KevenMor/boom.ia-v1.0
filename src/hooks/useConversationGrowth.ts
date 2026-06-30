@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { fetchAgentTokenUsageInRange } from "@/lib/fetch-agent-token-usage";
 import {
   buildConversationGrowthSeries,
@@ -29,6 +29,9 @@ export function useConversationGrowth(tenantId?: string | null) {
 
       return buildConversationGrowthSeries(raw as ConversationUsageRow[]);
     },
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
+    staleTime: 1000 * 60 * 5,
+    refetchIntervalInBackground: false,
+    placeholderData: keepPreviousData,
   });
 }

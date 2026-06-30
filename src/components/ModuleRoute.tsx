@@ -13,7 +13,7 @@ interface ModuleRouteProps {
 }
 
 export function ModuleRoute({ moduleKey, children, requiredRoles }: ModuleRouteProps) {
-  const { isModuleEnabled, tenantModulesLoading } = useTenantContext();
+  const { isModuleEnabled, tenantModulesLoading, selectedTenantModules } = useTenantContext();
   const { profile, isSuperAdmin } = useAuth();
   const firstRoute = useFirstEnabledRoute();
 
@@ -34,7 +34,8 @@ export function ModuleRoute({ moduleKey, children, requiredRoles }: ModuleRouteP
     }
   }
 
-  if (tenantModulesLoading) {
+  /** Spinner só na primeira carga; com cache de permissões mantém a rota montada. */
+  if (tenantModulesLoading && !selectedTenantModules) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
         <div className="flex flex-col items-center gap-3">

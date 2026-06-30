@@ -53,6 +53,8 @@ import ParkCalendarManagementPage from "@/pages/hospedagem/ParkCalendarManagemen
 import LodgingRegistryPage from "@/pages/hospedagem/LodgingRegistryPage";
 import LodgingPricingPage from "@/pages/hospedagem/LodgingPricingPage";
 
+import { hydrateQueryCache, persistQueryCache } from "@/lib/query-cache-persist";
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -64,6 +66,12 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+hydrateQueryCache(queryClient);
+
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", () => persistQueryCache(queryClient));
+}
 
 function RootRedirect() {
   const { user, loading: authLoading } = useAuth();

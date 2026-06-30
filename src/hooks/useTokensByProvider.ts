@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { fetchAgentTokenUsageInRange } from "@/lib/fetch-agent-token-usage";
 
 export interface ProviderTokenSummary {
@@ -35,7 +35,10 @@ export function useTokensByProvider(tenantId?: string | null) {
 
       return aggregateByProvider(usage);
     },
-    refetchInterval: 30000,
+    refetchInterval: 60_000,
+    staleTime: 1000 * 60 * 5,
+    refetchIntervalInBackground: false,
+    placeholderData: keepPreviousData,
   });
 }
 
