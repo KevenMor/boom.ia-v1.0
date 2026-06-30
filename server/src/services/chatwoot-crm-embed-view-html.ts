@@ -120,8 +120,8 @@ export function renderChatwootCrmEmbedViewHtml(
   function money(n){return "R$ "+Number(n||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});}
   function fmtDate(iso){if(!iso)return "—";try{return new Date(iso).toLocaleString("pt-BR",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});}catch(e){return iso;}}
   function fmtDay(iso){if(!iso)return "—";try{return new Date(iso).toLocaleDateString("pt-BR");}catch(e){return iso;}}
-  function qs(){return "?account_id="+encodeURIComponent(ACCOUNT_ID)+"&key="+encodeURIComponent(KEY);}
-  function api(path,opts){opts=opts||{};return fetch(API_BASE+path+qs(),Object.assign({headers:{"Content-Type":"application/json","x-chatwoot-mirror-key":KEY}},opts)).then(function(r){return r.json().then(function(j){return{ok:r.ok,j:j};});});}
+  function qs(extra){var p="account_id="+encodeURIComponent(ACCOUNT_ID)+"&key="+encodeURIComponent(KEY);if(extra)p+="&"+extra;return p;}
+  function api(path,opts){opts=opts||{};var sep=path.indexOf("?")>=0?"&":"?";return fetch(API_BASE+path+sep+qs(),Object.assign({headers:{"Content-Type":"application/json","x-chatwoot-mirror-key":KEY}},opts)).then(function(r){return r.json().then(function(j){return{ok:r.ok,j:j};});});}
   function base(sub){return "/embed/chatwoot/crm/contacts/"+encodeURIComponent(CONTACT_ID)+sub;}
   function val(id){var el=document.getElementById(id);return el?el.value.trim():"";}
   function setTheme(t){document.documentElement.setAttribute("data-theme",t==="dark"?"dark":"light");}
@@ -303,11 +303,12 @@ export function renderChatwootCrmEmbedViewHtml(
   function renderAgenda(){
     var el=document.getElementById("panel-agenda");
     el.innerHTML='<div class="cw-empty">Carregando…</div>';
-    Promise.all([api(base("/appointments?upcoming=false")),api(base("/calendars"))]).then(function(rs){
-      if(!rs[0].ok){el.innerHTML='<div class="cw-empty">'+esc(rs[0].j.error||"Erro")+"</div>";return;}
+    Promise.all([api(base("/appointments")),api(base("/calendars"))]).then(function(rs){
+      if(!rs[0].ok){el.innerHTML='<div class="cw-empty">'+esc(rs[0].j.error||"Erro ao carregar agenda")+"</div>";return;}
       STATE.calendars=rs[1].ok?(rs[1].j.data||[]):[];
       var rows=rs[0].j.data||[];
       var calOpts='<option value="">Selecione o calendário</option>'+selectOpts(STATE.calendars,"id","name","");
+      var calHint=STATE.calendars.length?"":'<p class="cw-empty" style="padding:12px 0">Nenhum calendário no tenant — configure em Agenda no painel Boom IA.</p>';
       var form='<div class="cw-card"><h3>Novo agendamento</h3><form id="form-ag">'+
         '<div class="cw-field"><label>Título</label><input id="ag-title" value="Agendamento"/></div>'+
         '<div class="cw-field"><label>Calendário / profissional</label><select id="ag-cal">'+calOpts+'</select></div>'+
@@ -318,7 +319,7 @@ export function renderChatwootCrmEmbedViewHtml(
       var list=tableHtml(rows,["Título","Início","Fim","Descrição"],function(r){
         return "<tr><td>"+esc(r.title||"—")+"</td><td>"+fmtDate(r.start_at)+"</td><td>"+fmtDate(r.end_at)+"</td><td>"+esc(r.description||"—")+'</td><td><button type="button" class="cw-btn cw-btn-sm cw-btn-danger" data-del-ag="'+esc(r.id)+'">Remover</button></td></tr>';
       },true);
-      bindPanel(el,form+'<div class="cw-toolbar"><p>'+rows.length+' evento(s)</p></div>'+list,function(root){
+      bindPanel(el,form+calHint+'<div class="cw-toolbar"><p>'+rows.length+' evento(s)</p></div>'+list,function(root){
         root.querySelector("#form-ag").addEventListener("submit",function(ev){
           ev.preventDefault();
           var cal=val("ag-cal"),start=val("ag-start"),end=val("ag-end"),msg=root.querySelector("#ag-msg");
