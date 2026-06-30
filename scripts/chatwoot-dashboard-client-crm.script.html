@@ -5,7 +5,7 @@
   O que faz:
   - Na sidebar DIREITA do chat (painel do contato): botão "Transformar em cliente"
     quando o contato ainda não é cliente no CRM, ou "Abrir cadastro do cliente" se já for cliente.
-  - Abre o CRM em modal centralizado com fundo desfocado (melhor visualização).
+  - Abre o CRM em modal centralizado premium (blur, avatar, abas com ícones) — v20.
 
   NÃO adiciona item na sidebar esquerda.
 
@@ -27,7 +27,7 @@
 
 <script data-name="boom-ia-client-crm-conversation">
 (function () {
-  const SCRIPT_VERSION = "v19";
+  const SCRIPT_VERSION = "v20";
   const SCRIPT_KEY = "boom_ia_client_crm_conversation_" + SCRIPT_VERSION;
   if (window[SCRIPT_KEY]) return;
   window[SCRIPT_KEY] = true;
@@ -155,6 +155,29 @@
       .replace(/"/g, "&quot;");
   }
 
+  function contactInitials(name) {
+    return (
+      String(name || "?")
+        .trim()
+        .split(/\s+/)
+        .slice(0, 2)
+        .map(function (p) {
+          return p[0] || "";
+        })
+        .join("")
+        .toUpperCase() || "?"
+    );
+  }
+
+  function formatPhoneBr(digits) {
+    const d = String(digits || "").replace(/\D/g, "");
+    if (d.length >= 12 && d.startsWith("55")) {
+      return "+" + d.slice(0, 2) + " (" + d.slice(2, 4) + ") " + d.slice(4, 9) + "-" + d.slice(9);
+    }
+    if (d.length >= 10) return "+" + d;
+    return d || "";
+  }
+
   function ensureStyles() {
     const id = "boom-ia-crm-conv-styles";
     if ($(id)) return;
@@ -168,28 +191,33 @@
       ".boom-ia-crm-btn-primary{color:#fff;}" +
       ".boom-ia-crm-btn-ghost{background:transparent;border:1px solid var(--color-border,#e5e7eb);color:var(--color-heading,#111);}" +
       ".boom-ia-crm-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:#dcfce7;color:#166534;}" +
-      "#boom-ia-crm-modal-root{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(15,23,42,.42);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);opacity:0;transition:opacity .22s ease;}" +
+      "#boom-ia-crm-modal-root{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;padding:24px;background:radial-gradient(ellipse 120% 80% at 50% 0%,rgba(31,147,255,.14),transparent 55%),rgba(15,23,42,.52);backdrop-filter:blur(16px) saturate(1.2);-webkit-backdrop-filter:blur(16px) saturate(1.2);opacity:0;transition:opacity .26s ease;}" +
       "#boom-ia-crm-modal-root.is-open{opacity:1;}" +
-      ".boom-ia-crm-modal{width:min(1080px,96vw);height:min(88vh,900px);max-height:calc(100vh - 40px);display:flex;flex-direction:column;background:#fff;border-radius:16px;box-shadow:0 25px 60px -12px rgba(0,0,0,.28),0 0 0 1px rgba(15,23,42,.06);overflow:hidden;transform:scale(.96) translateY(12px);opacity:0;transition:transform .28s cubic-bezier(.16,1,.3,1),opacity .22s ease;}" +
+      ".boom-ia-crm-modal{--boom-brand:#1f93ff;position:relative;width:min(1120px,96vw);height:min(90vh,920px);max-height:calc(100vh - 48px);display:flex;flex-direction:column;background:#fff;border-radius:20px;box-shadow:0 32px 64px -16px rgba(15,23,42,.35),0 0 0 1px rgba(255,255,255,.65) inset,0 0 0 1px rgba(15,23,42,.06);overflow:hidden;transform:scale(.94) translateY(16px);opacity:0;transition:transform .32s cubic-bezier(.16,1,.3,1),opacity .24s ease;}" +
+      ".boom-ia-crm-modal::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--boom-brand,#1f93ff),#60a5fa 45%,#a78bfa);z-index:2;}" +
       "#boom-ia-crm-modal-root.is-open .boom-ia-crm-modal{transform:scale(1) translateY(0);opacity:1;}" +
-      ".boom-ia-crm-modal.is-dark{background:#1a1f26;box-shadow:0 25px 60px -12px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.08);}" +
-      ".boom-ia-crm-modal-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 18px;border-bottom:1px solid rgba(15,23,42,.08);background:linear-gradient(180deg,#fafbfc 0%,#fff 100%);flex-shrink:0;}" +
-      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-header{border-bottom-color:rgba(255,255,255,.08);background:linear-gradient(180deg,#232a33 0%,#1a1f26 100%);}" +
-      ".boom-ia-crm-modal-brand{display:flex;align-items:center;gap:12px;min-width:0;}" +
-      ".boom-ia-crm-modal-dot{width:10px;height:10px;border-radius:50%;background:var(--boom-brand,#1f93ff);box-shadow:0 0 0 4px rgba(31,147,255,.18);flex-shrink:0;}" +
-      ".boom-ia-crm-modal-kicker{display:block;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#64748b;line-height:1.2;}" +
+      ".boom-ia-crm-modal.is-dark{background:#141a22;box-shadow:0 32px 64px -16px rgba(0,0,0,.65),0 0 0 1px rgba(255,255,255,.06) inset;}" +
+      ".boom-ia-crm-modal-header{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:18px 22px 16px;border-bottom:1px solid rgba(15,23,42,.07);background:linear-gradient(180deg,#f8fafc 0%,#fff 70%);flex-shrink:0;}" +
+      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-header{border-bottom-color:rgba(255,255,255,.07);background:linear-gradient(180deg,#1c2430 0%,#141a22 70%);}" +
+      ".boom-ia-crm-modal-brand{display:flex;align-items:center;gap:14px;min-width:0;}" +
+      ".boom-ia-crm-modal-avatar{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff;background:linear-gradient(135deg,var(--boom-brand,#1f93ff),#6366f1);box-shadow:0 8px 20px -6px rgba(31,147,255,.55);flex-shrink:0;letter-spacing:.02em;}" +
+      ".boom-ia-crm-modal-meta{min-width:0;}" +
+      ".boom-ia-crm-modal-kicker{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#64748b;line-height:1.2;margin-bottom:4px;}" +
+      ".boom-ia-crm-modal-kicker-badge{display:inline-flex;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.03em;background:rgba(34,197,94,.12);color:#15803d;border:1px solid rgba(34,197,94,.2);}" +
       ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-kicker{color:#94a3b8;}" +
-      ".boom-ia-crm-modal-name{display:block;font-size:16px;font-weight:600;color:#0f172a;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(640px,70vw);}" +
-      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-name{color:#f1f5f9;}" +
-      ".boom-ia-crm-modal-close{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border:0;border-radius:10px;background:transparent;color:#64748b;cursor:pointer;transition:background .15s,color .15s;flex-shrink:0;}" +
-      ".boom-ia-crm-modal-close:hover{background:rgba(15,23,42,.06);color:#0f172a;}" +
+      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-kicker-badge{background:rgba(74,222,128,.1);color:#86efac;border-color:rgba(74,222,128,.2);}" +
+      ".boom-ia-crm-modal-name{display:block;font-size:18px;font-weight:700;color:#0f172a;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(560px,62vw);letter-spacing:-.02em;}" +
+      ".boom-ia-crm-modal-phone{display:block;margin-top:3px;font-size:13px;font-weight:500;color:#64748b;line-height:1.3;}" +
+      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-name{color:#f8fafc;}" +
+      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-phone{color:#94a3b8;}" +
+      ".boom-ia-crm-modal-close{display:flex;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid rgba(15,23,42,.08);border-radius:12px;background:#fff;color:#64748b;cursor:pointer;transition:background .15s,color .15s,border-color .15s,transform .15s;flex-shrink:0;}" +
+      ".boom-ia-crm-modal-close:hover{background:#f8fafc;color:#0f172a;border-color:rgba(15,23,42,.12);transform:scale(1.04);}" +
       ".boom-ia-crm-modal-close:focus-visible{outline:2px solid var(--boom-brand,#1f93ff);outline-offset:2px;}" +
-      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-close{color:#94a3b8;}" +
-      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-close:hover{background:rgba(255,255,255,.08);color:#f8fafc;}" +
-      ".boom-ia-crm-modal-body{flex:1;min-height:0;background:#fff;}" +
-      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-body{background:#1a1f26;}" +
-      ".boom-ia-crm-modal-body iframe{width:100%;height:100%;border:0;display:block;background:#fff;}" +
-      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-body iframe{background:#1a1f26;}" +
+      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-close{background:#1c2430;border-color:rgba(255,255,255,.08);color:#94a3b8;}" +
+      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-close:hover{background:#232d3b;color:#f8fafc;}" +
+      ".boom-ia-crm-modal-body{flex:1;min-height:0;background:#f8fafc;}" +
+      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-body{background:#0f1419;}" +
+      ".boom-ia-crm-modal-body iframe{width:100%;height:100%;border:0;display:block;background:transparent;}" +
       "html.boom-ia-crm-modal-open body{overflow:hidden;}" +
       "@media(prefers-reduced-motion:reduce){#boom-ia-crm-modal-root,.boom-ia-crm-modal{transition:none!important;transform:none!important;}}" +
       "@media(max-width:768px){#boom-ia-crm-modal-root{padding:0;align-items:stretch;}.boom-ia-crm-modal{width:100vw;height:100vh;max-height:100vh;border-radius:0;transform:translateY(100%);}#boom-ia-crm-modal-root.is-open .boom-ia-crm-modal{transform:translateY(0);}}" +
@@ -430,6 +458,8 @@
     const color = brandColor();
     const isDark = detectTheme() === "dark";
     const name = escHtml(crm.contactName || "Cliente");
+    const initials = escHtml(contactInitials(crm.contactName));
+    const phone = escHtml(formatPhoneBr(crm.phoneDigits) || "Sem telefone");
     return (
       '<div class="boom-ia-crm-modal' +
       (isDark ? " is-dark" : "") +
@@ -437,13 +467,20 @@
       '<header class="boom-ia-crm-modal-header" style="--boom-brand:' +
       color +
       '">' +
-      '<div class="boom-ia-crm-modal-brand"><span class="boom-ia-crm-modal-dot"></span><div>' +
-      '<span class="boom-ia-crm-modal-kicker">Boom IA · Cadastro do cliente</span>' +
+      '<div class="boom-ia-crm-modal-brand">' +
+      '<div class="boom-ia-crm-modal-avatar" aria-hidden="true">' +
+      initials +
+      "</div>" +
+      '<div class="boom-ia-crm-modal-meta">' +
+      '<span class="boom-ia-crm-modal-kicker">Boom IA <span class="boom-ia-crm-modal-kicker-badge">Cliente</span></span>' +
       '<strong class="boom-ia-crm-modal-name">' +
       name +
-      "</strong></div></div>" +
+      "</strong>" +
+      '<span class="boom-ia-crm-modal-phone">' +
+      phone +
+      "</span></div></div>" +
       '<button type="button" id="boom-ia-crm-panel-close" class="boom-ia-crm-modal-close" aria-label="Fechar cadastro">' +
-      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>' +
       "</button></header>" +
       '<div class="boom-ia-crm-modal-body">' +
       '<iframe id="boom-ia-crm-iframe" title="CRM Cliente — ' +
