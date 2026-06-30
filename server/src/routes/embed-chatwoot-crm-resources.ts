@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
 import {
@@ -29,6 +30,11 @@ function sendErr(reply: FastifyReply, e: unknown) {
   const msg = e instanceof Error ? e.message : String(e);
   const status = (e as { status?: number }).status ?? (msg.includes("não encontrado") ? 404 : 500);
   return reply.status(status).send({ error: msg });
+}
+
+function contactFilesPublicUrl(storagePath: string): string {
+  const base = (process.env.NEXUS_DB_URL || "").replace(/\/+$/, "");
+  return `${base}/storage/v1/object/public/contact-files/${storagePath}`;
 }
 
 export async function embedChatwootCrmResourceRoutes(fastify: FastifyInstance) {
@@ -202,6 +208,49 @@ export async function embedChatwootCrmResourceRoutes(fastify: FastifyInstance) {
             if (error) throw error;
             return reply.send({ success: true });
           }
+        }
+
+        if (resource === "calendars" && method === "GET" && !resourceId) {
+          const { data, error } = await supabase
+            .from("calendars")
+            .select("id, name, color")
+            .eq("tenant_id", tenantId)
+            .order("name");
+          if (error) throw error;
+          return reply.send({ data: data ?? [] });
+        }
+
+        if (resource === "documents" && resourceId === "upload" && method === "POST") {
+          const body = req.body ?? {};
+          const rawB64 = String(body.file_base64 || "").replace(/^data:[^;]+;base64,/, "");
+          if (!rawB64) return reply.status(400).send({ error: "file_base64 é obrigatório" });
+          const buf = Buffer.from(rawB64, "base64");
+          if (buf.length > 50 * 1024 * 1024) {
+            return reply.status(400).send({ error: "Arquivo deve ter no máximo 50 MB" });
+          }
+          const fileName = String(body.file_name || "arquivo").trim() || "arquivo";
+          const ext = fileName.includes(".") ? (fileName.split(".").pop() || "bin") : "bin";
+          const storagePath = `${tenantId}/${contactId}/${randomUUID()}.${ext}`;
+          const { error: uploadError } = await supabase.storage
+            .from("contact-files")
+            .upload(storagePath, buf, {
+              contentType: String(body.file_type || "application/octet-stream"),
+              upsert: false,
+            });
+          if (uploadError) throw uploadError;
+          const record = {
+            contact_id: contactId,
+            tenant_id: tenantId,
+            name: String(body.name || fileName).trim() || fileName,
+            category: String(body.category || "geral"),
+            file_url: contactFilesPublicUrl(storagePath),
+            file_type: (body.file_type as string) || null,
+            file_size: buf.length,
+            notes: (body.notes as string) || null,
+          };
+          const { data, error } = await supabase.from("contact_documents").insert(record).select().single();
+          if (error) throw error;
+          return reply.send(data);
         }
 
         if (resource === "documents") {

@@ -29,11 +29,11 @@
 
 <script data-name="boom-ia-client-crm-conversation">
 (function () {
-  const SCRIPT_VERSION = "v14";
+  const SCRIPT_VERSION = "v15";
   const SCRIPT_KEY = "boom_ia_client_crm_conversation_" + SCRIPT_VERSION;
   if (window[SCRIPT_KEY]) return;
   window[SCRIPT_KEY] = true;
-  console.info("[Boom IA] Cliente CRM conversa " + SCRIPT_VERSION + " carregado");
+  console.info("[Boom IA] Cliente CRM " + SCRIPT_VERSION + " carregado");
 
   /** ========== CONFIGURE AQUI ========== */
   const CFG = {
@@ -158,10 +158,11 @@
       ".boom-ia-crm-btn-ghost{background:transparent;border:1px solid var(--color-border,#e5e7eb);color:var(--color-heading,#111);}" +
       ".boom-ia-crm-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:#dcfce7;color:#166534;}" +
       "#boom-ia-crm-chat-bar{display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--color-border,#e5e7eb);background:var(--color-background-light,#f9fafb);}" +
-      "#boom-ia-crm-panel{position:fixed;top:0;right:0;bottom:0;width:min(1120px,78vw);z-index:100000;background:#fff;box-shadow:-4px 0 24px rgba(0,0,0,.15);display:flex;flex-direction:column;}" +
+      "#boom-ia-crm-panel{position:fixed;top:0;right:0;bottom:0;width:min(720px,54vw);z-index:100000;background:#fff;box-shadow:-4px 0 24px rgba(0,0,0,.15);display:flex;flex-direction:column;}" +
       "#boom-ia-crm-panel-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--color-border,#e5e7eb);}" +
       "#boom-ia-crm-panel iframe{flex:1;border:0;width:100%;}" +
       "html.boom-ia-crm-open-mobile #boom-ia-crm-panel{width:100vw!important;left:0!important;}" +
+      "html.boom-ia-crm-open .reply-box,html.boom-ia-crm-open .reply-box__wrap,html.boom-ia-crm-open [data-testid='reply-editor'],html.boom-ia-crm-open .conversation-footer,html.boom-ia-crm-open .editor-wrap{display:none!important;}" +
       "html.boom-ia-crm-open,html.boom-ia-crm-open body{overflow:hidden!important;}";
     document.head.appendChild(s);
   }
