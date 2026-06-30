@@ -85,6 +85,10 @@ async function build() {
     .split(",")
     .map((o) => o.trim())
     .filter(Boolean);
+  const embedFrameOrigins = (process.env.CHATWOOT_EMBED_FRAME_ANCESTORS || "")
+    .split(",")
+    .map((o) => o.trim())
+    .filter((o) => o && o !== "*");
   const tenantToggleCorsOrigins = (process.env.TENANT_AI_TOGGLE_CORS_ORIGINS || "")
     .split(",")
     .map((o) => o.trim())
@@ -100,6 +104,7 @@ async function build() {
     /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|172\.\d+\.\d+\.\d+)(:\d+)?$/,
     /\.lovable\.dev$/,
     ...extraOrigins,
+    ...embedFrameOrigins,
   ];
 
   function isTenantToggleCorsOrigin(origin: string): boolean {
@@ -153,6 +158,7 @@ async function build() {
       "content-type",
       "x-nexus-auth",
       "x-tenant-ai-toggle-secret",
+      "x-chatwoot-mirror-key",
       "x-supabase-client-platform",
       "x-supabase-client-platform-version",
       "x-supabase-client-runtime",

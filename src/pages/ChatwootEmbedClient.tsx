@@ -18,6 +18,11 @@ const EMBED_VERSION = "v1";
 
 export default function ChatwootEmbedClient() {
   const initial = parseEmbedCredentialsFromLocation();
+  const initialContactId = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("contact_id")?.trim() || null;
+  }, []);
+
   const [embedKey, setEmbedKey] = useState(initial.key);
   const [accountId, setAccountId] = useState(initial.accountId);
   const [appContext, setAppContext] = useState<ChatwootAppContext | null>(null);
@@ -97,8 +102,9 @@ export default function ChatwootEmbedClient() {
   }, [applyCredentials]);
 
   useEffect(() => {
+    if (initialContactId) return;
     void runLookup();
-  }, [runLookup, contextConversationId(appContext)]);
+  }, [runLookup, contextConversationId(appContext), initialContactId]);
 
   const handlePromote = async () => {
     if (!creds || !phoneDigits) return;
@@ -118,6 +124,16 @@ export default function ChatwootEmbedClient() {
       setPromoting(false);
     }
   };
+
+  if (initialContactId && creds) {
+    return (
+      <ContactProfileEmbed
+        contactId={initialContactId}
+        embedKey={creds.embedKey}
+        accountId={creds.accountId}
+      />
+    );
+  }
 
   if (lookupState === "client" && contact?.id && creds) {
     return (
