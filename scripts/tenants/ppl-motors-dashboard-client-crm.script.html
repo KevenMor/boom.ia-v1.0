@@ -1,7 +1,7 @@
 <!--
-  PPL Motors — Cliente CRM na conversa v11
+  PPL Motors — Cliente CRM na conversa v12
   Conta Chatwoot: 9 · Cole em Super Admin → Dashboard Scripts
-  Console esperado: "[Boom IA] Cliente CRM conversa v11 carregado"
+  Console esperado: "[Boom IA] Cliente CRM conversa v12 carregado"
 -->
 <!--
   Boom IA — Dashboard Script · Cliente CRM na conversa (Chatwoot / Mega)
@@ -34,7 +34,7 @@
 
 <script data-name="boom-ia-client-crm-conversation">
 (function () {
-  const SCRIPT_VERSION = "v11";
+  const SCRIPT_VERSION = "v12";
   const SCRIPT_KEY = "boom_ia_client_crm_conversation_" + SCRIPT_VERSION;
   if (window[SCRIPT_KEY]) return;
   window[SCRIPT_KEY] = true;
@@ -258,14 +258,33 @@
   }
 
   function findChatHeaderAnchor() {
-    return (
+    const direct =
       $('[data-testid="conversation-header"]') ||
       $(".conversation-header") ||
       $(".conversation-details__header") ||
       $(".header-title-wrap")?.closest("div") ||
       $(".conversation-panel .header") ||
-      $(".messages-wrap")?.previousElementSibling
-    );
+      $(".messages-wrap")?.previousElementSibling;
+    if (direct) return direct;
+
+    const resolver = [...$$("button, a")].find((el) => /resolver|resolve/i.test(el.textContent || ""));
+    if (resolver) {
+      let node = resolver.parentElement;
+      for (let i = 0; i < 6 && node; i++) {
+        const r = node.getBoundingClientRect();
+        if (r.width > 300 && r.height < 120 && r.top < 120) return node;
+        node = node.parentElement;
+      }
+    }
+
+    const messages = $(".messages-wrap") || $('[data-testid="message-list"]') || $(".message-content");
+    if (messages?.parentElement) return messages.parentElement.firstElementChild;
+
+    const centerCols = $$("div, main, section").filter((el) => {
+      const r = el.getBoundingClientRect();
+      return r.width > 400 && r.left > 200 && r.left < window.innerWidth * 0.55 && r.top < 100 && r.height < 100;
+    });
+    return centerCols[0] || null;
   }
 
   function extractPhoneDigits(sidebar) {
@@ -351,7 +370,11 @@
     if (crm.state === "client" && crm.contactId) {
       box.innerHTML =
         '<span class="boom-ia-crm-badge">Cliente no CRM</span>' +
-        '<p style="margin-top:8px">Cadastro vinculado. Use o botão no chat para abrir o perfil.</p>';
+        '<p style="margin-top:8px">Cadastro vinculado ao telefone deste contato.</p>' +
+        '<button type="button" class="boom-ia-crm-btn boom-ia-crm-btn-primary" data-action="open" style="background:' +
+        color +
+        ';margin-top:4px">Abrir cadastro do cliente</button>';
+      on(box.querySelector('[data-action="open"]'), "click", () => openClientPanel(crm.contactId));
       return;
     }
     if (!crm.phoneDigits) {
