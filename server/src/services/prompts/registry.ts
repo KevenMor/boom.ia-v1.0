@@ -231,7 +231,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: ST_DISPATCHER,
     followupPrompt: ST_FOLLOWUP,
     alwaysInjectCommRules: true,
-    version: "v1.5.5",
+    version: "v1.5.16",
     description: "Julia — Consultora de reservas Sunset Thermas Park",
   },
   "sunset-thermas": {
@@ -240,7 +240,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: ST_DISPATCHER,
     followupPrompt: ST_FOLLOWUP,
     alwaysInjectCommRules: true,
-    version: "v1.5.5",
+    version: "v1.5.16",
     description: "Julia — Consultora de reservas Sunset Thermas Park",
   },
   /** Slugs alinhados ao cabeçalho de durce-vita.ts */
@@ -443,7 +443,7 @@ export function buildSystemPrompt(
   const dateContext = `\n\n[CONTEXTO TEMPORAL] Agora: ${nowStr} (Bras?�lia). Hoje: ${todayISO}. Use estas datas como refer?�ncia ao falar de "hoje", "amanh?�", dias da semana, etc.`;
 
   const sunsetContext = isSunsetThermasPromptConfig(config)
-    ? appendSunsetConversationContext(options?.firstUserMessage, options?.messages)
+    ? appendSunsetConversationContext(options?.firstUserMessage, options?.messages, now)
     : "";
 
   return base + commRules + greeting + dateContext + sunsetContext;

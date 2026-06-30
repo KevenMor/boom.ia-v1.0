@@ -33,6 +33,12 @@ import {
 import { normalizeSuiteGalleryMediaUrl } from "@/lib/suite-gallery-display";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import {
+  readSandboxConversationId,
+  readSandboxInputDraft,
+  writeSandboxConversationId,
+  writeSandboxInputDraft,
+} from "@/lib/sandbox-session";
 
 type DebugEntry = { type: string; [key: string]: any };
 type TokenUsageEntry = {
@@ -149,12 +155,16 @@ export default function AgentSandbox() {
   const agent = agents?.find((a) => a.id === agentId);
 
   const [messages, setMessages] = useState<Msg[]>([]);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(() => readSandboxInputDraft(agentId));
   const [isLoading, setIsLoading] = useState(false);
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(() =>
+    readSandboxConversationId(agentId)
+  );
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [showHistory, setShowHistory] = useState(false);
-  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(
+    () => Boolean(agentId && readSandboxConversationId(agentId))
+  );
   const [showDebug, setShowDebug] = useState(false);
   const [pendingDebug, setPendingDebug] = useState<DebugEntry[] | null>(null);
   const [attachments, setAttachments] = useState<AttachmentFile[]>([]);
@@ -173,12 +183,12 @@ export default function AgentSandbox() {
 
   useEffect(() => {
     conversationIdRef.current = conversationId;
-  }, [conversationId]);
+    writeSandboxConversationId(agentId, conversationId);
+  }, [conversationId, agentId]);
 
   useEffect(() => {
-    conversationIdRef.current = null;
-    setConversationId(null);
-  }, [agentId]);
+    writeSandboxInputDraft(agentId, input);
+  }, [input, agentId]);
 
   const loadConversations = useCallback(async () => {
     if (!agentId) return;
@@ -232,7 +242,7 @@ export default function AgentSandbox() {
     return cleaned;
   };
 
-  const loadConversation = async (convId: string) => {
+  const loadConversation = useCallback(async (convId: string) => {
     if (!agentId) return;
     setLoadingHistory(true);
     try {
@@ -252,19 +262,40 @@ export default function AgentSandbox() {
           }))
           .filter((m) => m.content.trim() !== "" || (m.metadata?.type === "welcome_video" && m.metadata?.video_url))
       );
+      conversationIdRef.current = convId;
       setConversationId(convId);
+      writeSandboxConversationId(agentId, convId);
       setShowHistory(false);
     } catch {
       toast.error("Erro ao carregar conversa");
+      writeSandboxConversationId(agentId, null);
+      conversationIdRef.current = null;
+      setConversationId(null);
+      setMessages([]);
     } finally {
       setLoadingHistory(false);
     }
-  };
+  }, [agentId]);
+
+  /** Ao trocar de agente ou voltar à página: restaura conversa ativa do sessionStorage. */
+  useEffect(() => {
+    if (!agentId) return;
+    const stored = readSandboxConversationId(agentId);
+    setInput(readSandboxInputDraft(agentId));
+    if (stored) {
+      void loadConversation(stored);
+    } else {
+      conversationIdRef.current = null;
+      setConversationId(null);
+      setMessages([]);
+    }
+  }, [agentId, loadConversation]);
 
   const startNewConversation = () => {
     setMessages([]);
     conversationIdRef.current = null;
     setConversationId(null);
+    writeSandboxConversationId(agentId, null);
     setShowHistory(false);
   };
 

@@ -17,6 +17,8 @@ import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification,
 import { formatLodgingConsultaForLlm } from "../utils/lodging-consulta-summary.js";
 import { formatParkDayConsultaForLlm } from "../utils/park-day-consulta-summary.js";
 import {
+  conversationNeedsChildrenConfirmation,
+  conversationNeedsChildAgesConfirmation,
   extractSunsetLodgingParams,
   isSunsetThermasTenantSlug,
   shouldReinvokeSunsetLodging,
@@ -1453,7 +1455,11 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               sunsetParkHint = `\n\n[HINT OBRIGATÓRIO — PARQUE SUNSET]\nO cliente perguntou sobre ingresso/valor/abertura do parque. NÃO responda NO_TOOLS_NEEDED para consultar_parque_sunset. Chame a tool agora com date="${parkParamsHint.date}" (YYYY-MM-DD). Use ticket_lines e day_kind retornados — PROIBIDO inventar R$ ou mandar só link do site quando houver valores cadastrados.`;
             }
             const lodgingParamsHint = extractSunsetLodgingParams(messages);
-            if (lodgingParamsHint && !userAsksSunsetParkConsultation(messages)) {
+            if (conversationNeedsChildAgesConfirmation(messages) && !userAsksSunsetParkConsultation(messages)) {
+              sunsetLodgingHint = `\n\n[BLOQUEIO — HOSPEDAGEM SUNSET / IDADES PENDENTES]\nO cliente confirmou **criança(s)** mas **não informou idade(s)**. Responda **NO_TOOLS_NEEDED** para consultar_hospedagem_sunset. Julia: reconheça o que ele disse + "Quantos anos tem a criança?" (ou idade de cada uma se forem 2+) — **proibido** cotar ou inventar idade.`;
+            } else if (conversationNeedsChildrenConfirmation(messages) && !userAsksSunsetParkConsultation(messages)) {
+              sunsetLodgingHint = `\n\n[BLOQUEIO — HOSPEDAGEM SUNSET / CRIANÇAS PENDENTES]\nO cliente informou quantidade de pessoas (ex.: "3 pessoas") mas **não confirmou crianças**. Responda **NO_TOOLS_NEEDED** para consultar_hospedagem_sunset. Julia: reconheça o nº + "Alguma criança vai junto? Se sim, quantas e com quantos anos?" — **proibido** frase redundante tipo "quantas crianças? se sim, quantas?".`;
+            } else if (lodgingParamsHint && !userAsksSunsetParkConsultation(messages)) {
               const interestPart =
                 lodgingParamsHint.interest_keywords?.length
                   ? `, interest_keywords=${JSON.stringify(lodgingParamsHint.interest_keywords)}`

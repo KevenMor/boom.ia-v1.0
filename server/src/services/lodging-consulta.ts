@@ -23,15 +23,23 @@ export type LodgingConsultaOk =
         notes: string | null;
         /** Ocupação usada na tarifa quando difere da família (ex.: Loft cotado para 6 pessoas). */
         quoted_for_occupancy?: number;
+        /** Grupos acima de 4 pessoas: nº de unidades no orçamento. */
+        rooms_count?: number;
       }>;
       message: string;
+      /** Quando > 1, cotação multi-quarto (ex.: 8 pessoas = 2× até 4). */
+      rooms_in_quote?: number;
     }
   | {
       status: "park_closed";
       check_in: string;
       check_out: string;
+      nights: number;
+      closed_dates: string[];
       message: string;
       suggestions: string[];
+      /** Primeira janela com parque aberto em todos os dias da estadia (mesmo nº de noites). */
+      nearest_open_window?: { check_in: string; check_out: string; nights: number };
     };
 
 export type LodgingConsultaErr = { error: string; detail?: string };
@@ -41,8 +49,74 @@ export type LodgingConsultaErr = { error: string; detail?: string };
  * Usada pela rota HTTP e pela tool `lodging_consulta` (sem URL externa).
  */
 const LOFT_MIN_GUESTS_FOR_RATE = 6;
+/** Máximo de hóspedes por unidade nas tarifas padrão (Chalé/Suítes). Acima disso: multi-quarto. */
+const MAX_GUESTS_PER_STANDARD_ROOM = 4;
 
 type LodgingAccommodationRow = Extract<LodgingConsultaOk, { status: "success" }>["available_accommodations"][number];
+
+export type ParkDayRow = { calendar_date: string; day_kind: string };
+
+function addDaysIso(iso: string, days: number): string {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function formatDateIsoBR(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return d && m && y ? `${d}/${m}/${y}` : iso;
+}
+
+/**
+ * Primeira janela de hospedagem em que todos os dias [check_in, check_out) estão com parque aberto.
+ */
+export function findNearestOpenLodgingWindowFromRows(
+  rows: ParkDayRow[],
+  nights: number,
+  searchFrom: string
+): { check_in: string; check_out: string; nights: number } | null {
+  if (nights < 1 || rows.length === 0) return null;
+
+  const byDate = new Map(rows.map((r) => [r.calendar_date, r.day_kind]));
+  const candidateStarts = rows
+    .filter((r) => r.calendar_date >= searchFrom && r.day_kind === "aberto")
+    .map((r) => r.calendar_date)
+    .sort();
+
+  for (const checkIn of candidateStarts) {
+    let windowOpen = true;
+    for (let n = 0; n < nights; n++) {
+      const day = addDaysIso(checkIn, n);
+      if (byDate.get(day) !== "aberto") {
+        windowOpen = false;
+        break;
+      }
+    }
+    if (windowOpen) {
+      return { check_in: checkIn, check_out: addDaysIso(checkIn, nights), nights };
+    }
+  }
+  return null;
+}
+
+async function fetchNearestOpenLodgingWindow(
+  supabase: ReturnType<typeof createNexusClient>,
+  tenant_id: string,
+  nights: number,
+  searchFrom: string
+): Promise<{ check_in: string; check_out: string; nights: number } | null> {
+  const horizon = Math.max(nights * 14, 45);
+  const { data: days, error } = await supabase
+    .from("lodging_park_days")
+    .select("calendar_date, day_kind")
+    .eq("tenant_id", tenant_id)
+    .gte("calendar_date", searchFrom)
+    .order("calendar_date", { ascending: true })
+    .limit(horizon);
+
+  if (error) throw error;
+  return findNearestOpenLodgingWindowFromRows(days ?? [], nights, searchFrom);
+}
 
 async function fetchLoftSupplementalAccommodation(
   supabase: ReturnType<typeof createNexusClient>,
@@ -152,6 +226,13 @@ export async function runLodgingConsulta(
     const checkOutDate = new Date(check_out + "T00:00:00Z");
     const nights = Math.floor((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
 
+    let rateGuestCount = guestsForPricing;
+    let roomsInQuote = 1;
+    if (guestsForPricing > MAX_GUESTS_PER_STANDARD_ROOM) {
+      rateGuestCount = MAX_GUESTS_PER_STANDARD_ROOM;
+      roomsInQuote = Math.ceil(guestsForPricing / MAX_GUESTS_PER_STANDARD_ROOM);
+    }
+
     const { data: parkDays, error: parkError } = await supabase
       .from("lodging_park_days")
       .select("calendar_date, day_kind")
@@ -168,6 +249,21 @@ export async function runLodgingConsulta(
 
     if (closedDates.length > 0) {
       const suggestions: string[] = [];
+      const nearestOpenWindow = await fetchNearestOpenLodgingWindow(
+        supabase,
+        tenant_id,
+        nights,
+        check_in
+      );
+
+      if (nearestOpenWindow) {
+        const fromBR = formatDateIsoBR(nearestOpenWindow.check_in);
+        const toBR = formatDateIsoBR(nearestOpenWindow.check_out);
+        const nightsLabel = nearestOpenWindow.nights === 1 ? "1 noite" : `${nearestOpenWindow.nights} noites`;
+        suggestions.push(
+          `Hospedagem com parque aberto: check-in ${fromBR} → check-out ${toBR} (${nightsLabel})`
+        );
+      }
 
       const { data: allDays } = await supabase
         .from("lodging_park_days")
@@ -186,22 +282,28 @@ export async function runLodgingConsulta(
             }
           } else {
             if (lastOpen) {
-              suggestions.push(`Parque aberto: ${lastOpen} a ${d.calendar_date}`);
+              suggestions.push(
+                `Parque aberto: ${formatDateIsoBR(lastOpen)} a ${formatDateIsoBR(d.calendar_date)}`
+              );
               lastOpen = null;
             }
           }
         }
         if (lastOpen) {
-          suggestions.push(`Parque aberto a partir de: ${lastOpen}`);
+          suggestions.push(`Parque aberto a partir de: ${formatDateIsoBR(lastOpen)}`);
         }
       }
 
+      const closedBR = closedDates.map(formatDateIsoBR).join(", ");
       const data: LodgingConsultaOk = {
         status: "park_closed",
         check_in,
         check_out,
-        message: `O parque estará fechado em ${closedDates.join(", ")}. Não conseguimos confirmar hospedagem nessas datas.`,
+        nights,
+        closed_dates: closedDates,
+        message: `O parque estará fechado em ${closedBR}. Não é possível cotar hospedagem para essas datas.`,
         suggestions,
+        ...(nearestOpenWindow ? { nearest_open_window: nearestOpenWindow } : {}),
       };
       return { ok: true, data };
     }
@@ -210,7 +312,7 @@ export async function runLodgingConsulta(
       .from("lodging_rate_items")
       .select("*, lodging_accommodation_types (id, name)")
       .eq("tenant_id", tenant_id)
-      .eq("guests", guestsForPricing)
+      .eq("guests", rateGuestCount)
       .eq("nights", nights)
       .order("accommodation_type_id", { ascending: true });
 
@@ -228,7 +330,7 @@ export async function runLodgingConsulta(
       };
 
       const minGuests = minGuestsMap[typeName] ?? 2;
-      return guestsForPricing >= minGuests;
+      return rateGuestCount >= minGuests;
     });
 
     /** Uma linha por categoria de acomodação: evita duplicatas (ex.: BRL + USD ou seeds repetidos). */
@@ -272,16 +374,28 @@ export async function runLodgingConsulta(
       }>
     );
 
-    const accommodations = uniqueRates.map((rate) => ({
-      id: rate.id,
-      name: rate.lodging_accommodation_types?.name ?? "Acomodação",
-      guests: rate.guests,
-      nights: rate.nights,
-      price_per_night: Number(rate.price) / nights,
-      total_price: parseFloat(String(rate.price)),
-      currency: rate.currency,
-      notes: rate.notes,
-    }));
+    const accommodations = uniqueRates.map((rate) => {
+      const unitTotal = parseFloat(String(rate.price));
+      const totalForGroup = unitTotal * roomsInQuote;
+      const multiRoomNote =
+        roomsInQuote > 1
+          ? `${roomsInQuote} unidades (até ${rateGuestCount} pessoas cada) — referência para ${guestsForPricing} hóspedes no total.`
+          : null;
+      const mergedNotes = [multiRoomNote, rate.notes?.trim()].filter(Boolean).join(" ") || null;
+      return {
+        id: rate.id,
+        name: rate.lodging_accommodation_types?.name ?? "Acomodação",
+        guests: rate.guests,
+        nights: rate.nights,
+        price_per_night: unitTotal / nights,
+        total_price: totalForGroup,
+        currency: rate.currency,
+        notes: mergedNotes,
+        ...(roomsInQuote > 1
+          ? { rooms_count: roomsInQuote, quoted_for_occupancy: rateGuestCount }
+          : {}),
+      };
+    });
 
     const loftInterest = wantsLoftOrSpaInterest(params.interest_keywords);
     const hasLoftInList = accommodations.some((a) => /loft|spa/i.test(a.name));
@@ -301,8 +415,12 @@ export async function runLodgingConsulta(
         : "";
 
     const optWord = uniqueRates.length === 1 ? "opção" : "opções";
+    const groupRoomHint =
+      roomsInQuote > 1
+        ? ` (orçamento com ${roomsInQuote} unidades de até ${rateGuestCount} pessoas cada para acomodar ${guestsForPricing} hóspedes)`
+        : "";
     const message =
-      `Encontramos ${uniqueRates.length} ${optWord} de hospedagem para ${guestsForPricing} pessoa${guestsForPricing === 1 ? "" : "s"}` +
+      `Encontramos ${uniqueRates.length} ${optWord} de hospedagem para ${guestsForPricing} pessoa${guestsForPricing === 1 ? "" : "s"}${groupRoomHint}` +
       (guestsFamilyTotal > guestsForPricing
         ? ` (sua família tem ${guestsFamilyTotal} pessoa${guestsFamilyTotal === 1 ? "" : "s"}), `
         : `, `) +
@@ -319,6 +437,7 @@ export async function runLodgingConsulta(
       kids_under_12: childrenUnder12,
       available_accommodations: accommodations,
       message,
+      ...(roomsInQuote > 1 ? { rooms_in_quote: roomsInQuote } : {}),
     };
     return { ok: true, data };
   } catch (e) {

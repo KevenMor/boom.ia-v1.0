@@ -30,6 +30,13 @@ export function formatParkDayConsultaForLlm(obj: Record<string, unknown>): strin
 
   if (!parkOpen) {
     lines.push("Comunique gentilmente que o parque não está aberto nesta data. PROIBIDO citar valores de ingresso.");
+    const nextOpen =
+      typeof obj.next_open_date === "string" && obj.next_open_date.trim()
+        ? obj.next_open_date.trim()
+        : null;
+    if (nextOpen) {
+      lines.push(`PRÓXIMA DATA COM PARQUE ABERTO no calendário: ${nextOpen}. Informe ao cliente e ofereça essa data se fizer sentido.`);
+    }
     return lines.join("\n");
   }
 

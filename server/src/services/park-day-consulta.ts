@@ -12,6 +12,8 @@ export type ParkDayConsultaResult =
       park_open: boolean;
       ticket_lines: ParkTicketLine[];
       message: string;
+      /** Quando fechado/manutenção: próxima data com parque aberto no calendário. */
+      next_open_date?: string;
     }
   | {
       status: "no_data";
@@ -125,6 +127,22 @@ export async function runParkDayConsulta(
     );
     const park_open = day_kind === "aberto";
 
+    let next_open_date: string | undefined;
+    if (!park_open) {
+      const { data: futureDays } = await supabase
+        .from("lodging_park_days")
+        .select("calendar_date, day_kind")
+        .eq("tenant_id", tenant_id)
+        .gt("calendar_date", date)
+        .order("calendar_date", { ascending: true })
+        .limit(45);
+
+      const nextOpen = futureDays?.find((d) => d.day_kind === "aberto");
+      if (nextOpen?.calendar_date) {
+        next_open_date = nextOpen.calendar_date;
+      }
+    }
+
     return {
       ok: true,
       data: {
@@ -135,6 +153,7 @@ export async function runParkDayConsulta(
         park_open,
         ticket_lines,
         message: buildSuccessMessage(date, day_kind, event_label, ticket_lines),
+        ...(next_open_date ? { next_open_date } : {}),
       },
     };
   } catch (e) {

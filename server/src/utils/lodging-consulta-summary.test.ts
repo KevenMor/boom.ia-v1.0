@@ -68,14 +68,18 @@ describe("formatLodgingConsultaForLlm", () => {
     expect(formatLodgingConsultaForLlm({ error: "falha" })).toBeNull();
   });
 
-  it("trata park_closed sem citar tarifas", () => {
+  it("trata park_closed sem citar tarifas e oferece janela alternativa", () => {
     const summary = formatLodgingConsultaForLlm({
       status: "park_closed",
       message: "Parque fechado às segundas.",
-      suggestions: ["Terça 17/06"],
+      suggestions: ["Hospedagem com parque aberto: check-in 18/05/2026 → check-out 19/05/2026 (1 noite)"],
+      nearest_open_window: { check_in: "2026-05-18", check_out: "2026-05-19", nights: 1 },
     });
-    expect(summary).toContain("parque fechado");
+    expect(summary).toMatch(/parque fechado/i);
     expect(summary).toContain("PROIBIDO citar valores");
+    expect(summary).toContain("JANELA ALTERNATIVA");
+    expect(summary).toContain("2026-05-18");
+    expect(summary).toMatch(/OFEREÇA|orçamento/i);
   });
 
   it("ordena acomodações do menor para o maior total_price", () => {

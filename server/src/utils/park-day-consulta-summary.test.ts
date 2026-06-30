@@ -15,15 +15,17 @@ describe("formatParkDayConsultaForLlm", () => {
     expect(text).toMatch(/PROIBIDO substituir por link genérico/);
   });
 
-  it("formata parque fechado", () => {
+  it("formata parque fechado com próxima data aberta", () => {
     const text = formatParkDayConsultaForLlm({
       status: "success",
       date: "2026-06-12",
       day_kind: "fechado",
       park_open: false,
       ticket_lines: [],
+      next_open_date: "2026-06-14",
     });
     expect(text).toMatch(/Parque aberto para visita: não/);
     expect(text).toMatch(/PROIBIDO citar valores de ingresso/);
+    expect(text).toMatch(/PRÓXIMA DATA COM PARQUE ABERTO.*2026-06-14/);
   });
 });

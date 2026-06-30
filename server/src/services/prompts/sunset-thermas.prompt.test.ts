@@ -5,6 +5,7 @@ import {
   conversationDeclaresLodgingIntent,
   detectSunsetSiteFormMessage,
   DISPATCHER_PROMPT,
+  FOLLOWUP_PROMPT,
   messageDeclaresLodgingIntent,
   messageDeclaresParkDayVisitQuestion,
   SUNSET_FORM_DIALOGUE_EXAMPLE,
@@ -14,7 +15,7 @@ import { buildSystemPrompt } from "./registry.js";
 
 describe("Sunset Thermas Park — SYSTEM_PROMPT (contratos de negócio)", () => {
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.5/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.16/);
   });
 
   it("mantém regra suprema de valores e vaga (tolerância zero)", () => {
@@ -203,8 +204,10 @@ describe("Sunset Thermas Park — §00a CALENDÁRIO INTERNO (política v1.3.0)",
 });
 
 describe("Sunset Thermas Park — COMMUNICATION_RULES (regras de WhatsApp)", () => {
-  it("mantém regras de zero emoji e valores apenas da tabela", () => {
+  it("mantém regras de zero emoji (inclusive orçamento) e valores apenas da tabela", () => {
     expect(COMMUNICATION_RULES).toMatch(/Emoji: zero/i);
+    expect(COMMUNICATION_RULES).toMatch(/inclusive no or[cç]amento|inclusive no orçamento/i);
+    expect(COMMUNICATION_RULES).toMatch(/3b-formato/i);
     expect(COMMUNICATION_RULES).toMatch(/Valores:/i);
     expect(COMMUNICATION_RULES).toMatch(/21\/12\/2026/);
   });
@@ -220,6 +223,39 @@ describe("Sunset Thermas Park — COMMUNICATION_RULES (regras de WhatsApp)", () 
     expect(COMMUNICATION_RULES).toMatch(/Calend[aá]rio do parque[^.\n]*interno/i);
     expect(COMMUNICATION_RULES).toMatch(/N[aã]o envie[^\n]*index\.php|N[aã]o[^\n]*link[^\n]*cliente|N[aã]o pe[cç]a[^\n]*olhada no funcionamento/i);
     expect(COMMUNICATION_RULES).toMatch(/fonte registrada/i);
+  });
+});
+
+describe("Sunset Thermas Park — gate abertura do parque (v1.5.16)", () => {
+  it("§00a declara gate de hospedagem e janela alternativa em park_closed", () => {
+    expect(SYSTEM_PROMPT).toMatch(/GATE|gate obrigatório/i);
+    expect(SYSTEM_PROMPT).toMatch(/nearest_open_window/);
+    expect(SYSTEM_PROMPT).toMatch(/n[aã]o continue.*valores de hotel|N[aã]o continue/i);
+  });
+
+  it("§00e park_closed proíbe cotação e manda oferecer data alternativa", () => {
+    expect(SYSTEM_PROMPT).toMatch(/PARE a cota[cç][ãa]o|GATE:/i);
+    expect(SYSTEM_PROMPT).toMatch(/data aberta mais pr[oó]xima/i);
+  });
+
+  it("§00f cobre pergunta se parque vai estar aberto", () => {
+    expect(SYSTEM_PROMPT).toMatch(/vai estar aberto|funciona nessa data/i);
+    expect(SYSTEM_PROMPT).toMatch(/next_open_date/);
+  });
+
+  it("DISPATCHER documenta gate na hospedagem e re-chamada após park_closed", () => {
+    expect(DISPATCHER_PROMPT).toMatch(/Park-open gate|park_closed/i);
+    expect(DISPATCHER_PROMPT).toMatch(/nearest_open_window/);
+    expect(DISPATCHER_PROMPT).toMatch(/Re-call after park_closed/i);
+  });
+
+  it("DISPATCHER chama consultar_parque_sunset para abertura do parque", () => {
+    expect(DISPATCHER_PROMPT).toMatch(/vai estar aberto|abre nessa data/i);
+  });
+
+  it("COMMUNICATION_RULES item 12 reforça gate e nearest_open_window", () => {
+    expect(COMMUNICATION_RULES).toMatch(/12\./);
+    expect(COMMUNICATION_RULES).toMatch(/nearest_open_window|Gate hospedagem/i);
   });
 });
 
@@ -276,9 +312,9 @@ describe("Sunset Thermas Park — Tabela do §2 como FALLBACK (v1.4.0)", () => {
     expect(SYSTEM_PROMPT).toMatch(/tool n[aã]o foi chamada[^\n]*ou retornou erro|fallback da tabela §2|fallback[^\n]*tabela §2/i);
   });
 
-  it("Turno 3 inclui park_closed no roteamento de exceção (encaminha humano + oferece suggestions)", () => {
+  it("Turno 3 inclui park_closed no roteamento de exceção (oferece janela alternativa)", () => {
     expect(SYSTEM_PROMPT).toMatch(/park_closed/);
-    expect(SYSTEM_PROMPT).toMatch(/suggestions/);
+    expect(SYSTEM_PROMPT).toMatch(/nearest_open_window|data aberta mais pr[oó]xima/i);
   });
 
   it("§00a cita a tool como fonte canônica do park_closed (calendário)", () => {
@@ -359,7 +395,7 @@ describe("Sunset Thermas Park — regressão v1.4.1 (caso 'dia dos namorados')",
   });
 });
 
-describe("Sunset Thermas Park — regressão v1.4.2 (caso 'Prazer, Keven.hoje?')", () => {
+describe("Sunset Thermas Park — regressão v1.4.2 (tom hoje/amanhã)", () => {
   it("declara §00c-2 sobre CONTEXTO TEMPORAL como uso interno, não fala do cliente", () => {
     expect(SYSTEM_PROMPT).toMatch(/00c-2\)/);
     expect(SYSTEM_PROMPT).toMatch(/CONTEXTO TEMPORAL|USO INTERNO|n[ãa]o [eé] fala do cliente/i);
@@ -367,7 +403,7 @@ describe("Sunset Thermas Park — regressão v1.4.2 (caso 'Prazer, Keven.hoje?')
 
   it("proíbe encher linguiça com 'hoje?' ou ganchos inventados a partir do contexto temporal", () => {
     expect(SYSTEM_PROMPT).toMatch(/N[UÚ]NCA[^\n]*trate esse bloco|n[ãa]o[^\n]*enche[nc]ha?[^\n]*lingui[çc]a|n[ãa]o encha lingui[çc]a/i);
-    expect(SYSTEM_PROMPT).toMatch(/Prazer, Keven[^\n]*hoje\?|hoje\?/);
+    expect(SYSTEM_PROMPT).toMatch(/hoje\?/i);
   });
 
   it("Turno 2 sem dados: proíbe inventar gancho e manda descobrir intenção antes de datas", () => {
@@ -376,8 +412,8 @@ describe("Sunset Thermas Park — regressão v1.4.2 (caso 'Prazer, Keven.hoje?')
     expect(SYSTEM_PROMPT).toMatch(/3a\)|INTEN[ÇC][ÃA]O.*PARQUE|parque.*hospedagem.*ambos/i);
   });
 
-  it("§3 tem exemplo positivo oi → keven → perguntar intenção (não curtir o parque nem §00d)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/Cliente Turno 2: "keven"/i);
+  it("§3 tem exemplo positivo oi → Maria → perguntar intenção (não curtir o parque nem §00d)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Cliente Turno 2: "Maria"/i);
     expect(SYSTEM_PROMPT).toMatch(/parque.*hospedagem.*os dois|hospedagem no hotel.*os dois/i);
     expect(SYSTEM_PROMPT).toMatch(/ERRADO.*curtir o parque|vi[eé]s s[oó] parque/i);
     expect(SYSTEM_PROMPT).not.toMatch(/Turno 2 \(CORRETO\)[^\n]*curtir o parque/i);
@@ -484,35 +520,150 @@ describe("Sunset Thermas Park — anti-alucinação sem tool (v1.5.1)", () => {
     expect(SYSTEM_PROMPT).toMatch(/Sem resultado da tool neste turno.*PROIBIDO citar R\$/i);
   });
 
-  it("DISPATCHER chama tool quando cliente responde composição após pergunta de pessoas", () => {
-    expect(DISPATCHER_PROMPT).toMatch(/Composition answer|quantas pessoas/i);
-    expect(DISPATCHER_PROMPT).toMatch(/duas apenas|explicit.*guest count/i);
+  it("DISPATCHER exige idades quando há criança", () => {
+    expect(DISPATCHER_PROMPT).toMatch(/3-composi[cç][ãa]o-idades|without ages = NO_TOOLS_NEEDED/i);
+    expect(DISPATCHER_PROMPT).toMatch(/Never.*invent child ages/i);
   });
 
-  it("COMMUNICATION_RULES item 15 reforça anti-alucinação", () => {
-    expect(COMMUNICATION_RULES).toMatch(/15\./);
+  it("DISPATCHER exige crianças confirmadas antes de chamar tool", () => {
+    expect(DISPATCHER_PROMPT).toMatch(/Composition answer|quantas pessoas/i);
+    expect(DISPATCHER_PROMPT).toMatch(/Bare number "3"|sem crian[cç]as|NO_TOOLS_NEEDED/i);
+  });
+
+  it("COMMUNICATION_RULES item 16 reforça anti-alucinação", () => {
+    expect(COMMUNICATION_RULES).toMatch(/16\./);
     expect(COMMUNICATION_RULES).toMatch(/sem resultado da tool|Anti-alucina/i);
   });
 });
 
-describe("Sunset Thermas Park — §3d fechamento aquecido (v1.5.0)", () => {
-  it("declara §3d com tom consultivo e proíbe menu seco de call center", () => {
+describe("Sunset Thermas Park — §3d fechamento consultivo SDR (v1.5.9)", () => {
+  it("declara §3d consultivo e proíbe encaminhar após cotação", () => {
     expect(SYSTEM_PROMPT).toMatch(/3d\)/);
-    expect(SYSTEM_PROMPT).toMatch(/FECHAMENTO DE TURNO|CONVERSA AQUECIDA/i);
+    expect(SYSTEM_PROMPT).toMatch(/CONSULTORA \+ SDR|consultiva SDR/i);
+    expect(SYSTEM_PROMPT).toMatch(/Proibido.*encaminho.*setor de reservas|encaminho pro setor de reservas/i);
+    expect(SYSTEM_PROMPT).toMatch(/o que achou|Ficou alguma d[uú]vida/i);
+  });
+
+  it("§3d proíbe menu seco de call center", () => {
     expect(SYSTEM_PROMPT).toMatch(/prefere que eu verifique algo mais/i);
-    expect(SYSTEM_PROMPT).toMatch(/Proibido.*tom seco|menu gen[eé]rico/i);
+    expect(SYSTEM_PROMPT).toMatch(/Menu seco|Posso ajudar em algo mais/i);
   });
 
-  it("§3d manda ancorar gancho no plano do cliente após dúvida", () => {
-    expect(SYSTEM_PROMPT).toMatch(/Gancho leve|gancho leve/i);
-    expect(SYSTEM_PROMPT).toMatch(/retoma.*plano|plano deles/i);
-    expect(SYSTEM_PROMPT).toMatch(/Dia dos Namorados/i);
-  });
-
-  it("COMMUNICATION_RULES item 14 reforça fechamento §3d", () => {
+  it("COMMUNICATION_RULES item 14 reforça fechamento consultivo sem encaminhar", () => {
     expect(COMMUNICATION_RULES).toMatch(/14\./);
-    expect(COMMUNICATION_RULES).toMatch(/§3d|fechamento de turno/i);
-    expect(COMMUNICATION_RULES).toMatch(/verificar algo mais/i);
+    expect(COMMUNICATION_RULES).toMatch(/§3d|consultivo/i);
+    expect(COMMUNICATION_RULES).toMatch(/Proibido.*encaminho|encaminhar pro setor/i);
+  });
+
+  it("§3b-formato documenta layout WhatsApp limpo sem emoji", () => {
+    expect(SYSTEM_PROMPT).toMatch(/3b-formato\)/);
+    expect(SYSTEM_PROMPT).toMatch(/Zero emoji no or[cç]amento|Zero emoji.*or[cç]amento/i);
+    expect(SYSTEM_PROMPT).toMatch(/\*Opções\*/);
+    expect(SYSTEM_PROMPT).toMatch(/\*Chal[eé]\* — R\$/);
+    expect(SYSTEM_PROMPT).toMatch(/STANDART.*Chal[eé]/i);
+    expect(SYSTEM_PROMPT).toMatch(/Proibido.*STANDART R\$/i);
+    expect(SYSTEM_PROMPT).toMatch(/Check-in: a partir das 10h/i);
+  });
+
+  it("COMMUNICATION_RULES proíbe emoji inclusive no orçamento", () => {
+    expect(COMMUNICATION_RULES).toMatch(/Emoji: zero/i);
+    expect(COMMUNICATION_RULES).not.toMatch(/Exce[cç][ãa]o.*3b-formato.*emoji/i);
+  });
+
+  it("§3-composição exige confirmar crianças antes de cotar", () => {
+    expect(SYSTEM_PROMPT).toMatch(/3-composi[cç][ãa]o|CRIAN[CÇ]AS — OBRIGAT/i);
+    expect(SYSTEM_PROMPT).toMatch(/Alguma crian[cç]a vai junto/i);
+    expect(COMMUNICATION_RULES).toMatch(/15\./);
+  });
+});
+
+describe("Sunset Thermas Park — §3f conversão SDR (v1.5.8+)", () => {
+  it("declara papel SDR e encaminhamento ao setor de reservas", () => {
+    expect(SYSTEM_PROMPT).toMatch(/3f\)/);
+    expect(SYSTEM_PROMPT).toMatch(/PAPEL SDR|consultora \+ SDR/i);
+    expect(SYSTEM_PROMPT).toMatch(/99860-5662/);
+    expect(SYSTEM_PROMPT).toMatch(/hotel\.php/);
+    expect(SYSTEM_PROMPT).toMatch(/reserva confirmada/i);
+  });
+
+  it("FOLLOWUP inclui Etapa F e precisão ancorada no histórico", () => {
+    expect(FOLLOWUP_PROMPT).toMatch(/Etapa F/i);
+    expect(FOLLOWUP_PROMPT).toMatch(/fato exato|fato do hist/i);
+    expect(FOLLOWUP_PROMPT).toMatch(/setor de reservas/i);
+    expect(FOLLOWUP_PROMPT).toMatch(/fico no aguardo/i);
+  });
+
+  it("appendSunsetConversationContext injeta bloco de conversão com interesse", () => {
+    const ref = new Date("2026-06-13T15:00:00Z");
+    const ctx = appendSunsetConversationContext(undefined, [
+      { role: "user", content: "quero hospedagem de hoje ate amanha" },
+      { role: "assistant", content: "Quantas pessoas?" },
+      { role: "user", content: "8 pessoas" },
+      { role: "assistant", content: "Valores..." },
+      { role: "user", content: "gostei do Standart, quero reservar" },
+    ], ref);
+    expect(ctx).toMatch(/INTERESSE|CONVERS[AÃ]O SDR/i);
+    expect(ctx).toMatch(/99860-5662/);
+    expect(ctx).toMatch(/PROIBIDO.*reserva confirmada/i);
+  });
+
+  it("COMMUNICATION_RULES item 24 reforça papel SDR só com interesse", () => {
+    expect(COMMUNICATION_RULES).toMatch(/24\./);
+    expect(COMMUNICATION_RULES).toMatch(/§3f|SDR/i);
+  });
+
+  it("§3-composição-tom proíbe pergunta redundante sobre crianças", () => {
+    expect(SYSTEM_PROMPT).toMatch(/3-composi[cç][ãa]o-tom/i);
+    expect(SYSTEM_PROMPT).toMatch(/Quantas crian[cç]as v[aã]o junto\? Se sim, quantas/i);
+    expect(SYSTEM_PROMPT).toMatch(/Perfeito, 3 pessoas/i);
+  });
+
+  it("§00c-3 proíbe inventar nome e copiar exemplos fictícios", () => {
+    expect(SYSTEM_PROMPT).toMatch(/00c-3\)/);
+    expect(SYSTEM_PROMPT).toMatch(/PROIBIDO.*Keven|copiar nomes dos \*\*exemplos fict/i);
+    expect(SYSTEM_PROMPT).toMatch(/hospedagem para hoje até amanhã/i);
+  });
+
+  it("injeta nameGuard quando cliente não disse nome", () => {
+    const ctx = appendSunsetConversationContext(undefined, [
+      { role: "user", content: "ola" },
+      { role: "assistant", content: "Como prefere ser chamado(a)?" },
+      { role: "user", content: "hospedagem para o dia de hoje ate amanha" },
+    ]);
+    expect(ctx).toMatch(/PROIBIDO.*Prazer/i);
+    expect(ctx).toMatch(/copiar nomes dos exemplos fict/i);
+  });
+
+  it("§3-composição-idades exige idade quando há criança", () => {
+    expect(SYSTEM_PROMPT).toMatch(/3-composi[cç][ãa]o-idades/i);
+    expect(SYSTEM_PROMPT).toMatch(/Quantos anos tem a crian[cç]a/i);
+    expect(SYSTEM_PROMPT).toMatch(/2 adultos e 1 crian[cç]a de 5 anos/i);
+  });
+
+  it("injeta contexto idades pendentes quando criança sem idade", () => {
+    const ref = new Date("2026-06-13T15:00:00Z");
+    const ctx = appendSunsetConversationContext(undefined, [
+      { role: "user", content: "hospedagem para hoje ate amanha" },
+      { role: "assistant", content: "Quantas pessoas vão na estadia?" },
+      { role: "user", content: "3" },
+      { role: "assistant", content: "Alguma criança vai junto?" },
+      { role: "user", content: "sim, 1 criança" },
+    ], ref);
+    expect(ctx).toMatch(/IDADES PENDENTES/i);
+    expect(ctx).toMatch(/Quantos anos/i);
+    expect(ctx).toMatch(/PROIBIDO.*cotar/i);
+  });
+
+  it("injeta contexto crianças pendentes quando cliente disse só número", () => {
+    const ref = new Date("2026-06-13T15:00:00Z");
+    const ctx = appendSunsetConversationContext(undefined, [
+      { role: "user", content: "hospedagem para hoje ate amanha" },
+      { role: "assistant", content: "Quantas pessoas vão na estadia?" },
+      { role: "user", content: "3" },
+    ], ref);
+    expect(ctx).toMatch(/CRIAN[CÇ]AS PENDENTES/i);
+    expect(ctx).toMatch(/PROIBIDO.*repetir.*quantas pessoas/i);
+    expect(ctx).toMatch(/PROIBIDO.*cotar/i);
   });
 });
 
@@ -546,9 +697,8 @@ describe("Sunset Thermas Park — §3b listagem de todas as acomodações (v1.4.
     expect(SYSTEM_PROMPT).toMatch(/Proibido:.*citar Chal[eé].*Su[ií]te Luxo|pular categorias que vieram na tool/i);
   });
 
-  it("COMMUNICATION_RULES item 13 reforça listar todas e §3c sexta→domingo", () => {
-    expect(COMMUNICATION_RULES).toMatch(/liste \*\*todas\*\*|liste todas/i);
-    expect(COMMUNICATION_RULES).toMatch(/recota[cç][ãa]o|nunca s[oó] uma/i);
+  it("COMMUNICATION_RULES item 13 reforça §3b-formato e §3c sexta→domingo", () => {
+    expect(COMMUNICATION_RULES).toMatch(/3b-formato|liste \*\*todas\*\*|liste todas/i);
     expect(COMMUNICATION_RULES).toMatch(/sexta.*domingo|§3c/i);
   });
 });
@@ -606,6 +756,40 @@ describe("Sunset Thermas Park — mudança de assunto parque (v1.5.4)", () => {
     expect(COMMUNICATION_RULES).toMatch(/18\./);
     expect(COMMUNICATION_RULES).toMatch(/consultar_parque_sunset|§00f/i);
   });
+
+  it("§3b-grupos proíbe confirmação especial para 8 pessoas", () => {
+    expect(SYSTEM_PROMPT).toMatch(/3b-grupos/);
+    expect(SYSTEM_PROMPT).toMatch(/confirma[cç][ãa]o especial|multi-quarto/i);
+  });
+
+  it("§00c-2 proíbe Dia dos Namorados quando cliente disse hoje", () => {
+    expect(SYSTEM_PROMPT).toMatch(/PROIBIDO.*Dia dos Namorados|n[aã]o citou.*hoje/i);
+  });
+
+  it("injeta contexto hoje/amanhã sem evento inventado", () => {
+    const ref = new Date("2026-06-13T15:00:00.000Z");
+    const ctx = appendSunsetConversationContext(
+      undefined,
+      [{ role: "user", content: "Maria, quero hospedagem para o dia de hoje ate amanha" }],
+      ref
+    );
+    expect(ctx).toMatch(/HOJE\/AMANHÃ|13\/06\/2026/i);
+    expect(ctx).toMatch(/§3a-tom|certo\?/i);
+    expect(ctx).toMatch(/PROIBIDO.*Dia dos Namorados|12\/06/i);
+    expect(ctx).toMatch(/quantas pessoas/i);
+    expect(ctx).toMatch(/n[aã]o.*repita essas datas/i);
+  });
+
+  it("§3a-tom proíbe confirmar hoje/amanhã roboticamente", () => {
+    expect(SYSTEM_PROMPT).toMatch(/3a-tom\)/);
+    expect(SYSTEM_PROMPT).toMatch(/certo\?|13\/06 e amanhã será 14\/06/i);
+    expect(SYSTEM_PROMPT).toMatch(/me chamo Maria e quero hospedagem de hoje at[eé] amanh[aã]/i);
+  });
+
+  it("§3b-grupos-tom exige explicar quartos antes da lista", () => {
+    expect(SYSTEM_PROMPT).toMatch(/3b-grupos-tom|divide em \*\*dois quartos\*\*/i);
+    expect(SYSTEM_PROMPT).toMatch(/para 2 unidades.*sem explicar/i);
+  });
 });
 
 describe("Sunset Thermas Park — intenção já declarada (v1.5.3)", () => {
@@ -616,7 +800,7 @@ describe("Sunset Thermas Park — intenção já declarada (v1.5.3)", () => {
 
   it("§3a proíbe menu parque/hospedagem quando intenção + período já vieram", () => {
     expect(SYSTEM_PROMPT).toMatch(/INTEN[ÇC][ÃA]O \+ PER[IÍ]ODO J[AÁ] DITOS/i);
-    expect(SYSTEM_PROMPT).toMatch(/keven, quero hospedagem para o dia dos namorados/i);
+    expect(SYSTEM_PROMPT).toMatch(/Maria, quero hospedagem para o dia dos namorados/i);
     expect(SYSTEM_PROMPT).toMatch(/Quantas pessoas v[aã]o na estadia/);
   });
 
@@ -624,7 +808,7 @@ describe("Sunset Thermas Park — intenção já declarada (v1.5.3)", () => {
     const msgs = [
       { role: "user", content: "ola" },
       { role: "assistant", content: "Como prefere ser chamado?" },
-      { role: "user", content: "keven, quero hospedagem para o dia dos namorados" },
+      { role: "user", content: "Maria, quero hospedagem para o dia dos namorados" },
     ];
     const ctx = appendSunsetConversationContext(undefined, msgs);
     expect(ctx).toMatch(/j[aá] declarou HOSPEDAGEM/i);
