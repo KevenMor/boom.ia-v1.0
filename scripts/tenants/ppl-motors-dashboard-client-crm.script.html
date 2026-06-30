@@ -1,15 +1,11 @@
 <!--
-  PPL Motors — Cliente CRM v18 (só botão na sidebar de contato)
-  Console: "[Boom IA] Cliente CRM v18 carregado"
--->
-<!--
   Boom IA — Dashboard Script · Cliente CRM na conversa (Chatwoot / Mega)
   =====================================================================
 
   O que faz:
   - Na sidebar DIREITA do chat (painel do contato): botão "Transformar em cliente"
     quando o contato ainda não é cliente no CRM, ou "Abrir cadastro do cliente" se já for cliente.
-  - Abre o CRM na própria coluna da sidebar (/api/embed/chatwoot/crm/view?contact_id=...).
+  - Abre o CRM em modal centralizado com fundo desfocado (melhor visualização).
 
   NÃO adiciona item na sidebar esquerda.
 
@@ -31,7 +27,7 @@
 
 <script data-name="boom-ia-client-crm-conversation">
 (function () {
-  const SCRIPT_VERSION = "v18";
+  const SCRIPT_VERSION = "v19";
   const SCRIPT_KEY = "boom_ia_client_crm_conversation_" + SCRIPT_VERSION;
   if (window[SCRIPT_KEY]) return;
   window[SCRIPT_KEY] = true;
@@ -44,9 +40,11 @@
     EMBED_CLIENT_VIEW_URL: "https://ia.agboom.com.br/api/embed/chatwoot/crm/view",
     /** false = HTML da API (estável no Mega). true = app React (exige deploy frontend). */
     USE_REACT_EMBED: false,
+    /** true = modal centralizado com blur; false = sidebar nativa (legado) */
+    USE_MODAL: true,
     API_BASE: "https://ia.agboom.com.br/api",
-    EMBED_KEY: "iUDtFP4Rd9FyqNz3nkynZnkW",
-    TARGET_ACCOUNT_ID: 9,
+    EMBED_KEY: "COLE_A_MESMA_CHAVE_DO_SERVER_ENV",
+    TARGET_ACCOUNT_ID: null,
     MOBILE_MAX_WIDTH: 768,
   };
   /** ==================================== */
@@ -71,9 +69,7 @@
   const normalize = (v) => (v || "").toLowerCase().replace(/\s+/g, " ").trim();
 
   let panel = null;
-  let crmHostSidebar = null;
-  let hiddenSidebarNodes = [];
-  let panelMode = null;
+  let modalKeyHandler = null;
   let lookupTimer = null;
   let cleanupTimer = null;
   let applyTimer = null;
@@ -151,6 +147,14 @@
     );
   }
 
+  function escHtml(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
   function ensureStyles() {
     const id = "boom-ia-crm-conv-styles";
     if ($(id)) return;
@@ -164,12 +168,36 @@
       ".boom-ia-crm-btn-primary{color:#fff;}" +
       ".boom-ia-crm-btn-ghost{background:transparent;border:1px solid var(--color-border,#e5e7eb);color:var(--color-heading,#111);}" +
       ".boom-ia-crm-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:#dcfce7;color:#166534;}" +
+      "#boom-ia-crm-modal-root{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(15,23,42,.42);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);opacity:0;transition:opacity .22s ease;}" +
+      "#boom-ia-crm-modal-root.is-open{opacity:1;}" +
+      ".boom-ia-crm-modal{width:min(1080px,96vw);height:min(88vh,900px);max-height:calc(100vh - 40px);display:flex;flex-direction:column;background:#fff;border-radius:16px;box-shadow:0 25px 60px -12px rgba(0,0,0,.28),0 0 0 1px rgba(15,23,42,.06);overflow:hidden;transform:scale(.96) translateY(12px);opacity:0;transition:transform .28s cubic-bezier(.16,1,.3,1),opacity .22s ease;}" +
+      "#boom-ia-crm-modal-root.is-open .boom-ia-crm-modal{transform:scale(1) translateY(0);opacity:1;}" +
+      ".boom-ia-crm-modal.is-dark{background:#1a1f26;box-shadow:0 25px 60px -12px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.08);}" +
+      ".boom-ia-crm-modal-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 18px;border-bottom:1px solid rgba(15,23,42,.08);background:linear-gradient(180deg,#fafbfc 0%,#fff 100%);flex-shrink:0;}" +
+      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-header{border-bottom-color:rgba(255,255,255,.08);background:linear-gradient(180deg,#232a33 0%,#1a1f26 100%);}" +
+      ".boom-ia-crm-modal-brand{display:flex;align-items:center;gap:12px;min-width:0;}" +
+      ".boom-ia-crm-modal-dot{width:10px;height:10px;border-radius:50%;background:var(--boom-brand,#1f93ff);box-shadow:0 0 0 4px rgba(31,147,255,.18);flex-shrink:0;}" +
+      ".boom-ia-crm-modal-kicker{display:block;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#64748b;line-height:1.2;}" +
+      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-kicker{color:#94a3b8;}" +
+      ".boom-ia-crm-modal-name{display:block;font-size:16px;font-weight:600;color:#0f172a;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(640px,70vw);}" +
+      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-name{color:#f1f5f9;}" +
+      ".boom-ia-crm-modal-close{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border:0;border-radius:10px;background:transparent;color:#64748b;cursor:pointer;transition:background .15s,color .15s;flex-shrink:0;}" +
+      ".boom-ia-crm-modal-close:hover{background:rgba(15,23,42,.06);color:#0f172a;}" +
+      ".boom-ia-crm-modal-close:focus-visible{outline:2px solid var(--boom-brand,#1f93ff);outline-offset:2px;}" +
+      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-close{color:#94a3b8;}" +
+      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-close:hover{background:rgba(255,255,255,.08);color:#f8fafc;}" +
+      ".boom-ia-crm-modal-body{flex:1;min-height:0;background:#fff;}" +
+      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-body{background:#1a1f26;}" +
+      ".boom-ia-crm-modal-body iframe{width:100%;height:100%;border:0;display:block;background:#fff;}" +
+      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-body iframe{background:#1a1f26;}" +
+      "html.boom-ia-crm-modal-open body{overflow:hidden;}" +
+      "@media(prefers-reduced-motion:reduce){#boom-ia-crm-modal-root,.boom-ia-crm-modal{transition:none!important;transform:none!important;}}" +
+      "@media(max-width:768px){#boom-ia-crm-modal-root{padding:0;align-items:stretch;}.boom-ia-crm-modal{width:100vw;height:100vh;max-height:100vh;border-radius:0;transform:translateY(100%);}#boom-ia-crm-modal-root.is-open .boom-ia-crm-modal{transform:translateY(0);}}" +
       ".boom-ia-crm-host{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;width:100%;overflow:hidden;background:var(--color-background-light,#fff);}" +
       ".boom-ia-crm-host iframe{flex:1 1 auto;min-height:240px;border:0;width:100%;background:#fff!important;display:block;}" +
       "#boom-ia-crm-panel-header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid var(--color-border,#e5e7eb);background:var(--color-background-light,#f9fafb);flex-shrink:0;}" +
       ".boom-ia-crm-back{border:0;background:transparent;cursor:pointer;font:inherit;font-size:13px;font-weight:500;color:var(--color-woot-500,#1f93ff);padding:4px 0;}" +
-      "#boom-ia-crm-panel.fixed-fallback{position:fixed;top:0;right:0;bottom:0;z-index:99999;display:flex;flex-direction:column;background:var(--color-background-light,#fff);box-shadow:-2px 0 12px rgba(0,0,0,.08);}" +
-      "html.boom-ia-crm-open-mobile #boom-ia-crm-panel.fixed-fallback{width:100vw!important;left:0!important;}";
+      "#boom-ia-crm-panel.fixed-fallback{position:fixed;top:0;right:0;bottom:0;z-index:99999;display:flex;flex-direction:column;background:var(--color-background-light,#fff);box-shadow:-2px 0 12px rgba(0,0,0,.08);}";
     document.head.appendChild(s);
   }
 
@@ -237,46 +265,6 @@
       bestLeft = r.left;
     });
     return best;
-  }
-
-  function findContactSidebarColumn() {
-    const inner = findContactSidebar();
-    if (!inner) return null;
-    let col = inner;
-    for (let i = 0; i < 10 && col; i++) {
-      const r = col.getBoundingClientRect();
-      if (r.left > window.innerWidth * 0.4 && r.width >= 260 && r.width <= 560 && r.height > window.innerHeight * 0.45) {
-        return col;
-      }
-      col = col.parentElement;
-    }
-    return inner.parentElement || inner;
-  }
-
-  function measureContactSidebarWidth() {
-    const col = findContactSidebarColumn();
-    if (!col) return 380;
-    const w = Math.round(col.getBoundingClientRect().width);
-    if (!w || w < 260) return 380;
-    return Math.min(520, Math.max(300, w));
-  }
-
-  function layoutNativeHost() {
-    if (!panel || panelMode !== "native" || !crmHostSidebar) return;
-    const rect = crmHostSidebar.getBoundingClientRect();
-    const h = Math.max(320, window.innerHeight - rect.top);
-    panel.style.height = h + "px";
-    panel.style.maxHeight = h + "px";
-    panel.style.width = "100%";
-    crmHostSidebar.style.display = crmHostSidebar.style.display || "flex";
-    crmHostSidebar.style.flexDirection = "column";
-    crmHostSidebar.style.minHeight = "0";
-    crmHostSidebar.style.overflow = "hidden";
-  }
-
-  function applyFixedPanelWidth() {
-    if (!panel || panelMode !== "fixed") return;
-    panel.style.width = window.innerWidth <= CFG.MOBILE_MAX_WIDTH ? "100vw" : measureContactSidebarWidth() + "px";
   }
 
   function findSidebarInjectionPoint(sidebar) {
@@ -438,7 +426,35 @@
     $("#boom-ia-crm-chat-bar")?.remove();
   }
 
-  function buildHostInnerHtml(contactId) {
+  function buildModalHtml(contactId) {
+    const color = brandColor();
+    const isDark = detectTheme() === "dark";
+    const name = escHtml(crm.contactName || "Cliente");
+    return (
+      '<div class="boom-ia-crm-modal' +
+      (isDark ? " is-dark" : "") +
+      '">' +
+      '<header class="boom-ia-crm-modal-header" style="--boom-brand:' +
+      color +
+      '">' +
+      '<div class="boom-ia-crm-modal-brand"><span class="boom-ia-crm-modal-dot"></span><div>' +
+      '<span class="boom-ia-crm-modal-kicker">Boom IA · Cadastro do cliente</span>' +
+      '<strong class="boom-ia-crm-modal-name">' +
+      name +
+      "</strong></div></div>" +
+      '<button type="button" id="boom-ia-crm-panel-close" class="boom-ia-crm-modal-close" aria-label="Fechar cadastro">' +
+      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>' +
+      "</button></header>" +
+      '<div class="boom-ia-crm-modal-body">' +
+      '<iframe id="boom-ia-crm-iframe" title="CRM Cliente — ' +
+      name +
+      '" src="' +
+      buildClientIframeUrl(contactId) +
+      '"></iframe></div></div>'
+    );
+  }
+
+  function buildSidebarHostHtml(contactId) {
     return (
       '<div id="boom-ia-crm-panel-header">' +
       '<button type="button" id="boom-ia-crm-panel-close" class="boom-ia-crm-back">← Voltar</button>' +
@@ -450,8 +466,24 @@
     );
   }
 
+  function findContactSidebarColumn() {
+    const inner = findContactSidebar();
+    if (!inner) return null;
+    let col = inner;
+    for (let i = 0; i < 10 && col; i++) {
+      const r = col.getBoundingClientRect();
+      if (r.left > window.innerWidth * 0.4 && r.width >= 260 && r.width <= 560 && r.height > window.innerHeight * 0.45) {
+        return col;
+      }
+      col = col.parentElement;
+    }
+    return inner.parentElement || inner;
+  }
+
   function bindHostEvents() {
-    on($("#boom-ia-crm-panel-close"), "click", closeClientPanel);
+    if (!panel) return;
+    const closeBtn = panel.querySelector("#boom-ia-crm-panel-close");
+    on(closeBtn, "click", closeClientPanel);
     const iframe = $("#boom-ia-crm-iframe");
     if (iframe) {
       on(iframe, "load", postThemeToCrmEmbed);
@@ -476,6 +508,7 @@
       theme: detectTheme(),
       native: "1",
     });
+    if (CFG.USE_MODAL !== false) params.set("modal", "1");
     const reactBase = (CFG.EMBED_CLIENT_URL || CFG.BOOM_URL + "/embed/chatwoot/client").replace(/\/+$/, "");
     const htmlBase = (CFG.EMBED_CLIENT_VIEW_URL || CFG.API_BASE + "/embed/chatwoot/crm/view").replace(/\/+$/, "");
     const viewBase = CFG.USE_REACT_EMBED === true ? reactBase : htmlBase;
@@ -490,20 +523,33 @@
   }
 
   function closeClientPanel() {
-    hiddenSidebarNodes.forEach(function (item) {
-      item.el.style.display = item.display || "";
-      item.el.style.visibility = item.visibility || "";
-    });
-    hiddenSidebarNodes = [];
-    if (crmHostSidebar) {
-      crmHostSidebar.style.overflow = "";
+    if (modalKeyHandler) {
+      document.removeEventListener("keydown", modalKeyHandler);
+      modalKeyHandler = null;
     }
     if (panel) {
-      panel.remove();
+      const isModal = panel.id === "boom-ia-crm-modal-root";
+      if (isModal) {
+        panel.classList.remove("is-open");
+        const node = panel;
+        setTimeout(function () {
+          if (node.parentElement) node.remove();
+        }, 220);
+      } else {
+        const column = panel.parentElement;
+        if (column) {
+          Array.from(column.children).forEach(function (child) {
+            if (child.dataset.boomIaCrmHidden === "1") {
+              child.style.display = "";
+              delete child.dataset.boomIaCrmHidden;
+            }
+          });
+        }
+        panel.remove();
+      }
       panel = null;
     }
-    crmHostSidebar = null;
-    panelMode = null;
+    document.documentElement.classList.remove("boom-ia-crm-modal-open");
     document.documentElement.classList.remove("boom-ia-crm-open");
     document.documentElement.classList.remove("boom-ia-crm-open-mobile");
     document.body.style.overflow = "";
@@ -515,39 +561,45 @@
     ensureStyles();
     closeClientPanel();
 
-    const column = findContactSidebarColumn();
-    if (column && window.innerWidth > CFG.MOBILE_MAX_WIDTH) {
-      panelMode = "native";
-      crmHostSidebar = column;
-      Array.from(column.children).forEach(function (child) {
-        if (child.id === "boom-ia-crm-host") return;
-        hiddenSidebarNodes.push({
-          el: child,
-          display: child.style.display,
-          visibility: child.style.visibility,
-        });
-        child.style.display = "none";
+    if (CFG.USE_MODAL !== false) {
+      const root = document.createElement("div");
+      root.id = "boom-ia-crm-modal-root";
+      root.setAttribute("role", "dialog");
+      root.setAttribute("aria-modal", "true");
+      root.setAttribute("aria-label", "Cadastro do cliente");
+      root.innerHTML = buildModalHtml(contactId);
+      panel = root;
+      document.body.appendChild(root);
+      document.documentElement.classList.add("boom-ia-crm-modal-open");
+      on(root, "click", function (e) {
+        if (e.target === root) closeClientPanel();
       });
-      panel = document.createElement("div");
-      panel.id = "boom-ia-crm-host";
-      panel.className = "boom-ia-crm-host";
-      panel.innerHTML = buildHostInnerHtml(contactId);
-      column.appendChild(panel);
-      layoutNativeHost();
+      modalKeyHandler = function (e) {
+        if (e.key === "Escape") closeClientPanel();
+      };
+      document.addEventListener("keydown", modalKeyHandler);
+      requestAnimationFrame(function () {
+        root.classList.add("is-open");
+        const closeBtn = root.querySelector("#boom-ia-crm-panel-close");
+        if (closeBtn && typeof closeBtn.focus === "function") closeBtn.focus();
+      });
       bindHostEvents();
       return;
     }
 
-    panelMode = "fixed";
-    panel = document.createElement("div");
-    panel.id = "boom-ia-crm-panel";
-    panel.className = "fixed-fallback";
-    panel.innerHTML = buildHostInnerHtml(contactId);
-    document.body.appendChild(panel);
-    applyFixedPanelWidth();
-    if (window.innerWidth <= CFG.MOBILE_MAX_WIDTH) {
-      document.documentElement.classList.add("boom-ia-crm-open-mobile");
-    }
+    const column = findContactSidebarColumn();
+    if (!column) return;
+    Array.from(column.children).forEach(function (child) {
+      if (child.id === "boom-ia-crm-host") return;
+      child.dataset.boomIaCrmHidden = "1";
+      child.style.display = "none";
+    });
+    const host = document.createElement("div");
+    host.id = "boom-ia-crm-host";
+    host.className = "boom-ia-crm-host";
+    host.innerHTML = buildSidebarHostHtml(contactId);
+    panel = host;
+    column.appendChild(host);
     bindHostEvents();
   }
 
@@ -685,8 +737,6 @@
   on(window, "popstate", scheduleApply);
   on(window, "hashchange", scheduleApply);
     on(window, "resize", () => {
-      layoutNativeHost();
-      applyFixedPanelWidth();
       postThemeToCrmEmbed();
       scheduleApply();
     });

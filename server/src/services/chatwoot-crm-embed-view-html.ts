@@ -6,6 +6,7 @@ export function renderChatwootCrmEmbedViewHtml(
   contactId: string,
   theme: "dark" | "light" = "light",
   nativeChrome = false,
+  modalChrome = false,
 ): string {
   const safeApi = JSON.stringify(apiBase.replace(/\/+$/, ""));
   const safeKey = JSON.stringify(embedKey);
@@ -13,6 +14,7 @@ export function renderChatwootCrmEmbedViewHtml(
   const safeContactId = JSON.stringify(contactId);
   const safeTheme = JSON.stringify(theme);
   const native = nativeChrome;
+  const modal = modalChrome;
 
   return `<!DOCTYPE html>
 <html lang="pt-BR" data-theme="${theme}">
@@ -76,11 +78,11 @@ export function renderChatwootCrmEmbedViewHtml(
     <div id="loading-wrap" class="cw-loading"><div class="cw-spinner"></div>Carregando cadastro…</div>
     <div id="error-wrap" class="cw-body cw-hidden"></div>
     <div id="app-wrap" class="cw-hidden" style="display:flex;flex-direction:column;flex:1;min-height:0;height:100%;">
-      ${native ? "" : '<p class="cw-hint">Responda ao cliente pelo chat à esquerda — aqui você gerencia o cadastro.</p>'}
-      <header class="cw-header${native ? " cw-header-compact" : ""}">
+      ${!native && !modal ? '<p class="cw-hint">Responda ao cliente pelo chat à esquerda — aqui você gerencia o cadastro.</p>' : ""}
+      ${modal ? "" : `<header class="cw-header${native ? " cw-header-compact" : ""}">
         <div id="avatar-wrap"></div>
         <div class="cw-title"><h1 id="c-name">—</h1><p id="c-phone">—</p><span class="cw-badge">Cliente CRM</span></div>
-      </header>
+      </header>`}
       <nav class="cw-tabs" id="tabs">
         <button type="button" class="cw-tab active" data-tab="edit">Cadastro</button>
         <button type="button" class="cw-tab" data-tab="invoices">Faturas</button>
@@ -112,7 +114,7 @@ export function renderChatwootCrmEmbedViewHtml(
   </div>
   <script>
 (function(){
-  var API_BASE=${safeApi}, KEY=${safeKey}, ACCOUNT_ID=${safeAccountId}, CONTACT_ID=${safeContactId}, THEME=${safeTheme};
+  var API_BASE=${safeApi}, KEY=${safeKey}, ACCOUNT_ID=${safeAccountId}, CONTACT_ID=${safeContactId}, THEME=${safeTheme}, MODAL=${modal ? "true" : "false"};
   var STATE={contact:null,calendars:[],editing:{}};
   var TAB_IDS=["edit","invoices","packages","contracts","documents","agenda"];
 
@@ -132,6 +134,7 @@ export function renderChatwootCrmEmbedViewHtml(
   function initials(n){return String(n||"?").trim().split(/\\s+/).slice(0,2).map(function(p){return p[0]||"";}).join("").toUpperCase();}
 
   function fillHeader(){
+    if(MODAL)return;
     var c=STATE.contact,w=document.getElementById("avatar-wrap");
     w.innerHTML=c.avatar_url?'<img class="cw-avatar" src="'+esc(c.avatar_url)+'" alt=""/>':'<div class="cw-avatar-fallback">'+esc(initials(c.name))+"</div>";
     document.getElementById("c-name").textContent=c.name||"Sem nome";

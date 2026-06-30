@@ -79,10 +79,11 @@ export async function embedChatwootCrmRoutes(fastify: FastifyInstance) {
       const rawTheme = req.query.theme?.trim().toLowerCase();
       const theme: "dark" | "light" = rawTheme === "dark" ? "dark" : "light";
       const nativeChrome = req.query.native === "1" || req.query.native === "true";
+      const modalChrome = req.query.modal === "1" || req.query.modal === "true";
       const key = getEmbedKey(req)!;
       return reply
         .type("text/html; charset=utf-8")
-        .send(renderChatwootCrmEmbedViewHtml(publicApiBase(), key, accountId, contactId, theme, nativeChrome));
+        .send(renderChatwootCrmEmbedViewHtml(publicApiBase(), key, accountId, contactId, theme, nativeChrome, modalChrome));
     },
   );
 
