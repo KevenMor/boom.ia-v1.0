@@ -1,18 +1,7 @@
 <!--
-  PPL Motors — Cliente CRM na conversa v10
-  Conta Chatwoot: 9 (mega.atendai.app)
-  Cole em: https://mega.atendai.app/super_admin/app_config?config=internal
-  REMOVA o script antigo v9 ("PPL Motors — Cliente" na sidebar esquerda).
-  Após colar: salve, recarregue o Mega (Cmd+Shift+R) e confira no console F12:
-  "[Boom IA] Cliente CRM conversa v10 carregado"
--->
-<!--
-  PPL Motors — Cliente CRM na conversa v10
-  Conta Chatwoot: 9 (mega.atendai.app)
-  Cole em: https://mega.atendai.app/super_admin/app_config?config=internal
-  REMOVA o script antigo v9 ("PPL Motors — Cliente" na sidebar esquerda).
-  Após colar: salve, recarregue o Mega (Cmd+Shift+R) e confira no console F12:
-  "[Boom IA] Cliente CRM conversa v10 carregado"
+  PPL Motors — Cliente CRM na conversa v11
+  Conta Chatwoot: 9 · Cole em Super Admin → Dashboard Scripts
+  Console esperado: "[Boom IA] Cliente CRM conversa v11 carregado"
 -->
 <!--
   Boom IA — Dashboard Script · Cliente CRM na conversa (Chatwoot / Mega)
@@ -45,7 +34,7 @@
 
 <script data-name="boom-ia-client-crm-conversation">
 (function () {
-  const SCRIPT_VERSION = "v10";
+  const SCRIPT_VERSION = "v11";
   const SCRIPT_KEY = "boom_ia_client_crm_conversation_" + SCRIPT_VERSION;
   if (window[SCRIPT_KEY]) return;
   window[SCRIPT_KEY] = true;
@@ -83,6 +72,8 @@
 
   let panel = null;
   let lookupTimer = null;
+  let cleanupTimer = null;
+  let applyTimer = null;
   let lastConversationKey = null;
 
   const crm = {
@@ -95,23 +86,57 @@
     error: null,
   };
 
+  function routeText() {
+    return window.location.pathname + window.location.search + window.location.hash;
+  }
+
   function getAccountIdFromPath() {
-    const m = window.location.pathname.match(/\/app\/accounts\/(\d+)/);
+    const m = routeText().match(/\/accounts\/(\d+)/);
     return m ? String(m[1]) : null;
   }
 
+  function resolvedAccountId() {
+    return getAccountIdFromPath() || String(CFG.TARGET_ACCOUNT_ID || "");
+  }
+
   function getConversationIdFromPath() {
-    const m = window.location.pathname.match(/\/conversations\/(\d+)/);
-    return m ? String(m[1]) : null;
+    const src = routeText();
+    const patterns = [/\/conversations\/(\d+)/, /\/conversation\/(\d+)/, /conversation_id=(\d+)/i];
+    for (let i = 0; i < patterns.length; i++) {
+      const m = src.match(patterns[i]);
+      if (m) return String(m[1]);
+    }
+    return null;
   }
 
   function isScopeAllowed() {
     if (CFG.TARGET_ACCOUNT_ID === null || CFG.TARGET_ACCOUNT_ID === "") return true;
-    return getAccountIdFromPath() === String(CFG.TARGET_ACCOUNT_ID);
+    const acct = getAccountIdFromPath();
+    if (!acct) return true;
+    return acct === String(CFG.TARGET_ACCOUNT_ID);
   }
 
   function isConversationView() {
-    return Boolean(getConversationIdFromPath()) || Boolean($(".conversation-panel") || $('[data-testid="conversation-panel"]'));
+    if (getConversationIdFromPath()) return true;
+    if (
+      $(".conversation-panel") ||
+      $('[data-testid="conversation-panel"]') ||
+      $(".conversation-details-wrap") ||
+      $(".messages-wrap")
+    ) {
+      return true;
+    }
+    if (
+      $('[data-testid="reply-editor"]') ||
+      $(".reply-box") ||
+      $('textarea[placeholder*="mensagem" i]') ||
+      $('textarea[placeholder*="message" i]')
+    ) {
+      return true;
+    }
+    if ($(".message-bubble") || $('[data-testid="message"]')) return true;
+    const sidebar = findContactSidebar();
+    return Boolean(sidebar && extractPhoneDigits(sidebar));
   }
 
   function brandColor() {
@@ -144,31 +169,92 @@
     document.head.appendChild(s);
   }
 
+  function panelFromNode(node) {
+    let cur = node;
+    for (let i = 0; i < 14 && cur; i++) {
+      const r = cur.getBoundingClientRect();
+      if (r.width > 200 && r.width < 520 && r.left > window.innerWidth * 0.42 && r.height > 180) {
+        return cur;
+      }
+      cur = cur.parentElement;
+    }
+    return null;
+  }
+
   function findContactSidebar() {
     const byTestId =
       $('[data-testid="contactPanel"]') ||
       $('[data-testid="contact-sidebar"]') ||
+      $('[data-testid="contact-sidebar-panel"]') ||
       $(".conversation-sidebar") ||
-      $(".contact--panel");
+      $(".contact--panel") ||
+      $(".contact-panel");
     if (byTestId) return byTestId;
 
-    const headings = ["contatos", "contact", "contacto"];
-    for (const h of $$("h2, h3, .text-base")) {
-      const t = normalize(h.textContent);
-      if (!headings.some((x) => t === x || t.startsWith(x + " "))) continue;
-      const panel =
-        h.closest("aside") ||
-        h.closest('[class*="sidebar"]') ||
-        h.closest('[class*="Contact"]') ||
-        h.parentElement?.parentElement;
-      if (panel && panel.getBoundingClientRect().width > 180) return panel;
+    for (const tel of $$('a[href^="tel:"]')) {
+      const r = tel.getBoundingClientRect();
+      if (r.left < window.innerWidth * 0.42) continue;
+      const panel = panelFromNode(tel);
+      if (panel) return panel;
     }
 
-    const asides = $$("aside").filter((el) => {
+    const markers = [
+      "ações da conversa",
+      "etiquetas do contato",
+      "atributos do contato",
+      "notas do contato",
+      "conversas anteriores",
+      "macros",
+      "kanban",
+    ];
+    for (const el of $$("div, section, aside, span, button, h2, h3, p, label")) {
+      const t = normalize((el.textContent || "").slice(0, 80));
+      if (!markers.some((m) => t === m || t.startsWith(m + " "))) continue;
+      const panel = panelFromNode(el);
+      if (panel) return panel;
+    }
+
+    const headings = ["contatos", "contact", "contacto"];
+    for (const h of $$("h1, h2, h3, h4, .text-base, span, div")) {
+      const t = normalize((h.textContent || "").slice(0, 40));
+      if (!headings.some((x) => t === x)) continue;
+      const panel = panelFromNode(h);
+      if (panel) return panel;
+    }
+
+    let best = null;
+    let bestLeft = 0;
+    $$("div, aside, section").forEach((el) => {
       const r = el.getBoundingClientRect();
-      return r.width > 200 && r.left > window.innerWidth * 0.45;
+      if (r.height < 360 || r.width < 200 || r.width > 500) return;
+      if (r.left < window.innerWidth * 0.5) return;
+      if (r.left <= bestLeft) return;
+      best = el;
+      bestLeft = r.left;
     });
-    return asides[0] || null;
+    return best;
+  }
+
+  function findSidebarInjectionPoint(sidebar) {
+    if (!sidebar) return null;
+    for (const el of $$("*", sidebar)) {
+      const t = normalize((el.textContent || "").slice(0, 20));
+      if (t === "kanban" || t === "ações da conversa") {
+        const block = el.closest("div") || el.parentElement;
+        if (block && sidebar.contains(block)) return block;
+      }
+    }
+    const tel = $('a[href^="tel:"]', sidebar);
+    if (tel) {
+      let node = tel.parentElement;
+      for (let i = 0; i < 6 && node; i++) {
+        if (node.parentElement === sidebar || (node.parentElement && sidebar.contains(node.parentElement))) {
+          return node.nextElementSibling || node.parentElement;
+        }
+        node = node.parentElement;
+      }
+    }
+    return sidebar.firstElementChild;
   }
 
   function findChatHeaderAnchor() {
@@ -199,13 +285,20 @@
 
   function extractContactName(sidebar) {
     if (!sidebar) return null;
-    const h = $("h2, h3, .text-base.font-medium, .contact--name", sidebar);
-    const t = (h?.textContent || "").trim();
-    return t && t.length < 80 ? t : null;
+    for (const h of $$("h2, h3, .text-base.font-medium, .contact--name, .truncate, strong", sidebar)) {
+      const t = (h.textContent || "").trim();
+      if (!t || t.length > 80) continue;
+      const n = normalize(t);
+      if (n === "contatos" || n === "contacts" || n === "contacto") continue;
+      if (/^\+?\d/.test(t)) continue;
+      if (n === "indisponível" || n === "unavailable") continue;
+      return t;
+    }
+    return null;
   }
 
   async function apiLookup(phoneDigits) {
-    const accountId = getAccountIdFromPath() || String(CFG.TARGET_ACCOUNT_ID || "");
+    const accountId = resolvedAccountId();
     const params = new URLSearchParams({
       key: CFG.EMBED_KEY,
       account_id: accountId,
@@ -222,7 +315,7 @@
   }
 
   async function apiPromote(phoneDigits, name) {
-    const accountId = getAccountIdFromPath() || String(CFG.TARGET_ACCOUNT_ID || "");
+    const accountId = resolvedAccountId();
     const params = new URLSearchParams({
       key: CFG.EMBED_KEY,
       account_id: accountId,
@@ -282,26 +375,26 @@
 
   function injectSidebarCta() {
     const sidebar = findContactSidebar();
-    if (!sidebar) return;
+    if (!sidebar) return false;
     ensureStyles();
-    let box = $("#boom-ia-crm-sidebar-box", sidebar);
+    let box = $("#boom-ia-crm-sidebar-box");
+    if (box && !sidebar.contains(box)) {
+      box.remove();
+      box = null;
+    }
     if (!box) {
       box = document.createElement("div");
       box.id = "boom-ia-crm-sidebar-box";
       box.className = "boom-ia-crm-box";
-      const anchor =
-        $('[data-testid="contact-sidebar"]', sidebar) ||
-        $("h2, h3", sidebar)?.parentElement ||
-        sidebar.firstElementChild;
-      if (anchor && anchor.parentElement === sidebar) {
-        sidebar.insertBefore(box, anchor.nextSibling);
-      } else if (anchor) {
-        anchor.insertAdjacentElement("afterbegin", box);
+      const anchor = findSidebarInjectionPoint(sidebar);
+      if (anchor && anchor.parentElement) {
+        anchor.parentElement.insertBefore(box, anchor);
       } else {
         sidebar.prepend(box);
       }
     }
     renderSidebarBox(box);
+    return true;
   }
 
   function removeChatBar() {
@@ -332,7 +425,7 @@
   }
 
   function buildClientIframeUrl(contactId) {
-    const accountId = getAccountIdFromPath() || String(CFG.TARGET_ACCOUNT_ID || "");
+    const accountId = resolvedAccountId();
     const params = new URLSearchParams({
       key: CFG.EMBED_KEY,
       account_id: accountId,
@@ -392,7 +485,7 @@
   async function refreshCrm() {
     if (!isScopeAllowed() || !isConversationView()) return;
 
-    const convKey = getConversationIdFromPath() || window.location.pathname;
+    const convKey = getConversationIdFromPath() || routeText();
     if (convKey !== lastConversationKey) {
       lastConversationKey = convKey;
       crm.state = null;
@@ -445,7 +538,7 @@
 
   function scheduleRefresh() {
     clearTimeout(lookupTimer);
-    lookupTimer = setTimeout(() => void refreshCrm(), 280);
+    lookupTimer = setTimeout(() => void refreshCrm(), 320);
   }
 
   function cleanup() {
@@ -461,28 +554,58 @@
     crm.error = null;
   }
 
+  function scheduleCleanup() {
+    clearTimeout(cleanupTimer);
+    cleanupTimer = setTimeout(() => {
+      if (!isConversationView()) cleanup();
+    }, 900);
+  }
+
   function apply() {
     if (!isScopeAllowed()) {
       cleanup();
       return;
     }
     if (!isConversationView()) {
-      cleanup();
+      scheduleCleanup();
       return;
     }
+    clearTimeout(cleanupTimer);
     scheduleRefresh();
   }
 
-  const observer = new MutationObserver(apply);
+  function scheduleApply() {
+    clearTimeout(applyTimer);
+    applyTimer = setTimeout(apply, 120);
+  }
+
+  function hookSpaNavigation() {
+    const wrap = (fn) =>
+      function () {
+        const ret = fn.apply(this, arguments);
+        scheduleApply();
+        return ret;
+      };
+    if (!history.__boomIaCrmPatched) {
+      history.__boomIaCrmPatched = true;
+      history.pushState = wrap(history.pushState);
+      history.replaceState = wrap(history.replaceState);
+    }
+  }
+
+  const observer = new MutationObserver(scheduleApply);
   observer.observe(document.documentElement, { childList: true, subtree: true });
 
-  on(window, "popstate", apply);
-  on(window, "hashchange", apply);
+  hookSpaNavigation();
+  on(window, "popstate", scheduleApply);
+  on(window, "hashchange", scheduleApply);
   on(window, "resize", () => {
     if (panel) {
       panel.style.width = window.innerWidth <= CFG.MOBILE_MAX_WIDTH ? "100vw" : "min(520px, 100vw)";
     }
+    scheduleApply();
   });
+  setInterval(scheduleApply, 2500);
 
   apply();
 })();
