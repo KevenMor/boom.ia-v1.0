@@ -1,14 +1,17 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import {
+  clearSandboxSession,
   readSandboxConversationId,
-  readSandboxInputDraft,
+  readSandboxMemorySnapshot,
   writeSandboxConversationId,
-  writeSandboxInputDraft,
+  writeSandboxMemorySnapshot,
 } from "./sandbox-session";
 
 describe("sandbox-session", () => {
   beforeEach(() => {
     sessionStorage.clear();
+    clearSandboxSession("agent-a");
+    clearSandboxSession("agent-b");
   });
 
   it("persiste e lê conversationId por agente", () => {
@@ -23,10 +26,25 @@ describe("sandbox-session", () => {
     expect(readSandboxConversationId("agent-a")).toBeNull();
   });
 
-  it("persiste rascunho do input", () => {
-    writeSandboxInputDraft("agent-a", "olá");
-    expect(readSandboxInputDraft("agent-a")).toBe("olá");
-    writeSandboxInputDraft("agent-a", "   ");
-    expect(readSandboxInputDraft("agent-a")).toBe("");
+  it("cache em memória sobrevive por agentId", () => {
+    writeSandboxMemorySnapshot("agent-a", {
+      conversationId: "conv-1",
+      messages: [{ role: "user", content: "oi" }],
+    });
+    const snap = readSandboxMemorySnapshot("agent-a");
+    expect(snap?.conversationId).toBe("conv-1");
+    expect(snap?.messages).toHaveLength(1);
+    expect(readSandboxMemorySnapshot("agent-b")).toBeUndefined();
+  });
+
+  it("clearSandboxSession limpa memória e sessionStorage", () => {
+    writeSandboxConversationId("agent-a", "conv-1");
+    writeSandboxMemorySnapshot("agent-a", {
+      conversationId: "conv-1",
+      messages: [{ role: "user", content: "x" }],
+    });
+    clearSandboxSession("agent-a");
+    expect(readSandboxConversationId("agent-a")).toBeNull();
+    expect(readSandboxMemorySnapshot("agent-a")).toBeUndefined();
   });
 });

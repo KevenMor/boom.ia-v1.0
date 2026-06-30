@@ -34,10 +34,12 @@ import { normalizeSuiteGalleryMediaUrl } from "@/lib/suite-gallery-display";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import {
+  clearSandboxSession,
   readSandboxConversationId,
-  readSandboxInputDraft,
+  readSandboxMemorySnapshot,
   writeSandboxConversationId,
-  writeSandboxInputDraft,
+  writeSandboxMemorySnapshot,
+  type SandboxMemoryMessage,
 } from "@/lib/sandbox-session";
 
 type DebugEntry = { type: string; [key: string]: any };
@@ -148,6 +150,24 @@ async function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
+function serializeSandboxMessages(msgs: Msg[]): SandboxMemoryMessage[] {
+  return msgs.map((m) => ({
+    role: m.role,
+    content: m.content,
+    ...(m.timestamp ? { timestamp: m.timestamp.toISOString() } : {}),
+    ...(m.metadata ? { metadata: m.metadata } : {}),
+  }));
+}
+
+function deserializeSandboxMessages(msgs: SandboxMemoryMessage[]): Msg[] {
+  return msgs.map((m) => ({
+    role: m.role,
+    content: m.content,
+    ...(m.timestamp ? { timestamp: new Date(m.timestamp) } : {}),
+    ...(m.metadata ? { metadata: m.metadata } : {}),
+  }));
+}
+
 export default function AgentSandbox() {
   const { agentId } = useParams<{ agentId: string }>();
   const navigate = useNavigate();
@@ -155,16 +175,12 @@ export default function AgentSandbox() {
   const agent = agents?.find((a) => a.id === agentId);
 
   const [messages, setMessages] = useState<Msg[]>([]);
-  const [input, setInput] = useState(() => readSandboxInputDraft(agentId));
+  const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [conversationId, setConversationId] = useState<string | null>(() =>
-    readSandboxConversationId(agentId)
-  );
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [showHistory, setShowHistory] = useState(false);
-  const [loadingHistory, setLoadingHistory] = useState(
-    () => Boolean(agentId && readSandboxConversationId(agentId))
-  );
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [pendingDebug, setPendingDebug] = useState<DebugEntry[] | null>(null);
   const [attachments, setAttachments] = useState<AttachmentFile[]>([]);
@@ -176,19 +192,28 @@ export default function AgentSandbox() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   /** ID da conversa atual no servidor — atualizado assim que o SSE envia conversation_id (antes do [DONE]). */
   const conversationIdRef = useRef<string | null>(null);
+  const hydratedAgentRef = useRef<string | null>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    const id = requestAnimationFrame(() => {
+      bottomRef.current?.scrollIntoView({ behavior: isLoading ? "auto" : "smooth" });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [messages, isLoading]);
 
   useEffect(() => {
     conversationIdRef.current = conversationId;
-    writeSandboxConversationId(agentId, conversationId);
-  }, [conversationId, agentId]);
+  }, [conversationId]);
 
+  /** Persiste snapshot após interação (não a cada token do SSE). */
   useEffect(() => {
-    writeSandboxInputDraft(agentId, input);
-  }, [input, agentId]);
+    if (!agentId || loadingHistory || isLoading) return;
+    writeSandboxMemorySnapshot(agentId, {
+      conversationId,
+      messages: serializeSandboxMessages(messages),
+    });
+    writeSandboxConversationId(agentId, conversationId);
+  }, [agentId, conversationId, messages, loadingHistory, isLoading]);
 
   const loadConversations = useCallback(async () => {
     if (!agentId) return;
@@ -210,8 +235,9 @@ export default function AgentSandbox() {
   }, [agentId]);
 
   useEffect(() => {
+    if (!showHistory) return;
     loadConversations();
-  }, [loadConversations]);
+  }, [showHistory, loadConversations]);
 
   // Sanitize message content to remove leaked JSON dispatcher data and tool_code/assign_agent
   const sanitizeContent = (content: string): string => {
@@ -264,11 +290,10 @@ export default function AgentSandbox() {
       );
       conversationIdRef.current = convId;
       setConversationId(convId);
-      writeSandboxConversationId(agentId, convId);
       setShowHistory(false);
     } catch {
       toast.error("Erro ao carregar conversa");
-      writeSandboxConversationId(agentId, null);
+      clearSandboxSession(agentId);
       conversationIdRef.current = null;
       setConversationId(null);
       setMessages([]);
@@ -277,25 +302,41 @@ export default function AgentSandbox() {
     }
   }, [agentId]);
 
-  /** Ao trocar de agente ou voltar à página: restaura conversa ativa do sessionStorage. */
+  /**
+   * Hidratação única por agente: memória (navegação interna) → senão RPC (refresh de página).
+   * Evita refetch em loop quando o ModuleRoute remonta o sandbox.
+   */
   useEffect(() => {
     if (!agentId) return;
-    const stored = readSandboxConversationId(agentId);
-    setInput(readSandboxInputDraft(agentId));
-    if (stored) {
-      void loadConversation(stored);
-    } else {
-      conversationIdRef.current = null;
-      setConversationId(null);
-      setMessages([]);
+    if (hydratedAgentRef.current === agentId) return;
+    hydratedAgentRef.current = agentId;
+
+    const cached = readSandboxMemorySnapshot(agentId);
+    if (cached && cached.messages.length > 0) {
+      setMessages(deserializeSandboxMessages(cached.messages));
+      setConversationId(cached.conversationId);
+      conversationIdRef.current = cached.conversationId;
+      return;
     }
-  }, [agentId, loadConversation]);
+
+    const stored = readSandboxConversationId(agentId);
+    if (stored) {
+      conversationIdRef.current = stored;
+      setConversationId(stored);
+      void loadConversation(stored);
+      return;
+    }
+
+    conversationIdRef.current = null;
+    setConversationId(null);
+    setMessages([]);
+  }, [agentId]);
 
   const startNewConversation = () => {
     setMessages([]);
     conversationIdRef.current = null;
     setConversationId(null);
-    writeSandboxConversationId(agentId, null);
+    clearSandboxSession(agentId);
     setShowHistory(false);
   };
 

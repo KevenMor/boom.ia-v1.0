@@ -1,5 +1,19 @@
 const conversationKey = (agentId: string) => `sandbox_conversation_${agentId}`;
-const inputKey = (agentId: string) => `sandbox_input_draft_${agentId}`;
+
+/** Mensagem serializada para cache em memória (sobrevive a remount do React). */
+export type SandboxMemoryMessage = {
+  role: "user" | "assistant";
+  content: string;
+  timestamp?: string;
+  metadata?: { type?: string; video_url?: string };
+};
+
+export type SandboxMemorySnapshot = {
+  conversationId: string | null;
+  messages: SandboxMemoryMessage[];
+};
+
+const memoryByAgent = new Map<string, SandboxMemorySnapshot>();
 
 export function readSandboxConversationId(agentId: string | undefined): string | null {
   if (!agentId) return null;
@@ -20,22 +34,18 @@ export function writeSandboxConversationId(agentId: string | undefined, conversa
   }
 }
 
-export function readSandboxInputDraft(agentId: string | undefined): string {
-  if (!agentId) return "";
-  try {
-    return sessionStorage.getItem(inputKey(agentId)) ?? "";
-  } catch {
-    return "";
-  }
+export function readSandboxMemorySnapshot(agentId: string | undefined): SandboxMemorySnapshot | undefined {
+  if (!agentId) return undefined;
+  return memoryByAgent.get(agentId);
 }
 
-export function writeSandboxInputDraft(agentId: string | undefined, value: string): void {
+export function writeSandboxMemorySnapshot(agentId: string | undefined, snapshot: SandboxMemorySnapshot): void {
   if (!agentId) return;
-  try {
-    const trimmed = value.trim();
-    if (trimmed) sessionStorage.setItem(inputKey(agentId), value);
-    else sessionStorage.removeItem(inputKey(agentId));
-  } catch {
-    /* ignore */
-  }
+  memoryByAgent.set(agentId, snapshot);
+}
+
+export function clearSandboxSession(agentId: string | undefined): void {
+  if (!agentId) return;
+  memoryByAgent.delete(agentId);
+  writeSandboxConversationId(agentId, null);
 }
