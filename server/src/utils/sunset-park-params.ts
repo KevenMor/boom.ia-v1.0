@@ -1,17 +1,31 @@
-/** Extrai data de visita ao parque do histórico (Sunset Thermas). */
+/** Extrai data(s) de visita ao parque do histórico (Sunset Thermas). */
+
+import {
+  brasiliaTodayIso,
+  extractSunsetLodgingDateRange,
+} from "./sunset-lodging-params.js";
 
 type ChatMessage = { role: string; content?: string };
 
-const WORD_NUMBERS: Record<string, number> = {
-  um: 1,
-  uma: 1,
-  dois: 2,
-  duas: 2,
-  tres: 3,
-  três: 3,
-  quatro: 4,
-  cinco: 5,
-  seis: 6,
+export type SunsetParkParams = {
+  date: string;
+  date_to?: string;
+};
+
+const MONTH_NAMES: Record<string, number> = {
+  janeiro: 1,
+  fevereiro: 2,
+  marco: 3,
+  março: 3,
+  abril: 4,
+  maio: 5,
+  junho: 6,
+  julho: 7,
+  agosto: 8,
+  setembro: 9,
+  outubro: 10,
+  novembro: 11,
+  dezembro: 12,
 };
 
 function normalizeText(text: string): string {
@@ -19,10 +33,6 @@ function normalizeText(text: string): string {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
-}
-
-function brasiliaTodayIso(ref: Date): string {
-  return ref.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
 }
 
 function isoAddDays(iso: string, days: number): string {
@@ -55,6 +65,78 @@ function parseExplicitDateIso(text: string, ref: Date): string | null {
     const mm = dmy2[2].padStart(2, "0");
     const y = yearForFixedEvent(parseInt(mm, 10), parseInt(dd, 10), ref);
     return `${y}-${mm}-${dd}`;
+  }
+
+  return null;
+}
+
+function inferMonthFromThread(thread: string, ref: Date): number | null {
+  const norm = normalizeText(thread);
+  for (const [name, month] of Object.entries(MONTH_NAMES)) {
+    if (new RegExp(`\\b${name}\\b`).test(norm)) return month;
+  }
+  const mm = thread.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(20\d{2}))?\b/);
+  if (mm) return parseInt(mm[2], 10);
+  const ymd = thread.match(/\b(20\d{2})-(\d{2})-(\d{2})\b/);
+  if (ymd) return parseInt(ymd[2], 10);
+  return ref.getMonth() + 1;
+}
+
+function inferYearForMonth(month: number, ref: Date): number {
+  const y = ref.getFullYear();
+  const refMonth = ref.getMonth() + 1;
+  if (month < refMonth) return y + 1;
+  return y;
+}
+
+function buildIsoFromDayMonth(day: number, month: number, ref: Date): string {
+  const y = inferYearForMonth(month, ref);
+  return `${y}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+/** Intervalo explícito no histórico: "01 a 03 de julho", "de 01/07 a 03/07", etc. */
+export function extractParkVisitDateRange(
+  messages: ChatMessage[],
+  referenceDate: Date = new Date()
+): { date: string; date_to: string } | null {
+  const thread = messages.map((m) => m.content ?? "").join("\n");
+
+  const fullRange = thread.match(
+    /\b(?:de|do)\s+(\d{1,2})\/(\d{1,2})(?:\/(20\d{2}))?\s+(?:a|ao|ate)\s+(\d{1,2})\/(\d{1,2})(?:\/(20\d{2}))?/i
+  );
+  if (fullRange) {
+    const yIn = fullRange[3] ?? fullRange[6] ?? String(referenceDate.getFullYear());
+    const yOut = fullRange[6] ?? fullRange[3] ?? yIn;
+    const date = `${yIn}-${fullRange[2].padStart(2, "0")}-${fullRange[1].padStart(2, "0")}`;
+    const date_to = `${yOut}-${fullRange[5].padStart(2, "0")}-${fullRange[4].padStart(2, "0")}`;
+    if (date_to >= date) return { date, date_to };
+  }
+
+  const shortRange =
+    thread.match(/\b(\d{1,2})\s+a\s+(\d{1,2})\s+de\s+([a-zç]+)/i) ??
+    thread.match(/\bde\s+(\d{1,2})\s+a\s+(\d{1,2})\s+de\s+([a-zç]+)/i);
+  if (shortRange) {
+    const monthName = normalizeText(shortRange[3]);
+    const month = MONTH_NAMES[monthName];
+    if (month) {
+      const d1 = parseInt(shortRange[1], 10);
+      const d2 = parseInt(shortRange[2], 10);
+      const date = buildIsoFromDayMonth(d1, month, referenceDate);
+      const date_to = buildIsoFromDayMonth(d2, month, referenceDate);
+      if (date_to >= date) return { date, date_to };
+    }
+  }
+
+  const bareShort = thread.match(/\b(\d{1,2})\s+a\s+(\d{1,2})\b/);
+  if (bareShort) {
+    const month = inferMonthFromThread(thread, referenceDate);
+    if (month) {
+      const d1 = parseInt(bareShort[1], 10);
+      const d2 = parseInt(bareShort[2], 10);
+      const date = buildIsoFromDayMonth(d1, month, referenceDate);
+      const date_to = buildIsoFromDayMonth(d2, month, referenceDate);
+      if (date_to >= date) return { date, date_to };
+    }
   }
 
   return null;
@@ -96,18 +178,39 @@ export function userAsksSunsetParkConsultation(messages: ChatMessage[]): boolean
   const t = normalizeText(text);
   if (!/parque|ingresso|\bpark\b/.test(t)) return false;
   if (/hospedagem|hotel|pernoite/.test(t) && !/parque|ingresso|\bpark\b/.test(t)) return false;
-  return /hor[aá]rio|funciona|abre|fecha|passar.*dia|somente o dia/.test(t);
+  return /hor[aá]rio|funciona|abre|aberto|fecha|passar.*dia|somente o dia|esta aberto|est[aá] aberto/.test(t);
 }
 
 /**
- * Retorna `{ date: YYYY-MM-DD }` quando o cliente pergunta sobre parque/ingresso
- * e a data pode ser inferida (hoje, amanhã, data explícita).
+ * Retorna `{ date, date_to? }` quando o cliente pergunta sobre parque/ingresso
+ * e a(s) data(s) podem ser inferidas do histórico.
  */
 export function extractSunsetParkParams(
   messages: ChatMessage[],
   referenceDate: Date = new Date()
-): { date: string } | null {
+): SunsetParkParams | null {
   if (!userAsksSunsetParkConsultation(messages)) return null;
+
+  const range = extractParkVisitDateRange(messages, referenceDate);
+  if (range) return range;
+
+  const lodging = extractSunsetLodgingDateRange(messages, referenceDate);
+  if (lodging) {
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    const asksOpen = lastUser?.content
+      ? /aberto|abre|funciona|fecha|fechado/.test(normalizeText(lastUser.content))
+      : false;
+    if (asksOpen) {
+      const visitEnd =
+        lodging.check_out > lodging.check_in
+          ? isoAddDays(lodging.check_out, -1)
+          : lodging.check_in;
+      if (visitEnd > lodging.check_in) {
+        return { date: lodging.check_in, date_to: visitEnd };
+      }
+      return { date: lodging.check_in };
+    }
+  }
 
   for (const m of [...messages].reverse()) {
     if (m.role !== "user" || !m.content) continue;
@@ -130,6 +233,8 @@ function messageContentLooksLikeParkResult(content: string): boolean {
   return (
     content.includes('"ticket_lines"') ||
     content.includes('"park_open"') ||
+    content.includes('"days"') ||
+    content.includes('"closed_dates"') ||
     /"status"\s*:\s*"no_data"/.test(content)
   );
 }

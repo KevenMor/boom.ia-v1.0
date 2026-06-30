@@ -1452,7 +1452,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           if (isSunsetThermasTenantSlug(tenantSlug)) {
             const parkParamsHint = extractSunsetParkParams(messages);
             if (parkParamsHint && userAsksSunsetParkConsultation(messages)) {
-              sunsetParkHint = `\n\n[HINT OBRIGATÓRIO — PARQUE SUNSET]\nO cliente perguntou sobre ingresso/valor/abertura do parque. NÃO responda NO_TOOLS_NEEDED para consultar_parque_sunset. Chame a tool agora com date="${parkParamsHint.date}" (YYYY-MM-DD). Use ticket_lines e day_kind retornados — PROIBIDO inventar R$ ou mandar só link do site quando houver valores cadastrados.`;
+              sunsetParkHint = `\n\n[HINT OBRIGATÓRIO — PARQUE SUNSET]\nO cliente perguntou sobre ingresso/valor/abertura do parque. NÃO responda NO_TOOLS_NEEDED para consultar_parque_sunset. Chame a tool agora com date="${parkParamsHint.date}" (YYYY-MM-DD)${parkParamsHint.date_to ? ` e date_to="${parkParamsHint.date_to}"` : ""}. Se o cliente citou intervalo (ex.: "01 a 03"), date_to é OBRIGATÓRIO — consulte TODOS os dias do período. Use day_kind/park_open/days[] retornados — PROIBIDO inventar abertura de dia não consultado.`;
             }
             const lodgingParamsHint = extractSunsetLodgingParams(messages);
             if (conversationNeedsChildAgesConfirmation(messages) && !userAsksSunsetParkConsultation(messages)) {

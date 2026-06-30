@@ -3,16 +3,36 @@ import { isTenantModuleEnabled } from "./tenant-modules.js";
 
 export type ParkTicketLine = { label: string; value: string };
 
+export type ParkDayEntry = {
+  date: string;
+  day_kind: "aberto" | "fechado" | "manutencao" | "no_data";
+  park_open: boolean;
+  event_label: string | null;
+  ticket_lines: ParkTicketLine[];
+};
+
 export type ParkDayConsultaResult =
   | {
       status: "success";
+      mode?: "single";
       date: string;
       day_kind: "aberto" | "fechado" | "manutencao";
       event_label: string | null;
       park_open: boolean;
       ticket_lines: ParkTicketLine[];
       message: string;
-      /** Quando fechado/manutenção: próxima data com parque aberto no calendário. */
+      next_open_date?: string;
+    }
+  | {
+      status: "success";
+      mode: "range";
+      date_from: string;
+      date_to: string;
+      days: ParkDayEntry[];
+      all_park_open: boolean;
+      closed_dates: string[];
+      open_dates: string[];
+      message: string;
       next_open_date?: string;
     }
   | {
@@ -20,6 +40,26 @@ export type ParkDayConsultaResult =
       date: string;
       message: string;
     };
+
+const MAX_RANGE_DAYS = 31;
+
+export function addDaysIso(iso: string, days: number): string {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+export function enumerateIsoDateRange(from: string, to: string): string[] {
+  if (to < from) return [];
+  const out: string[] = [];
+  let cur = from;
+  while (cur <= to && out.length < MAX_RANGE_DAYS) {
+    out.push(cur);
+    if (cur === to) break;
+    cur = addDaysIso(cur, 1);
+  }
+  return out;
+}
 
 function parseParkTicketLines(stored: string | null): ParkTicketLine[] {
   if (!stored?.trim()) return [];
@@ -51,6 +91,7 @@ function parseParkTicketLines(stored: string | null): ParkTicketLine[] {
 function dayKindLabel(kind: string): string {
   if (kind === "fechado") return "fechado";
   if (kind === "manutencao") return "em manutenção";
+  if (kind === "no_data") return "sem registro";
   return "aberto";
 }
 
@@ -79,18 +120,81 @@ function buildSuccessMessage(
   return parts.join(" ");
 }
 
+type ParkDayRow = {
+  calendar_date: string;
+  day_kind: string;
+  event_label: string | null;
+  park_ticket_value: string | null;
+};
+
+export function buildParkDayEntry(date: string, row: ParkDayRow | undefined): ParkDayEntry {
+  if (!row) {
+    return {
+      date,
+      day_kind: "no_data",
+      park_open: false,
+      event_label: null,
+      ticket_lines: [],
+    };
+  }
+  const day_kind = (row.day_kind as "aberto" | "fechado" | "manutencao") ?? "aberto";
+  const event_label =
+    typeof row.event_label === "string" && row.event_label.trim() ? row.event_label.trim() : null;
+  const ticket_lines = parseParkTicketLines(
+    typeof row.park_ticket_value === "string" ? row.park_ticket_value : null
+  );
+  const park_open = day_kind === "aberto";
+  return {
+    date,
+    day_kind,
+    park_open,
+    event_label,
+    ticket_lines,
+  };
+}
+
+export function buildParkRangeMessage(
+  dateFrom: string,
+  dateTo: string,
+  days: ParkDayEntry[],
+  closedDates: string[],
+  openDates: string[]
+): string {
+  const parts: string[] = [
+    `Calendário do parque de ${dateFrom} a ${dateTo} (${days.length} dia(s)):`,
+  ];
+  for (const d of days) {
+    parts.push(`- ${d.date}: ${dayKindLabel(d.day_kind)}${d.park_open ? "" : " (parque não aberto)"}.`);
+  }
+  if (closedDates.length > 0) {
+    parts.push(`Dias fechados ou sem operação normal: ${closedDates.join(", ")}.`);
+  }
+  if (openDates.length > 0) {
+    parts.push(`Dias abertos: ${openDates.join(", ")}.`);
+  }
+  parts.push("Use SOMENTE estes dias ao responder — PROIBIDO afirmar abertura/fechamento de data não listada.");
+  return parts.join(" ");
+}
+
 export async function runParkDayConsulta(
   supabase: ReturnType<typeof createNexusClient>,
-  params: { tenant_id: string; date: string }
+  params: { tenant_id: string; date: string; date_to?: string }
 ): Promise<{ ok: true; data: ParkDayConsultaResult } | { ok: false; status: number; body: Record<string, unknown> }> {
   const tenant_id = params.tenant_id.trim();
   const date = params.date.trim();
+  const date_to = params.date_to?.trim();
 
   if (!tenant_id) {
     return { ok: false, status: 400, body: { error: "tenant_id required" } };
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return { ok: false, status: 400, body: { error: "invalid_date", detail: date } };
+  }
+  if (date_to && !/^\d{4}-\d{2}-\d{2}$/.test(date_to)) {
+    return { ok: false, status: 400, body: { error: "invalid_date_to", detail: date_to } };
+  }
+  if (date_to && date_to < date) {
+    return { ok: false, status: 400, body: { error: "date_to_before_date" } };
   }
 
   const hospedagemEnabled = await isTenantModuleEnabled(supabase, tenant_id, "hospedagem");
@@ -99,6 +203,68 @@ export async function runParkDayConsulta(
   }
 
   try {
+    if (date_to && date_to !== date) {
+      const dates = enumerateIsoDateRange(date, date_to);
+      if (dates.length === 0) {
+        return { ok: false, status: 400, body: { error: "invalid_range" } };
+      }
+      if (dates.length > MAX_RANGE_DAYS) {
+        return {
+          ok: false,
+          status: 400,
+          body: { error: "range_too_long", max_days: MAX_RANGE_DAYS },
+        };
+      }
+
+      const { data: rows, error } = await supabase
+        .from("lodging_park_days")
+        .select("calendar_date, day_kind, event_label, park_ticket_value")
+        .eq("tenant_id", tenant_id)
+        .gte("calendar_date", date)
+        .lte("calendar_date", date_to)
+        .order("calendar_date", { ascending: true });
+
+      if (error) throw error;
+
+      const byDate = new Map((rows ?? []).map((r) => [r.calendar_date as string, r as ParkDayRow]));
+      const days = dates.map((d) => buildParkDayEntry(d, byDate.get(d)));
+      const closed_dates = days.filter((d) => !d.park_open).map((d) => d.date);
+      const open_dates = days.filter((d) => d.park_open).map((d) => d.date);
+      const all_park_open = closed_dates.length === 0;
+
+      let next_open_date: string | undefined;
+      if (!all_park_open) {
+        const { data: futureDays } = await supabase
+          .from("lodging_park_days")
+          .select("calendar_date, day_kind")
+          .eq("tenant_id", tenant_id)
+          .gt("calendar_date", date_to)
+          .order("calendar_date", { ascending: true })
+          .limit(45);
+
+        const nextOpen = futureDays?.find((d) => d.day_kind === "aberto");
+        if (nextOpen?.calendar_date) {
+          next_open_date = nextOpen.calendar_date;
+        }
+      }
+
+      return {
+        ok: true,
+        data: {
+          status: "success",
+          mode: "range",
+          date_from: date,
+          date_to,
+          days,
+          all_park_open,
+          closed_dates,
+          open_dates,
+          message: buildParkRangeMessage(date, date_to, days, closed_dates, open_dates),
+          ...(next_open_date ? { next_open_date } : {}),
+        },
+      };
+    }
+
     const { data: row, error } = await supabase
       .from("lodging_park_days")
       .select("calendar_date, day_kind, event_label, park_ticket_value")
@@ -147,6 +313,7 @@ export async function runParkDayConsulta(
       ok: true,
       data: {
         status: "success",
+        mode: "single",
         date,
         day_kind: day_kind as "aberto" | "fechado" | "manutencao",
         event_label,

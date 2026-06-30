@@ -15,7 +15,7 @@ import { buildSystemPrompt } from "./registry.js";
 
 describe("Sunset Thermas Park — SYSTEM_PROMPT (contratos de negócio)", () => {
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.16/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.17/);
   });
 
   it("mantém regra suprema de valores e vaga (tolerância zero)", () => {
@@ -251,6 +251,13 @@ describe("Sunset Thermas Park — gate abertura do parque (v1.5.16)", () => {
 
   it("DISPATCHER chama consultar_parque_sunset para abertura do parque", () => {
     expect(DISPATCHER_PROMPT).toMatch(/vai estar aberto|abre nessa data/i);
+    expect(DISPATCHER_PROMPT).toMatch(/date_to/);
+  });
+
+  it("§00f exige consulta por intervalo com date_to", () => {
+    expect(SYSTEM_PROMPT).toMatch(/date_to/);
+    expect(SYSTEM_PROMPT).toMatch(/01 a 03/);
+    expect(SYSTEM_PROMPT).toMatch(/days\[\]/);
   });
 
   it("COMMUNICATION_RULES item 12 reforça gate e nearest_open_window", () => {

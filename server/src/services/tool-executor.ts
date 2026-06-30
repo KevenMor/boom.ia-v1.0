@@ -1718,7 +1718,8 @@ async function executeParkDayConsulta(
   }
 
   const date = String(args?.date ?? "").trim();
-  const out = await runParkDayConsulta(supabase, { tenant_id: tenantId, date });
+  const date_to = String(args?.date_to ?? args?.end_date ?? "").trim() || undefined;
+  const out = await runParkDayConsulta(supabase, { tenant_id: tenantId, date, date_to });
   if (!out.ok) {
     return { success: false, result: null, error: JSON.stringify(out.body) };
   }
