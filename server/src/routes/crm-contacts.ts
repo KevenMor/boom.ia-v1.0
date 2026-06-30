@@ -909,6 +909,81 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
     }
   );
 
+  fastify.get(
+    "/crm-contacts/:id/calendars",
+    async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
+        const { id: contactId } = req.params;
+        const { data: contact, error: contactErr } = await supabase
+          .from("contacts")
+          .select("id, tenant_id")
+          .eq("id", contactId)
+          .maybeSingle();
+        if (contactErr || !contact) return reply.status(404).send({ error: "Contato não encontrado" });
+        if (!canAccessTenant(auth, contact.tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
+        const { data, error } = await supabase
+          .from("calendars")
+          .select("id, name, color, tenant_id")
+          .eq("tenant_id", contact.tenant_id)
+          .order("name");
+        if (error) throw error;
+        return reply.send({ data: data ?? [] });
+      } catch (err: unknown) {
+        return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) });
+      }
+    },
+  );
+
+  fastify.patch(
+    "/crm-contacts/:contactId/appointments/:eventId",
+    async (
+      req: FastifyRequest<{ Params: { contactId: string; eventId: string }; Body: Record<string, unknown> }>,
+      reply: FastifyReply,
+    ) => {
+      try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
+        const { contactId, eventId } = req.params;
+        const { data: contact } = await supabase.from("contacts").select("tenant_id").eq("id", contactId).maybeSingle();
+        if (!contact || !canManageTenant(auth, contact.tenant_id)) {
+          return reply.status(403).send({ error: "forbidden_tenant_access" });
+        }
+        const body = req.body ?? {};
+        const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        for (const key of [
+          "title",
+          "description",
+          "start_at",
+          "end_at",
+          "all_day",
+          "color",
+          "calendar_id",
+          "metadata",
+        ]) {
+          if (body[key] !== undefined) {
+            updates[key] =
+              key === "metadata" && typeof body[key] !== "string"
+                ? JSON.stringify(body[key] ?? {})
+                : body[key];
+          }
+        }
+        const { data, error } = await supabase
+          .from("calendar_events")
+          .update(updates)
+          .eq("id", eventId)
+          .eq("contact_id", contactId)
+          .select()
+          .single();
+        if (error) throw error;
+        return reply.send(data);
+      } catch (err: unknown) {
+        return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) });
+      }
+    },
+  );
+
   fastify.delete(
     "/crm-contacts/:contactId/appointments/:eventId",
     async (req: FastifyRequest<{ Params: { contactId: string; eventId: string } }>, reply: FastifyReply) => {

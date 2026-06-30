@@ -199,6 +199,36 @@ export async function embedChatwootCrmResourceRoutes(fastify: FastifyInstance) {
             if (error) throw error;
             return reply.send(data);
           }
+          if (method === "PATCH" && resourceId) {
+            const body = req.body ?? {};
+            const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+            for (const key of [
+              "title",
+              "description",
+              "start_at",
+              "end_at",
+              "all_day",
+              "color",
+              "calendar_id",
+              "metadata",
+            ]) {
+              if (body[key] !== undefined) {
+                updates[key] =
+                  key === "metadata" && typeof body[key] !== "string"
+                    ? JSON.stringify(body[key] ?? {})
+                    : body[key];
+              }
+            }
+            const { data, error } = await supabase
+              .from("calendar_events")
+              .update(updates)
+              .eq("id", resourceId)
+              .eq("contact_id", contactId)
+              .select()
+              .single();
+            if (error) throw error;
+            return reply.send(data);
+          }
           if (method === "DELETE" && resourceId) {
             const { error } = await supabase
               .from("calendar_events")

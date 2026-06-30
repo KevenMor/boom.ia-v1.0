@@ -325,7 +325,7 @@ export default function ContactProfilePage() {
 
   return (
     <div className={`ds-chatwoot font-cw ${isEmbed ? "min-h-[100dvh]" : "min-h-[calc(100vh-4rem)]"} w-full bg-[hsl(var(--cw-surface,0_0%_98%))] dark:bg-background`}>
-      <div className={`w-full max-w-[1200px] mx-auto px-4 py-6 sm:px-6 lg:px-8 space-y-5`}>
+      <div className={cn("w-full mx-auto space-y-5", isEmbed ? "max-w-none px-2 py-3 sm:px-3" : "max-w-[1200px] px-4 py-6 sm:px-6 lg:px-8")}>
         {!isEmbed && (
         <Breadcrumb>
           <BreadcrumbList>
@@ -426,8 +426,8 @@ export default function ContactProfilePage() {
 
         {/* Profile body — só para clientes */}
         {isClient && (
-        <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-5">
-          {contact && (
+        <div className={cn("grid gap-5", isEmbed ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-[260px_1fr]")}>
+          {contact && !isEmbed && (
             <ProfileSidebarPanel
               contact={contact}
               isLoading={isLoading}

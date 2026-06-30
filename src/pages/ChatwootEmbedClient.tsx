@@ -88,6 +88,13 @@ export default function ChatwootEmbedClient() {
 
       const ctx = parseChatwootAppContext(event.data);
       if (ctx) setAppContext(ctx);
+
+      const data = event.data as { type?: string; theme?: string } | null;
+      if (data?.type === "boom-ia-embed:theme" && data.theme) {
+        const dark = data.theme === "dark";
+        document.documentElement.classList.toggle("dark", dark);
+        document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+      }
     };
     window.addEventListener("message", onMessage);
 

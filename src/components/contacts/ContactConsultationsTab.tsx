@@ -29,9 +29,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useContactAppointments, useCreateContactAppointment } from "@/hooks/useContacts";
-import { useUpdateCalendarEvent } from "@/hooks/useCalendarEvents";
-import { useCalendars } from "@/hooks/useCalendars";
+import { useContactAppointments, useCreateContactAppointment, useUnlinkContactAppointment, useContactCalendars, useUpdateContactAppointment } from "@/hooks/useContacts";
 import { toast } from "sonner";
 import type { CalendarEvent, EventProcedureMetadata } from "@/types/calendar";
 
@@ -68,9 +66,9 @@ export function ContactConsultationsTab({ contactId, tenantId }: Props) {
   const [editingConsultation, setEditingConsultation] = useState<EditingConsultation | null>(null);
 
   const { data: allAppointments, isLoading } = useContactAppointments(contactId, false);
-  const { data: calendars } = useCalendars(tenantId);
+  const { data: calendars } = useContactCalendars(contactId);
   const createAppointment = useCreateContactAppointment(contactId);
-  const updateEvent = useUpdateCalendarEvent();
+  const updateAppointment = useUpdateContactAppointment(contactId);
 
   // Filter past consultations
   const consultations = (allAppointments ?? [])
@@ -152,11 +150,10 @@ export function ContactConsultationsTab({ contactId, tenantId }: Props) {
       session_number: editForm.session_number ? parseInt(editForm.session_number) : undefined,
     };
 
-    updateEvent.mutate(
+    updateAppointment.mutate(
       {
-        id: editingConsultation.event.id,
+        eventId: editingConsultation.event.id,
         metadata,
-        updated_at: new Date().toISOString(),
       },
       {
         onSuccess: () => {
@@ -434,7 +431,7 @@ export function ContactConsultationsTab({ contactId, tenantId }: Props) {
             <Button variant="outline" onClick={() => setEditingConsultation(null)}>
               Cancelar
             </Button>
-            <Button onClick={handleSaveEditConsultation} disabled={updateEvent.isPending}>
+            <Button onClick={handleSaveEditConsultation} disabled={updateAppointment.isPending}>
               Salvar Anotações
             </Button>
           </DialogFooter>

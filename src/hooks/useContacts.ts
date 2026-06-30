@@ -351,6 +351,37 @@ export function useUnlinkContactAppointment(contactId: string | null) {
   });
 }
 
+export function useUpdateContactAppointment(contactId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ eventId, ...updates }: Partial<import("@/types/calendar").CalendarEvent> & { eventId: string }) => {
+      const { id: _id, ...body } = updates as Partial<import("@/types/calendar").CalendarEvent> & { id?: string };
+      return callAPI<import("@/types/calendar").CalendarEvent>(
+        `/crm-contacts/${contactId}/appointments/${eventId}`,
+        { method: "PATCH", body },
+      );
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-contacts", contactId, "appointments"] });
+      qc.invalidateQueries({ queryKey: ["crm-contacts", contactId, "summary"] });
+    },
+  });
+}
+
+export function useContactCalendars(contactId: string | null) {
+  return useQuery({
+    queryKey: ["crm-contacts", contactId, "calendars"],
+    queryFn: async () => {
+      const res = await callAPI<{ data: import("@/types/calendar").Calendar[] }>(
+        `/crm-contacts/${contactId}/calendars`,
+        { method: "GET" },
+      );
+      return res.data;
+    },
+    enabled: !!contactId,
+  });
+}
+
 // --- Documentos ---
 export function useContactDocuments(contactId: string | null) {
   return useQuery({

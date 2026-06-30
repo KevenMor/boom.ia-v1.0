@@ -30,8 +30,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useContactAppointments, useCreateContactAppointment, useUnlinkContactAppointment } from "@/hooks/useContacts";
-import { useCalendars } from "@/hooks/useCalendars";
+import { useContactAppointments, useCreateContactAppointment, useUnlinkContactAppointment, useContactCalendars } from "@/hooks/useContacts";
 import { toast } from "sonner";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
@@ -67,7 +66,7 @@ export function ContactAgendaTab({ contactId, tenantId }: Props) {
   const [unlinkTarget, setUnlinkTarget] = useState<CalendarEvent | null>(null);
 
   const { data: appointments, isLoading } = useContactAppointments(contactId, false);
-  const { data: calendars } = useCalendars(tenantId);
+  const { data: calendars } = useContactCalendars(contactId);
   const createAppointment = useCreateContactAppointment(contactId);
   const unlinkAppointment = useUnlinkContactAppointment(contactId);
 

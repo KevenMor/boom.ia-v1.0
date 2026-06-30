@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { FileUp, FileText, Trash2, ExternalLink, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -36,6 +37,8 @@ import {
   useCreateContactDocument,
   useDeleteContactDocument,
 } from "@/hooks/useContacts";
+import { getActiveEmbedCrm } from "@/lib/api-client";
+import { embedCrmFetch } from "@/lib/embed-crm-api";
 import type { ContactDocument, ContactDocumentCategory } from "@/types/database";
 import { toast } from "sonner";
 
@@ -60,6 +63,7 @@ interface Props {
 }
 
 export function ContactDocumentsTab({ contactId, tenantId }: Props) {
+  const qc = useQueryClient();
   const { data: documents, isLoading } = useContactDocuments(contactId);
   const createDoc = useCreateContactDocument(contactId);
   const deleteDoc = useDeleteContactDocument(contactId);
@@ -100,21 +104,47 @@ export function ContactDocumentsTab({ contactId, tenantId }: Props) {
     }
     setUploading(true);
     try {
-      const ext = pendingFile.name.split(".").pop() ?? "bin";
-      const path = `${tenantId}/${contactId}/${crypto.randomUUID()}.${ext}`;
-      const { error: uploadError } = await supabase.storage
-        .from("contact-files")
-        .upload(path, pendingFile, { upsert: false });
-      if (uploadError) throw uploadError;
-      const { data } = supabase.storage.from("contact-files").getPublicUrl(path);
-      await createDoc.mutateAsync({
-        name: docName.trim(),
-        file_url: data.publicUrl,
-        category,
-        file_type: pendingFile.type || null,
-        file_size: pendingFile.size,
-        notes: notes.trim() || null,
-      });
+      const embed = getActiveEmbedCrm();
+      if (embed) {
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ""));
+          reader.onerror = () => reject(new Error("Falha ao ler arquivo"));
+          reader.readAsDataURL(pendingFile);
+        });
+        await embedCrmFetch<ContactDocument>(
+          `/crm-contacts/${contactId}/documents/upload`,
+          embed,
+          {
+            method: "POST",
+            body: {
+              file_base64: base64,
+              file_name: pendingFile.name,
+              file_type: pendingFile.type || null,
+              name: docName.trim(),
+              category,
+              notes: notes.trim() || null,
+            },
+          },
+        );
+        await qc.invalidateQueries({ queryKey: ["crm-contacts", contactId, "documents"] });
+      } else {
+        const ext = pendingFile.name.split(".").pop() ?? "bin";
+        const path = `${tenantId}/${contactId}/${crypto.randomUUID()}.${ext}`;
+        const { error: uploadError } = await supabase.storage
+          .from("contact-files")
+          .upload(path, pendingFile, { upsert: false });
+        if (uploadError) throw uploadError;
+        const { data } = supabase.storage.from("contact-files").getPublicUrl(path);
+        await createDoc.mutateAsync({
+          name: docName.trim(),
+          file_url: data.publicUrl,
+          category,
+          file_type: pendingFile.type || null,
+          file_size: pendingFile.size,
+          notes: notes.trim() || null,
+        });
+      }
       toast.success("Arquivo enviado!");
       setUploadOpen(false);
       resetUploadForm();
