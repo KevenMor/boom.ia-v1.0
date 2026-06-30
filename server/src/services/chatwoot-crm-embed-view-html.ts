@@ -24,78 +24,74 @@ export function renderChatwootCrmEmbedViewHtml(
   <title>Cadastro do cliente</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
   <style>
-    :root,[data-theme="light"]{--bg:#ffffff;--surface:#ffffff;--surface-muted:#f1f5f9;--border:#e2e8f0;--text:#0f172a;--text-muted:#64748b;--brand:#2563eb;--brand-hover:#1d4ed8;--brand-soft:rgba(37,99,235,.1);--success-soft:#dcfce7;--success-text:#15803d;--err:#ef4444;--input-bg:#fff;--danger:#dc2626;--ring:rgba(37,99,235,.28);--shadow-sm:0 1px 2px rgba(15,23,42,.05);--shadow-md:0 8px 24px -8px rgba(15,23,42,.12);}
-    [data-theme="dark"]{--bg:#0f1419;--surface:#141a22;--surface-muted:#1c2430;--border:#2d3748;--text:#f1f5f9;--text-muted:#94a3b8;--brand:#3b9eff;--brand-hover:#60a5fa;--brand-soft:rgba(59,158,255,.12);--success-soft:rgba(74,222,128,.12);--success-text:#86efac;--err:#f87171;--input-bg:#141a22;--danger:#f87171;--ring:rgba(59,158,255,.32);--shadow-sm:0 1px 2px rgba(0,0,0,.25);--shadow-md:0 8px 24px -8px rgba(0,0,0,.45);}
+    :root,[data-theme="light"]{--bg:#fff;--surface:#fff;--surface-muted:#f6f8fa;--border:#e5e7eb;--text:#111827;--text-muted:#6b7280;--text-subtle:#9ca3af;--brand:#1f93ff;--brand-hover:#1a7fdc;--ring:rgba(31,147,255,.18);--success-bg:#ecfdf5;--success-text:#027a48;--success-border:#a9efc5;--warn-bg:#fffbeb;--warn-text:#92400e;--warn-border:#fde68a;--err-bg:#fef2f2;--err-text:#b91c1c;--err-border:#fecaca;--danger:#dc2626;--input-bg:#fff;}
+    [data-theme="dark"]{--bg:#1c2431;--surface:#1c2431;--surface-muted:#232f3e;--border:#2d3c4e;--text:#f3f4f6;--text-muted:#9ca3af;--text-subtle:#6b7280;--brand:#3b9eff;--brand-hover:#60a5fa;--ring:rgba(59,158,255,.22);--success-bg:rgba(74,222,128,.1);--success-text:#86efac;--success-border:rgba(74,222,128,.25);--warn-bg:rgba(252,211,77,.08);--warn-text:#fcd34d;--warn-border:rgba(252,211,77,.3);--err-bg:rgba(248,113,113,.1);--err-text:#f87171;--err-border:rgba(248,113,113,.3);--danger:#f87171;--input-bg:#232f3e;}
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
     html,body{height:100%;background:var(--bg);}
-    body{color:var(--text);font:14px/1.5 Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
-    .cw-app{height:100%;min-height:100%;display:flex;flex-direction:column;background:var(--bg);}
-    .cw-hint{padding:10px 20px;font-size:12px;color:var(--text-muted);background:var(--surface-muted);border-bottom:1px solid var(--border);}
-    .cw-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;gap:12px;align-items:center;background:var(--surface);}
-    .cw-header-compact{padding:12px 16px;}
-    .cw-avatar,.cw-avatar-fallback{width:48px;height:48px;border-radius:14px;flex-shrink:0;border:2px solid var(--border);}
-    .cw-avatar{object-fit:cover;}.cw-avatar-fallback{display:flex;align-items:center;justify-content:center;background:var(--surface-muted);font-weight:700;color:var(--text-muted);}
-    .cw-title h1{font-size:18px;font-weight:700;letter-spacing:-.02em;}.cw-title p{font-size:13px;color:var(--text-muted);margin-top:2px;}
-    .cw-badge{display:inline-flex;padding:3px 9px;border-radius:999px;font-size:10px;font-weight:700;background:var(--success-soft);color:var(--success-text);margin-top:6px;}
-    .cw-tabs{display:flex;gap:4px;padding:0 16px;border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:thin;background:var(--surface);}
-    .cw-tab{display:inline-flex;align-items:center;gap:7px;padding:11px 14px;border:0;background:none;cursor:pointer;font:inherit;font-size:13px;font-weight:500;color:var(--text-muted);border-bottom:2px solid transparent;white-space:nowrap;transition:color .15s,border-color .15s,background .15s;border-radius:10px 10px 0 0;}
-    .cw-tab:hover{color:var(--text);background:var(--surface-muted);}
+    body{color:var(--text);font:13px/1.5 Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+    .cw-app{height:100%;display:flex;flex-direction:column;background:var(--bg);}
+    .cw-hint{padding:8px 16px;font-size:12px;color:var(--text-muted);background:var(--surface-muted);border-bottom:1px solid var(--border);}
+    .cw-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;background:var(--surface);}
+    .cw-avatar,.cw-avatar-fallback{width:36px;height:36px;border-radius:50%;flex-shrink:0;border:1px solid var(--border);}
+    .cw-avatar{object-fit:cover;}.cw-avatar-fallback{display:flex;align-items:center;justify-content:center;background:var(--surface-muted);font-weight:600;font-size:12px;color:var(--text-muted);}
+    .cw-title h1{font-size:14px;font-weight:600;line-height:1.3;}.cw-title p{font-size:12px;color:var(--text-muted);}
+    .cw-badge{display:inline-flex;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;background:var(--success-bg);color:var(--success-text);border:1px solid var(--success-border);margin-top:4px;}
+    .cw-tabs{display:flex;padding:0 12px;border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none;background:var(--surface);}
+    .cw-tabs::-webkit-scrollbar{display:none;}
+    .cw-tab{display:inline-flex;align-items:center;gap:5px;padding:9px 10px;border:0;background:none;cursor:pointer;font:inherit;font-size:12px;font-weight:500;color:var(--text-muted);border-bottom:2px solid transparent;white-space:nowrap;transition:color .12s,border-color .12s;}
+    .cw-tab:hover{color:var(--text);}
     .cw-tab.active{color:var(--brand);border-bottom-color:var(--brand);font-weight:600;}
-    .cw-tab-ico{width:15px;height:15px;opacity:.72;flex-shrink:0;}
+    .cw-tab-ico{width:13px;height:13px;opacity:.55;flex-shrink:0;}
     .cw-tab.active .cw-tab-ico{opacity:1;}
-    .cw-body{flex:1;overflow:auto;padding:20px;min-height:0;}
-    .cw-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
+    .cw-body{flex:1;overflow:auto;padding:0;min-height:0;}
+    .cw-section{padding:16px 16px 0;}
+    .cw-section-head{display:flex;align-items:center;gap:8px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+    .cw-section-head span{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-subtle);}
+    .cw-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 12px;}
     .cw-grid-3{grid-template-columns:repeat(3,minmax(0,1fr));}
-    .cw-metric{padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--surface);box-shadow:var(--shadow-sm);}
-    .cw-metric span{display:block;font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;}
-    .cw-metric strong{display:block;margin-top:6px;font-size:17px;font-weight:700;}
-    .cw-field{margin-bottom:12px;}.cw-field label{display:block;font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:6px;}
-    .cw-field input,.cw-field textarea,.cw-field select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--input-bg);color:var(--text);font:inherit;transition:border-color .15s,box-shadow .15s;}
+    .cw-metric{padding:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface-muted);}
+    .cw-metric span{display:block;font-size:10px;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.04em;}
+    .cw-metric strong{display:block;margin-top:4px;font-size:16px;font-weight:700;}
+    .cw-field{margin-bottom:10px;}.cw-field label{display:block;font-size:11px;font-weight:500;color:var(--text-muted);margin-bottom:4px;}
+    .cw-field input,.cw-field textarea,.cw-field select{width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font:inherit;font-size:13px;line-height:1.4;transition:border-color .12s,box-shadow .12s;}
     .cw-field input:focus,.cw-field textarea:focus,.cw-field select:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px var(--ring);}
-    .cw-field textarea{min-height:88px;resize:vertical;line-height:1.5;}
-    .cw-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 16px;border-radius:10px;border:0;font:inherit;font-size:13px;font-weight:600;cursor:pointer;background:linear-gradient(180deg,var(--brand),var(--brand-hover));color:#fff;box-shadow:0 4px 14px -4px var(--ring);transition:transform .12s,box-shadow .15s,opacity .15s;}
-    .cw-btn:hover{transform:translateY(-1px);box-shadow:0 6px 18px -4px var(--ring);}
-    .cw-btn:active{transform:translateY(0);}
-    .cw-btn:disabled{opacity:.6;cursor:not-allowed;transform:none;}
-    .cw-btn-sm{padding:7px 12px;font-size:12px;box-shadow:none;}
-    .cw-btn-ghost{background:var(--surface);border:1px solid var(--border);color:var(--text);box-shadow:var(--shadow-sm);}
-    .cw-btn-danger{background:var(--surface);border:1px solid var(--danger);color:var(--danger);box-shadow:none;}
-    .cw-card{margin-bottom:16px;padding:16px;border:1px solid var(--border);border-radius:14px;background:var(--surface);box-shadow:var(--shadow-sm);}
-    .cw-card h3{font-size:14px;font-weight:700;margin-bottom:12px;letter-spacing:-.01em;}
-    .cw-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;}
-    .cw-toolbar p{font-size:13px;color:var(--text-muted);}
+    .cw-field textarea{min-height:72px;resize:vertical;}
+    .cw-field-row{display:grid;grid-template-columns:1fr 56px;gap:0 10px;}
+    .cw-field-row3{display:grid;grid-template-columns:1fr 56px 100px;gap:0 10px;}
+    .cw-form-footer{padding:12px 16px;border-top:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:10px;flex-wrap:wrap;position:sticky;bottom:0;}
+    .cw-btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:7px 14px;border-radius:6px;border:0;font:inherit;font-size:13px;font-weight:600;cursor:pointer;background:var(--brand);color:#fff;transition:background .12s,opacity .12s;}
+    .cw-btn:hover{background:var(--brand-hover);}
+    .cw-btn:disabled{opacity:.55;cursor:not-allowed;}
+    .cw-btn-sm{padding:5px 10px;font-size:12px;}
+    .cw-btn-ghost{background:var(--surface);border:1px solid var(--border);color:var(--text-muted);}
+    .cw-btn-ghost:hover{color:var(--text);background:var(--surface-muted);}
+    .cw-btn-danger{background:var(--surface);border:1px solid var(--danger);color:var(--danger);}
+    .cw-card{margin-bottom:10px;padding:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface-muted);}
+    .cw-card h3{font-size:13px;font-weight:600;margin-bottom:10px;}
+    .cw-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;}
+    .cw-toolbar p{font-size:12px;color:var(--text-muted);}
     .cw-table{width:100%;border-collapse:collapse;font-size:13px;}
-    .cw-table th,.cw-table td{padding:10px 12px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}
-    .cw-table th{font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;background:var(--surface-muted);}
+    .cw-table th{padding:8px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-subtle);border-bottom:1px solid var(--border);text-align:left;background:var(--surface-muted);}
+    .cw-table td{padding:9px 10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle;}
+    .cw-table tr:last-child td{border-bottom:0;}
     .cw-table tr:hover td{background:var(--surface-muted);}
-    .cw-empty{padding:32px 24px;text-align:center;color:var(--text-muted);font-size:13px;border:1px dashed var(--border);border-radius:12px;background:var(--surface-muted);}
-    .cw-pill{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;background:var(--surface-muted);border:1px solid var(--border);}
-    .cw-bubble{max-width:92%;padding:10px 12px;border-radius:14px;font-size:13px;margin-bottom:8px;word-break:break-word;}
-    .cw-bubble.in{background:var(--surface);border:1px solid var(--border);}.cw-bubble.out{margin-left:auto;background:var(--brand);color:#fff;}
-    .cw-bubble time{display:block;font-size:10px;opacity:.7;margin-top:4px;}
-    .cw-actions{display:flex;gap:8px;flex-wrap:wrap;}
-    .cw-alert{padding:14px;border-radius:12px;font-size:13px;background:rgba(239,68,68,.1);color:var(--err);border:1px solid rgba(239,68,68,.2);}
-    .cw-loading{padding:48px 24px;text-align:center;color:var(--text-muted);}
-    .cw-spinner{width:28px;height:28px;border:2px solid var(--border);border-top-color:var(--brand);border-radius:50%;animation:spin .75s linear infinite;margin:0 auto 12px;}
+    .cw-empty{padding:32px 20px;text-align:center;color:var(--text-muted);font-size:13px;}
+    .cw-empty-ico{font-size:28px;opacity:.35;margin-bottom:8px;}
+    .cw-pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;}
+    .cw-pill-green{background:var(--success-bg);color:var(--success-text);border:1px solid var(--success-border);}
+    .cw-pill-yellow{background:var(--warn-bg);color:var(--warn-text);border:1px solid var(--warn-border);}
+    .cw-pill-red{background:var(--err-bg);color:var(--err-text);border:1px solid var(--err-border);}
+    .cw-pill-gray{background:var(--surface-muted);color:var(--text-muted);border:1px solid var(--border);}
+    .cw-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+    .cw-alert{padding:10px 12px;border-radius:6px;font-size:12px;background:var(--err-bg);color:var(--err-text);border:1px solid var(--err-border);}
+    .cw-loading{padding:40px 20px;text-align:center;color:var(--text-muted);}
+    .cw-spinner{width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--brand);border-radius:50%;animation:spin .75s linear infinite;margin:0 auto 10px;}
     @keyframes spin{to{transform:rotate(360deg);}}
-    .cw-hidden{display:none!important;}.cw-msg-ok{font-size:12px;color:var(--success-text);margin-top:10px;font-weight:500;}.cw-msg-err{font-size:12px;color:var(--err);margin-top:10px;}
-    .cw-modal-root{background:transparent;}
-    .cw-modal-root .cw-app{background:transparent;}
-    .cw-modal-root .cw-tabs{padding:12px 20px 0;border-bottom:none;background:var(--surface-muted);gap:6px;}
-    .cw-modal-root .cw-tab{border-radius:10px;border-bottom:2px solid transparent;margin-bottom:8px;padding:9px 13px;font-size:12px;}
-    .cw-modal-root .cw-tab.active{background:var(--surface);border-color:var(--border);border-bottom-color:var(--brand);box-shadow:var(--shadow-sm);}
-    .cw-modal-root .cw-body{padding:20px 24px 0;background:linear-gradient(180deg,var(--surface-muted) 0%,var(--bg) 140px);}
-    .cw-form-sheet{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px 20px 8px;box-shadow:var(--shadow-md);}
-    .cw-form-sheet-head{margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border);}
-    .cw-form-sheet-head h2{font-size:16px;font-weight:700;letter-spacing:-.02em;}
-    .cw-form-sheet-head p{margin-top:4px;font-size:13px;color:var(--text-muted);}
-    .cw-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 16px;}
-    .cw-form-grid .cw-field-full{grid-column:1/-1;}
-    .cw-form-footer{position:sticky;bottom:0;margin:20px -24px 0;padding:16px 24px 20px;background:linear-gradient(180deg,transparent,rgba(248,250,252,.92) 24%,var(--bg) 40%);border-top:1px solid var(--border);backdrop-filter:blur(8px);display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
-    [data-theme="dark"] .cw-form-footer{background:linear-gradient(180deg,transparent,rgba(15,20,25,.88) 24%,var(--bg) 40%);}
-    .cw-form-footer .cw-btn{min-width:160px;}
-    @media(max-width:720px){.cw-form-grid,.cw-grid,.cw-grid-3{grid-template-columns:1fr;}.cw-modal-root .cw-tabs{padding:10px 12px 0;}.cw-modal-root .cw-body{padding:16px 16px 0;}.cw-form-footer{margin:16px -16px 0;padding:14px 16px 18px;}}
-    @media(prefers-reduced-motion:reduce){.cw-spinner{animation:none;}.cw-btn{transition:none;}}
+    .cw-hidden{display:none!important;}
+    .cw-msg-ok{font-size:12px;color:var(--success-text);font-weight:500;}
+    .cw-msg-err{font-size:12px;color:var(--err-text);}
+    @media(max-width:680px){.cw-grid,.cw-grid-3,.cw-field-row,.cw-field-row3{grid-template-columns:1fr;}}
+    @media(prefers-reduced-motion:reduce){.cw-spinner{animation:none;}}
   </style>
 </head>
 <body>
@@ -117,21 +113,33 @@ export function renderChatwootCrmEmbedViewHtml(
         <button type="button" class="cw-tab" data-tab="agenda"><svg class="cw-tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><span>Agenda</span></button>
       </nav>
       <main class="cw-body" id="tab-body">
-        <section id="tab-edit"><form id="edit-form"${modal ? ' class="cw-modal-form"' : ""}>
-          ${modal ? '<div class="cw-form-sheet"><div class="cw-form-sheet-head"><h2>Dados do cliente</h2><p>Informações de contato, documento e endereço.</p></div><div class="cw-form-grid">' : ""}
-          <div class="cw-field${modal ? " cw-field-full" : ""}"><label>Nome completo</label><input id="f-name" placeholder="Nome do cliente"/></div>
-          <div class="cw-field"><label>E-mail</label><input id="f-email" type="email" placeholder="email@exemplo.com"/></div>
-          <div class="cw-field"><label>Telefone</label><input id="f-phone" placeholder="5511999999999"/></div>
-          <div class="cw-field"><label>CPF/CNPJ</label><input id="f-cpf" placeholder="000.000.000-00"/></div>
-          <div class="cw-field cw-field-full"><label>Endereço</label><input id="f-address" placeholder="Rua, número, complemento"/></div>
-          <div class="cw-field"><label>Cidade</label><input id="f-city"/></div>
-          <div class="cw-field"><label>UF</label><input id="f-state" maxlength="2" placeholder="SP"/></div>
-          <div class="cw-field"><label>CEP</label><input id="f-zip" placeholder="00000-000"/></div>
-          <div class="cw-field cw-field-full"><label>Observações</label><textarea id="f-notes" placeholder="Anotações internas sobre o cliente…"></textarea></div>
-          ${modal ? "</div></div>" : ""}
-          <div class="${modal ? "cw-form-footer" : "cw-actions"}">
-            <button type="submit" class="cw-btn" id="save-btn">Salvar cadastro</button>
-            <div id="save-ok" class="cw-msg-ok"></div><div id="save-err" class="cw-msg-err"></div>
+        <section id="tab-edit"><form id="edit-form">
+          <div class="cw-section">
+            <div class="cw-section-head"><span>Contato</span></div>
+            <div class="cw-field"><label>Nome completo</label><input id="f-name" placeholder="Nome do cliente"/></div>
+            <div class="cw-grid">
+              <div class="cw-field"><label>E-mail</label><input id="f-email" type="email" placeholder="email@exemplo.com"/></div>
+              <div class="cw-field"><label>Telefone</label><input id="f-phone" placeholder="5511999999999"/></div>
+            </div>
+            <div class="cw-field"><label>CPF / CNPJ</label><input id="f-cpf" placeholder="000.000.000-00"/></div>
+          </div>
+          <div class="cw-section">
+            <div class="cw-section-head"><span>Endereço</span></div>
+            <div class="cw-field"><label>Logradouro</label><input id="f-address" placeholder="Rua, número, complemento"/></div>
+            <div class="cw-field-row3">
+              <div class="cw-field"><label>Cidade</label><input id="f-city"/></div>
+              <div class="cw-field"><label>UF</label><input id="f-state" maxlength="2" placeholder="SP"/></div>
+              <div class="cw-field"><label>CEP</label><input id="f-zip" placeholder="00000-000"/></div>
+            </div>
+          </div>
+          <div class="cw-section">
+            <div class="cw-section-head"><span>Observações</span></div>
+            <div class="cw-field"><textarea id="f-notes" placeholder="Anotações internas sobre o cliente…"></textarea></div>
+          </div>
+          <div class="cw-form-footer">
+            <button type="submit" class="cw-btn" id="save-btn">Salvar</button>
+            <span id="save-ok" class="cw-msg-ok"></span>
+            <span id="save-err" class="cw-msg-err"></span>
           </div>
         </form></section>
         <section id="tab-invoices" class="cw-hidden"><div id="panel-invoices"></div></section>
@@ -183,8 +191,20 @@ export function renderChatwootCrmEmbedViewHtml(
     document.getElementById("f-notes").value=c.notes||"";
   }
 
+  function statusPill(s){
+    var map={paid:"cw-pill-green",active:"cw-pill-green",pending:"cw-pill-yellow",paused:"cw-pill-yellow",overdue:"cw-pill-red",cancelled:"cw-pill-gray",completed:"cw-pill-gray",inactive:"cw-pill-gray",signed:"cw-pill-green",draft:"cw-pill-gray",expired:"cw-pill-red"};
+    var labels={paid:"Pago",active:"Ativo",pending:"Pendente",paused:"Pausado",overdue:"Em atraso",cancelled:"Cancelado",completed:"Concluído",inactive:"Inativo",signed:"Assinado",draft:"Rascunho",expired:"Expirado"};
+    var cls=map[s]||"cw-pill-gray";
+    var lbl=labels[s]||s;
+    return '<span class="cw-pill '+cls+'">'+esc(lbl)+"</span>";
+  }
+
+  function emptyState(msg){
+    return '<div class="cw-empty"><div class="cw-empty-ico">📋</div>'+esc(msg||"Nenhum registro.")+"</div>";
+  }
+
   function tableHtml(rows,head,mapFn,actions){
-    if(!rows.length)return '<div class="cw-empty">Nenhum registro.</div>';
+    if(!rows.length)return emptyState();
     return '<table class="cw-table"><thead><tr>'+head.map(function(h){return "<th>"+esc(h)+"</th>";}).join("")+(actions?"<th></th>":"")+'</tr></thead><tbody>'+rows.map(function(r,i){return mapFn(r,i);}).join("")+"</tbody></table>";
   }
 
@@ -210,7 +230,7 @@ export function renderChatwootCrmEmbedViewHtml(
         '<div class="cw-field"><label>Status</label><select id="inv-status"><option value="pending">Pendente</option><option value="paid">Pago</option><option value="overdue">Em atraso</option><option value="cancelled">Cancelado</option></select></div>'+
         '<div class="cw-actions"><button type="submit" class="cw-btn cw-btn-sm">'+(ed?"Salvar":"Adicionar")+'</button>'+(ed?'<button type="button" class="cw-btn cw-btn-sm cw-btn-ghost" id="inv-cancel">Cancelar</button>':"")+'</div><div id="inv-msg" class="cw-msg-err"></div></form></div>';
       var list=tableHtml(rows,["Descrição","Valor","Vencimento","Status"],function(r){
-        return "<tr><td>"+esc(r.description||"—")+"</td><td>"+money(r.amount)+"</td><td>"+fmtDay(r.due_date)+'</td><td><span class="cw-pill">'+esc(r.status)+'</span></td><td><div class="cw-actions"><button type="button" class="cw-btn cw-btn-sm cw-btn-ghost" data-edit-inv="'+esc(r.id)+'">Editar</button><button type="button" class="cw-btn cw-btn-sm cw-btn-danger" data-del-inv="'+esc(r.id)+'">Excluir</button></div></td></tr>';
+        return "<tr><td>"+esc(r.description||"—")+"</td><td>"+money(r.amount)+"</td><td>"+fmtDay(r.due_date)+"</td><td>"+statusPill(r.status)+'</td><td><div class="cw-actions"><button type="button" class="cw-btn cw-btn-sm cw-btn-ghost" data-edit-inv="'+esc(r.id)+'">Editar</button><button type="button" class="cw-btn cw-btn-sm cw-btn-danger" data-del-inv="'+esc(r.id)+'">Excluir</button></div></td></tr>';
       },true);
       bindPanel(el,form+'<div class="cw-toolbar"><p>'+rows.length+' fatura(s)</p></div>'+list,function(root){
         if(ed){var sel=root.querySelector("#inv-status");if(sel)sel.value=ed.status||"pending";}
@@ -243,7 +263,7 @@ export function renderChatwootCrmEmbedViewHtml(
         '<div class="cw-field"><label>Fim</label><input id="pkg-end" type="date" value="'+esc(ed&&ed.end_date?ed.end_date.slice(0,10):"")+'"/></div></div>'+
         '<div class="cw-actions"><button type="submit" class="cw-btn cw-btn-sm">'+(ed?"Salvar":"Adicionar")+'</button>'+(ed?'<button type="button" class="cw-btn cw-btn-sm cw-btn-ghost" id="pkg-cancel">Cancelar</button>':"")+'</div></form></div>';
       var list=tableHtml(rows,["Nome","Status","Valor","Período"],function(r){
-        return "<tr><td>"+esc(r.name)+'</td><td><span class="cw-pill">'+esc(r.status)+"</span></td><td>"+(r.price!=null?money(r.price):"—")+"</td><td>"+fmtDay(r.start_date)+" – "+fmtDay(r.end_date)+'</td><td><div class="cw-actions"><button type="button" class="cw-btn cw-btn-sm cw-btn-ghost" data-edit-pkg="'+esc(r.id)+'">Editar</button><button type="button" class="cw-btn cw-btn-sm cw-btn-danger" data-del-pkg="'+esc(r.id)+'">Excluir</button></div></td></tr>';
+        return "<tr><td>"+esc(r.name)+"</td><td>"+statusPill(r.status)+"</td><td>"+(r.price!=null?money(r.price):"—")+"</td><td>"+fmtDay(r.start_date)+" – "+fmtDay(r.end_date)+'</td><td><div class="cw-actions"><button type="button" class="cw-btn cw-btn-sm cw-btn-ghost" data-edit-pkg="'+esc(r.id)+'">Editar</button><button type="button" class="cw-btn cw-btn-sm cw-btn-danger" data-del-pkg="'+esc(r.id)+'">Excluir</button></div></td></tr>';
       },true);
       bindPanel(el,form+'<div class="cw-toolbar"><p>'+rows.length+' pacote(s)</p></div>'+list,function(root){
         if(ed){var s=root.querySelector("#pkg-status");if(s)s.value=ed.status||"active";}
@@ -278,7 +298,7 @@ export function renderChatwootCrmEmbedViewHtml(
         '<div class="cw-field"><label>Descrição</label><textarea id="ctr-desc">'+esc(ed?ed.description||"":"")+'</textarea></div>'+
         '<div class="cw-actions"><button type="submit" class="cw-btn cw-btn-sm">'+(ed?"Salvar":"Adicionar")+'</button>'+(ed?'<button type="button" class="cw-btn cw-btn-sm cw-btn-ghost" id="ctr-cancel">Cancelar</button>':"")+'</div></form></div>';
       var list=tableHtml(rows,["Título","Status","Valor","Período"],function(r){
-        return "<tr><td>"+esc(r.title||"—")+'</td><td><span class="cw-pill">'+esc(r.status)+"</span></td><td>"+(r.value!=null?money(r.value):"—")+"</td><td>"+fmtDay(r.start_date)+" – "+fmtDay(r.end_date)+'</td><td><div class="cw-actions"><button type="button" class="cw-btn cw-btn-sm cw-btn-ghost" data-edit-ctr="'+esc(r.id)+'">Editar</button><button type="button" class="cw-btn cw-btn-sm cw-btn-danger" data-del-ctr="'+esc(r.id)+'">Excluir</button></div></td></tr>';
+        return "<tr><td>"+esc(r.title||"—")+"</td><td>"+statusPill(r.status)+"</td><td>"+(r.value!=null?money(r.value):"—")+"</td><td>"+fmtDay(r.start_date)+" – "+fmtDay(r.end_date)+'</td><td><div class="cw-actions"><button type="button" class="cw-btn cw-btn-sm cw-btn-ghost" data-edit-ctr="'+esc(r.id)+'">Editar</button><button type="button" class="cw-btn cw-btn-sm cw-btn-danger" data-del-ctr="'+esc(r.id)+'">Excluir</button></div></td></tr>';
       },true);
       bindPanel(el,form+'<div class="cw-toolbar"><p>'+rows.length+' contrato(s)</p></div>'+list,function(root){
         if(ed){var s=root.querySelector("#ctr-status");if(s)s.value=ed.status||"draft";}
