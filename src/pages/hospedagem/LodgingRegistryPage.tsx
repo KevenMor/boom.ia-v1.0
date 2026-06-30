@@ -237,26 +237,37 @@ export default function LodgingRegistryPage() {
   }
 
   return (
-    <div className="-mx-4 flex min-h-[calc(100dvh-6rem)] flex-1 flex-col bg-slate-50 dark:bg-background md:-mx-6">
-      <div className={cn(col, "pb-12 pt-6 md:pt-8")}>
-        <header className="mb-2">
+    <div
+      className={cn(
+        "flex min-h-0 flex-1 flex-col bg-slate-50 dark:bg-background",
+        isEmbed ? "" : "-mx-4 md:-mx-6 min-h-[calc(100dvh-6rem)]",
+      )}
+    >
+      <div className={cn(col, isEmbed ? "pb-10 pt-4" : "pb-12 pt-6 md:pt-8")}>
+        <header className={cn("mb-2", isEmbed && "mb-4")}>
           {!isEmbed ? (
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">Gestão de reservas</p>
-          ) : null}
-          <div className={!isEmbed ? "mt-2" : undefined}>
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-foreground sm:text-3xl">
-              Estoque de quartos no parque
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-muted-foreground">
-              Aqui registra <strong className="font-medium text-foreground/90">o que existe fisicamente</strong>: tipo de hospedagem (categoria) e cada quarto/unidade disponível ou desativado. Serve como inventário para a equipe e base para ferramentas de disponibilidade. Marcar reservas e períodos ocupados é um passo opcional no fim da página quando precisarem bloquear datas.
+            <>
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">Gestão de reservas</p>
+              <div className="mt-2">
+                <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-foreground sm:text-3xl">
+                  Estoque de quartos no parque
+                </h1>
+                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-muted-foreground">
+                  Aqui registra <strong className="font-medium text-foreground/90">o que existe fisicamente</strong>: tipo de hospedagem (categoria) e cada quarto/unidade disponível ou desativado. Serve como inventário para a equipe e base para ferramentas de disponibilidade. Marcar reservas e períodos ocupados é um passo opcional no fim da página quando precisarem bloquear datas.
+                </p>
+                {scopedTenantDisplayName ? (
+                  <p className="mt-2 text-[13px] text-muted-foreground">
+                    Tenant: <span className="font-medium text-foreground/80">{scopedTenantDisplayName}</span>
+                  </p>
+                ) : null}
+              </div>
+              <HospedagemSubNav />
+            </>
+          ) : (
+            <p className="max-w-2xl text-[13px] leading-relaxed text-slate-500 dark:text-muted-foreground">
+              Cadastre categorias de hospedagem, unidades físicas e, se precisar, bloqueios por reserva.
             </p>
-            {!isEmbed && scopedTenantDisplayName ? (
-              <p className="mt-2 text-[13px] text-muted-foreground">
-                Tenant: <span className="font-medium text-foreground/80">{scopedTenantDisplayName}</span>
-              </p>
-            ) : null}
-          </div>
-          {!isEmbed ? <HospedagemSubNav /> : null}
+          )}
         </header>
 
         {!selectedTenantId ? (

@@ -283,25 +283,36 @@ export default function ParkCalendarManagementPage() {
   const weekLabels = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
   return (
-    <div className="-mx-4 flex min-h-[calc(100dvh-6rem)] flex-1 flex-col bg-slate-50 dark:bg-background md:-mx-6">
-      <div className={cn(col, "pb-12 pt-6 md:pt-8")}>
-        <header className="mb-2">
+    <div
+      className={cn(
+        "flex min-h-0 flex-1 flex-col bg-slate-50 dark:bg-background",
+        isEmbed ? "" : "-mx-4 md:-mx-6 min-h-[calc(100dvh-6rem)]",
+      )}
+    >
+      <div className={cn(col, isEmbed ? "pb-10 pt-4" : "pb-12 pt-6 md:pt-8")}>
+        <header className={cn("mb-2", isEmbed && "mb-4")}>
           {!isEmbed ? (
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">Gestão de reservas</p>
-          ) : null}
-          <h1 className={cn("text-2xl font-semibold tracking-tight text-slate-900 dark:text-foreground sm:text-3xl", !isEmbed && "mt-2")}>
-            Calendário do parque
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-muted-foreground">
-            Marque se o parque está aberto, fechado ou em manutenção, a etiqueta comercial do dia e, opcionalmente, o texto de valor
-            de ingresso por data para o cliente e para o agente de IA quando integrado ao calendário.
-            {!isEmbed && scopedTenantDisplayName ? (
-              <span className="block pt-2 text-[13px] text-muted-foreground">
-                Tenant: <span className="font-medium text-foreground/80">{scopedTenantDisplayName}</span>
-              </span>
-            ) : null}
-          </p>
-          {!isEmbed ? <HospedagemSubNav /> : null}
+            <>
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">Gestão de reservas</p>
+              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900 dark:text-foreground sm:text-3xl">
+                Calendário do parque
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-muted-foreground">
+                Marque se o parque está aberto, fechado ou em manutenção, a etiqueta comercial do dia e, opcionalmente, o texto de valor
+                de ingresso por data para o cliente e para o agente de IA quando integrado ao calendário.
+                {scopedTenantDisplayName ? (
+                  <span className="block pt-2 text-[13px] text-muted-foreground">
+                    Tenant: <span className="font-medium text-foreground/80">{scopedTenantDisplayName}</span>
+                  </span>
+                ) : null}
+              </p>
+              <HospedagemSubNav />
+            </>
+          ) : (
+            <p className="max-w-2xl text-[13px] leading-relaxed text-slate-500 dark:text-muted-foreground">
+              Defina abertura, fechamento ou manutenção por data, com etiqueta comercial e valores de ingresso quando necessário.
+            </p>
+          )}
         </header>
 
         {!selectedTenantId ? (

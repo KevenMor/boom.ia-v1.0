@@ -5,7 +5,7 @@ import { parseEmbedCredentialsFromLocation, parseEmbedInitMessage, persistEmbedC
 import { bootstrapEmbedHospedagem } from "@/lib/embed-hospedagem-api";
 import { setActiveEmbedHospedagem } from "@/lib/api-client";
 import { EmbedHospedagemProvider } from "@/contexts/EmbedHospedagemContext";
-import { HospedagemSubNav } from "@/components/hospedagem/HospedagemSubNav";
+import { HospedagemEmbedHeader } from "@/components/hospedagem/HospedagemEmbedHeader";
 import ParkCalendarManagementPage from "@/pages/hospedagem/ParkCalendarManagementPage";
 import LodgingRegistryPage from "@/pages/hospedagem/LodgingRegistryPage";
 import LodgingPricingPage from "@/pages/hospedagem/LodgingPricingPage";
@@ -130,20 +130,8 @@ export default function ChatwootEmbedHospedagem() {
 
   return (
     <EmbedHospedagemProvider value={embedValue}>
-      <div className="ds-chatwoot min-h-[100dvh] bg-slate-50 font-sans text-foreground dark:bg-background">
-        <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur dark:border-border dark:bg-background/95">
-          <div className="mx-auto w-full max-w-[1280px] px-5 sm:px-6 lg:px-8">
-            <div className="pt-4 pb-1">
-              <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-muted-foreground">
-                {tenantName}
-              </p>
-              <h1 className="mt-1 text-xl font-semibold tracking-tight text-slate-900 dark:text-foreground sm:text-2xl">
-                Reservas
-              </h1>
-            </div>
-            <HospedagemSubNav />
-          </div>
-        </header>
+      <div className="ds-chatwoot font-cw min-h-[100dvh] bg-slate-50 text-foreground dark:bg-background">
+        <HospedagemEmbedHeader />
 
         <Routes location={location}>
           <Route index element={<Navigate to="calendario-parque" replace />} />
