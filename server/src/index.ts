@@ -20,6 +20,7 @@ import { embedChatwootRoutes } from "./routes/embed-chatwoot.js";
 import { embedChatwootCrmRoutes } from "./routes/embed-chatwoot-crm.js";
 import { embedChatwootCrmResourceRoutes } from "./routes/embed-chatwoot-crm-resources.js";
 import { embedChatwootHospedagemRoutes } from "./routes/embed-chatwoot-hospedagem.js";
+import { embedChatwootInventoryRoutes } from "./routes/embed-chatwoot-inventory.js";
 import { occurrencesRoutes } from "./routes/occurrences.js";
 import { suiteGalleriesRoutes } from "./routes/suite-galleries.js";
 import { auditRoutes } from "./routes/audit.js";
@@ -192,6 +193,7 @@ async function build() {
   fastify.register(embedChatwootCrmRoutes, { prefix: "/api" });
   fastify.register(embedChatwootCrmResourceRoutes, { prefix: "/api" });
   fastify.register(embedChatwootHospedagemRoutes, { prefix: "/api" });
+  fastify.register(embedChatwootInventoryRoutes, { prefix: "/api" });
 
   fastify.get("/health", async () => ({ ok: true, timestamp: new Date().toISOString() }));
 

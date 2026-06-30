@@ -1,9 +1,11 @@
 import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
 import { embedCrmFetch, type EmbedCrmCredentials } from "@/lib/embed-crm-api";
 import { embedHospedagemFetch, type EmbedHospedagemCredentials } from "@/lib/embed-hospedagem-api";
+import { embedInventoryFetch, type EmbedInventoryCredentials } from "@/lib/embed-inventory-api";
 
 let activeEmbedCrm: EmbedCrmCredentials | null = null;
 let activeEmbedHospedagem: EmbedHospedagemCredentials | null = null;
+let activeEmbedInventory: EmbedInventoryCredentials | null = null;
 
 export function setActiveEmbedCrm(creds: EmbedCrmCredentials | null): void {
   activeEmbedCrm = creds;
@@ -19,6 +21,14 @@ export function setActiveEmbedHospedagem(creds: EmbedHospedagemCredentials | nul
 
 export function getActiveEmbedHospedagem(): EmbedHospedagemCredentials | null {
   return activeEmbedHospedagem;
+}
+
+export function setActiveEmbedInventory(creds: EmbedInventoryCredentials | null): void {
+  activeEmbedInventory = creds;
+}
+
+export function getActiveEmbedInventory(): EmbedInventoryCredentials | null {
+  return activeEmbedInventory;
 }
 
 // Em dev (localhost) usa /api relativo (proxy do Vite); em produção usa origem atual.
@@ -45,6 +55,10 @@ export async function callAPI<T = unknown>(
 
   if (activeEmbedHospedagem && endpoint.startsWith("/hospedagem")) {
     return embedHospedagemFetch<T>(endpoint, activeEmbedHospedagem, options);
+  }
+
+  if (activeEmbedInventory && endpoint.startsWith("/inventory")) {
+    return embedInventoryFetch<T>(endpoint, activeEmbedInventory, options);
   }
 
   const { method = "POST", body, headers = {} } = options;

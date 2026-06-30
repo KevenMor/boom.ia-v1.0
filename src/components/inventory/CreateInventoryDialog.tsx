@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { useCreateInventory } from "@/hooks/useInventory";
 import { useTenantContext } from "@/contexts/TenantContext";
+import { useEmbedInventoryOptional } from "@/contexts/EmbedInventoryContext";
 import { toast } from "sonner";
 
 const schema = z.object({
@@ -47,7 +48,9 @@ interface CreateInventoryDialogProps {
 
 export function CreateInventoryDialog({ open, onOpenChange }: CreateInventoryDialogProps) {
   const createInventory = useCreateInventory();
+  const embed = useEmbedInventoryOptional();
   const { selectedTenantId } = useTenantContext();
+  const tenantId = embed?.tenantId ?? selectedTenantId;
 
   const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -69,13 +72,13 @@ export function CreateInventoryDialog({ open, onOpenChange }: CreateInventoryDia
   });
 
   const onSubmit = async (data: FormData) => {
-    if (!selectedTenantId) {
+    if (!tenantId) {
       toast.error("Selecione um tenant para cadastrar um veículo.");
       return;
     }
     try {
       await createInventory.mutateAsync({
-        tenant_id: selectedTenantId,
+        tenant_id: tenantId,
         brand: data.brand,
         model: data.model,
         version: data.version || null,
@@ -189,7 +192,7 @@ export function CreateInventoryDialog({ open, onOpenChange }: CreateInventoryDia
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={createInventory.isPending || !selectedTenantId}>
+            <Button type="submit" disabled={createInventory.isPending || !tenantId}>
               {createInventory.isPending ? "Cadastrando..." : "Cadastrar"}
             </Button>
           </DialogFooter>

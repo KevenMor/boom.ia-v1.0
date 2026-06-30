@@ -48,8 +48,10 @@ import PublicSandbox from "@/pages/PublicSandbox";
 import ChatwootEmbedMirror from "@/pages/ChatwootEmbedMirror";
 import ChatwootEmbedClient from "@/pages/ChatwootEmbedClient";
 import ChatwootEmbedHospedagem from "@/pages/ChatwootEmbedHospedagem";
+import ChatwootEmbedInventory from "@/pages/ChatwootEmbedInventory";
 import EmbedChatwootViewRedirect from "@/pages/EmbedChatwootViewRedirect";
 import EmbedChatwootHospedagemViewRedirect from "@/pages/EmbedChatwootHospedagemViewRedirect";
+import EmbedChatwootInventoryViewRedirect from "@/pages/EmbedChatwootInventoryViewRedirect";
 import NotFound from "@/pages/NotFound";
 import SuiteGalleriesPage from "@/pages/SuiteGalleriesPage";
 import ParkCalendarManagementPage from "@/pages/hospedagem/ParkCalendarManagementPage";
@@ -106,8 +108,10 @@ const App = () => (
             <Route path="/demo/:agentId" element={<PublicSandbox />} />
             <Route path="/embed/chatwoot/view" element={<EmbedChatwootViewRedirect />} />
             <Route path="/embed/chatwoot/hospedagem/view" element={<EmbedChatwootHospedagemViewRedirect />} />
+            <Route path="/embed/chatwoot/inventory/view" element={<EmbedChatwootInventoryViewRedirect />} />
             <Route path="/embed/chatwoot/client" element={<ChatwootEmbedClient />} />
             <Route path="/embed/chatwoot/hospedagem/*" element={<ChatwootEmbedHospedagem />} />
+            <Route path="/embed/chatwoot/inventory" element={<ChatwootEmbedInventory />} />
             <Route path="/embed/chatwoot" element={<ChatwootEmbedMirror />} />
             <Route path="/" element={<RootRedirect />} />
             <Route

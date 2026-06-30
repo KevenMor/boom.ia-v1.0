@@ -2,10 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
 import {
-  requireAuthenticated,
-  canAccessTenant,
-  canManageTenant,
-} from "../services/authorization.js";
+  authorizeInventory,
+  authorizeInventoryList,
+  getEmbedInventoryTenantId,
+} from "./inventory-embed-auth.js";
 import { probeVideoUrl } from "../services/video-url-probe.js";
 import { decodeHtmlEntities, decodeInventoryRecord } from "../lib/html-entities.js";
 
@@ -138,15 +138,6 @@ function parseDetailPage(html: string): { photos: string[]; features: string[]; 
   return { photos, features, optionals };
 }
 
-/** Superadmin ou tenant_admin do tenant do recurso. */
-function canManageInventoryTenant(
-  auth: NonNullable<Awaited<ReturnType<typeof requireAuthenticated>>>,
-  tenantId: string
-): boolean {
-  if (auth.role === "superadmin") return true;
-  return canManageTenant(auth, tenantId);
-}
-
 export async function inventoryRoutes(fastify: FastifyInstance) {
   const supabase = createNexusClient();
 
@@ -165,18 +156,10 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
-        const auth = await requireAuthenticated(req, reply);
-        if (!auth) return;
-
         const { tenant_id, status, limit = "100", offset = "0", search } = req.query;
-
-        if (auth.role !== "superadmin" && !tenant_id) {
-          return reply.status(400).send({ error: "tenant_id is required" });
-        }
-
-        if (tenant_id && !canAccessTenant(auth, tenant_id)) {
-          return reply.status(403).send({ error: "forbidden_tenant_access" });
-        }
+        const listAuth = await authorizeInventoryList(req, reply, tenant_id?.trim());
+        if (!listAuth) return;
+        const effectiveTenantId = listAuth.tenantId;
 
         let query = supabase
           .from("inventory")
@@ -186,7 +169,7 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
           )
           .order("created_at", { ascending: false });
 
-        if (tenant_id) query = query.eq("tenant_id", tenant_id);
+        if (effectiveTenantId) query = query.eq("tenant_id", effectiveTenantId);
         if (status && status !== "all") query = query.eq("status", status);
 
         if (search?.trim()) {
@@ -215,15 +198,10 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
   );
 
   fastify.post("/inventory/video-probe", async (req: FastifyRequest, reply: FastifyReply) => {
-    const auth = await requireAuthenticated(req, reply);
-    if (!auth) return;
-
     const body = req.body as { url?: string; tenant_id?: string };
     const url = typeof body.url === "string" ? body.url.trim() : "";
     const tenantId = typeof body.tenant_id === "string" ? body.tenant_id.trim() : "";
-    if (tenantId && !canAccessTenant(auth, tenantId)) {
-      return reply.status(403).send({ error: "forbidden_tenant_access" });
-    }
+    if (tenantId && !(await authorizeInventory(req, reply, tenantId, "read"))) return;
 
     const result = await probeVideoUrl(url);
     return reply.send(result);
@@ -231,20 +209,12 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
 
   fastify.post("/inventory", async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const auth = await requireAuthenticated(req, reply);
-      if (!auth) return;
-
       const body = req.body as Record<string, unknown>;
       const tenantId = typeof body.tenant_id === "string" ? body.tenant_id.trim() : "";
       if (!tenantId) {
         return reply.status(400).send({ error: "tenant_id is required" });
       }
-      if (!canAccessTenant(auth, tenantId)) {
-        return reply.status(403).send({ error: "forbidden_tenant_access" });
-      }
-      if (!canManageInventoryTenant(auth, tenantId)) {
-        return reply.status(403).send({ error: "forbidden", detail: "manage_required" });
-      }
+      if (!(await authorizeInventory(req, reply, tenantId, "manage"))) return;
 
       const brand = String(body.brand ?? "").trim();
       const model = String(body.model ?? "").trim();
@@ -306,9 +276,6 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
 
   fastify.patch("/inventory/:id", async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     try {
-      const auth = await requireAuthenticated(req, reply);
-      if (!auth) return;
-
       const id = req.params.id?.trim();
       if (!id) return reply.status(400).send({ error: "id is required" });
 
@@ -323,12 +290,7 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
         return reply.status(404).send({ error: "not_found" });
       }
 
-      if (!canAccessTenant(auth, existing.tenant_id)) {
-        return reply.status(403).send({ error: "forbidden_tenant_access" });
-      }
-      if (!canManageInventoryTenant(auth, existing.tenant_id)) {
-        return reply.status(403).send({ error: "forbidden", detail: "manage_required" });
-      }
+      if (!(await authorizeInventory(req, reply, existing.tenant_id as string, "manage"))) return;
 
       const body = req.body as Record<string, unknown>;
       const updates: Record<string, unknown> = {};
@@ -410,9 +372,6 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
 
   fastify.delete("/inventory/:id", async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     try {
-      const auth = await requireAuthenticated(req, reply);
-      if (!auth) return;
-
       const id = req.params.id?.trim();
       if (!id) return reply.status(400).send({ error: "id is required" });
 
@@ -427,12 +386,7 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
         return reply.status(404).send({ error: "not_found" });
       }
 
-      if (!canAccessTenant(auth, existing.tenant_id)) {
-        return reply.status(403).send({ error: "forbidden_tenant_access" });
-      }
-      if (!canManageInventoryTenant(auth, existing.tenant_id)) {
-        return reply.status(403).send({ error: "forbidden", detail: "manage_required" });
-      }
+      if (!(await authorizeInventory(req, reply, existing.tenant_id as string, "manage"))) return;
 
       const { error } = await supabase.from("inventory").delete().eq("id", id);
       if (error) throw error;
@@ -446,10 +400,11 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
   });
 
   fastify.post("/inventory/sync", async (req: FastifyRequest, reply: FastifyReply) => {
-    const nexusAuth = (req.headers["x-nexus-auth"] as string) || "";
+    const embedTenant = getEmbedInventoryTenantId(req);
+    const nexusAuth = embedTenant ? "" : (req.headers["x-nexus-auth"] as string) || "";
     const supabase = createNexusClient(nexusAuth);
 
-    const tenant_id = PPL_MOTORS_TENANT_ID;
+    const tenant_id = embedTenant ?? PPL_MOTORS_TENANT_ID;
 
     try {
       const listResp = await fetch(LISTING_URL, {

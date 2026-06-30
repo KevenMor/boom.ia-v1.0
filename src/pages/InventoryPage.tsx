@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { useInventory, useInventorySync } from "@/hooks/useInventory";
 import { useTenantContext } from "@/contexts/TenantContext";
+import { useEmbedInventoryOptional } from "@/contexts/EmbedInventoryContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CreateInventoryDialog } from "@/components/inventory/CreateInventoryDialog";
 import { EditInventoryDialog } from "@/components/inventory/EditInventoryDialog";
@@ -21,7 +22,10 @@ import { toast } from "sonner";
 import { decodeInventoryDisplayText } from "@/lib/decodeHtmlEntities";
 
 export default function InventoryPage() {
+  const embed = useEmbedInventoryOptional();
   const { selectedTenantId } = useTenantContext();
+  const isEmbed = !!embed;
+  const effectiveTenantId = embed?.tenantId ?? selectedTenantId ?? undefined;
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [createOpen, setCreateOpen] = useState(false);
@@ -30,7 +34,7 @@ export default function InventoryPage() {
 
   // Quando "Todos os tenants" está selecionado: mostra todo o inventário do banco.
   // Quando um tenant específico está selecionado: filtra por esse tenant.
-  const tenantId = selectedTenantId ?? undefined;
+  const tenantId = effectiveTenantId;
   const { data, isLoading, error, refetch } = useInventory({
     tenant_id: tenantId,
     status: statusFilter === "all" ? undefined : statusFilter,
@@ -41,12 +45,12 @@ export default function InventoryPage() {
   const items = data?.data ?? [];
   const total = data?.total ?? 0;
 
-  const canSync = !!selectedTenantId;
+  const canSync = isEmbed ? !!effectiveTenantId : !!selectedTenantId;
 
   const handleSync = async () => {
     if (!canSync) return;
     try {
-      const res = await syncMutation.mutateAsync(selectedTenantId ?? undefined);
+      const res = await syncMutation.mutateAsync(effectiveTenantId ?? undefined);
       if (res.success) {
         toast.success(`Sincronizado: ${res.synced ?? 0} veículo(s)`);
       } else {
@@ -56,6 +60,8 @@ export default function InventoryPage() {
       toast.error("Erro no sync: " + (err.message ?? "erro desconhecido"));
     }
   };
+
+  const colCount = isEmbed ? 9 : 10;
 
   const formatPrice = (p: number | null) =>
     p != null ? p.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—";
@@ -143,9 +149,11 @@ export default function InventoryPage() {
                     <th className="px-4 py-3.5 text-left text-sm font-normal text-muted-foreground">
                       Foto
                     </th>
-                    <th className="px-4 py-3.5 text-left text-sm font-normal text-muted-foreground">
-                      Empresa
-                    </th>
+                    {!isEmbed && (
+                      <th className="px-4 py-3.5 text-left text-sm font-normal text-muted-foreground">
+                        Empresa
+                      </th>
+                    )}
                     <th className="px-4 py-3.5 text-left text-sm font-normal text-muted-foreground">
                       Veículo
                     </th>
@@ -176,7 +184,7 @@ export default function InventoryPage() {
                   {isLoading &&
                     Array.from({ length: 5 }).map((_, i) => (
                       <tr key={i}>
-                        <td className="px-4 py-4" colSpan={10}>
+                        <td className="px-4 py-4" colSpan={colCount}>
                           <Skeleton className="h-14 w-full" />
                         </td>
                       </tr>
@@ -184,7 +192,7 @@ export default function InventoryPage() {
 
                   {!isLoading && items.length === 0 && (
                     <tr>
-                      <td colSpan={10} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                      <td colSpan={colCount} className="px-4 py-12 text-center text-sm text-muted-foreground">
                         Nenhum veículo encontrado. Use &quot;Sincronizar&quot; ou &quot;Novo Veículo&quot; para adicionar.
                       </td>
                     </tr>
@@ -217,9 +225,11 @@ export default function InventoryPage() {
                             </div>
                           )}
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-sm text-muted-foreground">
-                          {item.tenants?.name ?? "—"}
-                        </td>
+                        {!isEmbed && (
+                          <td className="whitespace-nowrap px-4 py-3 text-sm text-muted-foreground">
+                            {item.tenants?.name ?? "—"}
+                          </td>
+                        )}
                         <td className="px-4 py-3 text-sm font-medium text-foreground">
                           <div>
                             <span className="font-medium">{vehicleName}</span>
