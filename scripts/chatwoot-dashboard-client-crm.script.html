@@ -29,7 +29,7 @@
 
 <script data-name="boom-ia-client-crm-conversation">
 (function () {
-  const SCRIPT_VERSION = "v16";
+  const SCRIPT_VERSION = "v17";
   const SCRIPT_KEY = "boom_ia_client_crm_conversation_" + SCRIPT_VERSION;
   if (window[SCRIPT_KEY]) return;
   window[SCRIPT_KEY] = true;
@@ -40,8 +40,8 @@
     BOOM_URL: "https://ia.agboom.com.br",
     EMBED_CLIENT_URL: "https://ia.agboom.com.br/embed/chatwoot/client",
     EMBED_CLIENT_VIEW_URL: "https://ia.agboom.com.br/api/embed/chatwoot/crm/view",
-    /** true = app React completo (todas as abas); false = HTML leve da API */
-    USE_REACT_EMBED: true,
+    /** false = HTML da API (estável no Mega). true = app React (exige deploy frontend). */
+    USE_REACT_EMBED: false,
     API_BASE: "https://ia.agboom.com.br/api",
     EMBED_KEY: "COLE_A_MESMA_CHAVE_DO_SERVER_ENV",
     TARGET_ACCOUNT_ID: null,
@@ -69,6 +69,9 @@
   const normalize = (v) => (v || "").toLowerCase().replace(/\s+/g, " ").trim();
 
   let panel = null;
+  let crmHostSidebar = null;
+  let hiddenSidebarNodes = [];
+  let panelMode = null;
   let lookupTimer = null;
   let cleanupTimer = null;
   let applyTimer = null;
@@ -160,12 +163,12 @@
       ".boom-ia-crm-btn-ghost{background:transparent;border:1px solid var(--color-border,#e5e7eb);color:var(--color-heading,#111);}" +
       ".boom-ia-crm-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:#dcfce7;color:#166534;}" +
       "#boom-ia-crm-chat-bar{display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--color-border,#e5e7eb);background:var(--color-background-light,#f9fafb);}" +
-      "#boom-ia-crm-panel{position:fixed;top:0;right:0;bottom:0;width:400px;max-width:92vw;z-index:100000;background:#fff;box-shadow:-4px 0 24px rgba(0,0,0,.15);display:flex;flex-direction:column;}" +
-      "#boom-ia-crm-panel-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--color-border,#e5e7eb);}" +
-      "#boom-ia-crm-panel iframe{flex:1;border:0;width:100%;}" +
-      "html.boom-ia-crm-open-mobile #boom-ia-crm-panel{width:100vw!important;left:0!important;}" +
-      "html.boom-ia-crm-open .reply-box,html.boom-ia-crm-open .reply-box__wrap,html.boom-ia-crm-open [data-testid='reply-editor'],html.boom-ia-crm-open .conversation-footer,html.boom-ia-crm-open .editor-wrap{display:none!important;}" +
-      "html.boom-ia-crm-open,html.boom-ia-crm-open body{overflow:hidden!important;}";
+      ".boom-ia-crm-host{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;width:100%;overflow:hidden;background:var(--color-background-light,#fff);}" +
+      ".boom-ia-crm-host iframe{flex:1 1 auto;min-height:240px;border:0;width:100%;background:#fff!important;display:block;}" +
+      "#boom-ia-crm-panel-header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid var(--color-border,#e5e7eb);background:var(--color-background-light,#f9fafb);flex-shrink:0;}" +
+      ".boom-ia-crm-back{border:0;background:transparent;cursor:pointer;font:inherit;font-size:13px;font-weight:500;color:var(--color-woot-500,#1f93ff);padding:4px 0;}" +
+      "#boom-ia-crm-panel.fixed-fallback{position:fixed;top:0;right:0;bottom:0;z-index:99999;display:flex;flex-direction:column;background:var(--color-background-light,#fff);box-shadow:-2px 0 12px rgba(0,0,0,.08);}" +
+      "html.boom-ia-crm-open-mobile #boom-ia-crm-panel.fixed-fallback{width:100vw!important;left:0!important;}";
     document.head.appendChild(s);
   }
 
@@ -233,6 +236,46 @@
       bestLeft = r.left;
     });
     return best;
+  }
+
+  function findContactSidebarColumn() {
+    const inner = findContactSidebar();
+    if (!inner) return null;
+    let col = inner;
+    for (let i = 0; i < 10 && col; i++) {
+      const r = col.getBoundingClientRect();
+      if (r.left > window.innerWidth * 0.4 && r.width >= 260 && r.width <= 560 && r.height > window.innerHeight * 0.45) {
+        return col;
+      }
+      col = col.parentElement;
+    }
+    return inner.parentElement || inner;
+  }
+
+  function measureContactSidebarWidth() {
+    const col = findContactSidebarColumn();
+    if (!col) return 380;
+    const w = Math.round(col.getBoundingClientRect().width);
+    if (!w || w < 260) return 380;
+    return Math.min(520, Math.max(300, w));
+  }
+
+  function layoutNativeHost() {
+    if (!panel || panelMode !== "native" || !crmHostSidebar) return;
+    const rect = crmHostSidebar.getBoundingClientRect();
+    const h = Math.max(320, window.innerHeight - rect.top);
+    panel.style.height = h + "px";
+    panel.style.maxHeight = h + "px";
+    panel.style.width = "100%";
+    crmHostSidebar.style.display = crmHostSidebar.style.display || "flex";
+    crmHostSidebar.style.flexDirection = "column";
+    crmHostSidebar.style.minHeight = "0";
+    crmHostSidebar.style.overflow = "hidden";
+  }
+
+  function applyFixedPanelWidth() {
+    if (!panel || panelMode !== "fixed") return;
+    panel.style.width = window.innerWidth <= CFG.MOBILE_MAX_WIDTH ? "100vw" : measureContactSidebarWidth() + "px";
   }
 
   function findSidebarInjectionPoint(sidebar) {
@@ -447,19 +490,25 @@
     on(bar.querySelector('[data-action="open"]'), "click", () => openClientPanel(crm.contactId));
   }
 
-  function measureContactSidebarWidth() {
-    const sidebar = findContactSidebar();
-    if (!sidebar) return 400;
-    const r = sidebar.getBoundingClientRect();
-    const w = Math.round(r.width);
-    if (!w || w < 280) return 400;
-    return Math.min(520, Math.max(320, w));
+  function buildHostInnerHtml(contactId) {
+    return (
+      '<div id="boom-ia-crm-panel-header">' +
+      '<button type="button" id="boom-ia-crm-panel-close" class="boom-ia-crm-back">← Voltar</button>' +
+      '<strong style="font-size:13px;font-weight:600">Cliente CRM</strong>' +
+      '<span style="width:48px"></span></div>' +
+      '<iframe id="boom-ia-crm-iframe" title="CRM Cliente" src="' +
+      buildClientIframeUrl(contactId) +
+      '"></iframe>'
+    );
   }
 
-  function applyPanelWidth() {
-    if (!panel) return;
-    panel.style.width =
-      window.innerWidth <= CFG.MOBILE_MAX_WIDTH ? "100vw" : measureContactSidebarWidth() + "px";
+  function bindHostEvents() {
+    on($("#boom-ia-crm-panel-close"), "click", closeClientPanel);
+    const iframe = $("#boom-ia-crm-iframe");
+    if (iframe) {
+      on(iframe, "load", postThemeToCrmEmbed);
+      setTimeout(postThemeToCrmEmbed, 600);
+    }
   }
 
   function postThemeToCrmEmbed() {
@@ -477,10 +526,11 @@
       account_id: accountId,
       contact_id: contactId,
       theme: detectTheme(),
+      native: "1",
     });
     const reactBase = (CFG.EMBED_CLIENT_URL || CFG.BOOM_URL + "/embed/chatwoot/client").replace(/\/+$/, "");
     const htmlBase = (CFG.EMBED_CLIENT_VIEW_URL || CFG.API_BASE + "/embed/chatwoot/crm/view").replace(/\/+$/, "");
-    const viewBase = CFG.USE_REACT_EMBED !== false ? reactBase : htmlBase;
+    const viewBase = CFG.USE_REACT_EMBED === true ? reactBase : htmlBase;
     return viewBase + "?" + params.toString();
   }
 
@@ -492,38 +542,65 @@
   }
 
   function closeClientPanel() {
+    hiddenSidebarNodes.forEach(function (item) {
+      item.el.style.display = item.display || "";
+      item.el.style.visibility = item.visibility || "";
+    });
+    hiddenSidebarNodes = [];
+    if (crmHostSidebar) {
+      crmHostSidebar.style.overflow = "";
+    }
     if (panel) {
       panel.remove();
       panel = null;
     }
+    crmHostSidebar = null;
+    panelMode = null;
     document.documentElement.classList.remove("boom-ia-crm-open");
+    document.documentElement.classList.remove("boom-ia-crm-open-mobile");
     document.body.style.overflow = "";
+    scheduleApply();
   }
 
   function openClientPanel(contactId) {
     if (!contactId) return;
     ensureStyles();
     closeClientPanel();
+
+    const column = findContactSidebarColumn();
+    if (column && window.innerWidth > CFG.MOBILE_MAX_WIDTH) {
+      panelMode = "native";
+      crmHostSidebar = column;
+      Array.from(column.children).forEach(function (child) {
+        if (child.id === "boom-ia-crm-host") return;
+        hiddenSidebarNodes.push({
+          el: child,
+          display: child.style.display,
+          visibility: child.style.visibility,
+        });
+        child.style.display = "none";
+      });
+      panel = document.createElement("div");
+      panel.id = "boom-ia-crm-host";
+      panel.className = "boom-ia-crm-host";
+      panel.innerHTML = buildHostInnerHtml(contactId);
+      column.appendChild(panel);
+      layoutNativeHost();
+      bindHostEvents();
+      return;
+    }
+
+    panelMode = "fixed";
     panel = document.createElement("div");
     panel.id = "boom-ia-crm-panel";
-    panel.innerHTML =
-      '<div id="boom-ia-crm-panel-header">' +
-      '<strong style="font-size:14px">Cadastro do cliente</strong>' +
-      '<button type="button" id="boom-ia-crm-panel-close" style="border:0;background:transparent;font-size:20px;cursor:pointer;line-height:1">×</button>' +
-      "</div>" +
-      '<iframe id="boom-ia-crm-iframe" title="CRM Cliente" src="' +
-      buildClientIframeUrl(contactId) +
-      '"></iframe>';
+    panel.className = "fixed-fallback";
+    panel.innerHTML = buildHostInnerHtml(contactId);
     document.body.appendChild(panel);
-    applyPanelWidth();
-    document.documentElement.classList.add("boom-ia-crm-open");
-    document.body.style.overflow = "hidden";
-    on($("#boom-ia-crm-panel-close"), "click", closeClientPanel);
-    const iframe = $("#boom-ia-crm-iframe");
-    if (iframe) {
-      on(iframe, "load", postThemeToCrmEmbed);
-      setTimeout(postThemeToCrmEmbed, 600);
+    applyFixedPanelWidth();
+    if (window.innerWidth <= CFG.MOBILE_MAX_WIDTH) {
+      document.documentElement.classList.add("boom-ia-crm-open-mobile");
     }
+    bindHostEvents();
   }
 
   async function handlePromote() {
@@ -663,7 +740,8 @@
   on(window, "popstate", scheduleApply);
   on(window, "hashchange", scheduleApply);
     on(window, "resize", () => {
-      applyPanelWidth();
+      layoutNativeHost();
+      applyFixedPanelWidth();
       postThemeToCrmEmbed();
       scheduleApply();
     });

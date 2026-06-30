@@ -5,12 +5,14 @@ export function renderChatwootCrmEmbedViewHtml(
   accountId: string,
   contactId: string,
   theme: "dark" | "light" = "light",
+  nativeChrome = false,
 ): string {
   const safeApi = JSON.stringify(apiBase.replace(/\/+$/, ""));
   const safeKey = JSON.stringify(embedKey);
   const safeAccountId = JSON.stringify(accountId);
   const safeContactId = JSON.stringify(contactId);
   const safeTheme = JSON.stringify(theme);
+  const native = nativeChrome;
 
   return `<!DOCTYPE html>
 <html lang="pt-BR" data-theme="${theme}">
@@ -20,14 +22,15 @@ export function renderChatwootCrmEmbedViewHtml(
   <title>Cadastro do cliente</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
   <style>
-    :root,[data-theme="light"]{--bg:#fff;--surface:#fff;--surface-muted:#f8fafc;--border:#e5e7eb;--text:#111827;--text-muted:#6b7280;--brand:#1f93ff;--brand-hover:#1781e3;--success-soft:#dcfce7;--success-text:#15803d;--err:#ef4444;--input-bg:#fff;--danger:#dc2626;}
-    [data-theme="dark"]{--bg:#0f1419;--surface:#1a1f26;--surface-muted:#232a33;--border:#2d3748;--text:#f3f4f6;--text-muted:#9ca3af;--brand:#3b9eff;--brand-hover:#60a5fa;--success-soft:rgba(74,222,128,.12);--success-text:#86efac;--err:#f87171;--input-bg:#1a1f26;--danger:#f87171;}
+    :root,[data-theme="light"]{--bg:#ffffff;--surface:#ffffff;--surface-muted:#f8fafc;--border:#e5e7eb;--text:#111827;--text-muted:#6b7280;--brand:#1f93ff;--brand-hover:#1781e3;--success-soft:#dcfce7;--success-text:#15803d;--err:#ef4444;--input-bg:#fff;--danger:#dc2626;}
+    [data-theme="dark"]{--bg:#1a1f26;--surface:#1a1f26;--surface-muted:#232a33;--border:#2d3748;--text:#f3f4f6;--text-muted:#9ca3af;--brand:#3b9eff;--brand-hover:#60a5fa;--success-soft:rgba(74,222,128,.12);--success-text:#86efac;--err:#f87171;--input-bg:#1a1f26;--danger:#f87171;}
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-    html,body{height:100%;}
-    body{background:var(--bg);color:var(--text);font:14px/1.5 Inter,system-ui,sans-serif;}
-    .cw-app{min-height:100dvh;display:flex;flex-direction:column;}
+    html,body{height:100%;background:var(--bg);}
+    body{color:var(--text);font:14px/1.5 Inter,system-ui,sans-serif;}
+    .cw-app{height:100%;min-height:100%;display:flex;flex-direction:column;background:var(--bg);}
     .cw-hint{padding:8px 16px;font-size:12px;color:var(--text-muted);background:var(--surface-muted);border-bottom:1px solid var(--border);}
     .cw-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;gap:12px;align-items:center;}
+    .cw-header-compact{padding:10px 12px;}
     .cw-avatar,.cw-avatar-fallback{width:48px;height:48px;border-radius:50%;flex-shrink:0;border:2px solid var(--border);}
     .cw-avatar{object-fit:cover;}.cw-avatar-fallback{display:flex;align-items:center;justify-content:center;background:var(--surface-muted);font-weight:600;color:var(--text-muted);}
     .cw-title h1{font-size:17px;font-weight:600;}.cw-title p{font-size:12px;color:var(--text-muted);margin-top:2px;}
@@ -35,7 +38,7 @@ export function renderChatwootCrmEmbedViewHtml(
     .cw-tabs{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:thin;}
     .cw-tab{padding:10px 12px;border:0;background:none;cursor:pointer;font:inherit;font-size:12px;font-weight:500;color:var(--text-muted);border-bottom:2px solid transparent;white-space:nowrap;}
     .cw-tab.active{color:var(--text);border-bottom-color:var(--brand);}
-    .cw-body{flex:1;overflow:auto;padding:16px;}
+    .cw-body{flex:1;overflow:auto;padding:16px;min-height:0;}
     .cw-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
     .cw-grid-3{grid-template-columns:repeat(3,minmax(0,1fr));}
     .cw-metric{padding:12px;border:1px solid var(--border);border-radius:10px;}
@@ -72,9 +75,9 @@ export function renderChatwootCrmEmbedViewHtml(
   <div class="cw-app">
     <div id="loading-wrap" class="cw-loading"><div class="cw-spinner"></div>Carregando cadastro…</div>
     <div id="error-wrap" class="cw-body cw-hidden"></div>
-    <div id="app-wrap" class="cw-hidden" style="display:flex;flex-direction:column;min-height:100dvh;">
-      <p class="cw-hint">Responda ao cliente pelo chat do Mega à esquerda — aqui você gerencia o cadastro completo.</p>
-      <header class="cw-header">
+    <div id="app-wrap" class="cw-hidden" style="display:flex;flex-direction:column;flex:1;min-height:0;height:100%;">
+      ${native ? "" : '<p class="cw-hint">Responda ao cliente pelo chat à esquerda — aqui você gerencia o cadastro.</p>'}
+      <header class="cw-header${native ? " cw-header-compact" : ""}">
         <div id="avatar-wrap"></div>
         <div class="cw-title"><h1 id="c-name">—</h1><p id="c-phone">—</p><span class="cw-badge">Cliente CRM</span></div>
       </header>

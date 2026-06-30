@@ -39,7 +39,7 @@ export async function embedChatwootCrmRoutes(fastify: FastifyInstance) {
     "/embed/chatwoot/crm/view",
     async (
       req: FastifyRequest<{
-        Querystring: { account_id?: string; contact_id?: string; key?: string; theme?: string };
+        Querystring: { account_id?: string; contact_id?: string; key?: string; theme?: string; native?: string };
       }>,
       reply: FastifyReply,
     ) => {
@@ -78,10 +78,11 @@ export async function embedChatwootCrmRoutes(fastify: FastifyInstance) {
 
       const rawTheme = req.query.theme?.trim().toLowerCase();
       const theme: "dark" | "light" = rawTheme === "dark" ? "dark" : "light";
+      const nativeChrome = req.query.native === "1" || req.query.native === "true";
       const key = getEmbedKey(req)!;
       return reply
         .type("text/html; charset=utf-8")
-        .send(renderChatwootCrmEmbedViewHtml(publicApiBase(), key, accountId, contactId, theme));
+        .send(renderChatwootCrmEmbedViewHtml(publicApiBase(), key, accountId, contactId, theme, nativeChrome));
     },
   );
 
