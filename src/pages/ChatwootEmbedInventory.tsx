@@ -1,14 +1,28 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
+import { ThemeProvider } from "next-themes";
 import { parseEmbedCredentialsFromLocation, parseEmbedInitMessage, persistEmbedCredentials } from "@/lib/embed-credentials";
 import { bootstrapEmbedInventory } from "@/lib/embed-inventory-api";
 import { setActiveEmbedInventory } from "@/lib/api-client";
+import {
+  applyEmbedTheme,
+  parseEmbedThemeFromMessage,
+  readEmbedThemeFromLocation,
+  type EmbedTheme,
+} from "@/lib/embed-theme";
 import { EmbedInventoryProvider } from "@/contexts/EmbedInventoryContext";
 import InventoryPage from "@/pages/InventoryPage";
 
 const BASE_PATH = "/embed/chatwoot/inventory";
 
-export default function ChatwootEmbedInventory() {
+const isEmbedInventoryPath =
+  typeof window !== "undefined" && window.location.pathname.startsWith("/embed/chatwoot/inventory");
+
+if (isEmbedInventoryPath) {
+  applyEmbedTheme(readEmbedThemeFromLocation());
+}
+
+function ChatwootEmbedInventoryBody() {
   const initial = parseEmbedCredentialsFromLocation();
   const [embedKey, setEmbedKey] = useState(initial.key);
   const [accountId, setAccountId] = useState(initial.accountId);
@@ -41,11 +55,12 @@ export default function ChatwootEmbedInventory() {
       const init = parseEmbedInitMessage(event.data);
       if (init) applyCredentials(init.key, init.accountId);
 
-      const data = event.data as { type?: string; theme?: string } | null;
-      if (data?.type === "boom-ia-embed:theme" && data.theme) {
-        const dark = data.theme === "dark";
-        document.documentElement.classList.toggle("dark", dark);
-        document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+      const themePayload = parseEmbedThemeFromMessage(event.data);
+      if (themePayload) {
+        applyEmbedTheme(themePayload.theme, themePayload.colors);
+        window.dispatchEvent(
+          new CustomEvent("boom-ia-embed-theme", { detail: themePayload }),
+        );
       }
     };
     window.addEventListener("message", onMessage);
@@ -125,9 +140,41 @@ export default function ChatwootEmbedInventory() {
 
   return (
     <EmbedInventoryProvider value={embedValue}>
-      <div className="ds-chatwoot font-cw min-h-[100dvh] bg-slate-50 p-4 text-foreground dark:bg-background sm:p-6">
+      <div className="ds-chatwoot font-cw min-h-[100dvh] bg-background p-4 text-foreground sm:p-6">
         <InventoryPage />
       </div>
     </EmbedInventoryProvider>
+  );
+}
+
+export default function ChatwootEmbedInventory() {
+  const [embedTheme, setEmbedTheme] = useState<EmbedTheme>(() => readEmbedThemeFromLocation());
+
+  useEffect(() => {
+    const syncFromUrl = () => {
+      const theme = readEmbedThemeFromLocation();
+      setEmbedTheme(theme);
+      applyEmbedTheme(theme);
+    };
+    syncFromUrl();
+    window.addEventListener("hashchange", syncFromUrl);
+
+    const onThemeEvent = (event: Event) => {
+      const detail = (event as CustomEvent<{ theme: EmbedTheme }>).detail;
+      if (!detail?.theme) return;
+      setEmbedTheme(detail.theme);
+    };
+    window.addEventListener("boom-ia-embed-theme", onThemeEvent);
+
+    return () => {
+      window.removeEventListener("hashchange", syncFromUrl);
+      window.removeEventListener("boom-ia-embed-theme", onThemeEvent);
+    };
+  }, []);
+
+  return (
+    <ThemeProvider forcedTheme={embedTheme} attribute="class" enableSystem={false}>
+      <ChatwootEmbedInventoryBody />
+    </ThemeProvider>
   );
 }

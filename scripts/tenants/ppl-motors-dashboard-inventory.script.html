@@ -461,8 +461,11 @@
     setPageMode(true);
     applyPanelTheme();
     layoutPanel();
+    postThemeToEmbed();
     setTimeout(layoutPanel, 120);
+    setTimeout(postThemeToEmbed, 120);
     setTimeout(layoutPanel, 600);
+    setTimeout(postThemeToEmbed, 800);
 
     const link = $("#boom-ia-inventory-link a");
     if (link) link.setAttribute("aria-expanded", "true");
