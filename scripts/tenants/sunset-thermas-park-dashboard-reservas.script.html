@@ -1,14 +1,14 @@
 <!--
   Sunset Thermas Park — Dashboard Script (painel de reservas)
-  Conta Chatwoot: CONFIGURE account-id (mega.atendai.app) · Agente: Julia
+  Conta Chatwoot: 12 (mega.atendai.app) · Agente: Julia
   Cole em: https://mega.atendai.app/super_admin/app_config?config=internal
   Após colar: salve, recarregue o Mega (Cmd+Shift+R) e confira no console F12:
-  "[Boom IA] Dashboard Script v9 carregado"
+  "[Boom IA] Dashboard Script v2 carregado"
 -->
 
 <script data-name="boom-ia-sunset_thermas_park-reservas">
 (function () {
-  const SCRIPT_VERSION = "v1";
+  const SCRIPT_VERSION = "v2";
   const SCRIPT_KEY = "boom_ia_sunset_thermas_park_reservas_" + SCRIPT_VERSION;
   if (window[SCRIPT_KEY]) return;
   window[SCRIPT_KEY] = true;
@@ -23,7 +23,7 @@
     // Deve começar com /api/ — NÃO use URL React direta (404 sem redirect)
     EMBED_VIEW_URL: "https://ia.agboom.com.br/api/embed/chatwoot/hospedagem/view",
     EMBED_KEY: "iUDtFP4Rd9FyqNz3nkynZnkW",
-    TARGET_ACCOUNT_ID: null,
+    TARGET_ACCOUNT_ID: 12,
     POSITION: {
       mode: "afterLabel",
       label: "Sunset Thermas Park — Agente IA",
@@ -432,6 +432,15 @@
     if (link) link.setAttribute("aria-expanded", "false");
   }
 
+  function removeSidebarLink() {
+    const li = $("#boom-ia-reservas-link");
+    if (li && li.parentNode) li.parentNode.removeChild(li);
+    if (panel && panel.parentNode) {
+      panel.parentNode.removeChild(panel);
+      panel = null;
+    }
+  }
+
   function showPanel() {
     if (!isScopeAllowed()) return;
 
@@ -574,6 +583,7 @@
   function applyFeature() {
     if (!isScopeAllowed()) {
       hidePanel();
+      removeSidebarLink();
       return;
     }
     ensurePanel();
