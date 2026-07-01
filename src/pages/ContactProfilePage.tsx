@@ -77,6 +77,7 @@ import { toast } from "sonner";
 import { useMemo, useState } from "react";
 import type { Contact, ContactClientMetadata } from "@/types/database";
 import { useEmbedCrm } from "@/contexts/EmbedCrmContext";
+import { useEmbedClientsOptional } from "@/contexts/EmbedClientsContext";
 
 const editSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
@@ -165,6 +166,7 @@ export default function ContactProfilePage() {
   const navigate = useNavigate();
   const location = useLocation();
   const embedCrm = useEmbedCrm();
+  const embedClients = useEmbedClientsOptional();
   const isEmbed = Boolean(embedCrm?.isEmbed);
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromUrl = searchParams.get("tab");
@@ -286,8 +288,8 @@ export default function ContactProfilePage() {
 
   const isClientRoute = isEmbed || location.pathname.startsWith("/clients/");
   const isClient = contact?.contact_type === "client" || isEmbed;
-  const listPath = isClient ? "/clients" : "/contacts";
-  const listLabel = isClient ? "Clientes" : "Leads";
+  const listPath = embedClients?.basePath ?? (isClient ? "/clients" : "/contacts");
+  const listLabel = isClient || embedClients ? "Clientes" : "Leads";
 
   // Rota /clients/:id é exclusiva para clientes — lead acessando redireciona (exceto embed)
   useEffect(() => {
@@ -414,7 +416,7 @@ export default function ContactProfilePage() {
               isLoading={isLoading}
               listPath={listPath}
               listLabel={listLabel}
-              hideBackLink={isEmbed}
+              hideBackLink={isEmbed && !embedClients}
               getInitials={getInitials}
               onAvatarUploaded={async (url) => {
                 await updateContact.mutateAsync({ id: contact.id, avatar_url: url });

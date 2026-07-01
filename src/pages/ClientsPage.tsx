@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Plus,
   Search,
@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/select";
 import { useContacts } from "@/hooks/useContacts";
 import { useTenantContext } from "@/contexts/TenantContext";
+import { useEmbedClientsOptional } from "@/contexts/EmbedClientsContext";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CreateContactDialog } from "@/components/contacts/CreateContactDialog";
@@ -80,6 +81,9 @@ function formatCreatedAt(createdAt: string | undefined): string {
 }
 
 export default function ClientsPage() {
+  const embed = useEmbedClientsOptional();
+  const isEmbed = !!embed;
+  const navigate = useNavigate();
   const { selectedTenantId } = useTenantContext();
   const [search, setSearch] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
@@ -97,7 +101,7 @@ export default function ClientsPage() {
     if (searchFocused) searchInputRef.current?.focus();
   }, [searchFocused]);
 
-  const tenantId = selectedTenantId ?? undefined;
+  const tenantId = embed?.tenantId ?? selectedTenantId ?? undefined;
   const order = sortToApi(sort);
   const { data, isLoading, error } = useContacts({
     tenant_id: tenantId,
@@ -139,9 +143,13 @@ export default function ClientsPage() {
     }
   };
 
+  const profilePathFor = (contactId: string) =>
+    isEmbed ? `${embed.basePath}/${contactId}` : `/clients/${contactId}`;
+
   return (
-    <div className="min-h-[calc(100vh-4rem)] w-full bg-muted/30">
-      <div className="w-full px-4 py-6 sm:px-6 lg:px-8">
+    <div className={isEmbed ? "w-full px-4 py-6 sm:px-6" : "min-h-[calc(100vh-4rem)] w-full bg-muted/30"}>
+      <div className={isEmbed ? "w-full" : "w-full px-4 py-6 sm:px-6 lg:px-8"}>
+        {!isEmbed && (
         <Breadcrumb className="mb-4">
           <BreadcrumbList>
             <BreadcrumbItem>
@@ -161,9 +169,11 @@ export default function ClientsPage() {
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
+        )}
 
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-lg font-medium text-foreground">Clientes</h1>
+          {!isEmbed && (
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
@@ -176,6 +186,7 @@ export default function ClientsPage() {
               Filtrar
             </Button>
           </div>
+          )}
         </div>
 
         <Card className="overflow-hidden border-border bg-card shadow-sm">
@@ -187,6 +198,8 @@ export default function ClientsPage() {
               </Badge>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {!isEmbed && (
+              <>
               <Button
                 variant="outline"
                 size="sm"
@@ -201,6 +214,8 @@ export default function ClientsPage() {
                 <Download className="h-4 w-4" />
                 Exportar CSV
               </Button>
+              </>
+              )}
               <Select value={clientStatusFilter} onValueChange={setClientStatusFilter}>
                 <SelectTrigger className="h-8 w-[140px] bg-muted/50">
                   <SelectValue placeholder="Status" />
@@ -224,10 +239,12 @@ export default function ClientsPage() {
                   ))}
                 </SelectContent>
               </Select>
+              {!isEmbed && (
               <Button size="sm" className="gap-1.5" onClick={() => setCreateOpen(true)}>
                 <Plus className="h-4 w-4" />
                 Novo Cliente
               </Button>
+              )}
             </div>
           </CardHeader>
 
@@ -262,9 +279,11 @@ export default function ClientsPage() {
                     <th className="px-4 py-3.5 text-left text-sm font-medium text-muted-foreground">
                       Cliente
                     </th>
+                    {!isEmbed && (
                     <th className="px-4 py-3.5 text-left text-sm font-medium text-muted-foreground">
                       Empresa
                     </th>
+                    )}
                     <th className="px-4 py-3.5 text-left text-sm font-medium text-muted-foreground">
                       E-mail
                     </th>
@@ -286,7 +305,7 @@ export default function ClientsPage() {
                   {isLoading &&
                     Array.from({ length: 5 }).map((_, i) => (
                       <tr key={i}>
-                        <td className="px-4 py-4" colSpan={7}>
+                        <td className="px-4 py-4" colSpan={isEmbed ? 6 : 7}>
                           <Skeleton className="h-12 w-full" />
                         </td>
                       </tr>
@@ -295,7 +314,7 @@ export default function ClientsPage() {
                   {!isLoading && paginatedContacts.length === 0 && (
                     <tr>
                       <td
-                        colSpan={7}
+                        colSpan={isEmbed ? 6 : 7}
                         className="px-4 py-12 text-center text-sm text-muted-foreground"
                       >
                         Nenhum cliente encontrado. Use &quot;Importar CSV&quot; ou &quot;Novo Cliente&quot; para adicionar.
@@ -316,17 +335,29 @@ export default function ClientsPage() {
                               {getInitials(contact.name)}
                             </AvatarFallback>
                           </Avatar>
+                          {isEmbed ? (
+                            <button
+                              type="button"
+                              onClick={() => navigate(profilePathFor(contact.id))}
+                              className="font-medium text-foreground hover:text-primary hover:underline text-left"
+                            >
+                              {contact.name}
+                            </button>
+                          ) : (
                           <Link
-                            to={`/clients/${contact.id}`}
+                            to={profilePathFor(contact.id)}
                             className="font-medium text-foreground hover:text-primary hover:underline text-left"
                           >
                             {contact.name}
                           </Link>
+                          )}
                         </div>
                       </td>
+                      {!isEmbed && (
                       <td className="px-4 py-3 text-sm text-muted-foreground">
                         {contact.tenants?.name ?? "—"}
                       </td>
+                      )}
                       <td className="px-4 py-3">
                         {contact.email ? (
                           <a
@@ -376,11 +407,17 @@ export default function ClientsPage() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 rounded-lg bg-primary/10 text-primary hover:bg-primary/20"
-                            onClick={() => setSelectedContactForConversation(contact)}
-                            title="Ver conversa"
+                            onClick={() =>
+                              isEmbed
+                                ? navigate(profilePathFor(contact.id))
+                                : setSelectedContactForConversation(contact)
+                            }
+                            title={isEmbed ? "Ver perfil" : "Ver conversa"}
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
+                          {!isEmbed && (
+                          <>
                           <Button
                             variant="ghost"
                             size="icon"
@@ -399,6 +436,8 @@ export default function ClientsPage() {
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
+                          </>
+                          )}
                         </div>
                       </td>
                     </tr>

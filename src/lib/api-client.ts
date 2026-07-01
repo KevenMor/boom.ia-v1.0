@@ -1,14 +1,24 @@
 import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
+import { embedClientsFetch, type EmbedClientsCredentials } from "@/lib/embed-clients-api";
 import { embedCrmFetch, type EmbedCrmCredentials } from "@/lib/embed-crm-api";
 import { embedHospedagemFetch, type EmbedHospedagemCredentials } from "@/lib/embed-hospedagem-api";
 import { embedInventoryFetch, type EmbedInventoryCredentials } from "@/lib/embed-inventory-api";
 
 let activeEmbedCrm: EmbedCrmCredentials | null = null;
+let activeEmbedClients: EmbedClientsCredentials | null = null;
 let activeEmbedHospedagem: EmbedHospedagemCredentials | null = null;
 let activeEmbedInventory: EmbedInventoryCredentials | null = null;
 
 export function setActiveEmbedCrm(creds: EmbedCrmCredentials | null): void {
   activeEmbedCrm = creds;
+}
+
+export function setActiveEmbedClients(creds: EmbedClientsCredentials | null): void {
+  activeEmbedClients = creds;
+}
+
+export function getActiveEmbedClients(): EmbedClientsCredentials | null {
+  return activeEmbedClients;
 }
 
 export function getActiveEmbedCrm(): EmbedCrmCredentials | null {
@@ -49,6 +59,10 @@ export async function callAPI<T = unknown>(
   endpoint: string,
   options: { method?: string; body?: unknown; headers?: Record<string, string> } = {}
 ): Promise<T> {
+  if (activeEmbedClients && /^\/crm-contacts(\?|$)/.test(endpoint)) {
+    return embedClientsFetch<T>(endpoint, activeEmbedClients, options);
+  }
+
   if (activeEmbedCrm && endpoint.startsWith("/crm-contacts")) {
     return embedCrmFetch<T>(endpoint, activeEmbedCrm, options);
   }
