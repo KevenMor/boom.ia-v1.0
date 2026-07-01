@@ -7,7 +7,7 @@ import {
   resolveTenantFromChatwootAccount,
 } from "../services/chatwoot-crm-embed.js";
 import { applyEmbedHeaders, assertEmbedKey } from "./embed-auth.js";
-import { buildChatwootConversationUrl } from "../utils/chatwoot-conversation-url.js";
+import { buildContactConversationPreview } from "../services/contact-conversation-resolve.js";
 
 type InvoiceStatus = "pending" | "paid" | "overdue" | "cancelled";
 
@@ -375,79 +375,22 @@ export async function embedChatwootCrmResourceRoutes(fastify: FastifyInstance) {
             .eq("id", contactId)
             .single();
 
-          const phoneRaw = (contact?.phone || "").trim();
-          const phoneDigits = phoneRaw.replace(/\D/g, "");
-          if (phoneDigits.length < 10) {
-            return reply.send({ messages: [], chatwoot_url: null, agent_name: null, agent_avatar_url: null });
-          }
-
-          const phoneNorm =
-            phoneDigits.startsWith("55") && phoneDigits.length >= 12 ? phoneDigits : "55" + phoneDigits;
-
-          const { data: agents } = await supabase.from("agents").select("id, name, avatar_url, config").eq("tenant_id", tenantId);
-          let bestConv: {
-            id: string;
-            agent_id: string;
-            agent_name: string;
-            agent_avatar_url: string | null;
-            chatwoot_conversation_id: number | null;
-            config: Record<string, unknown>;
-          } | null = null;
-
-          for (const agent of agents ?? []) {
-            const agentId = (agent as { id: string }).id;
-            const { data: convs } = await supabase.rpc("list_agent_conversations", {
-              p_agent_id: agentId,
-              p_limit: 200,
-              p_offset: 0,
+          if (!contact) {
+            return reply.send({
+              messages: [],
+              chatwoot_url: null,
+              chatwoot_conversation_id: null,
+              chatwoot_account_id: accountId,
+              agent_name: null,
+              agent_avatar_url: null,
             });
-            for (const c of (convs ?? []) as Array<Record<string, unknown>>) {
-              const ext = String(c.external_user_id ?? "").replace(/\D/g, "");
-              const extNorm = ext.startsWith("55") && ext.length >= 12 ? ext : ext.length >= 10 ? "55" + ext : ext;
-              if (extNorm !== phoneNorm) continue;
-              const cfg = ((agent as { config?: Record<string, unknown> }).config ?? {}) as Record<string, unknown>;
-              const row = {
-                id: String(c.id),
-                agent_id: agentId,
-                agent_name: String((agent as { name: string }).name),
-                agent_avatar_url: (agent as { avatar_url: string | null }).avatar_url,
-                chatwoot_conversation_id: c.chatwoot_conversation_id as number | null,
-                config: cfg,
-              };
-              if (!bestConv) bestConv = row;
-              if (c.chatwoot_conversation_id != null) bestConv = row;
-            }
           }
 
-          if (!bestConv) {
-            return reply.send({ messages: [], chatwoot_url: null, agent_name: null, agent_avatar_url: null });
-          }
-
-          const { data: msgs } = await supabase.rpc("load_conversation_messages", {
-            p_agent_id: bestConv.agent_id,
-            p_conversation_id: bestConv.id,
-            p_limit: 80,
+          const preview = await buildContactConversationPreview(supabase, contact, {
+            preferredAccountId: accountId,
+            relativeChatwootUrl: true,
           });
-
-          let chatwootUrl: string | null = null;
-          const cfg = bestConv.config;
-          if (bestConv.chatwoot_conversation_id) {
-            chatwootUrl = buildChatwootConversationUrl(
-              cfg.chatwoot_url as string | undefined,
-              accountId,
-              bestConv.chatwoot_conversation_id,
-              { relative: true },
-            );
-          }
-
-          return reply.send({
-            messages: msgs ?? [],
-            chatwoot_url: chatwootUrl,
-            chatwoot_conversation_id: bestConv.chatwoot_conversation_id,
-            chatwoot_account_id: accountId,
-            agent_name: bestConv.agent_name,
-            agent_avatar_url: bestConv.agent_avatar_url,
-          });
+          return reply.send(preview);
         }
 
         return reply.status(404).send({ error: `Recurso embed não suportado: ${resource}` });

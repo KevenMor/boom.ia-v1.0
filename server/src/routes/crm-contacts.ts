@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
 import { upsertCrmContact } from "../services/crm-contact-sync.js";
 import { canAccessTenant, canManageTenant, requireAuthenticated } from "../services/authorization.js";
-import { buildChatwootConversationUrl } from "../utils/chatwoot-conversation-url.js";
+import { buildContactConversationPreview } from "../services/contact-conversation-resolve.js";
 
 type ContactType = "lead" | "client";
 
@@ -495,122 +495,8 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
           return reply.status(403).send({ error: "forbidden_tenant_access" });
         }
 
-        const phoneRaw = (contact.phone || "").trim();
-        const phoneDigits = phoneRaw.replace(/\D/g, "");
-        if (phoneDigits.length < 10) {
-          return reply.send({
-            messages: [],
-            chatwoot_url: null,
-            agent_name: null,
-          });
-        }
-
-        const phoneNorm = phoneDigits.startsWith("55") && phoneDigits.length >= 12
-          ? phoneDigits
-          : "55" + phoneDigits;
-
-        const { data: agents } = await supabase
-          .from("agents")
-          .select("id, name, avatar_url, config")
-          .eq("tenant_id", contact.tenant_id);
-
-        const agentsList = (agents ?? []) as Array<{ id: string; name: string; avatar_url: string | null; config: Record<string, unknown> | null }>;
-        let bestConv: { id: string; agent_id: string; agent_name: string; agent_avatar_url: string | null; chatwoot_conversation_id: number | null; config: Record<string, unknown> } | null = null;
-
-        for (const agent of agentsList) {
-          const { data: convs } = await supabase.rpc("list_agent_conversations", {
-            p_agent_id: agent.id,
-            p_limit: 200,
-          });
-          const list = (convs ?? []) as Array<{
-            id: string;
-            external_user_id: string | null;
-            chatwoot_conversation_id: number | null;
-            started_at: string;
-          }>;
-          for (const c of list) {
-            const ext = (c.external_user_id || "").replace(/\D/g, "");
-            const extNorm = ext.length >= 10
-              ? (ext.startsWith("55") && ext.length >= 12 ? ext : "55" + ext)
-              : "";
-            if (extNorm !== phoneNorm) continue;
-
-            const hasCw = c.chatwoot_conversation_id != null;
-            const cfg = (agent.config || {}) as Record<string, unknown>;
-            const hasCwConfig = !!(cfg.chatwoot_url && cfg.chatwoot_account_id);
-
-            if (!bestConv) {
-              bestConv = {
-                id: c.id,
-                agent_id: agent.id,
-                agent_name: agent.name,
-                agent_avatar_url: agent.avatar_url ?? null,
-                chatwoot_conversation_id: c.chatwoot_conversation_id,
-                config: cfg,
-              };
-              continue;
-            }
-            if (hasCw && hasCwConfig && !bestConv.chatwoot_conversation_id) {
-              bestConv = {
-                id: c.id,
-                agent_id: agent.id,
-                agent_name: agent.name,
-                agent_avatar_url: agent.avatar_url ?? null,
-                chatwoot_conversation_id: c.chatwoot_conversation_id,
-                config: cfg,
-              };
-            }
-          }
-        }
-
-        if (!bestConv) {
-          return reply.send({
-            messages: [],
-            chatwoot_url: null,
-            agent_name: null,
-            agent_avatar_url: null,
-          });
-        }
-
-        const { data: msgs } = await supabase.rpc("load_conversation_messages", {
-          p_agent_id: bestConv.agent_id,
-          p_conversation_id: bestConv.id,
-        });
-
-        const rawMsgs = (msgs ?? []) as Array<{
-          id: string;
-          role: string;
-          content: string;
-          created_at: string;
-          model?: string | null;
-          metadata?: Record<string, unknown> | null;
-        }>;
-        const messages = rawMsgs.map((m) => ({
-          id: m.id,
-          role: m.role,
-          content: m.content ?? "",
-          created_at: m.created_at,
-          model: m.model ?? null,
-          metadata: m.metadata ?? null,
-        }));
-
-        let chatwootUrl: string | null = null;
-        if (bestConv.chatwoot_conversation_id && bestConv.config.chatwoot_account_id) {
-          chatwootUrl = buildChatwootConversationUrl(
-            bestConv.config.chatwoot_url as string | undefined,
-            bestConv.config.chatwoot_account_id as string | number,
-            bestConv.chatwoot_conversation_id,
-          );
-        }
-
-        return reply.send({
-          messages,
-          chatwoot_url: chatwootUrl,
-          chatwoot_conversation_id: bestConv.chatwoot_conversation_id,
-          chatwoot_account_id: bestConv.config.chatwoot_account_id ?? null,
-          agent_name: bestConv.agent_name,
-          agent_avatar_url: bestConv.agent_avatar_url,
-        });
+        const preview = await buildContactConversationPreview(supabase, contact);
+        return reply.send(preview);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("crm-contacts conversation-preview error:", msg);

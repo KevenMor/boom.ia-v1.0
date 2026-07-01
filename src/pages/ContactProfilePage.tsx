@@ -80,6 +80,7 @@ import { useEmbedCrm } from "@/contexts/EmbedCrmContext";
 import { useEmbedClientsOptional } from "@/contexts/EmbedClientsContext";
 import { openMegaChatwootConversation, isInsideParentEmbed } from "@/lib/open-mega-chatwoot-conversation";
 import { resolveMegaConversationNavigateUrl } from "@/lib/chatwoot-conversation-url";
+import { openContactMegaConversation } from "@/lib/open-contact-mega-conversation";
 
 const editSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
@@ -196,9 +197,10 @@ export default function ContactProfilePage() {
   const deleteInvoice = useDeleteContactInvoice(contactId ?? null);
   const messages = convData?.messages ?? [];
   const chatwootUrl = convData?.chatwoot_url ?? null;
+  const embedAccountId = embedClients?.accountId ?? embedCrm?.accountId ?? null;
   const megaConversationUrl = resolveMegaConversationNavigateUrl(
     convData ?? {},
-    embedClients?.accountId ?? null,
+    embedAccountId,
   );
   const agentName = convData?.agent_name ?? null;
 
@@ -212,9 +214,27 @@ export default function ContactProfilePage() {
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
   const [deleteInvoiceId, setDeleteInvoiceId] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
+  const [openingMegaChat, setOpeningMegaChat] = useState(false);
   const hasDebugData = messages.some(
     (m) => !!(m.metadata?.debug as unknown[])?.length || !!m.metadata?.token_usage
   );
+
+  const handleOpenMegaChat = async () => {
+    if (!contactId) return;
+    if (megaConversationUrl && (embedClients || embedCrm || isInsideParentEmbed())) {
+      openMegaChatwootConversation(megaConversationUrl, { embedAccountId });
+      return;
+    }
+    setOpeningMegaChat(true);
+    try {
+      const ok = await openContactMegaConversation(contactId, embedAccountId);
+      if (!ok) toast.error("Nenhuma conversa encontrada para este cliente no Mega");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Erro ao abrir conversa no Mega");
+    } finally {
+      setOpeningMegaChat(false);
+    }
+  };
   const { register, handleSubmit, reset, formState: { errors }, setValue, watch } = useForm<EditFormData>({
     resolver: zodResolver(editSchema),
     defaultValues: {
@@ -726,11 +746,34 @@ export default function ContactProfilePage() {
                         <div className="flex flex-col items-center justify-center py-14 text-center border border-dashed border-border rounded-xl bg-muted/20">
                           <p className="text-sm font-medium text-foreground">Nenhuma conversa</p>
                           <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-                            Este contato ainda não possui histórico no Chat ao Vivo.
+                            {isEmbed || isInsideParentEmbed()
+                              ? "Abra a conversa deste cliente diretamente no Mega."
+                              : "Este contato ainda não possui histórico no Chat ao Vivo."}
                           </p>
-                          <Button variant="outline" size="sm" className="mt-4" asChild>
-                            <Link to="/conversations">Abrir Chat ao Vivo</Link>
-                          </Button>
+                          {isEmbed || isInsideParentEmbed() ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="mt-4"
+                              disabled={openingMegaChat}
+                              onClick={() => void handleOpenMegaChat()}
+                            >
+                              {openingMegaChat ? "Abrindo..." : "Abrir conversa no Mega"}
+                            </Button>
+                          ) : megaConversationUrl ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="mt-4 gap-2"
+                              onClick={() => window.open(chatwootUrl ?? megaConversationUrl, "_blank", "noopener,noreferrer")}
+                            >
+                              Abrir no Chatwoot
+                            </Button>
+                          ) : (
+                            <Button variant="outline" size="sm" className="mt-4" asChild>
+                              <Link to="/conversations">Abrir Chat ao Vivo</Link>
+                            </Button>
+                          )}
                         </div>
                       )}
                       {!convLoading && messages.length > 0 && (
@@ -772,7 +815,7 @@ export default function ContactProfilePage() {
                                   if (!megaConversationUrl) return;
                                   if (embedClients || isInsideParentEmbed()) {
                                     openMegaChatwootConversation(megaConversationUrl, {
-                                      embedAccountId: embedClients?.accountId ?? null,
+                                      embedAccountId,
                                     });
                                     return;
                                   }

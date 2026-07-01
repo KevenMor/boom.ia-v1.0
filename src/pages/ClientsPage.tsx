@@ -46,9 +46,7 @@ import { DeleteContactDialog } from "@/components/contacts/DeleteContactDialog";
 import { ContactConversationModal } from "@/components/contacts/ContactConversationModal";
 import { ImportClientsDialog } from "@/components/contacts/ImportClientsDialog";
 import { callAPI } from "@/lib/api-client";
-import { openMegaChatwootConversation } from "@/lib/open-mega-chatwoot-conversation";
-import { resolveMegaConversationNavigateUrl } from "@/lib/chatwoot-conversation-url";
-import type { ContactConversationPreview } from "@/hooks/useContacts";
+import { openContactMegaConversation } from "@/lib/open-contact-mega-conversation";
 import { exportContactsCsv } from "@/lib/exportCsv";
 import type { Contact } from "@/types/database";
 
@@ -154,12 +152,8 @@ export default function ClientsPage() {
   const handleOpenMegaConversation = async (contactId: string) => {
     setOpeningConversationId(contactId);
     try {
-      const res = await callAPI<ContactConversationPreview>(
-        `/crm-contacts/${contactId}/conversation-preview`,
-        { method: "GET" },
-      );
-      const navUrl = resolveMegaConversationNavigateUrl(res ?? {}, embed?.accountId ?? null);
-      if (!openMegaChatwootConversation(navUrl, { embedAccountId: embed?.accountId ?? null })) {
+      const ok = await openContactMegaConversation(contactId, embed?.accountId ?? null);
+      if (!ok) {
         toast.error("Nenhuma conversa vinculada a este cliente no Mega");
       }
     } catch (err: unknown) {
