@@ -3,7 +3,7 @@
   Conta Chatwoot: 9 (mega.atendai.app) · Agente: Ana Júlia
   Cole em: https://mega.atendai.app/super_admin/app_config?config=internal
   Após colar: salve, recarregue o Mega (Cmd+Shift+R) e confira no console F12:
-  "[Boom IA] Dashboard Script v2 carregado"
+  "[Boom IA] Dashboard Script v3 carregado"
 -->
 
 <script data-name="boom-ia-ppl-motors-clients">
@@ -613,6 +613,19 @@
     syncLinkCollapsed();
   }
 
+  function resolveMegaNavigateUrl(url) {
+    var s = String(url).trim();
+    if (!s) return null;
+    if (s.charAt(0) === "/") return s;
+    try {
+      var u = new URL(s, window.location.href);
+      if (/\/app\/accounts\/\d+\/conversations\/\d+/.test(u.pathname)) {
+        return u.pathname + u.search + u.hash;
+      }
+    } catch (_) {}
+    return s;
+  }
+
   function isSafeMegaConversationUrl(url) {
     try {
       return /\/app\/accounts\/\d+\/conversations\/\d+/.test(
@@ -629,9 +642,10 @@
     on(window, "message", function (event) {
       var data = event.data;
       if (!data || data.type !== "boom-ia-embed:navigate" || !data.url) return;
-      if (!isSafeMegaConversationUrl(data.url)) return;
+      var target = resolveMegaNavigateUrl(data.url);
+      if (!target || !isSafeMegaConversationUrl(target)) return;
       hidePanel();
-      window.location.assign(String(data.url));
+      window.location.assign(target);
     });
   }
 

@@ -7,6 +7,7 @@ import {
   resolveTenantFromChatwootAccount,
 } from "../services/chatwoot-crm-embed.js";
 import { applyEmbedHeaders, assertEmbedKey } from "./embed-auth.js";
+import { buildChatwootConversationUrl } from "../utils/chatwoot-conversation-url.js";
 
 type InvoiceStatus = "pending" | "paid" | "overdue" | "cancelled";
 
@@ -430,14 +431,20 @@ export async function embedChatwootCrmResourceRoutes(fastify: FastifyInstance) {
 
           let chatwootUrl: string | null = null;
           const cfg = bestConv.config;
-          if (bestConv.chatwoot_conversation_id && cfg.chatwoot_url && cfg.chatwoot_account_id) {
-            const base = String(cfg.chatwoot_url).replace(/\/+$/, "");
-            chatwootUrl = `${base}/app/accounts/${cfg.chatwoot_account_id}/conversations/${bestConv.chatwoot_conversation_id}`;
+          if (bestConv.chatwoot_conversation_id) {
+            chatwootUrl = buildChatwootConversationUrl(
+              cfg.chatwoot_url as string | undefined,
+              accountId,
+              bestConv.chatwoot_conversation_id,
+              { relative: true },
+            );
           }
 
           return reply.send({
             messages: msgs ?? [],
             chatwoot_url: chatwootUrl,
+            chatwoot_conversation_id: bestConv.chatwoot_conversation_id,
+            chatwoot_account_id: accountId,
             agent_name: bestConv.agent_name,
             agent_avatar_url: bestConv.agent_avatar_url,
           });

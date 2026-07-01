@@ -101,6 +101,8 @@ export interface ContactConversationPreview {
     metadata?: Record<string, unknown> | null;
   }>;
   chatwoot_url: string | null;
+  chatwoot_conversation_id?: number | null;
+  chatwoot_account_id?: string | number | null;
   agent_name: string | null;
   agent_avatar_url: string | null;
 }

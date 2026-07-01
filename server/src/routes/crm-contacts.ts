@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
 import { upsertCrmContact } from "../services/crm-contact-sync.js";
 import { canAccessTenant, canManageTenant, requireAuthenticated } from "../services/authorization.js";
+import { buildChatwootConversationUrl } from "../utils/chatwoot-conversation-url.js";
 
 type ContactType = "lead" | "client";
 
@@ -594,19 +595,19 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
         }));
 
         let chatwootUrl: string | null = null;
-        if (
-          bestConv.chatwoot_conversation_id &&
-          bestConv.config.chatwoot_url &&
-          bestConv.config.chatwoot_account_id
-        ) {
-          const base = String(bestConv.config.chatwoot_url).replace(/\/+$/, "");
-          const accountId = bestConv.config.chatwoot_account_id;
-          chatwootUrl = `${base}/app/accounts/${accountId}/conversations/${bestConv.chatwoot_conversation_id}`;
+        if (bestConv.chatwoot_conversation_id && bestConv.config.chatwoot_account_id) {
+          chatwootUrl = buildChatwootConversationUrl(
+            bestConv.config.chatwoot_url as string | undefined,
+            bestConv.config.chatwoot_account_id as string | number,
+            bestConv.chatwoot_conversation_id,
+          );
         }
 
         return reply.send({
           messages,
           chatwoot_url: chatwootUrl,
+          chatwoot_conversation_id: bestConv.chatwoot_conversation_id,
+          chatwoot_account_id: bestConv.config.chatwoot_account_id ?? null,
           agent_name: bestConv.agent_name,
           agent_avatar_url: bestConv.agent_avatar_url,
         });

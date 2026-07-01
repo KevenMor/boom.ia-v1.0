@@ -1,3 +1,5 @@
+import { resolveMegaConversationNavigateUrl } from "./chatwoot-conversation-url";
+
 export type MegaNavigateMessage = {
   type: "boom-ia-embed:navigate";
   url: string;
@@ -12,8 +14,11 @@ export function isInsideParentEmbed(): boolean {
 }
 
 /** Abre conversa no Chatwoot/Mega (parent) quando estamos dentro do iframe do Dashboard Script. */
-export function openMegaChatwootConversation(url: string | null | undefined): boolean {
-  const target = url?.trim();
+export function openMegaChatwootConversation(
+  url: string | null | undefined,
+  opts?: { embedAccountId?: string | null },
+): boolean {
+  const target = resolveMegaConversationNavigateUrl({ chatwoot_url: url ?? null }, opts?.embedAccountId);
   if (!target) return false;
 
   if (isInsideParentEmbed()) {
@@ -22,6 +27,7 @@ export function openMegaChatwootConversation(url: string | null | undefined): bo
     return true;
   }
 
-  window.location.assign(target);
+  const assignUrl = target;
+  window.location.assign(assignUrl);
   return true;
 }

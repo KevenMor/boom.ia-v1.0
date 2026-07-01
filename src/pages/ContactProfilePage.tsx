@@ -79,6 +79,7 @@ import type { Contact, ContactClientMetadata } from "@/types/database";
 import { useEmbedCrm } from "@/contexts/EmbedCrmContext";
 import { useEmbedClientsOptional } from "@/contexts/EmbedClientsContext";
 import { openMegaChatwootConversation, isInsideParentEmbed } from "@/lib/open-mega-chatwoot-conversation";
+import { resolveMegaConversationNavigateUrl } from "@/lib/chatwoot-conversation-url";
 
 const editSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
@@ -195,6 +196,10 @@ export default function ContactProfilePage() {
   const deleteInvoice = useDeleteContactInvoice(contactId ?? null);
   const messages = convData?.messages ?? [];
   const chatwootUrl = convData?.chatwoot_url ?? null;
+  const megaConversationUrl = resolveMegaConversationNavigateUrl(
+    convData ?? {},
+    embedClients?.accountId ?? null,
+  );
   const agentName = convData?.agent_name ?? null;
 
   const normalizedMessages = useMemo(() => dedupeAndSortConversationMessages(messages), [messages]);
@@ -757,19 +762,21 @@ export default function ContactProfilePage() {
                               showDebug={showDebug}
                             />
                           </div>
-                          {chatwootUrl && (
+                          {megaConversationUrl && (
                             <div className="shrink-0 pt-4 mt-4 border-t border-border">
                               <Button
                                 variant="outline"
                                 size="sm"
                                 className="gap-2"
                                 onClick={() => {
-                                  if (!chatwootUrl) return;
+                                  if (!megaConversationUrl) return;
                                   if (embedClients || isInsideParentEmbed()) {
-                                    openMegaChatwootConversation(chatwootUrl);
+                                    openMegaChatwootConversation(megaConversationUrl, {
+                                      embedAccountId: embedClients?.accountId ?? null,
+                                    });
                                     return;
                                   }
-                                  window.open(chatwootUrl, "_blank", "noopener,noreferrer");
+                                  window.open(chatwootUrl ?? megaConversationUrl, "_blank", "noopener,noreferrer");
                                 }}
                               >
                                 <ExternalLink className="h-4 w-4" />

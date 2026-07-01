@@ -10,6 +10,9 @@ import { ExternalLink, MessageSquare } from "lucide-react";
 import { useMemo } from "react";
 import { useContactConversationPreview } from "@/hooks/useContacts";
 import { openMegaChatwootConversation, isInsideParentEmbed } from "@/lib/open-mega-chatwoot-conversation";
+import { resolveMegaConversationNavigateUrl } from "@/lib/chatwoot-conversation-url";
+import { useEmbedClientsOptional } from "@/contexts/EmbedClientsContext";
+import { useEmbedCrm } from "@/contexts/EmbedCrmContext";
 import { ConversationMessagesView } from "@/components/chat/ConversationMessagesView";
 import { shouldShowChatMessage, dedupeAndSortConversationMessages } from "@/lib/chatMessageDisplay";
 import type { Contact } from "@/types/database";
@@ -22,9 +25,13 @@ interface ContactConversationModalProps {
 
 export function ContactConversationModal({ contact, open, onOpenChange }: ContactConversationModalProps) {
   const { data, isLoading, error } = useContactConversationPreview(contact?.id ?? null);
+  const embedClients = useEmbedClientsOptional();
+  const embedCrm = useEmbedCrm();
+  const embedAccountId = embedClients?.accountId ?? embedCrm?.accountId ?? null;
 
   const messages = data?.messages ?? [];
   const chatwootUrl = data?.chatwoot_url ?? null;
+  const megaConversationUrl = resolveMegaConversationNavigateUrl(data ?? {}, embedAccountId);
   const agentName = data?.agent_name ?? null;
 
   const normalizedMessages = useMemo(() => dedupeAndSortConversationMessages(messages), [messages]);
@@ -94,15 +101,15 @@ export function ContactConversationModal({ contact, open, onOpenChange }: Contac
             size="sm"
             className="gap-2"
             onClick={() => {
-              if (!chatwootUrl) return;
+              if (!megaConversationUrl) return;
               if (!isInsideParentEmbed()) {
-                window.open(chatwootUrl, "_blank", "noopener,noreferrer");
+                window.open(chatwootUrl ?? megaConversationUrl, "_blank", "noopener,noreferrer");
                 return;
               }
-              openMegaChatwootConversation(chatwootUrl);
+              openMegaChatwootConversation(megaConversationUrl, { embedAccountId });
             }}
-            disabled={!chatwootUrl}
-            title={chatwootUrl ? (isInsideParentEmbed() ? "Abrir conversa no Mega" : "Abrir conversa no Chatwoot") : "Conversa não encontrada"}
+            disabled={!megaConversationUrl}
+            title={megaConversationUrl ? (isInsideParentEmbed() ? "Abrir conversa no Mega" : "Abrir conversa no Chatwoot") : "Conversa não encontrada"}
           >
             <ExternalLink className="h-4 w-4" />
             {isInsideParentEmbed() ? "Abrir conversa no Mega" : "Abrir no Chatwoot"}
