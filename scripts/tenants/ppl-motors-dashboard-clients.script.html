@@ -3,12 +3,12 @@
   Conta Chatwoot: 9 (mega.atendai.app) · Agente: Ana Júlia
   Cole em: https://mega.atendai.app/super_admin/app_config?config=internal
   Após colar: salve, recarregue o Mega (Cmd+Shift+R) e confira no console F12:
-  "[Boom IA] Dashboard Script v1 carregado"
+  "[Boom IA] Dashboard Script v2 carregado"
 -->
 
 <script data-name="boom-ia-ppl-motors-clients">
 (function () {
-  const SCRIPT_VERSION = "v1";
+  const SCRIPT_VERSION = "v2";
   const SCRIPT_KEY = "boom_ia_ppl_motors_clients_" + SCRIPT_VERSION;
   if (window[SCRIPT_KEY]) return;
   window[SCRIPT_KEY] = true;
@@ -613,7 +613,30 @@
     syncLinkCollapsed();
   }
 
+  function isSafeMegaConversationUrl(url) {
+    try {
+      return /\/app\/accounts\/\d+\/conversations\/\d+/.test(
+        new URL(String(url), window.location.href).pathname,
+      );
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function bindEmbedNavigateHandler() {
+    if (window.__boomIaClientsNavigateBound) return;
+    window.__boomIaClientsNavigateBound = true;
+    on(window, "message", function (event) {
+      var data = event.data;
+      if (!data || data.type !== "boom-ia-embed:navigate" || !data.url) return;
+      if (!isSafeMegaConversationUrl(data.url)) return;
+      hidePanel();
+      window.location.assign(String(data.url));
+    });
+  }
+
   function bootstrap() {
+    bindEmbedNavigateHandler();
     applyFeature();
 
     const observer = new MutationObserver(function () {

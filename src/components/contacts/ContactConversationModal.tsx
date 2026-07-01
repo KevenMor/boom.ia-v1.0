@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ExternalLink, MessageSquare } from "lucide-react";
 import { useMemo } from "react";
 import { useContactConversationPreview } from "@/hooks/useContacts";
-import { cn } from "@/lib/utils";
+import { openMegaChatwootConversation, isInsideParentEmbed } from "@/lib/open-mega-chatwoot-conversation";
 import { ConversationMessagesView } from "@/components/chat/ConversationMessagesView";
 import { shouldShowChatMessage, dedupeAndSortConversationMessages } from "@/lib/chatMessageDisplay";
 import type { Contact } from "@/types/database";
@@ -93,12 +93,19 @@ export function ContactConversationModal({ contact, open, onOpenChange }: Contac
             variant="outline"
             size="sm"
             className="gap-2"
-            onClick={() => chatwootUrl && window.open(chatwootUrl, "_blank")}
+            onClick={() => {
+              if (!chatwootUrl) return;
+              if (!isInsideParentEmbed()) {
+                window.open(chatwootUrl, "_blank", "noopener,noreferrer");
+                return;
+              }
+              openMegaChatwootConversation(chatwootUrl);
+            }}
             disabled={!chatwootUrl}
-            title={chatwootUrl ? "Abrir conversa no Chatwoot" : "Chatwoot não configurado para este agente"}
+            title={chatwootUrl ? (isInsideParentEmbed() ? "Abrir conversa no Mega" : "Abrir conversa no Chatwoot") : "Conversa não encontrada"}
           >
             <ExternalLink className="h-4 w-4" />
-            Abrir no Chatwoot
+            {isInsideParentEmbed() ? "Abrir conversa no Mega" : "Abrir no Chatwoot"}
           </Button>
         </div>
       </DialogContent>

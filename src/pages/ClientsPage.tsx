@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Download,
   Upload,
+  MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +46,7 @@ import { DeleteContactDialog } from "@/components/contacts/DeleteContactDialog";
 import { ContactConversationModal } from "@/components/contacts/ContactConversationModal";
 import { ImportClientsDialog } from "@/components/contacts/ImportClientsDialog";
 import { callAPI } from "@/lib/api-client";
+import { openMegaChatwootConversation } from "@/lib/open-mega-chatwoot-conversation";
 import { exportContactsCsv } from "@/lib/exportCsv";
 import type { Contact } from "@/types/database";
 
@@ -94,6 +96,7 @@ export default function ClientsPage() {
   const [editContact, setEditContact] = useState<Contact | null>(null);
   const [deleteContact, setDeleteContact] = useState<Contact | null>(null);
   const [selectedContactForConversation, setSelectedContactForConversation] = useState<Contact | null>(null);
+  const [openingConversationId, setOpeningConversationId] = useState<string | null>(null);
   const [clientStatusFilter, setClientStatusFilter] = useState<string>("all");
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -145,6 +148,23 @@ export default function ClientsPage() {
 
   const profilePathFor = (contactId: string) =>
     isEmbed ? `${embed.basePath}/${contactId}` : `/clients/${contactId}`;
+
+  const handleOpenMegaConversation = async (contactId: string) => {
+    setOpeningConversationId(contactId);
+    try {
+      const res = await callAPI<{ chatwoot_url: string | null }>(
+        `/crm-contacts/${contactId}/conversation-preview`,
+        { method: "GET" },
+      );
+      if (!openMegaChatwootConversation(res?.chatwoot_url)) {
+        toast.error("Nenhuma conversa vinculada a este cliente no Mega");
+      }
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Erro ao abrir conversa no Mega");
+    } finally {
+      setOpeningConversationId(null);
+    }
+  };
 
   return (
     <div className={isEmbed ? "w-full px-4 py-6 sm:px-6" : "min-h-[calc(100vh-4rem)] w-full bg-muted/30"}>
@@ -403,6 +423,18 @@ export default function ClientsPage() {
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
+                          {isEmbed && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 rounded-lg bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20"
+                              onClick={() => void handleOpenMegaConversation(contact.id)}
+                              disabled={openingConversationId === contact.id}
+                              title="Abrir conversa no Mega"
+                            >
+                              <MessageSquare className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="icon"

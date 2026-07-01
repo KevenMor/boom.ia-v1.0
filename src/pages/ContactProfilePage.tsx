@@ -78,6 +78,7 @@ import { useMemo, useState } from "react";
 import type { Contact, ContactClientMetadata } from "@/types/database";
 import { useEmbedCrm } from "@/contexts/EmbedCrmContext";
 import { useEmbedClientsOptional } from "@/contexts/EmbedClientsContext";
+import { openMegaChatwootConversation, isInsideParentEmbed } from "@/lib/open-mega-chatwoot-conversation";
 
 const editSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
@@ -762,10 +763,19 @@ export default function ContactProfilePage() {
                                 variant="outline"
                                 size="sm"
                                 className="gap-2"
-                                onClick={() => window.open(chatwootUrl!, "_blank")}
+                                onClick={() => {
+                                  if (!chatwootUrl) return;
+                                  if (embedClients || isInsideParentEmbed()) {
+                                    openMegaChatwootConversation(chatwootUrl);
+                                    return;
+                                  }
+                                  window.open(chatwootUrl, "_blank", "noopener,noreferrer");
+                                }}
                               >
                                 <ExternalLink className="h-4 w-4" />
-                                Abrir no Chatwoot
+                                {embedClients || isInsideParentEmbed()
+                                  ? "Abrir conversa no Mega"
+                                  : "Abrir no Chatwoot"}
                               </Button>
                             </div>
                           )}

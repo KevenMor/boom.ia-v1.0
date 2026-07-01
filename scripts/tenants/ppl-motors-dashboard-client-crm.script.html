@@ -27,7 +27,7 @@
 
 <script data-name="boom-ia-client-crm-conversation">
 (function () {
-  const SCRIPT_VERSION = "v22";
+  const SCRIPT_VERSION = "v23";
   const SCRIPT_KEY = "boom_ia_client_crm_conversation_" + SCRIPT_VERSION;
   if (window[SCRIPT_KEY]) return;
   window[SCRIPT_KEY] = true;
@@ -786,6 +786,29 @@
   const observer = new MutationObserver(scheduleApply);
   observer.observe(document.documentElement, { childList: true, subtree: true });
 
+  function isSafeMegaConversationUrl(url) {
+    try {
+      return /\/app\/accounts\/\d+\/conversations\/\d+/.test(
+        new URL(String(url), window.location.href).pathname,
+      );
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function bindEmbedNavigateHandler() {
+    if (window.__boomIaCrmNavigateBound) return;
+    window.__boomIaCrmNavigateBound = true;
+    on(window, "message", function (event) {
+      var data = event.data;
+      if (!data || data.type !== "boom-ia-embed:navigate" || !data.url) return;
+      if (!isSafeMegaConversationUrl(data.url)) return;
+      closeClientPanel();
+      window.location.assign(String(data.url));
+    });
+  }
+
+  bindEmbedNavigateHandler();
   hookSpaNavigation();
   on(window, "popstate", scheduleApply);
   on(window, "hashchange", scheduleApply);
