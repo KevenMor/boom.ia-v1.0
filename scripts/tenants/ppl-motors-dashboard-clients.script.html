@@ -3,7 +3,7 @@
   Conta Chatwoot: 9 (mega.atendai.app) · Agente: Ana Júlia
   Cole em: https://mega.atendai.app/super_admin/app_config?config=internal
   Após colar: salve, recarregue o Mega (Cmd+Shift+R) e confira no console F12:
-  "[Boom IA] Dashboard Script v5 carregado"
+  "[Boom IA] Dashboard Script v4 carregado"
 -->
 
 <script data-name="boom-ia-ppl-motors-clients">
@@ -24,7 +24,6 @@
     EMBED_VIEW_URL: "https://ia.agboom.com.br/api/embed/chatwoot/clients/view",
     EMBED_KEY: "iUDtFP4Rd9FyqNz3nkynZnkW",
     TARGET_ACCOUNT_ID: 9,
-    TARGET_ACCOUNT_MATCH: "ppl",
     POSITION: {
       mode: "afterLabel",
       label: "PPL Motors — Inventário",
@@ -63,37 +62,9 @@
     return match ? String(match[1]) : null;
   }
 
-  function getActiveAccountLabel() {
-    var selectors = [
-      '[data-testid="account-name"]',
-      '[data-testid="sidebar-account-switcher"]',
-      ".account-name",
-      ".active-account",
-    ];
-    for (var i = 0; i < selectors.length; i++) {
-      var el = $(selectors[i]);
-      if (el && el.textContent) return String(el.textContent).trim();
-    }
-    var sb = findSidebar();
-    if (sb) {
-      var heading = sb.querySelector("h1, h2, .text-sm.font-medium");
-      if (heading && heading.textContent) return String(heading.textContent).trim();
-    }
-    return "";
-  }
-
   function isScopeAllowed() {
-    var acct = getAccountIdFromPath();
-    if (CFG.TARGET_ACCOUNT_ID !== null && CFG.TARGET_ACCOUNT_ID !== "") {
-      if (acct !== String(CFG.TARGET_ACCOUNT_ID)) return false;
-    }
-    var match = CFG.TARGET_ACCOUNT_MATCH;
-    if (match) {
-      var label = normalize(getActiveAccountLabel());
-      if (!label) return false;
-      if (label.indexOf(normalize(match)) === -1) return false;
-    }
-    return true;
+    if (CFG.TARGET_ACCOUNT_ID === null || CFG.TARGET_ACCOUNT_ID === "") return true;
+    return getAccountIdFromPath() === String(CFG.TARGET_ACCOUNT_ID);
   }
 
   function bgLuminance(el) {
@@ -461,15 +432,6 @@
     if (link) link.setAttribute("aria-expanded", "false");
   }
 
-  function removeSidebarLink() {
-    const li = $("#boom-ia-clients-link");
-    if (li && li.parentNode) li.parentNode.removeChild(li);
-    if (panel && panel.parentNode) {
-      panel.parentNode.removeChild(panel);
-      panel = null;
-    }
-  }
-
   function showPanel() {
     if (!isScopeAllowed()) return;
 
@@ -641,7 +603,6 @@
   function applyFeature() {
     if (!isScopeAllowed()) {
       hidePanel();
-      removeSidebarLink();
       return;
     }
     ensurePanel();

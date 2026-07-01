@@ -27,7 +27,7 @@
 
 <script data-name="boom-ia-client-crm-conversation">
 (function () {
-  const SCRIPT_VERSION = "v26";
+  const SCRIPT_VERSION = "v25";
   const SCRIPT_KEY = "boom_ia_client_crm_conversation_" + SCRIPT_VERSION;
   if (window[SCRIPT_KEY]) return;
   window[SCRIPT_KEY] = true;
@@ -45,7 +45,6 @@
     API_BASE: "https://ia.agboom.com.br/api",
     EMBED_KEY: "iUDtFP4Rd9FyqNz3nkynZnkW",
     TARGET_ACCOUNT_ID: 9,
-    TARGET_ACCOUNT_MATCH: "ppl",
     MOBILE_MAX_WIDTH: 768,
   };
   /** ==================================== */
@@ -110,41 +109,11 @@
     return null;
   }
 
-  function findSidebar() {
-    return $('[data-testid="sidebar"]') || $(".sidebar") || $("aside");
-  }
-
-  function getActiveAccountLabel() {
-    var selectors = [
-      '[data-testid="account-name"]',
-      '[data-testid="sidebar-account-switcher"]',
-      ".account-name",
-      ".active-account",
-    ];
-    for (var i = 0; i < selectors.length; i++) {
-      var el = $(selectors[i]);
-      if (el && el.textContent) return String(el.textContent).trim();
-    }
-    var sb = findSidebar();
-    if (sb) {
-      var heading = sb.querySelector("h1, h2, .text-sm.font-medium");
-      if (heading && heading.textContent) return String(heading.textContent).trim();
-    }
-    return "";
-  }
-
   function isScopeAllowed() {
-    var acct = getAccountIdFromPath();
-    if (CFG.TARGET_ACCOUNT_ID !== null && CFG.TARGET_ACCOUNT_ID !== "") {
-      if (!acct || acct !== String(CFG.TARGET_ACCOUNT_ID)) return false;
-    }
-    var match = CFG.TARGET_ACCOUNT_MATCH;
-    if (match) {
-      var label = normalize(getActiveAccountLabel());
-      if (!label) return false;
-      if (label.indexOf(normalize(match)) === -1) return false;
-    }
-    return true;
+    if (CFG.TARGET_ACCOUNT_ID === null || CFG.TARGET_ACCOUNT_ID === "") return true;
+    const acct = getAccountIdFromPath();
+    if (!acct) return true;
+    return acct === String(CFG.TARGET_ACCOUNT_ID);
   }
 
   function isConversationView() {
