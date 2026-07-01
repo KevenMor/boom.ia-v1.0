@@ -3,12 +3,12 @@
   Conta Chatwoot: 9 (mega.atendai.app) · Agente: Ana Júlia
   Cole em: https://mega.atendai.app/super_admin/app_config?config=internal
   Após colar: salve, recarregue o Mega (Cmd+Shift+R) e confira no console F12:
-  "[Boom IA] Dashboard Script v1 carregado"
+  "[Boom IA] Dashboard Script v2 carregado"
 -->
 
 <script data-name="boom-ia-ppl-motors-inventory">
 (function () {
-  const SCRIPT_VERSION = "v1";
+  const SCRIPT_VERSION = "v2";
   const SCRIPT_KEY = "boom_ia_ppl_motors_inventory_" + SCRIPT_VERSION;
   if (window[SCRIPT_KEY]) return;
   window[SCRIPT_KEY] = true;
@@ -557,21 +557,47 @@
     syncLinkCollapsed();
   }
 
-  function bindSidebarCloseHandler() {
-    const sb = findSidebar();
-    if (!sb || sb.dataset.boomIaEmbedCloseBound === "true") return;
-    sb.dataset.boomIaEmbedCloseBound = "true";
+  function isInventoryNavClick(target) {
+    return !!(target && target.closest && target.closest("[data-boom-ia-inventory-link]"));
+  }
 
-    on(
-      sb,
-      "click",
-      function (event) {
-        const customLink =
-          event.target && event.target.closest && event.target.closest("[data-boom-ia-inventory-link]");
-        if (!customLink) hidePanel();
-      },
-      { capture: true, passive: true }
-    );
+  function onSidebarNavClick(event) {
+    if (!panel || panel.dataset.visible !== "true") return;
+    if (isInventoryNavClick(event.target)) return;
+    hidePanel();
+  }
+
+  function bindSidebarCloseHandler() {
+    const roots = [
+      findSidebar(),
+      $('[data-testid="sidebar-primary"]'),
+      $('[data-testid="sidebar"]'),
+      $('[data-testid="mobile-bottom-nav"]'),
+      $('[data-testid="bottom-nav"]'),
+    ].filter(Boolean);
+
+    const seen = new Set();
+    roots.forEach(function (root) {
+      if (seen.has(root)) return;
+      seen.add(root);
+      if (root.dataset.boomIaInventoryCloseBound === "true") return;
+      root.dataset.boomIaInventoryCloseBound = "true";
+      on(root, "click", onSidebarNavClick, { capture: true, passive: true });
+    });
+  }
+
+  function hookSpaNavigation() {
+    if (history.__boomIaInventoryPatched) return;
+    history.__boomIaInventoryPatched = true;
+    const wrap = function (fn) {
+      return function () {
+        const ret = fn.apply(this, arguments);
+        if (panel && panel.dataset.visible === "true") hidePanel();
+        return ret;
+      };
+    };
+    history.pushState = wrap(history.pushState);
+    history.replaceState = wrap(history.replaceState);
   }
 
   function applyFeature() {
@@ -636,6 +662,12 @@
       hidePanel();
       applyFeature();
     });
+
+    on(window, "hashchange", function () {
+      if (panel && panel.dataset.visible === "true") hidePanel();
+    });
+
+    hookSpaNavigation();
 
     setTimeout(function () {
       observer.disconnect();
