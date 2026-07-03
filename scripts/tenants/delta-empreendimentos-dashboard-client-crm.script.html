@@ -1,0 +1,833 @@
+<!--
+  Delta Empreendimentos — Dashboard Script · Cliente CRM na conversa (Chatwoot / Mega)
+  =====================================================================
+
+  Conta Chatwoot: 15 (mega.atendai.app)
+
+  O que faz:
+  - Na sidebar DIREITA do chat (painel do contato): botão "Transformar em cliente"
+    quando o contato ainda não é cliente no CRM, ou "Abrir cadastro do cliente" se já for cliente.
+  - Abre o CRM em modal centralizado com visual próximo ao Chatwoot.
+
+  NÃO adiciona item na sidebar esquerda.
+
+  Onde colar:
+  - Mega: Super Admin → App Config → Dashboard Scripts
+          https://mega.atendai.app/super_admin/app_config?config=internal
+
+  Pré-requisitos:
+  - Agente Boom IA com config.chatwoot_account_id = 15
+  - CHATWOOT_MIRROR_EMBED_KEY no server (mesma EMBED_KEY abaixo)
+  - CHATWOOT_EMBED_FRAME_ANCESTORS=https://mega.atendai.app
+-->
+
+<script data-name="boom-ia-delta_empreendimentos-client-crm">
+(function () {
+  const SCRIPT_VERSION = "v1";
+  const SCRIPT_KEY = "boom_ia_delta_empreendimentos_client_crm_" + SCRIPT_VERSION;
+  if (window[SCRIPT_KEY]) return;
+  window[SCRIPT_KEY] = true;
+  console.info("[Boom IA] Delta Cliente CRM " + SCRIPT_VERSION + " carregado");
+
+  /** ========== DELTA EMPREENDIMENTOS (conta 15) ========== */
+  const CFG = {
+    BOOM_URL: "https://ia.agboom.com.br",
+    EMBED_CLIENT_URL: "https://ia.agboom.com.br/embed/chatwoot/client",
+    EMBED_CLIENT_VIEW_URL: "https://ia.agboom.com.br/api/embed/chatwoot/crm/view",
+    /** false = HTML da API (estável no Mega). true = app React (exige deploy frontend). */
+    USE_REACT_EMBED: false,
+    /** true = modal centralizado com blur; false = sidebar nativa (legado) */
+    USE_MODAL: true,
+    API_BASE: "https://ia.agboom.com.br/api",
+    EMBED_KEY: "iUDtFP4Rd9FyqNz3nkynZnkW",
+    TARGET_ACCOUNT_ID: 15,
+    MOBILE_MAX_WIDTH: 768,
+  };
+  /** ==================================== */
+
+  const $ = (s, r) => {
+    try {
+      return (r || document).querySelector(s);
+    } catch {
+      return null;
+    }
+  };
+  const $$ = (s, r) => {
+    try {
+      return Array.from((r || document).querySelectorAll(s));
+    } catch {
+      return [];
+    }
+  };
+  const on = (el, ev, fn, opts) => {
+    if (el) el.addEventListener(ev, fn, opts);
+  };
+  const normalize = (v) => (v || "").toLowerCase().replace(/\s+/g, " ").trim();
+
+  let panel = null;
+  let modalKeyHandler = null;
+  let lookupTimer = null;
+  let cleanupTimer = null;
+  let applyTimer = null;
+  let lastConversationKey = null;
+
+  const crm = {
+    loading: false,
+    promoting: false,
+    state: null,
+    contactId: null,
+    contactName: null,
+    avatarUrl: null,
+    phoneDigits: null,
+    error: null,
+  };
+
+  function routeText() {
+    return window.location.pathname + window.location.search + window.location.hash;
+  }
+
+  function getAccountIdFromPath() {
+    const m = routeText().match(/\/accounts\/(\d+)/);
+    return m ? String(m[1]) : null;
+  }
+
+  function resolvedAccountId() {
+    return getAccountIdFromPath() || String(CFG.TARGET_ACCOUNT_ID || "");
+  }
+
+  function getConversationIdFromPath() {
+    const src = routeText();
+    const patterns = [/\/conversations\/(\d+)/, /\/conversation\/(\d+)/, /conversation_id=(\d+)/i];
+    for (let i = 0; i < patterns.length; i++) {
+      const m = src.match(patterns[i]);
+      if (m) return String(m[1]);
+    }
+    return null;
+  }
+
+  function isScopeAllowed() {
+    if (CFG.TARGET_ACCOUNT_ID === null || CFG.TARGET_ACCOUNT_ID === "") return true;
+    const acct = getAccountIdFromPath();
+    if (!acct) return true;
+    return acct === String(CFG.TARGET_ACCOUNT_ID);
+  }
+
+  function isConversationView() {
+    if (getConversationIdFromPath()) return true;
+    if (
+      $(".conversation-panel") ||
+      $('[data-testid="conversation-panel"]') ||
+      $(".conversation-details-wrap") ||
+      $(".messages-wrap")
+    ) {
+      return true;
+    }
+    if (
+      $('[data-testid="reply-editor"]') ||
+      $(".reply-box") ||
+      $('textarea[placeholder*="mensagem" i]') ||
+      $('textarea[placeholder*="message" i]')
+    ) {
+      return true;
+    }
+    if ($(".message-bubble") || $('[data-testid="message"]')) return true;
+    const sidebar = findContactSidebar();
+    return Boolean(sidebar && extractPhoneDigits(sidebar));
+  }
+
+  function brandColor() {
+    const cs = getComputedStyle(document.documentElement);
+    return (
+      cs.getPropertyValue("--color-woot-500").trim() ||
+      cs.getPropertyValue("--color-brand-primary").trim() ||
+      "#1f93ff"
+    );
+  }
+
+  function escHtml(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function contactInitials(name) {
+    return (
+      String(name || "?")
+        .trim()
+        .split(/\s+/)
+        .slice(0, 2)
+        .map(function (p) {
+          return p[0] || "";
+        })
+        .join("")
+        .toUpperCase() || "?"
+    );
+  }
+
+  function formatPhoneBr(digits) {
+    const d = String(digits || "").replace(/\D/g, "");
+    if (d.length >= 12 && d.startsWith("55")) {
+      return "+" + d.slice(0, 2) + " (" + d.slice(2, 4) + ") " + d.slice(4, 9) + "-" + d.slice(9);
+    }
+    if (d.length >= 10) return "+" + d;
+    return d || "";
+  }
+
+  function extractContactAvatarUrl(sidebar) {
+    if (!sidebar) return null;
+    for (const img of $$("img", sidebar)) {
+      const src = img.getAttribute("src") || "";
+      if (!src || src.startsWith("blob:")) continue;
+      const r = img.getBoundingClientRect();
+      if (r.width < 24 || r.height < 24 || r.width > 96 || r.height > 96) continue;
+      if (r.left < window.innerWidth * 0.42) continue;
+      return src;
+    }
+    return null;
+  }
+
+  function ensureStyles() {
+    const id = "boom-ia-crm-conv-styles";
+    if ($(id)) return;
+    const s = document.createElement("style");
+    s.id = id;
+    s.textContent =
+      ".boom-ia-crm-box{margin:12px 16px 0;padding:12px;border-radius:10px;border:1px solid var(--color-border,#e5e7eb);background:var(--color-background-light,#f9fafb);}" +
+      ".boom-ia-crm-box p{margin:0 0 8px;font-size:12px;line-height:1.4;color:var(--color-body,#6b7280);}" +
+      ".boom-ia-crm-btn{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:8px 12px;border-radius:8px;border:0;font-size:13px;font-weight:600;cursor:pointer;}" +
+      ".boom-ia-crm-btn:disabled{opacity:.6;cursor:not-allowed;}" +
+      ".boom-ia-crm-btn-primary{color:#fff;}" +
+      ".boom-ia-crm-btn-ghost{background:transparent;border:1px solid var(--color-border,#e5e7eb);color:var(--color-heading,#111);}" +
+      ".boom-ia-crm-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:#dcfce7;color:#166534;}" +
+      "#boom-ia-crm-modal-root{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(16,24,40,.48);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);opacity:0;transition:opacity .18s ease;}" +
+      "#boom-ia-crm-modal-root.is-open{opacity:1;}" +
+      ".boom-ia-crm-modal{--boom-brand:#1f93ff;width:min(1080px,96vw);height:min(88vh,900px);max-height:calc(100vh - 40px);display:flex;flex-direction:column;background:#fff;border-radius:12px;box-shadow:0 20px 60px -12px rgba(16,24,40,.28),0 0 0 1px rgba(16,24,40,.06);overflow:hidden;transform:translateY(8px);opacity:0;transition:transform .22s cubic-bezier(.16,1,.3,1),opacity .18s ease;}" +
+      "#boom-ia-crm-modal-root.is-open .boom-ia-crm-modal{transform:translateY(0);opacity:1;}" +
+      ".boom-ia-crm-modal.is-dark{background:#1c2431;box-shadow:0 20px 60px -12px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.07);}" +
+      ".boom-ia-crm-modal-header{display:flex;align-items:center;gap:12px;padding:10px 14px 10px 12px;border-bottom:1px solid #e5e7eb;background:#fff;flex-shrink:0;min-height:56px;}" +
+      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-header{border-bottom-color:#2d3748;background:#1c2431;}" +
+      ".boom-ia-crm-modal-avatar{width:36px;height:36px;border-radius:50%;flex-shrink:0;overflow:hidden;background:#ebeff3;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#6b7280;border:1.5px solid rgba(16,24,40,.08);}" +
+      ".boom-ia-crm-modal-avatar img{width:100%;height:100%;object-fit:cover;display:block;}" +
+      ".boom-ia-crm-modal-info{flex:1;min-width:0;}" +
+      ".boom-ia-crm-modal-name{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:#111827;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(520px,60vw);}" +
+      ".boom-ia-crm-modal-name-badge{flex-shrink:0;display:inline-flex;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;letter-spacing:.02em;background:#ebfef1;color:#027a48;border:1px solid #a9efc5;line-height:1.4;}" +
+      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-name{color:#f3f4f6;}" +
+      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-name-badge{background:rgba(74,222,128,.1);color:#86efac;border-color:rgba(74,222,128,.25);}" +
+      ".boom-ia-crm-modal-phone{font-size:12px;color:#6b7280;margin-top:1px;line-height:1.3;}" +
+      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-phone{color:#9ca3af;}" +
+      ".boom-ia-crm-modal-actions{display:flex;align-items:center;gap:4px;flex-shrink:0;}" +
+      ".boom-ia-crm-modal-close{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border:0;border-radius:6px;background:transparent;color:#9ca3af;cursor:pointer;transition:background .12s,color .12s;}" +
+      ".boom-ia-crm-modal-close:hover{background:#f3f4f6;color:#374151;}" +
+      ".boom-ia-crm-modal-close:focus-visible{outline:2px solid var(--boom-brand,#1f93ff);outline-offset:2px;}" +
+      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-close:hover{background:rgba(255,255,255,.07);color:#d1d5db;}" +
+      ".boom-ia-crm-modal-body{flex:1;min-height:0;background:#fff;}" +
+      ".boom-ia-crm-modal.is-dark .boom-ia-crm-modal-body{background:#1c2431;}" +
+      ".boom-ia-crm-modal-body iframe{width:100%;height:100%;border:0;display:block;}" +
+      "html.boom-ia-crm-modal-open body{overflow:hidden;}" +
+      "@media(prefers-reduced-motion:reduce){#boom-ia-crm-modal-root,.boom-ia-crm-modal{transition:none!important;transform:none!important;}}" +
+      "@media(max-width:768px){#boom-ia-crm-modal-root{padding:0;align-items:stretch;}.boom-ia-crm-modal{width:100vw;height:100vh;max-height:100vh;border-radius:0;transform:translateY(100%);}#boom-ia-crm-modal-root.is-open .boom-ia-crm-modal{transform:translateY(0);}}" +
+      ".boom-ia-crm-host{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;width:100%;overflow:hidden;background:var(--color-background-light,#fff);}" +
+      ".boom-ia-crm-host iframe{flex:1 1 auto;min-height:240px;border:0;width:100%;background:#fff!important;display:block;}" +
+      "#boom-ia-crm-panel-header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid var(--color-border,#e5e7eb);background:var(--color-background-light,#f9fafb);flex-shrink:0;}" +
+      ".boom-ia-crm-back{border:0;background:transparent;cursor:pointer;font:inherit;font-size:13px;font-weight:500;color:var(--color-woot-500,#1f93ff);padding:4px 0;}" +
+      "#boom-ia-crm-panel.fixed-fallback{position:fixed;top:0;right:0;bottom:0;z-index:99999;display:flex;flex-direction:column;background:var(--color-background-light,#fff);box-shadow:-2px 0 12px rgba(0,0,0,.08);}";
+    document.head.appendChild(s);
+  }
+
+  function panelFromNode(node) {
+    let cur = node;
+    for (let i = 0; i < 14 && cur; i++) {
+      const r = cur.getBoundingClientRect();
+      if (r.width > 200 && r.width < 520 && r.left > window.innerWidth * 0.42 && r.height > 180) {
+        return cur;
+      }
+      cur = cur.parentElement;
+    }
+    return null;
+  }
+
+  function findContactSidebar() {
+    const byTestId =
+      $('[data-testid="contactPanel"]') ||
+      $('[data-testid="contact-sidebar"]') ||
+      $('[data-testid="contact-sidebar-panel"]') ||
+      $(".conversation-sidebar") ||
+      $(".contact--panel") ||
+      $(".contact-panel");
+    if (byTestId) return byTestId;
+
+    for (const tel of $$('a[href^="tel:"]')) {
+      const r = tel.getBoundingClientRect();
+      if (r.left < window.innerWidth * 0.42) continue;
+      const panel = panelFromNode(tel);
+      if (panel) return panel;
+    }
+
+    const markers = [
+      "ações da conversa",
+      "etiquetas do contato",
+      "atributos do contato",
+      "notas do contato",
+      "conversas anteriores",
+      "macros",
+      "kanban",
+    ];
+    for (const el of $$("div, section, aside, span, button, h2, h3, p, label")) {
+      const t = normalize((el.textContent || "").slice(0, 80));
+      if (!markers.some((m) => t === m || t.startsWith(m + " "))) continue;
+      const panel = panelFromNode(el);
+      if (panel) return panel;
+    }
+
+    const headings = ["contatos", "contact", "contacto"];
+    for (const h of $$("h1, h2, h3, h4, .text-base, span, div")) {
+      const t = normalize((h.textContent || "").slice(0, 40));
+      if (!headings.some((x) => t === x)) continue;
+      const panel = panelFromNode(h);
+      if (panel) return panel;
+    }
+
+    let best = null;
+    let bestLeft = 0;
+    $$("div, aside, section").forEach((el) => {
+      const r = el.getBoundingClientRect();
+      if (r.height < 360 || r.width < 200 || r.width > 500) return;
+      if (r.left < window.innerWidth * 0.5) return;
+      if (r.left <= bestLeft) return;
+      best = el;
+      bestLeft = r.left;
+    });
+    return best;
+  }
+
+  function findSidebarInjectionPoint(sidebar) {
+    if (!sidebar) return null;
+    for (const el of $$("*", sidebar)) {
+      const t = normalize((el.textContent || "").slice(0, 20));
+      if (t === "kanban" || t === "ações da conversa") {
+        const block = el.closest("div") || el.parentElement;
+        if (block && sidebar.contains(block)) return block;
+      }
+    }
+    const tel = $('a[href^="tel:"]', sidebar);
+    if (tel) {
+      let node = tel.parentElement;
+      for (let i = 0; i < 6 && node; i++) {
+        if (node.parentElement === sidebar || (node.parentElement && sidebar.contains(node.parentElement))) {
+          return node.nextElementSibling || node.parentElement;
+        }
+        node = node.parentElement;
+      }
+    }
+    return sidebar.firstElementChild;
+  }
+
+  function extractPhoneDigits(sidebar) {
+    if (!sidebar) return null;
+    const tel = $('a[href^="tel:"]', sidebar);
+    if (tel) {
+      const d = tel.getAttribute("href").replace(/\D/g, "");
+      if (d.length >= 10) return d;
+    }
+    const text = sidebar.innerText || "";
+    const m = text.match(/\+?\s*55\s*[\(\s]?\d{2}[\)\s]?\s*\d{4,5}[-\s]?\d{4}/);
+    if (m) return m[0].replace(/\D/g, "");
+    const m2 = text.match(/\(\d{2}\)\s*\d{4,5}[-\s]?\d{4}/);
+    if (m2) return ("55" + m2[0]).replace(/\D/g, "");
+    return null;
+  }
+
+  function extractContactName(sidebar) {
+    if (!sidebar) return null;
+    for (const h of $$("h2, h3, .text-base.font-medium, .contact--name, .truncate, strong", sidebar)) {
+      const t = (h.textContent || "").trim();
+      if (!t || t.length > 80) continue;
+      const n = normalize(t);
+      if (n === "contatos" || n === "contacts" || n === "contacto") continue;
+      if (/^\+?\d/.test(t)) continue;
+      if (n === "indisponível" || n === "unavailable") continue;
+      return t;
+    }
+    return null;
+  }
+
+  async function apiLookup(phoneDigits) {
+    const accountId = resolvedAccountId();
+    const params = new URLSearchParams({
+      key: CFG.EMBED_KEY,
+      account_id: accountId,
+      phone: phoneDigits,
+    });
+    const res = await fetch(CFG.API_BASE + "/embed/chatwoot/crm/lookup?" + params, {
+      headers: { "x-chatwoot-mirror-key": CFG.EMBED_KEY },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Erro " + res.status);
+    }
+    return res.json();
+  }
+
+  async function apiPromote(phoneDigits, name) {
+    const accountId = resolvedAccountId();
+    const params = new URLSearchParams({
+      key: CFG.EMBED_KEY,
+      account_id: accountId,
+    });
+    const res = await fetch(CFG.API_BASE + "/embed/chatwoot/crm/promote?" + params, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-chatwoot-mirror-key": CFG.EMBED_KEY,
+      },
+      body: JSON.stringify({ phone: phoneDigits, name: name || undefined }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Erro " + res.status);
+    }
+    return res.json();
+  }
+
+  function renderSidebarBox(box) {
+    const color = brandColor();
+    if (crm.loading) {
+      box.innerHTML = '<p>Consultando CRM…</p>';
+      return;
+    }
+    if (crm.error) {
+      box.innerHTML =
+        '<p style="color:#b91c1c">' + crm.error + "</p>" +
+        '<button type="button" class="boom-ia-crm-btn boom-ia-crm-btn-ghost" data-action="retry">Tentar novamente</button>';
+      on(box.querySelector('[data-action="retry"]'), "click", () => void refreshCrm());
+      return;
+    }
+    if (crm.state === "client" && crm.contactId) {
+      box.innerHTML =
+        '<span class="boom-ia-crm-badge">Cliente no CRM</span>' +
+        '<p style="margin-top:8px">Cadastro vinculado ao telefone deste contato.</p>' +
+        '<button type="button" class="boom-ia-crm-btn boom-ia-crm-btn-primary" data-action="open" style="background:' +
+        color +
+        ';margin-top:4px">Abrir cadastro do cliente</button>';
+      on(box.querySelector('[data-action="open"]'), "click", () => openClientPanel(crm.contactId));
+      return;
+    }
+    if (!crm.phoneDigits) {
+      box.innerHTML = "<p>Telefone não identificado neste contato.</p>";
+      return;
+    }
+    box.innerHTML =
+      '<p>' +
+      (crm.state === "lead"
+        ? "Lead no CRM — promova para liberar o cadastro completo."
+        : "Este contato ainda não é cliente no CRM.") +
+      "</p>" +
+      '<button type="button" class="boom-ia-crm-btn boom-ia-crm-btn-primary" data-action="promote" style="background:' +
+      color +
+      '">' +
+      (crm.promoting ? "Convertendo…" : "Transformar em cliente") +
+      "</button>";
+    const btn = box.querySelector('[data-action="promote"]');
+    if (btn) on(btn, "click", () => void handlePromote());
+  }
+
+  function injectSidebarCta() {
+    const sidebar = findContactSidebar();
+    if (!sidebar) return false;
+    ensureStyles();
+    let box = $("#boom-ia-crm-sidebar-box");
+    if (box && !sidebar.contains(box)) {
+      box.remove();
+      box = null;
+    }
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "boom-ia-crm-sidebar-box";
+      box.className = "boom-ia-crm-box";
+      const anchor = findSidebarInjectionPoint(sidebar);
+      if (anchor && anchor.parentElement) {
+        anchor.parentElement.insertBefore(box, anchor);
+      } else {
+        sidebar.prepend(box);
+      }
+    }
+    renderSidebarBox(box);
+    return true;
+  }
+
+  function removeLegacyChatBar() {
+    $("#boom-ia-crm-chat-bar")?.remove();
+  }
+
+  function buildModalHtml(contactId) {
+    const color = brandColor();
+    const isDark = detectTheme() === "dark";
+    const name = escHtml(crm.contactName || "Cliente");
+    const initials = escHtml(contactInitials(crm.contactName));
+    const phone = escHtml(formatPhoneBr(crm.phoneDigits) || "");
+    const avatarInner = crm.avatarUrl
+      ? '<img src="' + escHtml(crm.avatarUrl) + '" alt="' + name + '"/>'
+      : initials;
+    return (
+      '<div class="boom-ia-crm-modal' + (isDark ? " is-dark" : "") + '" style="--boom-brand:' + color + '">' +
+      '<header class="boom-ia-crm-modal-header">' +
+      '<div class="boom-ia-crm-modal-avatar" aria-hidden="true">' + avatarInner + "</div>" +
+      '<div class="boom-ia-crm-modal-info">' +
+      '<div class="boom-ia-crm-modal-name">' + name +
+      ' <span class="boom-ia-crm-modal-name-badge">Cliente CRM</span></div>' +
+      (phone ? '<div class="boom-ia-crm-modal-phone">' + phone + "</div>" : "") +
+      "</div>" +
+      '<div class="boom-ia-crm-modal-actions">' +
+      '<button type="button" id="boom-ia-crm-panel-close" class="boom-ia-crm-modal-close" aria-label="Fechar cadastro">' +
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>' +
+      "</button></div></header>" +
+      '<div class="boom-ia-crm-modal-body">' +
+      '<iframe id="boom-ia-crm-iframe" title="Cadastro — ' + name + '" src="' +
+      buildClientIframeUrl(contactId) +
+      '"></iframe></div></div>'
+    );
+  }
+
+  function buildSidebarHostHtml(contactId) {
+    return (
+      '<div id="boom-ia-crm-panel-header">' +
+      '<button type="button" id="boom-ia-crm-panel-close" class="boom-ia-crm-back">← Voltar</button>' +
+      '<strong style="font-size:13px;font-weight:600">Cliente CRM</strong>' +
+      '<span style="width:48px"></span></div>' +
+      '<iframe id="boom-ia-crm-iframe" title="CRM Cliente" src="' +
+      buildClientIframeUrl(contactId) +
+      '"></iframe>'
+    );
+  }
+
+  function findContactSidebarColumn() {
+    const inner = findContactSidebar();
+    if (!inner) return null;
+    let col = inner;
+    for (let i = 0; i < 10 && col; i++) {
+      const r = col.getBoundingClientRect();
+      if (r.left > window.innerWidth * 0.4 && r.width >= 260 && r.width <= 560 && r.height > window.innerHeight * 0.45) {
+        return col;
+      }
+      col = col.parentElement;
+    }
+    return inner.parentElement || inner;
+  }
+
+  function bindHostEvents() {
+    if (!panel) return;
+    const closeBtn = panel.querySelector("#boom-ia-crm-panel-close");
+    on(closeBtn, "click", closeClientPanel);
+    const iframe = $("#boom-ia-crm-iframe");
+    if (iframe) {
+      on(iframe, "load", postThemeToCrmEmbed);
+      setTimeout(postThemeToCrmEmbed, 600);
+    }
+  }
+
+  function postThemeToCrmEmbed() {
+    const iframe = panel && panel.querySelector("iframe");
+    if (!iframe || !iframe.contentWindow) return;
+    try {
+      iframe.contentWindow.postMessage({ type: "boom-ia-embed:theme", theme: detectTheme() }, "*");
+    } catch (_) {}
+  }
+
+  function buildClientIframeUrl(contactId) {
+    const accountId = resolvedAccountId();
+    const params = new URLSearchParams({
+      key: CFG.EMBED_KEY,
+      account_id: accountId,
+      contact_id: contactId,
+      theme: detectTheme(),
+      native: "1",
+    });
+    if (CFG.USE_MODAL !== false) params.set("modal", "1");
+    const reactBase = (CFG.EMBED_CLIENT_URL || CFG.BOOM_URL + "/embed/chatwoot/client").replace(/\/+$/, "");
+    const htmlBase = (CFG.EMBED_CLIENT_VIEW_URL || CFG.API_BASE + "/embed/chatwoot/crm/view").replace(/\/+$/, "");
+    const viewBase = CFG.USE_REACT_EMBED === true ? reactBase : htmlBase;
+    return viewBase + "?" + params.toString();
+  }
+
+  function detectTheme() {
+    const html = document.documentElement;
+    if (html.classList.contains("dark") || document.body.classList.contains("dark")) return "dark";
+    if (html.getAttribute("data-theme") === "dark" || document.body.getAttribute("data-theme") === "dark") return "dark";
+    return "light";
+  }
+
+  function closeClientPanel() {
+    if (modalKeyHandler) {
+      document.removeEventListener("keydown", modalKeyHandler);
+      modalKeyHandler = null;
+    }
+    if (panel) {
+      const isModal = panel.id === "boom-ia-crm-modal-root";
+      if (isModal) {
+        panel.classList.remove("is-open");
+        const node = panel;
+        setTimeout(function () {
+          if (node.parentElement) node.remove();
+        }, 220);
+      } else {
+        const column = panel.parentElement;
+        if (column) {
+          Array.from(column.children).forEach(function (child) {
+            if (child.dataset.boomIaCrmHidden === "1") {
+              child.style.display = "";
+              delete child.dataset.boomIaCrmHidden;
+            }
+          });
+        }
+        panel.remove();
+      }
+      panel = null;
+    }
+    document.documentElement.classList.remove("boom-ia-crm-modal-open");
+    document.documentElement.classList.remove("boom-ia-crm-open");
+    document.documentElement.classList.remove("boom-ia-crm-open-mobile");
+    document.body.style.overflow = "";
+    scheduleApply();
+  }
+
+  function openClientPanel(contactId) {
+    if (!contactId) return;
+    ensureStyles();
+    closeClientPanel();
+
+    if (CFG.USE_MODAL !== false) {
+      const root = document.createElement("div");
+      root.id = "boom-ia-crm-modal-root";
+      root.setAttribute("role", "dialog");
+      root.setAttribute("aria-modal", "true");
+      root.setAttribute("aria-label", "Cadastro do cliente");
+      root.innerHTML = buildModalHtml(contactId);
+      panel = root;
+      document.body.appendChild(root);
+      document.documentElement.classList.add("boom-ia-crm-modal-open");
+      on(root, "click", function (e) {
+        if (e.target === root) closeClientPanel();
+      });
+      modalKeyHandler = function (e) {
+        if (e.key === "Escape") closeClientPanel();
+      };
+      document.addEventListener("keydown", modalKeyHandler);
+      requestAnimationFrame(function () {
+        root.classList.add("is-open");
+        const closeBtn = root.querySelector("#boom-ia-crm-panel-close");
+        if (closeBtn && typeof closeBtn.focus === "function") closeBtn.focus();
+      });
+      bindHostEvents();
+      return;
+    }
+
+    const column = findContactSidebarColumn();
+    if (!column) return;
+    Array.from(column.children).forEach(function (child) {
+      if (child.id === "boom-ia-crm-host") return;
+      child.dataset.boomIaCrmHidden = "1";
+      child.style.display = "none";
+    });
+    const host = document.createElement("div");
+    host.id = "boom-ia-crm-host";
+    host.className = "boom-ia-crm-host";
+    host.innerHTML = buildSidebarHostHtml(contactId);
+    panel = host;
+    column.appendChild(host);
+    bindHostEvents();
+  }
+
+  async function handlePromote() {
+    if (!crm.phoneDigits || crm.promoting) return;
+    crm.promoting = true;
+    crm.error = null;
+    injectSidebarCta();
+    try {
+      const res = await apiPromote(crm.phoneDigits, crm.contactName);
+      crm.state = "client";
+      crm.contactId = res.contact?.id || null;
+      crm.contactName = res.contact?.name || crm.contactName;
+    } catch (e) {
+      crm.error = e.message || "Falha ao converter";
+    } finally {
+      crm.promoting = false;
+      injectSidebarCta();
+    }
+  }
+
+  async function refreshCrm() {
+    if (!isScopeAllowed() || !isConversationView()) return;
+
+    const convKey = getConversationIdFromPath() || routeText();
+    if (convKey !== lastConversationKey) {
+      lastConversationKey = convKey;
+      crm.state = null;
+      crm.contactId = null;
+      crm.phoneDigits = null;
+      crm.avatarUrl = null;
+      crm.error = null;
+      removeLegacyChatBar();
+    }
+
+    const sidebar = findContactSidebar();
+    if (!sidebar) return;
+
+    const phone = extractPhoneDigits(sidebar);
+    const name = extractContactName(sidebar);
+    const avatarUrl = extractContactAvatarUrl(sidebar);
+    if (!phone) {
+      crm.phoneDigits = null;
+      crm.avatarUrl = null;
+      crm.loading = false;
+      injectSidebarCta();
+      removeLegacyChatBar();
+      return;
+    }
+
+    if (phone === crm.phoneDigits && crm.state && !crm.error) {
+      injectSidebarCta();
+      return;
+    }
+
+    crm.phoneDigits = phone;
+    crm.contactName = name;
+    crm.avatarUrl = avatarUrl;
+    crm.loading = true;
+    crm.error = null;
+    injectSidebarCta();
+
+    if (!CFG.EMBED_KEY || CFG.EMBED_KEY.includes("COLE_A_MESMA")) {
+      crm.loading = false;
+      crm.error = "EMBED_KEY não configurada no Dashboard Script (Super Admin → App Config)";
+      injectSidebarCta();
+      return;
+    }
+
+    try {
+      const res = await apiLookup(phone);
+      crm.state = res.state;
+      crm.contactId = res.contact?.id || null;
+      if (res.contact?.name) crm.contactName = res.contact.name;
+      crm.avatarUrl = res.contact?.avatar_url || avatarUrl || null;
+    } catch (e) {
+      crm.error = e.message || "Falha ao consultar CRM";
+      crm.state = null;
+      crm.contactId = null;
+    } finally {
+      crm.loading = false;
+      injectSidebarCta();
+    }
+  }
+
+  function scheduleRefresh() {
+    clearTimeout(lookupTimer);
+    lookupTimer = setTimeout(() => void refreshCrm(), 320);
+  }
+
+  function cleanup() {
+    $("#boom-ia-crm-sidebar-box")?.remove();
+    removeLegacyChatBar();
+    closeClientPanel();
+    lastConversationKey = null;
+    crm.loading = false;
+    crm.promoting = false;
+    crm.state = null;
+    crm.contactId = null;
+    crm.phoneDigits = null;
+    crm.avatarUrl = null;
+    crm.error = null;
+  }
+
+  function scheduleCleanup() {
+    clearTimeout(cleanupTimer);
+    cleanupTimer = setTimeout(() => {
+      if (!isConversationView()) cleanup();
+    }, 900);
+  }
+
+  function apply() {
+    if (!isScopeAllowed()) {
+      cleanup();
+      return;
+    }
+    if (!isConversationView()) {
+      scheduleCleanup();
+      return;
+    }
+    clearTimeout(cleanupTimer);
+    scheduleRefresh();
+  }
+
+  function scheduleApply() {
+    clearTimeout(applyTimer);
+    applyTimer = setTimeout(apply, 120);
+  }
+
+  function hookSpaNavigation() {
+    const wrap = (fn) =>
+      function () {
+        const ret = fn.apply(this, arguments);
+        scheduleApply();
+        return ret;
+      };
+    if (!history.__boomIaCrmPatched) {
+      history.__boomIaCrmPatched = true;
+      history.pushState = wrap(history.pushState);
+      history.replaceState = wrap(history.replaceState);
+    }
+  }
+
+  const observer = new MutationObserver(scheduleApply);
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+
+  function resolveMegaNavigateUrl(url) {
+    var s = String(url).trim();
+    if (!s) return null;
+    if (s.charAt(0) === "/") return s;
+    try {
+      var u = new URL(s, window.location.href);
+      if (/\/app\/accounts\/\d+\/conversations\/\d+/.test(u.pathname)) {
+        return u.pathname + u.search + u.hash;
+      }
+    } catch (_) {}
+    return s;
+  }
+
+  function isSafeMegaConversationUrl(url) {
+    try {
+      return /\/app\/accounts\/\d+\/conversations\/\d+/.test(
+        new URL(String(url), window.location.href).pathname,
+      );
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function bindEmbedNavigateHandler() {
+    if (window.__boomIaCrmNavigateBound) return;
+    window.__boomIaCrmNavigateBound = true;
+    on(window, "message", function (event) {
+      var data = event.data;
+      if (!data || data.type !== "boom-ia-embed:navigate" || !data.url) return;
+      var target = resolveMegaNavigateUrl(data.url);
+      if (!target || !isSafeMegaConversationUrl(target)) return;
+      closeClientPanel();
+      window.location.assign(target);
+    });
+  }
+
+  bindEmbedNavigateHandler();
+  hookSpaNavigation();
+  on(window, "popstate", scheduleApply);
+  on(window, "hashchange", scheduleApply);
+    on(window, "resize", () => {
+      postThemeToCrmEmbed();
+      scheduleApply();
+    });
+  setInterval(scheduleApply, 2500);
+
+  apply();
+})();
+</script>
