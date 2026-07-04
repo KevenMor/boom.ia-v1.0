@@ -395,8 +395,8 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     followupPrompt: DE_FOLLOWUP,
     alwaysInjectCommRules: true,
     skipGreeting: true,
-    version: "v1.1.0",
-    description: "Sara — SDR consultora Delta Empreendimentos (Araçoiaba da Serra/SP)",
+    version: "v1.2.0",
+    description: "Manu — SDR consultora Delta Empreendimentos (Araçoiaba da Serra/SP)",
   },
   "delta_empreendimentos": {
     systemPrompt: DE_SYSTEM,
@@ -405,8 +405,8 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     followupPrompt: DE_FOLLOWUP,
     alwaysInjectCommRules: true,
     skipGreeting: true,
-    version: "v1.1.0",
-    description: "Sara — SDR consultora Delta Empreendimentos (Araçoiaba da Serra/SP)",
+    version: "v1.2.0",
+    description: "Manu — SDR consultora Delta Empreendimentos (Araçoiaba da Serra/SP)",
   },
   delta: {
     systemPrompt: DE_SYSTEM,
@@ -415,8 +415,8 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     followupPrompt: DE_FOLLOWUP,
     alwaysInjectCommRules: true,
     skipGreeting: true,
-    version: "v1.1.0",
-    description: "Sara — SDR consultora Delta Empreendimentos (Araçoiaba da Serra/SP)",
+    version: "v1.2.0",
+    description: "Manu — SDR consultora Delta Empreendimentos (Araçoiaba da Serra/SP)",
   },
 };
 
