@@ -1,7 +1,7 @@
 # Sara | Delta Empreendimentos — Prompt (rascunho)
 
-> **Status:** rascunho v1.1.0 — documento de trabalho antes de migrar para `server/src/services/prompts/delta-empreendimentos.ts`  
-> **Tenant slug (previsto):** `delta-empreendimentos`  
+> **Status:** em produção v1.1.0 — fonte canônica em `server/src/services/prompts/delta-empreendimentos.ts` (registry)  
+> **Tenant slug:** `delta-empreendimentos` (aliases: `delta_empreendimentos`, `delta`)  
 > **Site:** https://deltaempreendimentos.com.br
 
 ---
@@ -381,9 +381,11 @@ Usar quando: preço, proposta, visita, dúvida jurídica/técnica específica, r
 
 ## Próximos passos (implementação)
 
+- [x] Migrar para `server/src/services/prompts/delta-empreendimentos.ts`
+- [x] Registrar em `registry.ts` (slug + aliases)
+- [x] Criar `delta-empreendimentos.prompt.test.ts`
 - [ ] Validar conteúdo com equipe Delta (empreendimentos, condições reais)
-- [ ] Migrar para `server/src/services/prompts/delta-empreendimentos.ts`
-- [ ] Registrar em `registry.ts` (slug + aliases)
-- [ ] Criar `delta-empreendimentos.prompt.test.ts`
 - [ ] Definir handoff no Chatwoot (conta 15)
+- [ ] Renomear agente no painel de Manu para Sara (opcional, identidade vem do prompt)
+- [ ] Deploy do server em produção (GHCR / Portainer) para o painel carregar o preview
 - [ ] Testes E2E: lead anúncio "quero saber mais", Reservas do Brasil + preço, terreno/metragem, projeto de casa, pedido de visita, serviço técnico

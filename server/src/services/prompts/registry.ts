@@ -96,6 +96,12 @@ import {
   DISPATCHER_PROMPT as PFL_DISPATCHER,
   FOLLOWUP_PROMPT as PFL_FOLLOWUP,
 } from "./pousada-flores-do-lazaro.js";
+import {
+  SYSTEM_PROMPT as DE_SYSTEM,
+  COMMUNICATION_RULES as DE_COMM_RULES,
+  DISPATCHER_PROMPT as DE_DISPATCHER,
+  FOLLOWUP_PROMPT as DE_FOLLOWUP,
+} from "./delta-empreendimentos.js";
 
 /**
  * Configura?�?�o de prompt por tenant.
@@ -381,6 +387,36 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     skipGreeting: true,
     version: "v1.2.1",
     description: "Cleide — Atendente Monte Verde Ranch (Fazenda Centenária Sorocaba/SP)",
+  },
+  "delta-empreendimentos": {
+    systemPrompt: DE_SYSTEM,
+    communicationRules: DE_COMM_RULES,
+    dispatcherPrompt: DE_DISPATCHER,
+    followupPrompt: DE_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    skipGreeting: true,
+    version: "v1.1.0",
+    description: "Sara — SDR consultora Delta Empreendimentos (Araçoiaba da Serra/SP)",
+  },
+  "delta_empreendimentos": {
+    systemPrompt: DE_SYSTEM,
+    communicationRules: DE_COMM_RULES,
+    dispatcherPrompt: DE_DISPATCHER,
+    followupPrompt: DE_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    skipGreeting: true,
+    version: "v1.1.0",
+    description: "Sara — SDR consultora Delta Empreendimentos (Araçoiaba da Serra/SP)",
+  },
+  delta: {
+    systemPrompt: DE_SYSTEM,
+    communicationRules: DE_COMM_RULES,
+    dispatcherPrompt: DE_DISPATCHER,
+    followupPrompt: DE_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    skipGreeting: true,
+    version: "v1.1.0",
+    description: "Sara — SDR consultora Delta Empreendimentos (Araçoiaba da Serra/SP)",
   },
 };
 
