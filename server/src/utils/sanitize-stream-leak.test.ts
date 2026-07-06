@@ -5,6 +5,7 @@ import {
   stripToolNameLeakage,
   stripThoughtAndReasoningBlocks,
   stripChatbotPhrases,
+  stripSimulatedToolCallLeakage,
 } from "./sanitize.js";
 
 describe("sanitizeLLMOutput — regressão vazamento para cliente", () => {
@@ -103,6 +104,31 @@ describe("sanitizeLLMOutput — regressão vazamento para cliente", () => {
   it("should strip FOLLOW-UP GUARD even when mixed with client text", () => {
     const mixed = `Oi, tudo bem?\n\n[SISTEMA INTERNO - FOLLOW-UP GUARD]\nAnalise o histórico desta conversa.`;
     expect(sanitizeLLMOutput(mixed)).toBe("");
+  });
+
+  it("remove Chamada de ferramenta + JSON tool_code (Gemini / Thermas Card)", () => {
+    const raw = `Entendo, Keven! O valor parece alto à primeira vista.
+
+Chamada de ferramenta:
+{
+  "tool_code": "consultar_parque_sunset",
+  "parameters": {
+    "date": "2026-07-06",
+    "date_to": "2026-07-06"
+  }
+}`;
+    const out = sanitizeLLMOutput(raw);
+    expect(out).not.toMatch(/Chamada de ferramenta/i);
+    expect(out).not.toMatch(/tool_code/i);
+    expect(out).not.toMatch(/consultar_parque_sunset/i);
+    expect(out.toLowerCase()).toContain("keven");
+  });
+
+  it("stripSimulatedToolCallLeakage remove bloco tool_code isolado", () => {
+    const out = stripSimulatedToolCallLeakage(
+      '{"tool_code":"consultar_parque_sunset","parameters":{"date":"2026-07-06"}}'
+    );
+    expect(out.trim()).toBe("");
   });
 });
 

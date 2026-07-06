@@ -33,7 +33,9 @@ import {
 } from "../utils/sunset-lodging-params.js";
 import {
   extractSunsetParkParams,
+  extractSunsetParkParamsForThermasCard,
   hasSunsetParkToolResult,
+  shouldAutoInvokeParkForThermasCard,
   userAsksSunsetParkConsultation,
 } from "../utils/sunset-park-params.js";
 
@@ -316,10 +318,6 @@ async function maybeAutoInvokeSunsetPark(params: {
   }> = [];
 
   if (!isSunsetThermasTenantSlug(params.tenantSlug)) return debugEntries;
-  if (!userAsksSunsetParkConsultation(params.messages)) return debugEntries;
-
-  const parkTool = findParkConsultaTool(params.nameToTool);
-  if (!parkTool) return debugEntries;
 
   const parkToolContents = params.conversationalMessages
     .filter(
@@ -332,10 +330,25 @@ async function maybeAutoInvokeSunsetPark(params: {
 
   if (parkToolContents.length > 0) return debugEntries;
 
-  const autoParams = extractSunsetParkParams(params.messages);
+  const autoParams =
+    extractSunsetParkParams(params.messages) ??
+    extractSunsetParkParamsForThermasCard(params.messages);
+
   if (!autoParams) return debugEntries;
 
-  console.log(`[Chat-Local] Auto park_consulta (auto_sunset_park):`, JSON.stringify(autoParams));
+  const shouldRun =
+    userAsksSunsetParkConsultation(params.messages) ||
+    shouldAutoInvokeParkForThermasCard(params.messages);
+
+  if (!shouldRun) return debugEntries;
+
+  const parkTool = findParkConsultaTool(params.nameToTool);
+  if (!parkTool) return debugEntries;
+
+  const source = shouldAutoInvokeParkForThermasCard(params.messages)
+    ? "auto_sunset_park_thermas_card"
+    : "auto_sunset_park";
+  console.log(`[Chat-Local] Auto park_consulta (${source}):`, JSON.stringify(autoParams));
   const result = await executeTool(parkTool, autoParams, params.agentId);
   const content = buildOmnibeesGuardedContent(parkTool.name, result);
   params.conversationalMessages.push({
@@ -348,7 +361,7 @@ async function maybeAutoInvokeSunsetPark(params: {
     tool: parkTool.name,
     args: autoParams,
     tool_type: "park_consulta",
-    source: "auto_sunset_park",
+    source,
   });
   debugEntries.push({
     type: "tool_result",
@@ -1470,9 +1483,17 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           let sunsetLodgingHint = "";
           let sunsetParkHint = "";
           if (isSunsetThermasTenantSlug(tenantSlug)) {
-            const parkParamsHint = extractSunsetParkParams(messages);
+            const parkParamsHint =
+              extractSunsetParkParams(messages) ??
+              extractSunsetParkParamsForThermasCard(messages);
             if (parkParamsHint && userAsksSunsetParkConsultation(messages)) {
               sunsetParkHint = `\n\n[HINT OBRIGATÓRIO — PARQUE SUNSET]\nO cliente perguntou sobre ingresso/valor/abertura do parque. NÃO responda NO_TOOLS_NEEDED para consultar_parque_sunset. Chame a tool agora com date="${parkParamsHint.date}" (YYYY-MM-DD)${parkParamsHint.date_to ? ` e date_to="${parkParamsHint.date_to}"` : ""}. Se o cliente citou intervalo (ex.: "01 a 03"), date_to é OBRIGATÓRIO — consulte TODOS os dias do período. Use day_kind/park_open/days[] retornados — PROIBIDO inventar abertura de dia não consultado.`;
+            } else if (
+              parkParamsHint &&
+              shouldAutoInvokeParkForThermasCard(messages) &&
+              !userAsksSunsetParkConsultation(messages)
+            ) {
+              sunsetParkHint = `\n\n[HINT OBRIGATÓRIO — THERMAS CARD × INGRESSO]\nComparação Thermas Card exige preço real de ingresso. Chame consultar_parque_sunset com date="${parkParamsHint.date}" (YYYY-MM-DD). PROIBIDO escrever "Chamada de ferramenta" ou JSON ao cliente — use só os valores retornados em INGRESSOS CADASTRADOS.`;
             }
             const lodgingParamsHint = extractSunsetLodgingParams(messages);
             if (conversationNeedsChildAgesConfirmation(messages) && !userAsksSunsetParkConsultation(messages)) {

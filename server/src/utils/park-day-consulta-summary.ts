@@ -59,6 +59,12 @@ function formatSingleDayForLlm(obj: Record<string, unknown>): string | null {
       else if (value) lines.push(`- ${value}`);
       else if (label) lines.push(`- ${label}`);
     }
+    lines.push(
+      "Some os valores de ticket_lines conforme faixa etária e quantidade de pessoas do cliente — cite o total exato da soma, sem arredondar nem inventar."
+    );
+    lines.push(
+      "Comparação Thermas Card (§3g-compare): calcule ingresso avulso para **5 pessoas** (titular + 4 dependentes) — multiplique o valor unitário × 5 e mostre a conta."
+    );
     lines.push("PROIBIDO substituir por link genérico do site quando estes valores existem.");
   } else {
     lines.push(

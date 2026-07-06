@@ -83,9 +83,22 @@ export function stripThoughtAndReasoningBlocks(text: string): string {
   return result.replace(/\n{3,}/g, "\n\n").trim();
 }
 
+/** Remove simulação de tool call em texto (ex.: Gemini "Chamada de ferramenta:" + JSON tool_code). */
+export function stripSimulatedToolCallLeakage(text: string): string {
+  let t = text;
+  t = t.replace(/Chamada de ferramenta\s*:\s*\n?\s*\{[\s\S]*?\}\s*/gim, "");
+  t = t.replace(/Chamada da ferramenta\s*:\s*\n?\s*\{[\s\S]*?\}\s*/gim, "");
+  t = t.replace(/Chamada de ferramenta\s*:\s*[^\n]*/gim, "");
+  t = t.replace(/Chamada da ferramenta\s*:\s*[^\n]*/gim, "");
+  t = t.replace(/\{\s*"tool_code"\s*:\s*"[^"]+"\s*,\s*"parameters"\s*:\s*\{[\s\S]*?\}\s*\}\s*/gim, "");
+  t = t.replace(/\bconsultar_(?:parque|hospedagem)_sunset\s*\(\s*\{[\s\S]*?\}\s*\)\s*/gim, "");
+  t = t.replace(/\bconsultar_(?:parque|hospedagem)_sunset\s*\(\s*[^)]*\)\s*/gim, "");
+  return t;
+}
+
 /** Remove vazamento de ferramentas / instruções internas de lead e dispatcher */
 export function stripToolNameLeakage(text: string): string {
-  let t = text;
+  let t = stripSimulatedToolCallLeakage(text);
   // Remove linha inteira quando mark_lead() aparece inline com texto narrativo
   t = t.replace(/^[^\n]*\bmark_lead\s*\([^)]*\)[^\n]*/gim, "");
   t = t.replace(/\bmarcar_lead\s*\([^)]*\)/gim, "");
@@ -285,6 +298,8 @@ export function sanitizeLLMOutput(content: string): string {
   // Alguns modelos vazam "análise" e no final trazem "best response is: ...".
   // Nesse caso, extraímos somente a resposta final para o cliente.
   text = extractFinalResponseFromMetaReasoning(text);
+
+  text = stripSimulatedToolCallLeakage(text);
 
   return text;
 }
@@ -501,9 +516,13 @@ export function isCommandLine(line: string): boolean {
     /^Em\s+momentos?\s+assim[,.]?\s*o\s+procedimento\s+[eé]\s*:?\s*$/im.test(t) ||
     /^Portanto[,.]?\s+sua\s+resposta\s+deve\s+ser\s*:?\s*$/im.test(t) ||
     /\*\*(?:Confirme\s+sua\s+identidade|Retorne\s+ao\s+atendimento|Mantenha\s+o\s+tom|Siga\s+as\s+orienta[çc][oõ]es\s+do\s+supervisor)\*\*/im.test(t) ||
+    /^.*(?:Chamada da ferramenta|Chamada de ferramenta|Consultando a ferramenta|Vou consultar a ferramenta)\s*/im.test(t) ||
     /^.*(?:Chamada da ferramenta|Consultando a ferramenta|Vou consultar a ferramenta)\s+(?:consultar_estoque|consultar_agenda|consultar_base_conhecimento|inventory_query)/im.test(t) ||
-    /^.*\b(consultar_estoque|consultar_agenda|consultar_base_conhecimento|inventory_query|calendar_query|rag_search)\s*[:\s]\s*\{/im.test(t) ||
-    /\b(consultar_estoque|consultar_agenda|consultar_base_conhecimento|inventory_query|calendar_query|rag_search|consultar_unidade|nearest_unit)\s*\(/im.test(t) ||
+    /^.*\b(consultar_estoque|consultar_agenda|consultar_base_conhecimento|inventory_query|calendar_query|rag_search|consultar_parque_sunset|consultar_hospedagem_sunset)\s*[:\s]\s*\{/im.test(t) ||
+    /\b(consultar_estoque|consultar_agenda|consultar_base_conhecimento|inventory_query|calendar_query|rag_search|consultar_unidade|nearest_unit|consultar_parque_sunset|consultar_hospedagem_sunset)\s*\(/im.test(t) ||
+    /"tool_code"\s*:/im.test(t) ||
+    /^\s*\{\s*$/im.test(t) ||
+    /^\s*"parameters"\s*:/im.test(t) ||
     /\[CONTEXTO\s+ADICIONAL\]/im.test(t) ||
     /\[CONTEXTO\s+TEMPORAL\]/im.test(t) ||
     /\[NOVO\s+LEAD\s+DETECTADO/im.test(t) ||

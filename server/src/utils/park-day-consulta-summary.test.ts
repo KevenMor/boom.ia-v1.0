@@ -12,6 +12,7 @@ describe("formatParkDayConsultaForLlm", () => {
     });
     expect(text).toMatch(/CONSULTA PARQUE/);
     expect(text).toMatch(/Adulto: R\$ 89,90/);
+    expect(text).toMatch(/Thermas Card.*5 pessoas|5 pessoas.*Thermas Card/i);
     expect(text).toMatch(/PROIBIDO substituir por link genérico/);
   });
 

@@ -242,3 +242,54 @@ function messageContentLooksLikeParkResult(content: string): boolean {
 export function hasSunsetParkToolResult(toolContents: string[]): boolean {
   return toolContents.some(messageContentLooksLikeParkResult);
 }
+
+/** Cliente perguntou ou demonstrou interesse no Thermas Card (assinatura). */
+export function messageDeclaresThermasCardIntent(text: string): boolean {
+  const t = normalizeText(text);
+  return (
+    /thermas\s*card|cartao\s*thermas|cartão\s*thermas|clube\s*thermas|assinatura\s*thermas|quero\s+o\s+cartao|quero\s+o\s+cartão/.test(
+      t
+    ) || (/thermas/.test(t) && /\bcard\b|cartao|cartão|assinatura|clube/.test(t))
+  );
+}
+
+export function conversationDeclaresThermasCardIntent(messages: ChatMessage[]): boolean {
+  return messages.some(
+    (m) => m.role === "user" && m.content && messageDeclaresThermasCardIntent(m.content)
+  );
+}
+
+/**
+ * Thermas Card §3g-compare: auto-consultar ingresso quando há composição ou objeção de preço.
+ */
+export function shouldAutoInvokeParkForThermasCard(messages: ChatMessage[]): boolean {
+  if (!conversationDeclaresThermasCardIntent(messages)) return false;
+  const norm = normalizeText(messages.map((m) => m.content ?? "").join("\n"));
+  const hasComposition =
+    /\b(\d+|duas?|dois|tres|tr[eê]s|quatro|cinco)\s*(pessoas?|adultos?|gente)\b/.test(norm) ||
+    /\bcasal\b|n[oó]s\s+dois|somos\s+duas?|somos\s+dois|eu\s+e\s+(meu|minha)/.test(norm);
+  const hasPriceConcern =
+    /caro|compensa|vale a pena|ingresso|compar|meio caro|achei caro|preco alto|preço alto/.test(norm);
+  return hasComposition || hasPriceConcern;
+}
+
+/** Data de referência para comparar ingresso × Thermas Card (default: hoje). */
+export function extractSunsetParkParamsForThermasCard(
+  messages: ChatMessage[],
+  referenceDate: Date = new Date()
+): SunsetParkParams | null {
+  if (!shouldAutoInvokeParkForThermasCard(messages)) return null;
+
+  const range = extractParkVisitDateRange(messages, referenceDate);
+  if (range) return range;
+
+  for (const m of [...messages].reverse()) {
+    if (m.role !== "user" || !m.content) continue;
+    const relative = parseRelativeVisitDate(m.content, referenceDate);
+    if (relative) return { date: relative };
+    const explicit = parseExplicitDateIso(m.content, referenceDate);
+    if (explicit) return { date: explicit };
+  }
+
+  return { date: brasiliaTodayIso(referenceDate) };
+}

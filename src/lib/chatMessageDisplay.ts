@@ -107,6 +107,9 @@ export function sanitizeAssistantContent(content: string): string {
   if (!content) return content;
   let text = stripThoughtAndReasoningBlocks(stripToolNameLeakageForDisplay(content));
   text = text
+    .replace(/Chamada de ferramenta\s*:\s*\n?\s*\{[\s\S]*?\}\s*/gim, "")
+    .replace(/Chamada da ferramenta\s*:\s*\n?\s*\{[\s\S]*?\}\s*/gim, "")
+    .replace(/\{\s*"tool_code"\s*:\s*"[^"]+"\s*,\s*"parameters"\s*:\s*\{[\s\S]*?\}\s*\}\s*/gim, "")
     .replace(/\*\*?tool_code[\s\S]*?\)\s*\)\*\*?/gim, "")
     .replace(/tool_code[\s\S]*?\)\s*\)(?=\s|$|\.|,|;)/gim, "")
     .replace(/\b(assign_agent|atribuir_agente|chatwoot_assign|consultar_unidade|nearest_unit)\s*\(\s*[^)]*\)/gim, "")

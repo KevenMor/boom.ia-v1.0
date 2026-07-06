@@ -17,7 +17,7 @@ import { buildSystemPrompt } from "./registry.js";
 
 describe("Sunset Thermas Park — SYSTEM_PROMPT (contratos de negócio)", () => {
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.23/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.27/);
   });
 
   it("mantém regra suprema de valores e vaga (tolerância zero)", () => {
@@ -533,9 +533,16 @@ describe("Sunset Thermas Park — §3g Thermas Card (v1.5.18+)", () => {
     expect(SYSTEM_PROMPT).toMatch(/vendedor|venda consultiva/i);
   });
 
-  it("§3g-compare proíbe inventar ingresso na comparação", () => {
+  it("§3g-compare exige conta para 5 pessoas (plano completo)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/5 pessoas|sempre.*5|5 pessoas.*titular/i);
+    expect(SYSTEM_PROMPT).toMatch(/proibido.*2 pessoas|só para 2|calcular.*só para 2/i);
+    expect(SYSTEM_PROMPT).toMatch(/multiplic|5\s*×|×\s*5/i);
+  });
+
+  it("§3g-compare proíbe inventar ingresso e simular tool no texto", () => {
     expect(SYSTEM_PROMPT).toMatch(/proibido.*inventar.*ingresso|inventar.*ingresso/i);
     expect(SYSTEM_PROMPT).toMatch(/titular.*dependent|dependent.*titular/i);
+    expect(SYSTEM_PROMPT).toMatch(/Chamada de ferramenta|tool_code/i);
   });
 
   it("§3a inclui Thermas Card na pergunta de intenção", () => {
@@ -548,9 +555,15 @@ describe("Sunset Thermas Park — §3g Thermas Card (v1.5.18+)", () => {
     expect(SYSTEM_PROMPT).toMatch(/sem.*descontar automaticamente|n[aã]o aplicar 20% de desconto automaticamente/i);
   });
 
-  it("adesão Thermas Card encaminha WhatsApp (15) 99860-5662", () => {
-    expect(SYSTEM_PROMPT).toMatch(/99860-5662/);
+  it("adesão Thermas Card usa link oficial de cadastro", () => {
+    expect(SYSTEM_PROMPT).toMatch(/socio\.grupothermas\.com\.br\/cadastro/);
+    expect(SYSTEM_PROMPT).toMatch(/2-cadastro|portal do s[oó]cio/i);
+    expect(SYSTEM_PROMPT).toMatch(/ap[oó]s o pagamento|ap[oó]s pagamento/i);
     expect(SYSTEM_PROMPT).toMatch(/aderir|contratar|ades[aã]o/i);
+  });
+
+  it("proíbe WhatsApp como finalização do Thermas Card", () => {
+    expect(SYSTEM_PROMPT).toMatch(/proibido.*99860-5662.*cart[aã]o|99860-5662.*finaliz.*cart[aã]o/i);
   });
 
   it("detecta intenção Thermas Card na mensagem do cliente", () => {
@@ -568,20 +581,29 @@ describe("Sunset Thermas Park — §3g Thermas Card (v1.5.18+)", () => {
     expect(ctx).toMatch(/145,90/);
     expect(ctx).toMatch(/cidade|regi[aã]o/i);
     expect(ctx).toMatch(/3g-compare|compara[cç][aã]o/i);
-    expect(ctx).toMatch(/consultar_parque_sunset/i);
+    expect(ctx).toMatch(/socio\.grupothermas\.com\.br\/cadastro/);
+    expect(ctx).toMatch(/5 pessoas|sempre.*5/i);
     expect(ctx).toMatch(/NÃO.*parque.*hospedagem/i);
-    expect(ctx).toMatch(/99860-5662/);
+    expect(ctx).not.toMatch(/aderir\/contratar.*99860-5662/i);
   });
 
   it("COMMUNICATION_RULES item 25 reforça venda consultiva Thermas Card", () => {
     expect(COMMUNICATION_RULES).toMatch(/25\./);
     expect(COMMUNICATION_RULES).toMatch(/Thermas Card|§3g/i);
-    expect(COMMUNICATION_RULES).toMatch(/135,90/);
-    expect(COMMUNICATION_RULES).toMatch(/cidade|3g-compare/i);
+    expect(COMMUNICATION_RULES).toMatch(/5 pessoas|3g-compare|socio\.grupothermas/i);
   });
 
   it("FOLLOWUP inclui Etapa G para Thermas Card", () => {
     expect(FOLLOWUP_PROMPT).toMatch(/Etapa G.*Thermas Card|Thermas Card.*Etapa G/i);
+  });
+
+  it("FOLLOWUP v1.5.27 cobre parque, adesão Thermas Card e excursão", () => {
+    expect(FOLLOWUP_PROMPT).toMatch(/Etapa H.*Thermas Card|Thermas Card.*ades[aã]o/i);
+    expect(FOLLOWUP_PROMPT).toMatch(/socio\.grupothermas\.com\.br\/cadastro/);
+    expect(FOLLOWUP_PROMPT).toMatch(/5 pessoas/);
+    expect(FOLLOWUP_PROMPT).toMatch(/Etapa I.*parque|s[oó] parque/i);
+    expect(FOLLOWUP_PROMPT).toMatch(/Etapa J.*excurs/i);
+    expect(FOLLOWUP_PROMPT).toMatch(/Progressão por assunto/i);
   });
 });
 
@@ -810,6 +832,7 @@ describe("Sunset Thermas Park — §3f conversão SDR (v1.5.8+)", () => {
     expect(FOLLOWUP_PROMPT).toMatch(/fato exato|fato do hist/i);
     expect(FOLLOWUP_PROMPT).toMatch(/setor de reservas/i);
     expect(FOLLOWUP_PROMPT).toMatch(/fico no aguardo/i);
+    expect(FOLLOWUP_PROMPT).toMatch(/hotel\.php|99860-5662/i);
   });
 
   it("appendSunsetConversationContext injeta bloco de conversão com interesse", () => {
