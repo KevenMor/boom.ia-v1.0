@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   extractVideoUrlsFromText,
   consolidateImageParts,
+  expandDeliveryParts,
   shouldPromoteTextToImageCaption,
 } from "./delivery.js";
 
@@ -185,5 +186,29 @@ describe("POST_IMAGES delay otimizado — fotos com legenda", () => {
   it("último bloco (sem next) → 15s (não importa, mas retorna padrão)", () => {
     const current = { type: "images", content: "Suíte Vip: R$ 1.200,00" };
     expect(pickPostImagesDelay(current, undefined)).toBe(15000);
+  });
+});
+
+describe("expandDeliveryParts", () => {
+  it("não separa bloco foto+preço do orçamento Sunset em bolhas distintas", () => {
+    const lodgingBlock =
+      "![Suíte Luxo](https://cdn.example/luxo.jpg)\n*Suíte Luxo* — R$ 586,50";
+    const intro = "Segue o orçamento.\n\n*Resumo*\n• 2 pessoas\n\n• 1 pernoite";
+    const parts = expandDeliveryParts([intro, lodgingBlock]);
+    const lodgingPart = parts.find((p) => p.includes("![Suíte Luxo]"));
+    expect(lodgingPart).toBeDefined();
+    expect(lodgingPart).toContain("*Suíte Luxo* — R$ 586,50");
+    expect(parts.filter((p) => p.includes("R$ 586,50"))).toHaveLength(1);
+  });
+
+  it("consolida bloco foto+preço com legenda na imagem", () => {
+    const block =
+      "![Chalé](https://cdn.example/chale.jpg)\n*Chalé* — R$ 414,00";
+    const expanded = expandDeliveryParts([block]);
+    const consolidated = consolidateImageParts(expanded);
+    expect(consolidated).toHaveLength(1);
+    expect(consolidated[0].type).toBe("images");
+    expect(consolidated[0].imageUrls).toHaveLength(1);
+    expect(consolidated[0].content).toContain("*Chalé* — R$ 414,00");
   });
 });

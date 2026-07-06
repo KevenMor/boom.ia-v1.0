@@ -5,6 +5,7 @@ import {
   isDeliverableImageContentType,
   isLikelyDirectVehicleImageUrl,
 } from "../lib/inventory-photo-url.js";
+import { isLodgingQuoteImageWithPriceBlock } from "../utils/lodging-quote-image-overlay.js";
 
 /** Mensagem genérica quando download/upload de mídia falha — nunca enviar URL crua ao cliente. */
 const MEDIA_DELIVERY_FAILED_PT =
@@ -408,6 +409,19 @@ function consolidateImageParts(parts: string[]): ConsolidatedPart[] {
   return mergeAdjacentImageAndTextBlocks(result);
 }
 
+/** Expande partes para bolhas WhatsApp; blocos foto+preço do orçamento ficam intactos (legenda na imagem). */
+function expandDeliveryParts(rawParts: string[]): string[] {
+  return rawParts.flatMap((p) => {
+    const trimmed = p.trim();
+    if (!trimmed) return [];
+    if (isLodgingQuoteImageWithPriceBlock(trimmed)) return [trimmed];
+    return trimmed
+      .split(/\n\s*\n/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  });
+}
+
 async function replyToChatwoot(
   chatwootUrl: string,
   apiToken: string,
@@ -420,13 +434,7 @@ async function replyToChatwoot(
   const baseUrl = chatwootUrl.replace(/\/+$/, "");
   const msgUrl = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}/messages`;
   const rawParts = messageParts.length > 0 ? messageParts : [content];
-  // Expandir cada part em blocos por parágrafo (linha em branco), para múltiplas bolhas no WhatsApp mesmo sem <<MSG_SPLIT>>
-  const parts = rawParts.flatMap((p) =>
-    p
-      .split(/\n\s*\n/)
-      .map((s) => s.trim())
-      .filter(Boolean)
-  );
+  const parts = expandDeliveryParts(rawParts);
   if (parts.length === 0 && content.trim()) parts.push(content.trim());
 
 
@@ -543,6 +551,7 @@ export {
   extractVideoUrlsFromText,
   extractImagesFromMarkdown,
   consolidateImageParts,
+  expandDeliveryParts,
   shouldPromoteTextToImageCaption,
   sendChatwootTextMessage,
   sendChatwootImageMessage,

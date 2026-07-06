@@ -81,25 +81,40 @@ type LodgingToolPayload = {
 };
 
 function parseLodgingToolPayload(toolResultStrings: string[]): LodgingToolPayload | null {
+  let accommodations: Array<{ name?: string; total_price?: number }> = [];
+  const galleryPhotos: SunsetLodgingGalleryPhoto[] = [];
+  const seenPhotoUrls = new Set<string>();
+
+  const pushPhoto = (p: SunsetLodgingGalleryPhoto | undefined) => {
+    if (!p?.imageUrl || !p?.photoMarkdown) return;
+    if (seenPhotoUrls.has(p.imageUrl)) return;
+    seenPhotoUrls.add(p.imageUrl);
+    galleryPhotos.push(p);
+  };
+
   for (const raw of toolResultStrings) {
     try {
       const parsed = JSON.parse(raw) as {
         available_accommodations?: Array<{ name?: string; total_price?: number }>;
         gallery_photos?: SunsetLodgingGalleryPhoto[];
       };
-      if (!Array.isArray(parsed.available_accommodations) || parsed.available_accommodations.length === 0) {
-        continue;
+      if (Array.isArray(parsed.available_accommodations) && parsed.available_accommodations.length > 0) {
+        accommodations = parsed.available_accommodations;
       }
-      const galleryPhotos = Array.isArray(parsed.gallery_photos)
-        ? parsed.gallery_photos.filter((p) => p?.imageUrl && p?.photoMarkdown)
-        : [];
-      if (galleryPhotos.length === 0) continue;
-      return { accommodations: parsed.available_accommodations, galleryPhotos };
+      if (Array.isArray(parsed.gallery_photos)) {
+        for (const p of parsed.gallery_photos) pushPhoto(p);
+      }
     } catch {
       /* ignore */
     }
   }
-  return null;
+
+  for (const p of collectSunsetLodgingGalleryPhotosFromToolResults(toolResultStrings)) {
+    pushPhoto(p);
+  }
+
+  if (accommodations.length === 0 || galleryPhotos.length === 0) return null;
+  return { accommodations, galleryPhotos };
 }
 
 function photoForAccommodation(
@@ -107,7 +122,59 @@ function photoForAccommodation(
   photos: SunsetLodgingGalleryPhoto[]
 ): SunsetLodgingGalleryPhoto | undefined {
   const key = normalizeKey(accName);
-  return photos.find((p) => normalizeKey(p.accommodationName) === key);
+  const display = normalizeKey(lodgingAccommodationDisplayLabel(accName));
+
+  const exact = photos.find((p) => normalizeKey(p.accommodationName) === key);
+  if (exact) return exact;
+
+  const byDisplay = photos.find((p) => normalizeKey(p.displayLabel) === display);
+  if (byDisplay) return byDisplay;
+
+  const fuzzy = photos.find((p) => {
+    const accKey = normalizeKey(p.accommodationName);
+    const labelKey = normalizeKey(p.displayLabel);
+    const galleryKey = normalizeKey(p.galleryName || "");
+    return (
+      accKey.includes(key) ||
+      key.includes(accKey) ||
+      labelKey.includes(display) ||
+      display.includes(labelKey) ||
+      galleryKey.includes(display) ||
+      display.includes(galleryKey)
+    );
+  });
+  if (fuzzy) return fuzzy;
+
+  return undefined;
+}
+
+function buildPhotoAssignments(
+  accommodations: Array<{ name?: string; total_price?: number }>,
+  galleryPhotos: SunsetLodgingGalleryPhoto[]
+): Map<string, SunsetLodgingGalleryPhoto> {
+  const sorted = [...accommodations].sort((a, b) => (a.total_price ?? 0) - (b.total_price ?? 0));
+  const assignments = new Map<string, SunsetLodgingGalleryPhoto>();
+  const usedUrls = new Set<string>();
+
+  for (const acc of sorted) {
+    const accName = String(acc.name ?? "").trim();
+    if (!accName) continue;
+    const available = galleryPhotos.filter((p) => !usedUrls.has(p.imageUrl));
+    const photo = photoForAccommodation(accName, available);
+    if (!photo) continue;
+    assignments.set(accName, photo);
+    usedUrls.add(photo.imageUrl);
+  }
+
+  if (assignments.size === 0 && sorted.length === galleryPhotos.length) {
+    sorted.forEach((acc, idx) => {
+      const accName = String(acc.name ?? "").trim();
+      const photo = galleryPhotos[idx];
+      if (accName && photo) assignments.set(accName, photo);
+    });
+  }
+
+  return assignments;
 }
 
 function normalizePriceLine(line: string, displayLabel: string): string {
@@ -145,7 +212,7 @@ function extractIntroAndFooter(text: string): { intro: string; footer: string } 
 
   let endIntro = footerIdx >= 0 ? footerIdx : lines.length;
   if (opcoesIdx >= 0 && opcoesIdx < endIntro) {
-    endIntro = opcoesIdx + 1;
+    endIntro = opcoesIdx;
   } else {
     const firstPriceIdx = lines.findIndex((line, i) => i < endIntro && lineLooksLikePriceOption(line));
     if (firstPriceIdx >= 0) endIntro = firstPriceIdx;
@@ -155,6 +222,7 @@ function extractIntroAndFooter(text: string): { intro: string; footer: string } 
   for (let i = 0; i < endIntro; i++) {
     const trimmed = lines[i].trim();
     if (!trimmed || lineIsImageOnly(trimmed)) continue;
+    if (OPCOES_SECTION_RE.test(trimmed)) continue;
     if (lineLooksLikePriceOption(lines[i])) continue;
     introLines.push(lines[i]);
   }
@@ -182,12 +250,13 @@ export function rebuildSunsetLodgingQuoteFromTool(
   const sorted = [...payload.accommodations].sort(
     (a, b) => (a.total_price ?? 0) - (b.total_price ?? 0)
   );
+  const photoAssignments = buildPhotoAssignments(payload.accommodations, payload.galleryPhotos);
   const optionBlocks: string[] = [];
 
   for (const acc of sorted) {
     const accName = String(acc.name ?? "").trim();
     if (!accName) continue;
-    const photo = photoForAccommodation(accName, payload.galleryPhotos);
+    const photo = photoAssignments.get(accName);
     if (!photo) continue;
 
     let priceLine = findPriceLineForAccommodation(assistantText, photo, accName);
@@ -385,13 +454,23 @@ export function formatSunsetLodgingQuoteForDelivery(
   toolResultStrings: string[]
 ): string {
   const base = (assistantText ?? "").trim();
-  if (!base || !assistantDeliversLodgingQuote(base)) return assistantText ?? "";
-
   const toolPayload = parseLodgingToolPayload(toolResultStrings);
+  const shouldFormat =
+    !!toolPayload ||
+    assistantDeliversLodgingQuote(base) ||
+    isSunsetLodgingQuoteContext(base, toolResultStrings);
+
+  if (!shouldFormat) return assistantText ?? "";
+
   let text: string;
   if (toolPayload) {
-    const rebuilt = rebuildSunsetLodgingQuoteFromTool(base, toolPayload);
+    const rebuilt = rebuildSunsetLodgingQuoteFromTool(
+      base || "Segue o orçamento solicitado.",
+      toolPayload
+    );
     text = rebuilt ?? base;
+  } else if (!base) {
+    return assistantText ?? "";
   } else {
     const galleryPhotos = collectSunsetLodgingGalleryPhotosFromToolResults(toolResultStrings);
     if (galleryPhotos.length === 0) return base;

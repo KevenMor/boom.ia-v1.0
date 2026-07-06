@@ -135,6 +135,38 @@ describe("formatSunsetLodgingQuoteForDelivery", () => {
     expect(parts[parts.length - 1]).toContain("*Incluso no pacote*");
   });
 
+  it("reconstrói da tool quando fotos estão agrupadas no topo sem legenda", () => {
+    const assistantText =
+      "Perfeito! Segue o orçamento solicitado.\n\n" +
+      "![Chalé](https://cdn.example/chale.jpg)\n" +
+      "![Suíte Luxo](https://cdn.example/luxo.jpg)\n" +
+      "![Suíte com Varanda](https://cdn.example/varanda.jpg)\n\n" +
+      "*Resumo*\n2 pessoas · 1 pernoite\n\n" +
+      "*Opções*\n" +
+      "Chalé — R$ 414,00\n" +
+      "Suíte Luxo — R$ 586,50\n" +
+      "Suíte com Varanda — R$ 624,00\n\n" +
+      "*Incluso no pacote*\nJantar e café";
+
+    const toolJson = JSON.stringify({
+      available_accommodations: [
+        { name: "STANDART", total_price: 414 },
+        { name: "LUXO DUPLO", total_price: 586.5 },
+        { name: "LUXO COM VARANDA", total_price: 624 },
+      ],
+      gallery_photos: GALLERY_PHOTOS,
+    });
+
+    const formatted = formatSunsetLodgingQuoteForDelivery(assistantText, [toolJson]);
+    const parts = formatted.split("<<MSG_SPLIT>>");
+
+    expect(parts[0]).not.toContain("![Chalé]");
+    expect(parts[0]).not.toContain("*Opções*");
+    expect(parts[1]).toMatch(/!\[Chalé\][\s\S]*\*Chalé\* — R\$ 414,00/);
+    expect(parts[2]).toMatch(/!\[Suíte Luxo\][\s\S]*\*Suíte Luxo\* — R\$ 586,50/);
+    expect(parts[3]).toMatch(/!\[Suíte com Varanda\][\s\S]*\*Suíte com Varanda\* — R\$ 624,00/);
+  });
+
   it("formata rodapé com bullets e pergunta em bolha separada", () => {
     const assistantText =
       "Segue o orçamento.\n\n" +
