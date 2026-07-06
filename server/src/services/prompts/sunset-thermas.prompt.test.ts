@@ -17,7 +17,7 @@ import { buildSystemPrompt } from "./registry.js";
 
 describe("Sunset Thermas Park — SYSTEM_PROMPT (contratos de negócio)", () => {
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.28/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.29/);
   });
 
   it("mantém regra suprema de valores e vaga (tolerância zero)", () => {
@@ -105,9 +105,15 @@ describe("Sunset Thermas Park — §00d MENSAGEM PADRÃO DO SITE", () => {
     expect(SYSTEM_PROMPT).toMatch(/NUNCA[^\n]*despejando|n[aã]o[^\n]*despeja/i);
   });
 
-  it("Turno 1 sem nome: SÓ saudação + apresentação + pergunta de nome (sem confirmar/valor/CTA)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/Turno 1[^\n]*Sem nome|primeira bolha[^\n]*APENAS|primeira bolha[^\n]*apenas/i);
-    expect(SYSTEM_PROMPT).toMatch(/NADA MAIS|sem confirmar dados|n[aã]o cite valor/i);
+  it("Turno 1 §00d: nome opcional — não trava atendimento", () => {
+    expect(SYSTEM_PROMPT).toMatch(/nome.*opcional|N[aã]o [eé] obrigat[oó]rio|n[aã]o trave/i);
+    expect(SYSTEM_PROMPT).toMatch(/Turno 1|lead do formul[aá]rio/i);
+    expect(SYSTEM_PROMPT).toMatch(/n[aã]o cite valor|NADA MAIS/i);
+  });
+
+  it("§00c-3: proíbe inventar nome, apelido e insistir no nome", () => {
+    expect(SYSTEM_PROMPT).toMatch(/PROIBIDO.*inventar nome|inventar nome.*apelido/i);
+    expect(SYSTEM_PROMPT).toMatch(/insistir|travar/i);
   });
 
   it("Turno 2: confirmação curta dos dados + convite curto, sem valor ainda e SEM pedir cliente conferir calendário", () => {
@@ -873,7 +879,8 @@ describe("Sunset Thermas Park — §3f conversão SDR (v1.5.8+)", () => {
       { role: "user", content: "hospedagem para o dia de hoje ate amanha" },
     ]);
     expect(ctx).toMatch(/PROIBIDO.*Prazer/i);
-    expect(ctx).toMatch(/copiar nomes dos exemplos fict/i);
+    expect(ctx).toMatch(/Continue o atendimento|n[aã]o informou.*nome/i);
+    expect(ctx).toMatch(/travar|insistir/i);
   });
 
   it("§3-composição-idades exige idade quando há criança", () => {
