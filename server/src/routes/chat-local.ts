@@ -39,6 +39,12 @@ import {
   shouldAutoInvokeParkForThermasCard,
   userAsksSunsetParkConsultation,
 } from "../utils/sunset-park-params.js";
+import { mergeBuiltinAgentTools } from "../utils/builtin-agent-tools.js";
+import {
+  registerToolNameKeys,
+  resolveToolFromDispatcherCall,
+  sanitizeFunctionName,
+} from "../utils/tool-dispatcher-resolver.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 const MAX_TOOL_ITERATIONS = 5;
@@ -704,28 +710,6 @@ function isAppraisalContext(messages: Array<{ role: string; content: string }>):
   );
 }
 
-/**
- * Sanitiza nome de função para OpenAI e Gemini.
- * OpenAI exige: ^[a-zA-Z0-9_-]+$
- * Gemini exige: ^[a-zA-Z_][a-zA-Z0-9_.:-]{0,63}$
- * Sempre sanitizar para evitar rejeição (ex: enviar_notificação -> enviar_notificacao).
- */
-function sanitizeFunctionName(name: string, _baseUrl: string): string {
-  let s = String(name || "tool").trim();
-  // Remover acentos (NFD: ç -> c + combining cedilla)
-  s = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  // Substituir caracteres inválidos por underscore (OpenAI: apenas a-zA-Z0-9_-)
-  s = s.replace(/[^a-zA-Z0-9_-]/g, "_");
-  // Remover underscores consecutivos
-  s = s.replace(/_+/g, "_");
-  // Garantir que começa com letra ou underscore
-  if (s && !/^[a-zA-Z_]/.test(s)) s = "_" + s;
-  // Remover trailing underscores
-  s = s.replace(/_+$/, "");
-  if (!s) s = "tool";
-  return s.slice(0, 64);
-}
-
 const DEFAULT_PARAMS_SCHEMA = { type: "object", properties: {}, required: [] } as const;
 
 const NOTIFICATION_SYSTEM_PROMPT = `Voce monta uma unica mensagem de notificacao interna para a equipe. Inclua obrigatoriamente:
@@ -1019,16 +1003,27 @@ export function enrichChatwootAssignDescription(tool: ToolDef, originalDescripti
 
 function buildOpenAITools(
   tools: ToolDef[],
-  baseUrl: string
+  _baseUrl: string
 ): { openaiTools: Array<{ type: "function"; function: { name: string; description?: string; parameters: Record<string, unknown> } }>; nameToTool: Map<string, ToolDef> } {
   const nameToTool = new Map<string, ToolDef>();
   const openaiTools = tools
-    .filter((t) => t.function_def && typeof (t.function_def as Record<string, unknown>).name === "string")
+    .filter((t) => {
+      const fd = t.function_def as Record<string, unknown> | undefined;
+      if (fd && typeof fd.name === "string" && fd.name.trim()) return true;
+      // tool_type interno sem function_def.name — expor pelo name da tabela ou alias padrão
+      return ["suite_gallery_query", "lodging_consulta", "park_consulta"].includes(t.tool_type);
+    })
     .map((t) => {
-      const fd = t.function_def as Record<string, unknown>;
-      const originalName = fd.name as string;
-      const sanitizedName = sanitizeFunctionName(originalName, baseUrl);
-      nameToTool.set(sanitizedName, t);
+      const fd = (t.function_def || {}) as Record<string, unknown>;
+      const originalName =
+        (typeof fd.name === "string" && fd.name.trim()) ||
+        t.name ||
+        t.tool_type;
+      const sanitizedName = sanitizeFunctionName(originalName);
+      registerToolNameKeys(nameToTool, t);
+      if (!nameToTool.has(sanitizedName)) {
+        nameToTool.set(sanitizedName, t);
+      }
       return {
         type: "function" as const,
         function: {
@@ -1049,7 +1044,7 @@ function dedupeParallelSuiteGalleryToolCalls(
   const seen = new Set<string>();
   const out: typeof toolCalls = [];
   for (const tc of toolCalls) {
-    const def = nameToTool.get(tc.function.name);
+    const def = resolveToolFromDispatcherCall(tc.function.name, nameToTool);
     if (def?.tool_type !== "suite_gallery_query") {
       out.push(tc);
       continue;
@@ -1131,7 +1126,10 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       const { data: toolsData } = await supabase.rpc("load_agent_tools", {
         p_agent_id: agent_id,
       });
-      const tools = (toolsData || []) as ToolDef[];
+      const tools = mergeBuiltinAgentTools((toolsData || []) as ToolDef[], {
+        tenantSlug,
+        tenantId,
+      });
       const hasInventoryTool = tools.some((t) => t.tool_type === "inventory_query");
 
       const firstUserMessage = messages.find((m) => m.role === "user")?.content;
@@ -1682,9 +1680,13 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             // consultar_fipe removido do fluxo (v3.5.0) — avaliações são presenciais
 
             for (const tc of phase1ToolCalls) {
-              const tool = dispatcherNameToTool.get(tc.function.name);
+              const tool = resolveToolFromDispatcherCall(
+                tc.function.name,
+                dispatcherNameToTool,
+                tools
+              );
               if (!tool) {
-                console.warn("[Chat-Local] Tool não encontrada:", tc.function.name);
+                console.warn("[Chat-Local] Tool não encontrada:", tc.function.name, "| tools carregadas:", tools.map((t) => `${t.name}:${t.tool_type}`).join(", "));
                 let args: Record<string, unknown> = {};
                 try {
                   args = JSON.parse(tc.function.arguments || "{}");
@@ -1696,7 +1698,12 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 conversationalMessages.push({
                   role: "tool",
                   tool_call_id: tc.id,
-                  content: JSON.stringify({ error: "Tool not found" }),
+                  content: JSON.stringify({
+                    error: "Tool not found",
+                    tool: tc.function.name,
+                    instruction:
+                      "A ferramenta falhou. NÃO diga ao cliente que enviou fotos, vídeos ou orçamento. Peça desculpas breves e continue o atendimento com texto ou peça um dado que falte.",
+                  }),
                 });
               } else {
                 let args: Record<string, unknown> = {};
@@ -2409,13 +2416,18 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
         llmMessages.push(assistantMsg);
 
         for (const tc of toolCalls) {
-          const tool = nameToTool.get(tc.function.name);
+          const tool = resolveToolFromDispatcherCall(tc.function.name, nameToTool, tools);
           if (!tool) {
-            console.warn("[Chat-Local] Tool não encontrada (single-provider):", tc.function.name);
+            console.warn("[Chat-Local] Tool não encontrada (single-provider):", tc.function.name, "| tools carregadas:", tools.map((t) => `${t.name}:${t.tool_type}`).join(", "));
             llmMessages.push({
               role: "tool",
               tool_call_id: tc.id,
-              content: JSON.stringify({ error: "Tool not found" }),
+              content: JSON.stringify({
+                error: "Tool not found",
+                tool: tc.function.name,
+                instruction:
+                  "A ferramenta falhou. NÃO diga ao cliente que enviou fotos, vídeos ou orçamento. Peça desculpas breves e continue o atendimento com texto ou peça um dado que falte.",
+              }),
             });
             continue;
           }
