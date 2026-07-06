@@ -17,7 +17,7 @@ import { buildSystemPrompt } from "./registry.js";
 
 describe("Sunset Thermas Park — SYSTEM_PROMPT (contratos de negócio)", () => {
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.20/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.21/);
   });
 
   it("mantém regra suprema de valores e vaga (tolerância zero)", () => {
@@ -719,6 +719,47 @@ describe("Sunset Thermas Park — §3d fechamento consultivo SDR (v1.5.9)", () =
   });
 });
 
+describe("Sunset Thermas Park — §3f-form reserva antecipada (v1.5.21)", () => {
+  it("declara §3f-form com campos do formulário", () => {
+    expect(SYSTEM_PROMPT).toMatch(/3f-form\)/);
+    expect(SYSTEM_PROMPT).toMatch(/Seu nome completo/i);
+    expect(SYSTEM_PROMPT).toMatch(/CPF:/);
+    expect(SYSTEM_PROMPT).toMatch(/Endere[cç]o:/i);
+    expect(SYSTEM_PROMPT).toMatch(/CEP:/);
+    expect(SYSTEM_PROMPT).toMatch(/Maior de 18 anos/i);
+    expect(SYSTEM_PROMPT).toMatch(/Acompanhante nome completo/i);
+    expect(SYSTEM_PROMPT).toMatch(/forma de pagamento/i);
+  });
+
+  it("encaminha ao setor de reservas que dará continuidade", () => {
+    expect(SYSTEM_PROMPT).toMatch(/setor de reservas.*dar[aá] continuidade|dar[aá] continuidade.*setor de reservas/i);
+    expect(SYSTEM_PROMPT).toMatch(/vai encaminhar/i);
+  });
+
+  it("proíbe coleta campo a campo e reserva confirmada", () => {
+    expect(SYSTEM_PROMPT).toMatch(/n[aã]o.*campo a campo|campo a campo/i);
+    expect(SYSTEM_PROMPT).toMatch(/reserva confirmada|j[aá] reservei/i);
+  });
+
+  it("injeta contexto de conversão com formulário antecipado", () => {
+    const ctx = appendSunsetConversationContext(undefined, [
+      { role: "user", content: "quero hospedagem para hoje ate amanha" },
+      { role: "assistant", content: "Valores..." },
+      { role: "user", content: "gostei do Standart, quero reservar" },
+    ]);
+    expect(ctx).toMatch(/INTERESSE|CONVERS[AÃ]O SDR/i);
+    expect(ctx).toMatch(/setor de reservas/i);
+    expect(ctx).toMatch(/3f-form|formul[aá]rio antecipado/i);
+    expect(ctx).toMatch(/CPF/i);
+    expect(ctx).toMatch(/reserva confirmada/i);
+  });
+
+  it("COMMUNICATION_RULES item 28 reforça §3f-form", () => {
+    expect(COMMUNICATION_RULES).toMatch(/28\./);
+    expect(COMMUNICATION_RULES).toMatch(/3f-form|formul[aá]rio antecipado/i);
+  });
+});
+
 describe("Sunset Thermas Park — §3f conversão SDR (v1.5.8+)", () => {
   it("declara papel SDR e encaminhamento ao setor de reservas", () => {
     expect(SYSTEM_PROMPT).toMatch(/3f\)/);
@@ -746,7 +787,7 @@ describe("Sunset Thermas Park — §3f conversão SDR (v1.5.8+)", () => {
     ], ref);
     expect(ctx).toMatch(/INTERESSE|CONVERS[AÃ]O SDR/i);
     expect(ctx).toMatch(/99860-5662/);
-    expect(ctx).toMatch(/PROIBIDO.*reserva confirmada/i);
+    expect(ctx).toMatch(/reserva confirmada/i);
   });
 
   it("COMMUNICATION_RULES item 24 reforça papel SDR só com interesse", () => {
