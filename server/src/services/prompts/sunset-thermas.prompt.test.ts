@@ -17,7 +17,7 @@ import { buildSystemPrompt } from "./registry.js";
 
 describe("Sunset Thermas Park — SYSTEM_PROMPT (contratos de negócio)", () => {
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.22/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.23/);
   });
 
   it("mantém regra suprema de valores e vaga (tolerância zero)", () => {
@@ -499,7 +499,7 @@ describe("Sunset Thermas Park — §2-promo 25% OFF hospedagem (v1.5.19)", () =>
   });
 });
 
-describe("Sunset Thermas Park — §3g Thermas Card (v1.5.18)", () => {
+describe("Sunset Thermas Park — §3g Thermas Card (v1.5.18+)", () => {
   it("declara seção §3g e produto Thermas Card no §2", () => {
     expect(SYSTEM_PROMPT).toMatch(/3g\)/);
     expect(SYSTEM_PROMPT).toMatch(/Thermas Card/i);
@@ -524,6 +524,20 @@ describe("Sunset Thermas Park — §3g Thermas Card (v1.5.18)", () => {
     expect(SYSTEM_PROMPT).toMatch(/1\.000 t[ií]tulos|lote limitado/i);
   });
 
+  it("§3g exige venda consultiva: cidade, frequência e comparação de valor", () => {
+    expect(SYSTEM_PROMPT).toMatch(/3g-compare\)|3g-compare/i);
+    expect(SYSTEM_PROMPT).toMatch(/cidade|regi[aã]o/i);
+    expect(SYSTEM_PROMPT).toMatch(/frequ[eê]ncia.*visit|visit.*frequ[eê]ncia/i);
+    expect(SYSTEM_PROMPT).toMatch(/vale a pena|compensa/i);
+    expect(SYSTEM_PROMPT).toMatch(/consultar_parque_sunset.*ticket_lines|ticket_lines.*consultar_parque_sunset/i);
+    expect(SYSTEM_PROMPT).toMatch(/vendedor|venda consultiva/i);
+  });
+
+  it("§3g-compare proíbe inventar ingresso na comparação", () => {
+    expect(SYSTEM_PROMPT).toMatch(/proibido.*inventar.*ingresso|inventar.*ingresso/i);
+    expect(SYSTEM_PROMPT).toMatch(/titular.*dependent|dependent.*titular/i);
+  });
+
   it("§3a inclui Thermas Card na pergunta de intenção", () => {
     expect(SYSTEM_PROMPT).toMatch(/3a\)/);
     expect(SYSTEM_PROMPT).toMatch(/Thermas Card.*inten[cç][aã]o|inten[cç][aã]o.*Thermas Card/i);
@@ -545,21 +559,29 @@ describe("Sunset Thermas Park — §3g Thermas Card (v1.5.18)", () => {
     expect(messageDeclaresThermasCardIntent("quero hospedagem")).toBe(false);
   });
 
-  it("injeta contexto Thermas Card sem pedir menu parque/hospedagem", () => {
+  it("injeta contexto Thermas Card com venda consultiva e comparação", () => {
     const ctx = appendSunsetConversationContext(undefined, [
       { role: "user", content: "quero saber sobre o Thermas Card" },
     ]);
     expect(ctx).toMatch(/THERMAS CARD/i);
     expect(ctx).toMatch(/135,90/);
     expect(ctx).toMatch(/145,90/);
+    expect(ctx).toMatch(/cidade|regi[aã]o/i);
+    expect(ctx).toMatch(/3g-compare|compara[cç][aã]o/i);
+    expect(ctx).toMatch(/consultar_parque_sunset/i);
     expect(ctx).toMatch(/NÃO.*parque.*hospedagem/i);
     expect(ctx).toMatch(/99860-5662/);
   });
 
-  it("COMMUNICATION_RULES item 25 reforça Thermas Card", () => {
+  it("COMMUNICATION_RULES item 25 reforça venda consultiva Thermas Card", () => {
     expect(COMMUNICATION_RULES).toMatch(/25\./);
     expect(COMMUNICATION_RULES).toMatch(/Thermas Card|§3g/i);
     expect(COMMUNICATION_RULES).toMatch(/135,90/);
+    expect(COMMUNICATION_RULES).toMatch(/cidade|3g-compare/i);
+  });
+
+  it("FOLLOWUP inclui Etapa G para Thermas Card", () => {
+    expect(FOLLOWUP_PROMPT).toMatch(/Etapa G.*Thermas Card|Thermas Card.*Etapa G/i);
   });
 });
 
