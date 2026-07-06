@@ -12,7 +12,16 @@ import {
 
 describe("Delta Empreendimentos — SYSTEM_PROMPT", () => {
   it("versão do prompt", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.2\.0/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.3\.1/);
+  });
+
+  it("Reservas do Brasil com dados InstaCasa", () => {
+    expect(SYSTEM_PROMPT).toMatch(/145 lotes/i);
+    expect(SYSTEM_PROMPT).toMatch(/1\.442,84/);
+    expect(SYSTEM_PROMPT).toMatch(/SP-268/);
+    expect(SYSTEM_PROMPT).toMatch(/Playground/i);
+    expect(SYSTEM_PROMPT).toMatch(/InstaCasa/i);
+    expect(SYSTEM_PROMPT).toMatch(/30 meses/i);
   });
 
   it("identidade Manu e empresa", () => {
@@ -86,14 +95,14 @@ describe("Delta Empreendimentos — registry", () => {
   it("resolve slug delta-empreendimentos", () => {
     const cfg = getPromptConfig("delta-empreendimentos");
     expect(cfg).not.toBeNull();
-    expect(cfg!.version).toBe("v1.2.0");
+    expect(cfg!.version).toBe("v1.3.1");
     expect(cfg!.description).toMatch(/Manu/i);
   });
 
   it("buildSystemPrompt ignora prompt do banco e injeta Manu", () => {
     const prompt = buildSystemPrompt("PROMPT_BANCO_IGNORAR", "delta-empreendimentos", false);
     expect(prompt).toContain("Manu");
-    expect(prompt).toContain("v1.2.0");
+    expect(prompt).toContain("v1.3.1");
     expect(prompt).not.toContain("Sara");
     expect(prompt).not.toContain("PROMPT_BANCO_IGNORAR");
     expect(prompt).not.toContain("COMPORTAMENTO DE SAUDAÇÃO:");
