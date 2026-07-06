@@ -82,6 +82,18 @@ describe("formatLodgingConsultaForLlm", () => {
     expect(summary).toMatch(/OFEREÇA|orçamento/i);
   });
 
+  it("park_closed com 2 noites deixa claro dias de parque aberto vs check-out", () => {
+    const summary = formatLodgingConsultaForLlm({
+      status: "park_closed",
+      message: "O parque estará fechado em 10/07/2026.",
+      nearest_open_window: { check_in: "2026-07-18", check_out: "2026-07-20", nights: 2 },
+    });
+    expect(summary).toContain("18/07/2026");
+    expect(summary).toContain("19/07/2026");
+    expect(summary).toMatch(/check-out em 20\/07\/2026 NÃO exige parque aberto/i);
+    expect(summary).toMatch(/PROIBIDO dizer ao cliente que o parque estará aberto nesse dia de saída/i);
+  });
+
   it("ordena acomodações do menor para o maior total_price", () => {
     const summary = formatLodgingConsultaForLlm(SUNSET_THREE_OPTIONS)!;
     const standartIdx = summary.indexOf("STANDART");

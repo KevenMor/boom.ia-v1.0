@@ -14,6 +14,7 @@ import {
   formatSunsetLodgingQuoteForDelivery,
   isSunsetLodgingQuoteContext,
 } from "../utils/sunset-lodging-quote-format.js";
+import { applySunsetLodgingQuoteImageOverlays } from "../utils/sunset-lodging-quote-image-overlays.js";
 import {
   injectInventoryPhotosIfMissing,
   reorderInventoryPhotosBeforeText,
@@ -1353,11 +1354,11 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         if (!trimmed) return;
         sendSse({ repaired_assistant: trimmed });
       };
-      const applySuiteGalleryRepairs = (
+      const applySuiteGalleryRepairs = async (
         assistantText: string,
         toolResultStrings: string[],
         lastUserMessage: string
-      ): string => {
+      ): Promise<string> => {
         let text = assistantText;
         const skipSuiteGalleryBulkInject = isSunsetLodgingQuoteContext(text, toolResultStrings);
         if (!skipSuiteGalleryBulkInject) {
@@ -1405,6 +1406,14 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         }
         text = reorderInventoryPhotosBeforeText(text);
         text = sanitizeInvalidInventoryPhotoAttempt(text);
+
+        if (isSunsetThermasTenantSlug(tenantSlug) && isSunsetLodgingQuoteContext(text, toolResultStrings)) {
+          try {
+            text = await applySunsetLodgingQuoteImageOverlays(text, supabase, tenantId);
+          } catch (e) {
+            console.warn("[Chat-Local] Overlay de preço na foto do orçamento Sunset falhou:", (e as Error)?.message);
+          }
+        }
         return text;
       };
 
@@ -2032,7 +2041,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
 
           const lastUserForGalleryInject = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
-          convFullContent = applySuiteGalleryRepairs(convFullContent, toolResults, lastUserForGalleryInject);
+          convFullContent = await applySuiteGalleryRepairs(convFullContent, toolResults, lastUserForGalleryInject);
 
           if (/HANDOFF_COMERCIAL/i.test(convFullContent)) {
             sendHandoffNotification(agent_id, agent, messages, external_user_id).catch((e) => {
@@ -2349,7 +2358,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             const c = (m as { content?: unknown }).content;
             if (role === "tool" && typeof c === "string") toolStringsSP.push(c);
           }
-          fullContent = applySuiteGalleryRepairs(fullContent, toolStringsSP, lastUserForGalleryInjectSP);
+          fullContent = await applySuiteGalleryRepairs(fullContent, toolStringsSP, lastUserForGalleryInjectSP);
           emitMediaCommandsSseIfNeeded(sendSse, fullContent);
           sendSingleProviderSandboxDebug();
           if (singleProviderUsageAccum.total_tokens > 0) {
@@ -2526,7 +2535,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           const c = (m as { content?: unknown }).content;
           if (role === "tool" && typeof c === "string") toolStrsLoop.push(c);
         }
-        let finalAssistantRaw = applySuiteGalleryRepairs(fullContent, toolStrsLoop, lastUserGI);
+        let finalAssistantRaw = await applySuiteGalleryRepairs(fullContent, toolStrsLoop, lastUserGI);
         emitMediaCommandsSseIfNeeded(sendSse, finalAssistantRaw);
         const rawLoopAssist = prependWelcomeToAssistantText((finalAssistantRaw || "").trim());
         emitRepairedAssistant(rawLoopAssist);

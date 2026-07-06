@@ -134,4 +134,23 @@ describe("formatSunsetLodgingQuoteForDelivery", () => {
     expect(parts[3]).toContain("![Suíte com Varanda]");
     expect(parts[parts.length - 1]).toContain("*Incluso no pacote*");
   });
+
+  it("formata rodapé com bullets e pergunta em bolha separada", () => {
+    const assistantText =
+      "Segue o orçamento.\n\n" +
+      "*Resumo*\n2 pessoas · 2 pernoites\n\n" +
+      "*Opções*\n" +
+      "![Chalé](https://cdn.example/chale.jpg)\n*Chalé* — R$ 552,00\n\n" +
+      "*Incluso no pacote*\nJantar; Café; Parque\n\n" +
+      "Das opções, qual combina mais com vocês?";
+
+    const formatted = formatSunsetLodgingQuoteForDelivery(assistantText, [TOOL_JSON]);
+    const parts = formatted.split("<<MSG_SPLIT>>");
+
+    const footerPart = parts.find((p) => p.includes("*Incluso no pacote*"));
+    expect(footerPart).toMatch(/• Jantar/);
+    const questionPart = parts.find((p) => /Das opções/i.test(p));
+    expect(questionPart).toBeDefined();
+    expect(footerPart).not.toMatch(/Das opções/i);
+  });
 });

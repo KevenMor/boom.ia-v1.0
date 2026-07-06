@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { findNearestOpenLodgingWindowFromRows } from "./lodging-consulta.js";
+import {
+  buildOpenParkRangeSuggestions,
+  findNearestOpenLodgingWindowFromRows,
+} from "./lodging-consulta.js";
 
 describe("findNearestOpenLodgingWindowFromRows", () => {
   const rows = [
@@ -38,5 +41,32 @@ describe("findNearestOpenLodgingWindowFromRows", () => {
 
   it("retorna null se não houver janela", () => {
     expect(findNearestOpenLodgingWindowFromRows(rows, 3, "2026-05-16")).toBeNull();
+  });
+});
+
+describe("buildOpenParkRangeSuggestions", () => {
+  const julyRows = [
+    { calendar_date: "2026-07-18", day_kind: "aberto" },
+    { calendar_date: "2026-07-19", day_kind: "aberto" },
+    { calendar_date: "2026-07-20", day_kind: "fechado" },
+    { calendar_date: "2026-07-25", day_kind: "aberto" },
+    { calendar_date: "2026-07-26", day_kind: "aberto" },
+    { calendar_date: "2026-07-27", day_kind: "fechado" },
+  ];
+
+  it("não inclui dia fechado como fim do intervalo aberto", () => {
+    expect(buildOpenParkRangeSuggestions(julyRows)).toEqual([
+      "Parque aberto: 18/07/2026 a 19/07/2026",
+      "Parque aberto: 25/07/2026 a 26/07/2026",
+    ]);
+  });
+
+  it("dia único aberto antes de fechado", () => {
+    expect(
+      buildOpenParkRangeSuggestions([
+        { calendar_date: "2026-07-18", day_kind: "aberto" },
+        { calendar_date: "2026-07-19", day_kind: "fechado" },
+      ])
+    ).toEqual(["Parque aberto: 18/07/2026"]);
   });
 });

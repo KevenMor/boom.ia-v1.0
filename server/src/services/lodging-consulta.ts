@@ -77,6 +77,60 @@ function formatDateIsoBR(iso: string): string {
   return d && m && y ? `${d}/${m}/${y}` : iso;
 }
 
+/** Dias em que o parque precisa estar aberto numa estadia [check_in, check_out). */
+export function listParkDaysDuringLodgingStay(checkIn: string, checkOut: string): string[] {
+  const days: string[] = [];
+  let cursor = checkIn;
+  while (cursor < checkOut) {
+    days.push(cursor);
+    cursor = addDaysIso(cursor, 1);
+  }
+  return days;
+}
+
+function formatParkDaysListBR(dates: string[]): string {
+  const formatted = dates.map(formatDateIsoBR);
+  if (formatted.length <= 1) return formatted[0] ?? "";
+  if (formatted.length === 2) return `${formatted[0]} e ${formatted[1]}`;
+  return `${formatted.slice(0, -1).join(", ")} e ${formatted[formatted.length - 1]}`;
+}
+
+/**
+ * Agrupa dias consecutivos abertos no calendário.
+ * O fim do intervalo é o **último dia aberto**, não o dia fechado seguinte.
+ */
+export function buildOpenParkRangeSuggestions(rows: ParkDayRow[]): string[] {
+  const suggestions: string[] = [];
+  let rangeStart: string | null = null;
+  let lastOpen: string | null = null;
+
+  const flushRange = () => {
+    if (!rangeStart || !lastOpen) return;
+    if (rangeStart === lastOpen) {
+      suggestions.push(`Parque aberto: ${formatDateIsoBR(rangeStart)}`);
+    } else {
+      suggestions.push(
+        `Parque aberto: ${formatDateIsoBR(rangeStart)} a ${formatDateIsoBR(lastOpen)}`
+      );
+    }
+    rangeStart = null;
+    lastOpen = null;
+  };
+
+  for (const d of rows) {
+    if (d.day_kind === "aberto") {
+      if (!rangeStart) rangeStart = d.calendar_date;
+      lastOpen = d.calendar_date;
+    } else {
+      flushRange();
+    }
+  }
+  if (rangeStart && lastOpen) {
+    suggestions.push(`Parque aberto a partir de: ${formatDateIsoBR(rangeStart)}`);
+  }
+  return suggestions;
+}
+
 /**
  * Primeira janela de hospedagem em que todos os dias [check_in, check_out) estão com parque aberto.
  */
@@ -270,8 +324,11 @@ export async function runLodgingConsulta(
         const fromBR = formatDateIsoBR(nearestOpenWindow.check_in);
         const toBR = formatDateIsoBR(nearestOpenWindow.check_out);
         const nightsLabel = nearestOpenWindow.nights === 1 ? "1 noite" : `${nearestOpenWindow.nights} noites`;
+        const parkOpenDays = formatParkDaysListBR(
+          listParkDaysDuringLodgingStay(nearestOpenWindow.check_in, nearestOpenWindow.check_out)
+        );
         suggestions.push(
-          `Hospedagem com parque aberto: check-in ${fromBR} → check-out ${toBR} (${nightsLabel})`
+          `Hospedagem com parque aberto: check-in ${fromBR} → check-out ${toBR} (${nightsLabel}; parque aberto em ${parkOpenDays})`
         );
       }
 
@@ -284,24 +341,7 @@ export async function runLodgingConsulta(
         .limit(30);
 
       if (allDays && allDays.length > 0) {
-        let lastOpen: string | null = null;
-        for (const d of allDays) {
-          if (d.day_kind === "aberto") {
-            if (!lastOpen) {
-              lastOpen = d.calendar_date;
-            }
-          } else {
-            if (lastOpen) {
-              suggestions.push(
-                `Parque aberto: ${formatDateIsoBR(lastOpen)} a ${formatDateIsoBR(d.calendar_date)}`
-              );
-              lastOpen = null;
-            }
-          }
-        }
-        if (lastOpen) {
-          suggestions.push(`Parque aberto a partir de: ${formatDateIsoBR(lastOpen)}`);
-        }
+        suggestions.push(...buildOpenParkRangeSuggestions(allDays));
       }
 
       const closedBR = closedDates.map(formatDateIsoBR).join(", ");

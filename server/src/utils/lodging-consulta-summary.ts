@@ -1,4 +1,6 @@
 /** Linha de acomodação retornada por `runLodgingConsulta` / consultar_hospedagem_sunset. */
+import { listParkDaysDuringLodgingStay } from "../services/lodging-consulta.js";
+
 export type LodgingAccommodationLine = {
   name?: string;
   total_price?: number;
@@ -52,8 +54,14 @@ export function formatLodgingConsultaForLlm(obj: Record<string, unknown>): strin
         nearest.nights != null
           ? ` (${nearest.nights} noite${nearest.nights === 1 ? "" : "s"})`
           : "";
+      const parkDays = listParkDaysDuringLodgingStay(nearest.check_in, nearest.check_out)
+        .map(formatDateIsoBR)
+        .join(", ");
       lines.push(
-        `JANELA ALTERNATIVA MAIS PRÓXIMA (parque aberto): check-in ${nearest.check_in} → check-out ${nearest.check_out}${nights}.`
+        `JANELA ALTERNATIVA MAIS PRÓXIMA (hospedagem): check-in ${nearest.check_in} → check-out ${nearest.check_out}${nights}.`
+      );
+      lines.push(
+        `Parque aberto durante a estadia (dias de uso): ${parkDays}. O check-out em ${formatDateIsoBR(nearest.check_out)} NÃO exige parque aberto — PROIBIDO dizer ao cliente que o parque estará aberto nesse dia de saída.`
       );
       lines.push(
         "OFEREÇA essa data ao cliente e pergunte se quer o orçamento de hospedagem para esse período. Se aceitar, o dispatcher deve chamar consultar_hospedagem_sunset de novo com essas datas e os mesmos guests."
@@ -123,7 +131,7 @@ export function formatLodgingConsultaForLlm(obj: Record<string, unknown>): strin
     : [];
   if (galleryPhotos.length > 0) {
     lines.push(
-      "FOTOS NO ORÇAMENTO (OBRIGATÓRIO): imediatamente ANTES de cada linha de preço da acomodação, inclua o photos_markdown correspondente (uma foto por quarto):"
+      "FOTOS NO ORÇAMENTO (OBRIGATÓRIO): para cada acomodação, inclua photoMarkdown + linha de preço (*Nome* — R$ valor). O sistema sobrepõe nome e valor na imagem antes do envio ao WhatsApp — uma bolha por quarto, só a foto composta (sem repetir o preço em texto separado após o overlay)."
     );
     for (const p of galleryPhotos) {
       lines.push(`- ${p.displayLabel} (${p.accommodationName}): ${p.photoMarkdown}`);

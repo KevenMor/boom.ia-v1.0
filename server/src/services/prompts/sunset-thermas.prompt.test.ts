@@ -17,7 +17,7 @@ import { buildSystemPrompt } from "./registry.js";
 
 describe("Sunset Thermas Park — SYSTEM_PROMPT (contratos de negócio)", () => {
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.27/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.28/);
   });
 
   it("mantém regra suprema de valores e vaga (tolerância zero)", () => {

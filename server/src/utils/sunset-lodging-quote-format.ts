@@ -8,6 +8,10 @@ import {
   lodgingAccommodationDisplayLabel,
   type SunsetLodgingGalleryPhoto,
 } from "./sunset-lodging-gallery-photos.js";
+import {
+  extractLodgingQuoteClosingQuestion,
+  polishSunsetLodgingQuoteReadableText,
+} from "./sunset-lodging-quote-layout.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 const IMAGE_MD_RE = /^!\[[^\]]*\]\(https?:\/\/[^)\s]+\)\s*$/i;
@@ -199,11 +203,16 @@ export function rebuildSunsetLodgingQuoteFromTool(
 
   const { intro, footer } = extractIntroAndFooter(assistantText);
   const parts: string[] = [];
-  if (intro) parts.push(intro);
+  if (intro) parts.push(polishSunsetLodgingQuoteReadableText(intro));
   parts.push(...optionBlocks);
-  if (footer) parts.push(footer);
+  if (footer) {
+    const { body, question } = extractLodgingQuoteClosingQuestion(footer);
+    parts.push(polishSunsetLodgingQuoteReadableText(body));
+    if (question) parts.push(question);
+  }
 
-  return insertSunsetLodgingMessageSplits(parts.join("\n\n"));
+  if (parts.length === 0) return null;
+  return parts.join(`\n${MSG_SPLIT}\n`);
 }
 
 function photoForPriceLine(
@@ -293,9 +302,14 @@ export function reorganizeSunsetLodgingQuotePhotos(
 
   const out: string[] = [];
   const intro = introLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
-  if (intro) out.push(intro);
+  if (intro) out.push(polishSunsetLodgingQuoteReadableText(intro));
   out.push(...optionBlocks);
-  if (footerLines.length > 0) out.push(footerLines.join("\n"));
+  if (footerLines.length > 0) {
+    const footerRaw = footerLines.join("\n");
+    const { body, question } = extractLodgingQuoteClosingQuestion(footerRaw);
+    out.push(polishSunsetLodgingQuoteReadableText(body));
+    if (question) out.push(question);
+  }
 
   return out.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
 }
@@ -349,11 +363,18 @@ function insertSunsetLodgingMessageSplits(text: string): string {
     footerIdx >= 0 ? lines.slice(footerIdx).map((l) => l.trim()).filter(Boolean) : [];
 
   const parts: string[] = [];
-  if (introLines.length > 0) parts.push(introLines.join("\n"));
+  if (introLines.length > 0) {
+    parts.push(polishSunsetLodgingQuoteReadableText(introLines.join("\n")));
+  }
   for (const block of optionBlocks) {
     if (block.trim()) parts.push(block.trim());
   }
-  if (footerLines.length > 0) parts.push(footerLines.join("\n"));
+  if (footerLines.length > 0) {
+    const footerRaw = footerLines.join("\n");
+    const { body, question } = extractLodgingQuoteClosingQuestion(footerRaw);
+    parts.push(polishSunsetLodgingQuoteReadableText(body));
+    if (question) parts.push(question);
+  }
 
   if (parts.length <= 1) return text;
   return parts.join(`\n${MSG_SPLIT}\n`);
@@ -367,15 +388,19 @@ export function formatSunsetLodgingQuoteForDelivery(
   if (!base || !assistantDeliversLodgingQuote(base)) return assistantText ?? "";
 
   const toolPayload = parseLodgingToolPayload(toolResultStrings);
+  let text: string;
   if (toolPayload) {
     const rebuilt = rebuildSunsetLodgingQuoteFromTool(base, toolPayload);
-    if (rebuilt) return rebuilt;
+    text = rebuilt ?? base;
+  } else {
+    const galleryPhotos = collectSunsetLodgingGalleryPhotosFromToolResults(toolResultStrings);
+    if (galleryPhotos.length === 0) return base;
+    text = reorganizeSunsetLodgingQuotePhotos(base, galleryPhotos);
+    text = insertSunsetLodgingMessageSplits(text);
   }
 
-  const galleryPhotos = collectSunsetLodgingGalleryPhotosFromToolResults(toolResultStrings);
-  if (galleryPhotos.length === 0) return base;
-
-  let text = reorganizeSunsetLodgingQuotePhotos(base, galleryPhotos);
-  text = insertSunsetLodgingMessageSplits(text);
+  if (!text.includes(MSG_SPLIT)) {
+    text = polishSunsetLodgingQuoteReadableText(text);
+  }
   return text;
 }
