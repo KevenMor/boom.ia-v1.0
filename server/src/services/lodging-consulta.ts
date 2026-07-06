@@ -1,5 +1,11 @@
 import { createNexusClient } from "./supabase.js";
 import { isTenantModuleEnabled } from "./tenant-modules.js";
+import {
+  applySunsetLodgingPromoPrice,
+  buildSunsetLodgingPromotionInfo,
+  isSunsetLodgingPromoEligibleForStay,
+  type SunsetLodgingPromotionInfo,
+} from "../utils/sunset-lodging-promo.js";
 
 export type LodgingGuestInput = { type: string; age?: number };
 
@@ -21,12 +27,16 @@ export type LodgingConsultaOk =
         total_price: number;
         currency: string;
         notes: string | null;
+        /** Preço de tabela antes do desconto promocional (quando promotion ativa). */
+        list_total_price?: number;
         /** Ocupação usada na tarifa quando difere da família (ex.: Loft cotado para 6 pessoas). */
         quoted_for_occupancy?: number;
         /** Grupos acima de 4 pessoas: nº de unidades no orçamento. */
         rooms_count?: number;
       }>;
       message: string;
+      /** Promoção 25% OFF hospedagem quando elegível (reserva até 31/07/26, estadia até 31/12/26). */
+      promotion?: SunsetLodgingPromotionInfo;
       /** Quando > 1, cotação multi-quarto (ex.: 8 pessoas = 2× até 4). */
       rooms_in_quote?: number;
     }
@@ -409,6 +419,20 @@ export async function runLodgingConsulta(
       if (supplemental) accommodations.push(supplemental);
     }
 
+    const promoEligible = isSunsetLodgingPromoEligibleForStay(check_in);
+    const pricedAccommodations = promoEligible
+      ? accommodations.map((acc) => {
+          const listTotal = acc.total_price;
+          const promoTotal = applySunsetLodgingPromoPrice(listTotal);
+          return {
+            ...acc,
+            list_total_price: listTotal,
+            total_price: promoTotal,
+            price_per_night: Math.round((promoTotal / nights) * 100) / 100,
+          };
+        })
+      : accommodations;
+
     const messageKids =
       childrenUnder12.length > 0
         ? `${childrenUnder12.length === 1 ? "1 criança até 12 anos em cortesia" : `${childrenUnder12.length} crianças até 12 anos em cortesia`} (colchão${childrenUnder12.length > 1 ? "ões" : ""} adicional${childrenUnder12.length > 1 ? "is" : ""} inclusos).`
@@ -419,13 +443,15 @@ export async function runLodgingConsulta(
       roomsInQuote > 1
         ? ` (orçamento com ${roomsInQuote} unidades de até ${rateGuestCount} pessoas cada para acomodar ${guestsForPricing} hóspedes)`
         : "";
+    const promoHint = promoEligible ? " Valores com 25% OFF da promoção vigente." : "";
     const message =
       `Encontramos ${uniqueRates.length} ${optWord} de hospedagem para ${guestsForPricing} pessoa${guestsForPricing === 1 ? "" : "s"}${groupRoomHint}` +
       (guestsFamilyTotal > guestsForPricing
         ? ` (sua família tem ${guestsFamilyTotal} pessoa${guestsFamilyTotal === 1 ? "" : "s"}), `
         : `, `) +
       `de ${new Date(check_in).toLocaleDateString("pt-BR")} a ${new Date(check_out).toLocaleDateString("pt-BR")} (${nights} noite${nights === 1 ? "" : "s"}). ` +
-      (messageKids ? messageKids : "");
+      (messageKids ? messageKids : "") +
+      promoHint;
 
     const data: LodgingConsultaOk = {
       status: "success",
@@ -435,9 +461,10 @@ export async function runLodgingConsulta(
       guests_in_family: guestsFamilyTotal,
       guests_for_pricing: guestsForPricing,
       kids_under_12: childrenUnder12,
-      available_accommodations: accommodations,
+      available_accommodations: pricedAccommodations,
       message,
       ...(roomsInQuote > 1 ? { rooms_in_quote: roomsInQuote } : {}),
+      ...(promoEligible ? { promotion: buildSunsetLodgingPromotionInfo() } : {}),
     };
     return { ok: true, data };
   } catch (e) {

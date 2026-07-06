@@ -7,7 +7,9 @@ import {
   DISPATCHER_PROMPT,
   FOLLOWUP_PROMPT,
   messageDeclaresLodgingIntent,
+  messageDeclaresExcursionIntent,
   messageDeclaresParkDayVisitQuestion,
+  messageDeclaresThermasCardIntent,
   SUNSET_FORM_DIALOGUE_EXAMPLE,
   SYSTEM_PROMPT,
 } from "./sunset-thermas.js";
@@ -15,7 +17,7 @@ import { buildSystemPrompt } from "./registry.js";
 
 describe("Sunset Thermas Park — SYSTEM_PROMPT (contratos de negócio)", () => {
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.17/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.20/);
   });
 
   it("mantém regra suprema de valores e vaga (tolerância zero)", () => {
@@ -424,6 +426,139 @@ describe("Sunset Thermas Park — regressão v1.4.2 (tom hoje/amanhã)", () => {
     expect(SYSTEM_PROMPT).toMatch(/parque.*hospedagem.*os dois|hospedagem no hotel.*os dois/i);
     expect(SYSTEM_PROMPT).toMatch(/ERRADO.*curtir o parque|vi[eé]s s[oó] parque/i);
     expect(SYSTEM_PROMPT).not.toMatch(/Turno 2 \(CORRETO\)[^\n]*curtir o parque/i);
+  });
+});
+
+describe("Sunset Thermas Park — §3h excursões (v1.5.20)", () => {
+  it("declara §3h e §2-excursão com encaminhamento ao setor responsável", () => {
+    expect(SYSTEM_PROMPT).toMatch(/3h\)/);
+    expect(SYSTEM_PROMPT).toMatch(/2-excurs[aã]o|Excurs[oõ]es/i);
+    expect(SYSTEM_PROMPT).toMatch(/setor respons[aá]vel/i);
+  });
+
+  it("informa horário seg–sáb 08h–18h", () => {
+    expect(SYSTEM_PROMPT).toMatch(/segunda a s[aá]bado/i);
+    expect(SYSTEM_PROMPT).toMatch(/08h.*18h|08:00.*18:00/i);
+  });
+
+  it("proíbe inventar valores e roteiros de excursão", () => {
+    expect(SYSTEM_PROMPT).toMatch(/n[aã]o invente.*excurs|n[aã]o.*roteiros/i);
+  });
+
+  it("detecta intenção de excursão na mensagem", () => {
+    expect(messageDeclaresExcursionIntent("quero informações sobre excursão")).toBe(true);
+    expect(messageDeclaresExcursionIntent("pacote de excursão escolar")).toBe(true);
+    expect(messageDeclaresExcursionIntent("quero hospedagem")).toBe(false);
+  });
+
+  it("injeta contexto de excursão com horário e sem menu de intenção", () => {
+    const ctx = appendSunsetConversationContext(undefined, [
+      { role: "user", content: "quero informações sobre excursão" },
+    ]);
+    expect(ctx).toMatch(/EXCURS[AÃ]O/i);
+    expect(ctx).toMatch(/08h.*18h/i);
+    expect(ctx).toMatch(/setor respons[aá]vel/i);
+    expect(ctx).toMatch(/NÃO.*parque.*hospedagem/i);
+  });
+
+  it("COMMUNICATION_RULES item 27 reforça excursões", () => {
+    expect(COMMUNICATION_RULES).toMatch(/27\./);
+    expect(COMMUNICATION_RULES).toMatch(/Excurs[oõ]es|§3h/i);
+    expect(COMMUNICATION_RULES).toMatch(/08h.*18h/i);
+  });
+});
+
+describe("Sunset Thermas Park — §2-promo 25% OFF hospedagem (v1.5.19)", () => {
+  it("declara promoção vigente com 25% OFF e prazos", () => {
+    expect(SYSTEM_PROMPT).toMatch(/2-promo|Promo[cç][aã]o vigente/i);
+    expect(SYSTEM_PROMPT).toMatch(/25% OFF/);
+    expect(SYSTEM_PROMPT).toMatch(/31\/07\/2026/);
+    expect(SYSTEM_PROMPT).toMatch(/31\/12\/2026/);
+  });
+
+  it("documenta benefícios da promoção", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Jantar e caf[eé] da manh[aã]/i);
+    expect(SYSTEM_PROMPT).toMatch(/Acesso gratuito ao parque aqu[aá]tico/i);
+  });
+
+  it("tool aplica desconto e Julia cita total_price sem recalcular", () => {
+    expect(SYSTEM_PROMPT).toMatch(/promotion/);
+    expect(SYSTEM_PROMPT).toMatch(/total_price.*25% OFF|j[aá] com 25% OFF|n[aã]o recalcule/i);
+  });
+
+  it("desconto não acumulativo com Thermas Card", () => {
+    expect(SYSTEM_PROMPT).toMatch(/n[aã]o acumulativ|n[aã]o acumula/i);
+    expect(SYSTEM_PROMPT).toMatch(/Thermas Card/);
+  });
+
+  it("COMMUNICATION_RULES item 26 reforça promoção", () => {
+    expect(COMMUNICATION_RULES).toMatch(/26\./);
+    expect(COMMUNICATION_RULES).toMatch(/25% OFF|§2-promo/i);
+    expect(COMMUNICATION_RULES).toMatch(/31\/07\/2026/);
+  });
+});
+
+describe("Sunset Thermas Park — §3g Thermas Card (v1.5.18)", () => {
+  it("declara seção §3g e produto Thermas Card no §2", () => {
+    expect(SYSTEM_PROMPT).toMatch(/3g\)/);
+    expect(SYSTEM_PROMPT).toMatch(/Thermas Card/i);
+    expect(SYSTEM_PROMPT).toMatch(/titular \+ 4 dependentes|4 dependentes/i);
+  });
+
+  it("documenta benefícios oficiais do Thermas Card", () => {
+    expect(SYSTEM_PROMPT).toMatch(/acesso.*imediato.*ilimitado|ilimitado.*5 anos/i);
+    expect(SYSTEM_PROMPT).toMatch(/guich[eê] exclusivo/i);
+    expect(SYSTEM_PROMPT).toMatch(/entrada antecipada/i);
+    expect(SYSTEM_PROMPT).toMatch(/20% de desconto.*hospedagem|20%.*hospedagem/i);
+    expect(SYSTEM_PROMPT).toMatch(/5% de desconto.*consuma|5%.*consuma/i);
+    expect(SYSTEM_PROMPT).toMatch(/estacionamento gratuito/i);
+  });
+
+  it("documenta valores e regras oficiais do Thermas Card", () => {
+    expect(SYSTEM_PROMPT).toMatch(/R\$\s*135,90/);
+    expect(SYSTEM_PROMPT).toMatch(/R\$\s*145,90/);
+    expect(SYSTEM_PROMPT).toMatch(/taxa de ades[aã]o.*zero|ades[aã]o.*zero/i);
+    expect(SYSTEM_PROMPT).toMatch(/R\$\s*100,00.*dependente|troca de dependentes.*100/i);
+    expect(SYSTEM_PROMPT).toMatch(/fidelidade.*12 meses|12 meses.*fidelidade/i);
+    expect(SYSTEM_PROMPT).toMatch(/1\.000 t[ií]tulos|lote limitado/i);
+  });
+
+  it("§3a inclui Thermas Card na pergunta de intenção", () => {
+    expect(SYSTEM_PROMPT).toMatch(/3a\)/);
+    expect(SYSTEM_PROMPT).toMatch(/Thermas Card.*inten[cç][aã]o|inten[cç][aã]o.*Thermas Card/i);
+  });
+
+  it("proíbe confundir Thermas Card com ingresso e aplicar desconto automático na tool", () => {
+    expect(SYSTEM_PROMPT).toMatch(/N[aã]o.*confund.*ingresso|confund.*ingresso avulso/i);
+    expect(SYSTEM_PROMPT).toMatch(/sem.*descontar automaticamente|n[aã]o aplicar 20% de desconto automaticamente/i);
+  });
+
+  it("adesão Thermas Card encaminha WhatsApp (15) 99860-5662", () => {
+    expect(SYSTEM_PROMPT).toMatch(/99860-5662/);
+    expect(SYSTEM_PROMPT).toMatch(/aderir|contratar|ades[aã]o/i);
+  });
+
+  it("detecta intenção Thermas Card na mensagem do cliente", () => {
+    expect(messageDeclaresThermasCardIntent("quero saber sobre o Thermas Card")).toBe(true);
+    expect(messageDeclaresThermasCardIntent("cartão thermas")).toBe(true);
+    expect(messageDeclaresThermasCardIntent("quero hospedagem")).toBe(false);
+  });
+
+  it("injeta contexto Thermas Card sem pedir menu parque/hospedagem", () => {
+    const ctx = appendSunsetConversationContext(undefined, [
+      { role: "user", content: "quero saber sobre o Thermas Card" },
+    ]);
+    expect(ctx).toMatch(/THERMAS CARD/i);
+    expect(ctx).toMatch(/135,90/);
+    expect(ctx).toMatch(/145,90/);
+    expect(ctx).toMatch(/NÃO.*parque.*hospedagem/i);
+    expect(ctx).toMatch(/99860-5662/);
+  });
+
+  it("COMMUNICATION_RULES item 25 reforça Thermas Card", () => {
+    expect(COMMUNICATION_RULES).toMatch(/25\./);
+    expect(COMMUNICATION_RULES).toMatch(/Thermas Card|§3g/i);
+    expect(COMMUNICATION_RULES).toMatch(/135,90/);
   });
 });
 
