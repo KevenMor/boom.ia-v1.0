@@ -1,6 +1,7 @@
 import type { createNexusClient } from "../services/supabase.js";
 import {
   composeLodgingQuoteImageWithOverlay,
+  formatLodgingQuoteImageCaption,
   isLodgingQuoteImageWithPriceBlock,
   parseLodgingQuotePriceLine,
   uploadLodgingQuoteOverlayImage,
@@ -27,14 +28,15 @@ async function overlaySingleLodgingQuoteBlock(
   const parsed = parseLodgingQuotePriceLine(lines[1]);
   if (!parsed) return block;
 
+  const caption = formatLodgingQuoteImageCaption(parsed.label, parsed.price);
   const composed = await composeLodgingQuoteImageWithOverlay(imageUrl, parsed.label, parsed.price);
   const publicUrl = await uploadLodgingQuoteOverlayImage(supabase, tenantId, composed);
-  return `![${parsed.label}](${publicUrl})`;
+  return `![${parsed.label}](${publicUrl})\n${caption}`;
 }
 
 /**
- * Substitui blocos foto+preço por imagem composta (valor na foto) — orçamento Sunset.
- * Falha silenciosa por bloco: mantém legenda original se overlay/upload falhar.
+ * Substitui blocos foto+preço por imagem composta (valor na foto) + legenda WhatsApp abaixo.
+ * Falha silenciosa por bloco: mantém bloco original se overlay/upload falhar.
  */
 export async function applySunsetLodgingQuoteImageOverlays(
   text: string,

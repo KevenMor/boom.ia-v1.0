@@ -40,6 +40,13 @@ export function buildLodgingQuoteOverlaySvg(
 </svg>`;
 }
 
+/** Legenda WhatsApp abaixo da foto: nome da acomodação + valor. */
+export function formatLodgingQuoteImageCaption(label: string, price: string): string {
+  const safeLabel = label.trim().slice(0, 48);
+  const safePrice = price.trim();
+  return `*${safeLabel}* — ${safePrice}`;
+}
+
 export function parseLodgingQuotePriceLine(line: string): { label: string; price: string } | null {
   const trimmed = line.trim();
   const priceMatch = trimmed.match(/\bR\$\s*[\d.,]+/);
