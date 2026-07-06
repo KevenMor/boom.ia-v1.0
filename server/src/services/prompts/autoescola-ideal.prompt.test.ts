@@ -22,7 +22,13 @@ describe("Autoescola Ideal — SYSTEM_PROMPT (contratos de negócio)", () => {
   });
 
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v8\.14/);
+    expect(SYSTEM_PROMPT).toMatch(/v8\.15/);
+  });
+
+  it("proíbe usar preço de quantidade errada na tabela (ex.: 15 aulas ≠ pacote de 12)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/LOOKUP NA TABELA|lookup.*tabela/i);
+    expect(SYSTEM_PROMPT).toMatch(/15 aulas.*1\.765|1\.765.*12/i);
+    expect(SYSTEM_PROMPT).toMatch(/adjacentes|14.*1\.980|16.*2\.195/i);
   });
 
   it("primeira habilitação: exame toxicológico obrigatório", () => {
