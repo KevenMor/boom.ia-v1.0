@@ -17,7 +17,7 @@ import { buildSystemPrompt } from "./registry.js";
 
 describe("Sunset Thermas Park — SYSTEM_PROMPT (contratos de negócio)", () => {
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.21/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.22/);
   });
 
   it("mantém regra suprema de valores e vaga (tolerância zero)", () => {
@@ -123,10 +123,11 @@ describe("Sunset Thermas Park — §00d MENSAGEM PADRÃO DO SITE", () => {
     expect(SYSTEM_PROMPT).toMatch(/SOMENTE no caso §00d|formul[aá]rio com categoria/i);
   });
 
-  it("Turno 4: CTA único de reserva, somente após valor / dúvida resolvida", () => {
+  it("Turno 4: encaminhar ao setor de reservas no WhatsApp, somente após valor / dúvida resolvida", () => {
     expect(SYSTEM_PROMPT).toMatch(/Turno 4/i);
-    expect(SYSTEM_PROMPT).toMatch(/CTA [uú]nico/i);
-    expect(SYSTEM_PROMPT).toMatch(/n[aã]o mande CTA junto|CTA solto vira press[aã]o|N[aã]o mande CTA sem antes/i);
+    expect(SYSTEM_PROMPT).toMatch(/CTA [uú]nico|setor de reservas/i);
+    expect(SYSTEM_PROMPT).toMatch(/neste WhatsApp|j[aá] est[aá].*WhatsApp/i);
+    expect(SYSTEM_PROMPT).toMatch(/mande CTA sem antes/i);
   });
 
   it("proíbe juntar saudação + nome + confirmação + valor + CTA na mesma bolha", () => {
@@ -719,7 +720,7 @@ describe("Sunset Thermas Park — §3d fechamento consultivo SDR (v1.5.9)", () =
   });
 });
 
-describe("Sunset Thermas Park — §3f-form reserva antecipada (v1.5.21)", () => {
+describe("Sunset Thermas Park — §3f-form reserva antecipada (v1.5.21+)", () => {
   it("declara §3f-form com campos do formulário", () => {
     expect(SYSTEM_PROMPT).toMatch(/3f-form\)/);
     expect(SYSTEM_PROMPT).toMatch(/Seu nome completo/i);
@@ -729,6 +730,18 @@ describe("Sunset Thermas Park — §3f-form reserva antecipada (v1.5.21)", () =>
     expect(SYSTEM_PROMPT).toMatch(/Maior de 18 anos/i);
     expect(SYSTEM_PROMPT).toMatch(/Acompanhante nome completo/i);
     expect(SYSTEM_PROMPT).toMatch(/forma de pagamento/i);
+  });
+
+  it("exige formulário em lista vertical (uma linha por campo)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/lista vertical|uma linha por campo/i);
+    expect(SYSTEM_PROMPT).toMatch(/proibido.*amontoar|amontoar.*mesma linha/i);
+  });
+
+  it("fechamento só pelo setor de reservas no WhatsApp — sem site nem repetir telefone", () => {
+    expect(SYSTEM_PROMPT).toMatch(/somente.*setor de reservas|setor de reservas.*somente/i);
+    expect(SYSTEM_PROMPT).toMatch(/PROIBIDO.*hotel\.php|hotel\.php.*PROIBIDO/i);
+    expect(SYSTEM_PROMPT).toMatch(/PROIBIDO.*99860-5662|99860-5662.*PROIBIDO/i);
+    expect(SYSTEM_PROMPT).toMatch(/j[aá] est[aá].*WhatsApp|neste WhatsApp|por aqui/i);
   });
 
   it("encaminha ao setor de reservas que dará continuidade", () => {
@@ -741,7 +754,7 @@ describe("Sunset Thermas Park — §3f-form reserva antecipada (v1.5.21)", () =>
     expect(SYSTEM_PROMPT).toMatch(/reserva confirmada|j[aá] reservei/i);
   });
 
-  it("injeta contexto de conversão com formulário antecipado", () => {
+  it("injeta contexto de conversão com formulário em lista e sem site/telefone", () => {
     const ctx = appendSunsetConversationContext(undefined, [
       { role: "user", content: "quero hospedagem para hoje ate amanha" },
       { role: "assistant", content: "Valores..." },
@@ -749,24 +762,25 @@ describe("Sunset Thermas Park — §3f-form reserva antecipada (v1.5.21)", () =>
     ]);
     expect(ctx).toMatch(/INTERESSE|CONVERS[AÃ]O SDR/i);
     expect(ctx).toMatch(/setor de reservas/i);
-    expect(ctx).toMatch(/3f-form|formul[aá]rio antecipado/i);
-    expect(ctx).toMatch(/CPF/i);
+    expect(ctx).toMatch(/3f-form|lista vertical/i);
+    expect(ctx).toMatch(/PROIBIDO.*hotel\.php|hotel\.php/i);
+    expect(ctx).toMatch(/PROIBIDO.*99860-5662|99860-5662/i);
     expect(ctx).toMatch(/reserva confirmada/i);
   });
 
-  it("COMMUNICATION_RULES item 28 reforça §3f-form", () => {
+  it("COMMUNICATION_RULES item 28 reforça §3f-form sem site no fechamento", () => {
     expect(COMMUNICATION_RULES).toMatch(/28\./);
-    expect(COMMUNICATION_RULES).toMatch(/3f-form|formul[aá]rio antecipado/i);
+    expect(COMMUNICATION_RULES).toMatch(/3f-form|lista vertical/i);
+    expect(COMMUNICATION_RULES).toMatch(/hotel\.php|99860-5662/);
   });
 });
 
 describe("Sunset Thermas Park — §3f conversão SDR (v1.5.8+)", () => {
-  it("declara papel SDR e encaminhamento ao setor de reservas", () => {
+  it("declara papel SDR e encaminhamento ao setor de reservas (sem site no fechamento)", () => {
     expect(SYSTEM_PROMPT).toMatch(/3f\)/);
     expect(SYSTEM_PROMPT).toMatch(/PAPEL SDR|consultora \+ SDR/i);
-    expect(SYSTEM_PROMPT).toMatch(/99860-5662/);
-    expect(SYSTEM_PROMPT).toMatch(/hotel\.php/);
-    expect(SYSTEM_PROMPT).toMatch(/reserva confirmada/i);
+    expect(SYSTEM_PROMPT).toMatch(/setor de reservas/i);
+    expect(SYSTEM_PROMPT).toMatch(/PROIBIDO.*hotel\.php|hotel\.php.*PROIBIDO/i);
   });
 
   it("FOLLOWUP inclui Etapa F e precisão ancorada no histórico", () => {
@@ -786,7 +800,7 @@ describe("Sunset Thermas Park — §3f conversão SDR (v1.5.8+)", () => {
       { role: "user", content: "gostei do Standart, quero reservar" },
     ], ref);
     expect(ctx).toMatch(/INTERESSE|CONVERS[AÃ]O SDR/i);
-    expect(ctx).toMatch(/99860-5662/);
+    expect(ctx).toMatch(/setor de reservas/i);
     expect(ctx).toMatch(/reserva confirmada/i);
   });
 
