@@ -5,7 +5,7 @@
   O que faz:
   - Na sidebar DIREITA do chat (painel do contato): botão "Transformar em cliente"
     quando o contato ainda não é cliente no CRM, ou "Abrir cadastro do cliente" se já for cliente.
-  - Abre o CRM em modal centralizado com visual próximo ao Chatwoot (avatar real, abas nativas) — v21.
+  - Abre o CRM em modal centralizado com visual próximo ao Chatwoot (avatar real, abas nativas) — v26.
 
   NÃO adiciona item na sidebar esquerda.
 
@@ -27,7 +27,7 @@
 
 <script data-name="boom-ia-client-crm-conversation">
 (function () {
-  const SCRIPT_VERSION = "v22";
+  const SCRIPT_VERSION = "v26";
   const SCRIPT_KEY = "boom_ia_client_crm_conversation_" + SCRIPT_VERSION;
   if (window[SCRIPT_KEY]) return;
   window[SCRIPT_KEY] = true;
@@ -137,6 +137,43 @@
     if ($(".message-bubble") || $('[data-testid="message"]')) return true;
     const sidebar = findContactSidebar();
     return Boolean(sidebar && extractPhoneDigits(sidebar));
+  }
+
+  function isActiveConversationRoute() {
+    return Boolean(getConversationIdFromPath()) || /\/conversations(?:\/|$)/.test(routeText());
+  }
+
+  function isOwnCrmNode(node) {
+    if (!node) return false;
+    if (node.nodeType !== 1) return false;
+    if (node.id === "boom-ia-crm-sidebar-box" || node.id === "boom-ia-crm-modal-root" || node.id === "boom-ia-crm-host") {
+      return true;
+    }
+    if (typeof node.closest === "function") {
+      return Boolean(node.closest("#boom-ia-crm-sidebar-box, #boom-ia-crm-modal-root, #boom-ia-crm-host"));
+    }
+    return false;
+  }
+
+  function shouldIgnoreMutations(mutations) {
+    if (!mutations || !mutations.length) return true;
+    for (let i = 0; i < mutations.length; i++) {
+      const m = mutations[i];
+      if (!isOwnCrmNode(m.target)) return false;
+      for (let j = 0; j < m.addedNodes.length; j++) {
+        if (!isOwnCrmNode(m.addedNodes[j])) return false;
+      }
+      for (let k = 0; k < m.removedNodes.length; k++) {
+        if (!isOwnCrmNode(m.removedNodes[k])) return false;
+      }
+    }
+    return true;
+  }
+
+  function shouldCleanupNow() {
+    if (isActiveConversationRoute()) return false;
+    if (getConversationIdFromPath()) return false;
+    return !isConversationView();
   }
 
   function brandColor() {
@@ -395,34 +432,41 @@
     return res.json();
   }
 
-  function renderSidebarBox(box) {
+  function sidebarBoxStateKey() {
+    return [
+      crm.loading ? "1" : "0",
+      crm.promoting ? "1" : "0",
+      crm.state || "",
+      crm.contactId || "",
+      crm.phoneDigits || "",
+      crm.error || "",
+    ].join("|");
+  }
+
+  function buildSidebarBoxHtml() {
     const color = brandColor();
     if (crm.loading) {
-      box.innerHTML = '<p>Consultando CRM…</p>';
-      return;
+      return '<p>Consultando CRM…</p>';
     }
     if (crm.error) {
-      box.innerHTML =
+      return (
         '<p style="color:#b91c1c">' + crm.error + "</p>" +
-        '<button type="button" class="boom-ia-crm-btn boom-ia-crm-btn-ghost" data-action="retry">Tentar novamente</button>';
-      on(box.querySelector('[data-action="retry"]'), "click", () => void refreshCrm());
-      return;
+        '<button type="button" class="boom-ia-crm-btn boom-ia-crm-btn-ghost" data-action="retry">Tentar novamente</button>'
+      );
     }
     if (crm.state === "client" && crm.contactId) {
-      box.innerHTML =
+      return (
         '<span class="boom-ia-crm-badge">Cliente no CRM</span>' +
         '<p style="margin-top:8px">Cadastro vinculado ao telefone deste contato.</p>' +
         '<button type="button" class="boom-ia-crm-btn boom-ia-crm-btn-primary" data-action="open" style="background:' +
         color +
-        ';margin-top:4px">Abrir cadastro do cliente</button>';
-      on(box.querySelector('[data-action="open"]'), "click", () => openClientPanel(crm.contactId));
-      return;
+        ';margin-top:4px">Abrir cadastro do cliente</button>'
+      );
     }
     if (!crm.phoneDigits) {
-      box.innerHTML = "<p>Telefone não identificado neste contato.</p>";
-      return;
+      return "<p>Telefone não identificado neste contato.</p>";
     }
-    box.innerHTML =
+    return (
       '<p>' +
       (crm.state === "lead"
         ? "Lead no CRM — promova para liberar o cadastro completo."
@@ -432,30 +476,53 @@
       color +
       '">' +
       (crm.promoting ? "Convertendo…" : "Transformar em cliente") +
-      "</button>";
-    const btn = box.querySelector('[data-action="promote"]');
-    if (btn) on(btn, "click", () => void handlePromote());
+      "</button>"
+    );
+  }
+
+  function bindSidebarBoxEvents(box) {
+    on(box.querySelector('[data-action="retry"]'), "click", () => void refreshCrm());
+    on(box.querySelector('[data-action="open"]'), "click", () => openClientPanel(crm.contactId));
+    on(box.querySelector('[data-action="promote"]'), "click", () => void handlePromote());
+  }
+
+  function renderSidebarBox(box) {
+    const key = sidebarBoxStateKey();
+    if (box.dataset.boomIaState === key) return;
+    box.dataset.boomIaState = key;
+    box.innerHTML = buildSidebarBoxHtml();
+    bindSidebarBoxEvents(box);
+  }
+
+  function placeSidebarBox(box, sidebar) {
+    const anchor = findSidebarInjectionPoint(sidebar);
+    if (anchor && anchor.parentElement) {
+      if (box.parentElement !== anchor.parentElement || box.nextSibling !== anchor) {
+        anchor.parentElement.insertBefore(box, anchor);
+      }
+      return;
+    }
+    if (sidebar.firstElementChild !== box) {
+      sidebar.prepend(box);
+    }
   }
 
   function injectSidebarCta() {
+    const existing = $("#boom-ia-crm-sidebar-box");
     const sidebar = findContactSidebar();
-    if (!sidebar) return false;
+    if (!sidebar) {
+      return Boolean(existing && isActiveConversationRoute());
+    }
     ensureStyles();
-    let box = $("#boom-ia-crm-sidebar-box");
+    let box = existing;
     if (box && !sidebar.contains(box)) {
-      box.remove();
-      box = null;
+      placeSidebarBox(box, sidebar);
     }
     if (!box) {
       box = document.createElement("div");
       box.id = "boom-ia-crm-sidebar-box";
       box.className = "boom-ia-crm-box";
-      const anchor = findSidebarInjectionPoint(sidebar);
-      if (anchor && anchor.parentElement) {
-        anchor.parentElement.insertBefore(box, anchor);
-      } else {
-        sidebar.prepend(box);
-      }
+      placeSidebarBox(box, sidebar);
     }
     renderSidebarBox(box);
     return true;
@@ -676,7 +743,10 @@
     }
 
     const sidebar = findContactSidebar();
-    if (!sidebar) return;
+    if (!sidebar) {
+      if ($("#boom-ia-crm-sidebar-box") && isActiveConversationRoute()) return;
+      return;
+    }
 
     const phone = extractPhoneDigits(sidebar);
     const name = extractContactName(sidebar);
@@ -747,8 +817,8 @@
   function scheduleCleanup() {
     clearTimeout(cleanupTimer);
     cleanupTimer = setTimeout(() => {
-      if (!isConversationView()) cleanup();
-    }, 900);
+      if (shouldCleanupNow()) cleanup();
+    }, 1800);
   }
 
   function apply() {
@@ -756,11 +826,12 @@
       cleanup();
       return;
     }
-    if (!isConversationView()) {
+    if (shouldCleanupNow()) {
       scheduleCleanup();
       return;
     }
     clearTimeout(cleanupTimer);
+    injectSidebarCta();
     scheduleRefresh();
   }
 
@@ -783,7 +854,10 @@
     }
   }
 
-  const observer = new MutationObserver(scheduleApply);
+  const observer = new MutationObserver(function (mutations) {
+    if (shouldIgnoreMutations(mutations)) return;
+    scheduleApply();
+  });
   observer.observe(document.documentElement, { childList: true, subtree: true });
 
   hookSpaNavigation();
@@ -793,7 +867,11 @@
       postThemeToCrmEmbed();
       scheduleApply();
     });
-  setInterval(scheduleApply, 2500);
+  setInterval(function () {
+    if (!isScopeAllowed()) return;
+    if (shouldCleanupNow()) return;
+    if (!$("#boom-ia-crm-sidebar-box")) scheduleApply();
+  }, 3500);
 
   apply();
 })();

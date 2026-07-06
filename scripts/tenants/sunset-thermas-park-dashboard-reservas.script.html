@@ -3,12 +3,12 @@
   Conta Chatwoot: 12 (mega.atendai.app) · Agente: Julia
   Cole em: https://mega.atendai.app/super_admin/app_config?config=internal
   Após colar: salve, recarregue o Mega (Cmd+Shift+R) e confira no console F12:
-  "[Boom IA] Dashboard Script v2 carregado"
+  "[Boom IA] Dashboard Script v5 carregado"
 -->
 
 <script data-name="boom-ia-sunset_thermas_park-reservas">
 (function () {
-  const SCRIPT_VERSION = "v2";
+  const SCRIPT_VERSION = "v5";
   const SCRIPT_KEY = "boom_ia_sunset_thermas_park_reservas_" + SCRIPT_VERSION;
   if (window[SCRIPT_KEY]) return;
   window[SCRIPT_KEY] = true;
@@ -596,6 +596,13 @@
 
   function bootstrap() {
     applyFeature();
+
+    if (!isScopeAllowed()) {
+      on(window, "popstate", function () {
+        applyFeature();
+      });
+      return;
+    }
 
     const observer = new MutationObserver(function () {
       applyFeature();
