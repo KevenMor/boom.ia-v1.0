@@ -17,7 +17,7 @@ import { buildSystemPrompt } from "./registry.js";
 
 describe("Sunset Thermas Park — SYSTEM_PROMPT (contratos de negócio)", () => {
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.30/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.31/);
   });
 
   it("mantém regra suprema de valores e vaga (tolerância zero)", () => {
@@ -771,6 +771,25 @@ describe("Sunset Thermas Park — §3d fechamento consultivo SDR (v1.5.9)", () =
     expect(SYSTEM_PROMPT).toMatch(/consultar_galeria_suites/);
   });
 
+  it("§00c-3 v1.5.31: pedir nome proativamente no Turno 1 + modos de qualificação", () => {
+    expect(SYSTEM_PROMPT).toMatch(/00c-3\)/);
+    // Pedir nome proativamente + modos
+    expect(SYSTEM_PROMPT).toMatch(/pedir o nome do cliente proativamente/i);
+    expect(SYSTEM_PROMPT).toMatch(/first_open_qualification/);
+    expect(SYSTEM_PROMPT).toMatch(/lodging_intent_seen_no_form/);
+    expect(SYSTEM_PROMPT).toMatch(/structured_form/);
+    expect(SYSTEM_PROMPT).toMatch(/mid_flow/);
+    // Proibido insistir (uma vez só)
+    expect(SYSTEM_PROMPT).toMatch(/insistir.*nome/i);
+  });
+
+  it("§2-promo v1.5.31: citar promoção 25% OFF no Turno 1 quando cliente cita hospedagem", () => {
+    // §2-promo continua no orçamento (já existia) + novo gancho Turno 1
+    expect(SYSTEM_PROMPT).toMatch(/25% OFF.*promo[cç][ãa]o vigente/i);
+    expect(SYSTEM_PROMPT).toMatch(/cliente j[áa] citou hospedagem/i);
+    expect(SYSTEM_PROMPT).toMatch(/inclusive.*25.*OFF.*31\/12\/2026/i);
+  });
+
   it("COMMUNICATION_RULES proíbe emoji inclusive no orçamento", () => {
     expect(COMMUNICATION_RULES).toMatch(/Emoji: zero/i);
     expect(COMMUNICATION_RULES).not.toMatch(/Exce[cç][ãa]o.*3b-formato.*emoji/i);
@@ -882,7 +901,7 @@ describe("Sunset Thermas Park — §3f conversão SDR (v1.5.8+)", () => {
   it("§00c-3 proíbe inventar nome e copiar exemplos fictícios", () => {
     expect(SYSTEM_PROMPT).toMatch(/00c-3\)/);
     expect(SYSTEM_PROMPT).toMatch(/PROIBIDO.*Keven|copiar nomes dos \*\*exemplos fict/i);
-    expect(SYSTEM_PROMPT).toMatch(/hospedagem para hoje até amanhã/i);
+    expect(SYSTEM_PROMPT).toMatch(/pedir o nome do cliente proativamente/i);
   });
 
   it("injeta nameGuard quando cliente não disse nome", () => {

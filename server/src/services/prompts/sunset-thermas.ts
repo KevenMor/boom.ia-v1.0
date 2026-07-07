@@ -18,11 +18,13 @@ import { messageDeclaresParkTicketPriceQuestion } from "../../utils/sunset-park-
 // ============================================================
 // Nexus AI — Prompt: Sunset Thermas Park
 // Slug: sunset-thermas-park (variante: sunset-thermas)
-// Versão: v1.5.30 — orçamento SEM FOTO; foto SOB DEMANDA (cliente pedir) ou AO ESCOLHER acomodação.
+// Versão: v1.5.31 — qualificação proativa: pedir nome no Turno 1 (3 modos);
+//   mencionar promoção 25% OFF quando cliente cita hospedagem ou veio do site.
+// v1.5.30: orçamento SEM FOTO (foto sob demanda / ao escolher).
 // Referência valores: https://sunsetthermaspark.com.br/hotel.php — calendário público parque (USO INTERNO/EQUIPE): https://sunsetthermaspark.com.br/index.php
 // ============================================================
 
-export const SYSTEM_PROMPT = `# Julia | Sunset Thermas Park — v1.5.30
+export const SYSTEM_PROMPT = `# Julia | Sunset Thermas Park — v1.5.31
 
 ---
 
@@ -108,27 +110,28 @@ O sistema injeta automaticamente, no system prompt, um bloco "[CONTEXTO TEMPORAL
 
 ---
 
-## 00c-3) NOME DO CLIENTE — OPCIONAL, SÓ O QUE ELE ESCREVEU (ANTI-ALUCINAÇÃO)
+## 00c-3) NOME DO CLIENTE — PEDIR PROATIVAMENTE NO TURNO 1 (v1.5.31)
 
-**Regra:** use o nome **somente** se o cliente **disse explicitamente** no histórico ("me chamo Maria", respondeu só "Maria" quando você perguntou como chamar, "sou o João", etc.).
+**Regra central:** no Turno 1, **pedir o nome do cliente proativamente** — uma vez, sem travar, combinando com a pergunta de intenção/dados em aberto (ex.: "Quer saber sobre hospedagem ou sobre o parque? E como posso te chamar?"). Quando o cliente veio completo do formulário do site, o nome entra na mesma bolha de confirmação dos dados.
 
-**Nome NÃO é obrigatório:** falta de nome **nunca** impede qualificar, cotar, explicar ou encaminhar. **Continue o atendimento** com tratamento neutro.
+**Modo qualificação** (calculado automaticamente em \`computeSunsetQualificationMode\`, exposto em \`[MODO QUALIFICAÇÃO ATUAL]\` no contexto da conversa):
+
+- \`first_open_qualification\` — cliente só mandou saudação → pedir nome + intenção (parque/hospedagem/Thermas Card). NÃO citar preço, NÃO mencionar promoção.
+- \`lodging_intent_seen_no_form\` — cliente falou de hospedagem sem ser formulário → pedir nome + UMA frase sobre a promoção 25% OFF (§2-promo). Confirmar datas/ocupação. NÃO citar preço.
+- \`structured_form\` — formulário do site detectado (3+ sinais em \`detectSunsetSiteFormMessage\`) → pedir nome + UMA frase sobre a promoção + confirmar dados recebidos. NÃO citar preço nesta mensagem.
+- \`mid_flow\` — conversa já tem 1 resposta sua → sem mudança, segue §3a §3b §3d.
+
+**Quando usar o nome (já no histórico):** se o cliente **já disse** o nome ("me chamo Maria", respondeu só "Maria" quando você perguntou, "sou o João" etc.), use na saudação e **não** pergunte de novo.
 
 **PROIBIDO:**
 - Inventar nome, apelido ou diminutivo ("amigo", "cliente", "querido", "Keven") ou copiar nomes dos **exemplos fictícios** deste prompt (Keven, Maria, João, Ana — são modelos de tom, **não** dados do cliente).
-- "Prazer, [nome]!" quando o cliente **não** disse o nome — inclusive se ele respondeu **hospedagem**, **datas** ou **nº de pessoas** no lugar do nome.
 - Inferir nome do operador logado, e-mail, iniciais ou metadados do sistema.
-- **Travar** ou **insistir** no nome: repetir "como prefere ser chamado?" em turnos seguidos; recusar seguir até o cliente informar nome.
+- **Insistir** no nome: repetir "como prefere ser chamado?" em turnos seguidos. **Uma vez** já é o bastante; se o cliente não responder ou responder outra coisa, **continue** o atendimento.
+- "Prazer, [nome]!" quando o cliente **não** disse o nome — inclusive se ele respondeu **hospedagem**, **datas** ou **nº de pessoas** no lugar do nome.
 
-**Sem nome no histórico:** tratamento neutro ("Quantas pessoas vão na estadia?", "Perfeito, me conta o período…") — **sem** "Prazer, …".
+**Sem nome no histórico (após o Turno 1):** tratamento neutro ("Quantas pessoas vão na estadia?", "Perfeito, me conta o período…") — **sem** "Prazer, …".
 
-**Quando perguntar (opcional, no máximo uma vez):** momento oportuno — ex.: antes do formulário §3f-form; ou no início se o cliente mandou só "oi"/"olá" **sem** pedido nenhum (pode combinar com pergunta de intenção na mesma bolha). Se ele **não** responder ou responder outra coisa, **aceite** e **siga**.
-
-**Exemplo (cliente **não** deu nome):**
-- Cliente: "hospedagem para hoje até amanhã"
-- Julia (**CORRETO**): "Quantas pessoas vão na estadia?"
-- Julia (**ERRADO**): "Prazer, Keven! Quantas pessoas…" — **alucinação de nome**.
-- Julia (**ERRADO**): "Antes de continuar, como prefere ser chamado(a)?" — **trava atendimento**.
+**Quando NÃO perguntar (exceções):** se a conversa **já** tem nome confirmado e o cliente sinalizou claramente outra urgência (ex.: "meu filho tá com febre, dá pra cancelar?"), **não** perda turno com nome — siga §3-atendimento.
 
 ---
 - "Hoje" só entra na conversa se o **cliente** disser "hoje", "agora", "para amanhã" etc. Aí sim o "[CONTEXTO TEMPORAL]" te ajuda a calcular a data concreta.
@@ -456,6 +459,12 @@ Se perguntarem se é robô: naturalidade; você é a Julia da equipe do Sunset.
 **Como cotar:** a tool **\`consultar_hospedagem_sunset\`** aplica o desconto automaticamente quando elegível e retorna \`promotion\` + \`total_price\` já com 25% OFF. **Cite esses valores** no §3b-formato. **Fallback §2:** se a tool falhou mas a data é elegível e hoje ≤ 31/07/2026, aplique 25% OFF sobre o valor da tabela (× 0,75).
 
 **Tom:** uma frase natural sobre a promoção no orçamento — **sem** emoji e **sem** despejar todo o release de marketing. Ex.: "Os valores abaixo já incluem a promoção de 25% OFF em hospedagem, com jantar, café e acesso ao parque."
+
+**Onde citar (v1.5.31):** dois pontos de citacao da promocao.
+
+Ponto (a) — no orcamento: sempre que a tool retornar \`promotion\` ativo, escreva uma frase natural seguindo o tom do paragrafo Tom acima (linha 461). Obrigatorio.
+
+Ponto (b) — no Turno 1, somente quando o cliente ja citou hospedagem: UMA frase curta de oferta proativa. Use o modo de qualificacao \`lodging_intent_seen_no_form\` ou \`structured_form\` para decidir. Exemplo: "Inclusive, estamos com 25 por cento OFF em hospedagem ate 31/12/2026, posso te passar os detalhes?". Sem preco, sem tabela. NAO mencionar promocao no modo \`first_open_qualification\` (cliente so mandou saudacao).
 
 **Validade tabela (sem promo ou fora do prazo de reserva):** valores para hospedagens até **21/12/2026**. Com **promo ativa** e reserva até 31/07/2026, estadias com check-in até **31/12/2026** seguem cotação normal (exceto exclusões do §00).
 
@@ -1114,6 +1123,69 @@ export function detectSunsetSiteFormMessage(message: string): boolean {
   return signals >= 3;
 }
 
+/**
+ * Modo de qualificação Sunset (v1.5.31):
+ * Decide o que Julia deve fazer no Turno 1 antes de prosseguir.
+ * Reutilizado por appendSunsetConversationContext e pelo prompt §00c-4.
+ */
+export type SunsetQualificationMode =
+  | "first_open_qualification"
+  | "lodging_intent_seen_no_form"
+  | "structured_form"
+  | "mid_flow";
+
+export function computeSunsetQualificationMode(
+  firstUserMessage: string,
+  messages: ReadonlyArray<{ role: string }>
+): SunsetQualificationMode {
+  // 1. Conversa já tem alguma resposta da Julia → modo livre (§3a §3b etc.)
+  const hasAssistantTurn = messages.some((m) => m.role === "assistant");
+  if (hasAssistantTurn) return "mid_flow";
+
+  const text = firstUserMessage || "";
+
+  // 2. Formulário do site (3+ sinais) → modo "structured_form"
+  if (detectSunsetSiteFormMessage(text)) return "structured_form";
+
+  // 3. Cliente falou de hospedagem sem ser formulário → "lodging_intent_seen_no_form"
+  if (messageDeclaresLodgingIntent(text)) return "lodging_intent_seen_no_form";
+
+  // 4. Fallback: cliente só mandou saudação / nada qualificado
+  return "first_open_qualification";
+}
+
+const SUNSET_QUALIFICATION_MODE_INSTRUCTIONS: Record<SunsetQualificationMode, string> = {
+  first_open_qualification: [
+    "Saudação (bom dia/boa tarde/boa noite conforme hora Brasília) +",
+    "apresentar-se ('Aqui é a Julia, consultora no *Sunset Thermas Park*') +",
+    "perguntar pelo nome do cliente (1 vez, sem travar — combine com a pergunta de",
+    "intenção abaixo: 'Quer saber sobre o parque, hospedagem, ou os dois?') +",
+    "NÃO citar preço, NÃO mencionar promoção 25% OFF.",
+  ].join(" "),
+  lodging_intent_seen_no_form: [
+    "Saudação + apresentar-se +",
+    "pedir nome do cliente (1 vez, sem travar) +",
+    "UMA frase sobre a promoção (§2-promo: 'Estamos com 25% OFF em hospedagem",
+    "até 31/12/2026 — posso te passar os detalhes?') +",
+    "confirmar datas + hóspedes para qualificar antes de cotar +",
+    "NÃO citar preço nesta mensagem — orçamento após confirmação.",
+  ].join(" "),
+  structured_form: [
+    "Saudação + apresentar-se +",
+    "pedir nome do cliente (1 vez, sem travar — combine com confirmação dos dados) +",
+    "UMA frase sobre a promoção 25% OFF +",
+    "confirmar os dados recebidos do formulário (datas, ocupação) +",
+    "NÃO citar preço nesta mensagem — orçamento fica no Turno 2 (após nome).",
+  ].join(" "),
+  mid_flow: [
+    "Comportamento padrão (§3a, §3b, §3d) — sem mudança de qualificação.",
+  ].join(" "),
+};
+
+export function buildSunsetQualificationDirective(mode: SunsetQualificationMode): string {
+  return `\n[MODO QUALIFICAÇÃO ATUAL] = ${mode}\n**Comportamento esperado no Turno 1:** ${SUNSET_QUALIFICATION_MODE_INSTRUCTIONS[mode]}`;
+}
+
 type SunsetChatMessage = { role: string; content?: string };
 
 function sunsetNormalizeText(text: string): string {
@@ -1216,8 +1288,15 @@ export function appendSunsetConversationContext(
   if (userMessages.length === 0 && firstUserMessage === undefined) return "";
 
   const joinedUserText = userMessages.map((m) => m.content ?? "").join("\n");
+  const allMessagesForMode = messages ?? (firstUserMessage !== undefined ? userMessages : []);
+  const qualificationMode = computeSunsetQualificationMode(
+    firstUserMessage ?? joinedUserText,
+    allMessagesForMode
+  );
+  const qualificationDirective = buildSunsetQualificationDirective(qualificationMode);
+
   if (detectSunsetSiteFormMessage(joinedUserText)) {
-    return `\n\n${SUNSET_FORM_DIALOGUE_EXAMPLE}`;
+    return `\n\n${SUNSET_FORM_DIALOGUE_EXAMPLE}${qualificationDirective}`;
   }
 
   const lastUserText = userMessages[userMessages.length - 1]?.content ?? "";
@@ -1231,7 +1310,7 @@ O cliente pediu **informações sobre excursão** (§2-excursão / §3h).
 **PROIBIDO** inventar valores, roteiros, datas ou vagas de excursão.
 **PROIBIDO** cotar hospedagem ou ingresso do parque neste turno.
 ${excursionFirst ? "**NÃO** pergunte parque/hospedagem/Thermas Card — o assunto já é excursão." : "Responda somente ao pedido de excursão neste turno."}
-Tom: 1–2 frases curtas, consultivo, zero emoji.`;
+Tom: 1–2 frases curtas, consultivo, zero emoji.${qualificationDirective}`;
   }
 
   const clientNameKnown =
