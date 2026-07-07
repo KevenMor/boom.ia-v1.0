@@ -1,20 +1,21 @@
 <!--
   Delta Empreendimentos — Dashboard Script (painel de lotes)
-  Conta Chatwoot: 15 (mega.atendai.app)
+  Conta Chatwoot: 15 APENAS (mega.atendai.app)
   Cole em: https://mega.atendai.app/super_admin/app_config?config=internal
   Após colar: salve, recarregue o Mega (Cmd+Shift+R) e confira no console F12:
-  "[Boom IA] Dashboard Script v1 carregado"
+  "[Boom IA] Delta Loteamentos v2 carregado (conta 15)"
+  O menu NÃO aparece em outras contas do Mega — só em /app/accounts/15/*
 -->
 
 <script data-name="boom-ia-delta_empreendimentos-loteamentos">
 (function () {
-  const SCRIPT_VERSION = "v1";
+  const SCRIPT_VERSION = "v2";
   const SCRIPT_KEY = "boom_ia_delta_empreendimentos_loteamentos_" + SCRIPT_VERSION;
   if (window[SCRIPT_KEY]) return;
   window[SCRIPT_KEY] = true;
-  console.info("[Boom IA] Dashboard Script " + SCRIPT_VERSION + " carregado");
+  console.info("[Boom IA] Delta Loteamentos " + SCRIPT_VERSION + " carregado (conta 15)");
 
-  /** ========== DELTA EMPREENDIMENTOS — LOTES ========== */
+  /** ========== DELTA EMPREENDIMENTOS — LOTES (conta 15) ========== */
   const CFG = {
     LINK_TEXT: "Delta Empreendimentos — Lotes",
     LINK_ICON: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>',
@@ -23,6 +24,7 @@
     // Deve começar com /api/ — NÃO use URL React direta (404 sem redirect)
     EMBED_VIEW_URL: "https://ia.agboom.com.br/api/embed/chatwoot/loteamentos/view",
     EMBED_KEY: "iUDtFP4Rd9FyqNz3nkynZnkW",
+    /** Mega account_id — menu só aparece nesta conta */
     TARGET_ACCOUNT_ID: 15,
     POSITION: {
       mode: "afterLabel",
@@ -33,6 +35,15 @@
     SHOW_BORDER: true,
     MOBILE_MAX_WIDTH: 768,
     MOBILE_BOTTOM_NAV_FALLBACK: 60,
+  };
+  /** IDs por conta — não colide com script de Clientes (mesma conta 15) */
+  const LOT_ACCT = String(CFG.TARGET_ACCOUNT_ID);
+  const EL = {
+    link: "boom-ia-loteamentos-link-" + LOT_ACCT,
+    linkText: "boom-ia-loteamentos-link-text-" + LOT_ACCT,
+    panel: "boom-ia-loteamentos-panel-" + LOT_ACCT,
+    iframe: "boom-ia-loteamentos-iframe-" + LOT_ACCT,
+    pageStyles: "boom-ia-loteamentos-page-styles-" + LOT_ACCT,
   };
   /** ==================================== */
 
@@ -58,13 +69,20 @@
   let panel = null;
 
   function getAccountIdFromPath() {
-    const match = window.location.pathname.match(/\/app\/accounts\/(\d+)/);
+    const src = window.location.pathname + window.location.search + window.location.hash;
+    const match = src.match(/\/accounts\/(\d+)/) || src.match(/\/app\/accounts\/(\d+)/);
     return match ? String(match[1]) : null;
   }
 
+  /** Menu e painel só na conta Delta (15). Sem account_id na URL → não exibe. */
   function isScopeAllowed() {
-    if (CFG.TARGET_ACCOUNT_ID === null || CFG.TARGET_ACCOUNT_ID === "") return true;
-    return getAccountIdFromPath() === String(CFG.TARGET_ACCOUNT_ID);
+    const acct = getAccountIdFromPath();
+    if (!acct) return false;
+    return acct === LOT_ACCT;
+  }
+
+  function resolvedAccountId() {
+    return LOT_ACCT;
   }
 
   function bgLuminance(el) {
@@ -128,7 +146,7 @@
   }
 
   function postThemeToEmbed() {
-    const iframe = document.getElementById("boom-ia-clients-iframe");
+    const iframe = document.getElementById(EL.iframe);
     if (!iframe || !iframe.contentWindow) return;
     try {
       iframe.contentWindow.postMessage(
@@ -141,7 +159,8 @@
   }
 
   function buildIframeUrl() {
-    const accountId = String(CFG.TARGET_ACCOUNT_ID || getAccountIdFromPath() || "");
+    if (!isScopeAllowed()) return null;
+    const accountId = resolvedAccountId();
     if (!accountId || !CFG.EMBED_KEY) {
       console.warn("[Boom IA] account_id ou EMBED_KEY ausente.", { accountId, hasKey: Boolean(CFG.EMBED_KEY) });
       return null;
@@ -151,15 +170,16 @@
       account_id: accountId,
       theme: detectTheme(),
     });
-    const viewBase = (CFG.EMBED_VIEW_URL || CFG.BOOM_URL + "/api/embed/chatwoot/clients/view").replace(/\/+$/, "");
+    const viewBase = (CFG.EMBED_VIEW_URL || CFG.BOOM_URL + "/api/embed/chatwoot/loteamentos/view").replace(/\/+$/, "");
     const url = viewBase + "?" + params.toString();
-    console.info("[Boom IA] iframe:", url);
+    console.info("[Boom IA] iframe loteamentos (conta " + LOT_ACCT + "):", url);
     return url;
   }
 
   function postEmbedInit(iframe) {
     if (!iframe || !iframe.contentWindow) return;
-    const accountId = getAccountIdFromPath() || String(CFG.TARGET_ACCOUNT_ID || "");
+    if (!isScopeAllowed()) return;
+    const accountId = resolvedAccountId();
     if (!accountId || !CFG.EMBED_KEY) return;
     try {
       iframe.contentWindow.postMessage(
@@ -196,7 +216,7 @@
 
   /** Borda direita só da coluna de navegação (não inclui lista de conversas). */
   function getContentAreaLeft() {
-    var link = $("#boom-ia-clients-link");
+    var link = document.getElementById(EL.link);
     if (link) {
       var navAside = link.closest('[data-testid="sidebar"]') || link.closest("aside");
       if (navAside) {
@@ -295,24 +315,24 @@
 
   function ensurePageStyles() {
     var css =
-      "html.boom-ia-page-open,html.boom-ia-page-open body{overflow:hidden!important;}" +
-      "#boom-ia-clients-panel{background:#ffffff!important;}" +
-      "#boom-ia-clients-iframe{width:100%!important;height:100%!important;border:0!important;background:#ffffff!important;display:block!important;}" +
-      "html.boom-ia-page-open:not(.boom-ia-page-open-mobile) [data-testid=sidebar-primary]," +
-      "html.boom-ia-page-open:not(.boom-ia-page-open-mobile) [data-testid=sidebar]{position:relative;z-index:100001!important;}" +
-      "html.boom-ia-page-open-mobile #boom-ia-clients-panel{" +
+      "html.boom-ia-loteamentos-page-open,html.boom-ia-loteamentos-page-open body{overflow:hidden!important;}" +
+      "#" + EL.panel + "{background:#ffffff!important;}" +
+      "#" + EL.iframe + "{width:100%!important;height:100%!important;border:0!important;background:#ffffff!important;display:block!important;}" +
+      "html.boom-ia-loteamentos-page-open:not(.boom-ia-loteamentos-page-open-mobile) [data-testid=sidebar-primary]," +
+      "html.boom-ia-loteamentos-page-open:not(.boom-ia-loteamentos-page-open-mobile) [data-testid=sidebar]{position:relative;z-index:100001!important;}" +
+      "html.boom-ia-loteamentos-page-open-mobile #" + EL.panel + "{" +
       "left:0!important;right:0!important;width:100%!important;max-width:100vw!important;" +
       "top:0!important;height:auto!important;" +
       "padding-top:env(safe-area-inset-top,0)!important;" +
       "padding-left:env(safe-area-inset-left,0)!important;padding-right:env(safe-area-inset-right,0)!important;" +
       "padding-bottom:0!important;z-index:99999!important;}";
-    var s = $("#boom-ia-page-styles");
+    var s = document.getElementById(EL.pageStyles);
     if (s) {
       s.textContent = css;
       return;
     }
     s = document.createElement("style");
-    s.id = "boom-ia-page-styles";
+    s.id = EL.pageStyles;
     s.textContent = css;
     document.head.appendChild(s);
   }
@@ -323,8 +343,8 @@
 
   function setPageMode(open) {
     ensurePageStyles();
-    document.documentElement.classList.toggle("boom-ia-page-open", open);
-    document.documentElement.classList.toggle("boom-ia-page-open-mobile", open && isMobileViewport());
+    document.documentElement.classList.toggle("boom-ia-loteamentos-page-open", open);
+    document.documentElement.classList.toggle("boom-ia-loteamentos-page-open-mobile", open && isMobileViewport());
     document.body.style.overflow = open ? "hidden" : "";
     syncMobileBottomNav(open);
   }
@@ -362,7 +382,7 @@
     panel.style.padding = "0";
     panel.style.borderLeft = "0";
     panel.style.boxShadow = "none";
-    var iframe = $("#boom-ia-clients-iframe");
+    var iframe = document.getElementById(EL.iframe);
     if (iframe) iframe.style.background = bg;
   }
 
@@ -398,9 +418,10 @@
     if (panel && document.body.contains(panel)) return panel;
 
     panel = document.createElement("section");
-    panel.id = "boom-ia-clients-panel";
+    panel.id = EL.panel;
     panel.dataset.visible = "false";
-    panel.setAttribute("aria-label", "Boom IA — lista de clientes");
+    panel.dataset.boomIaAccount = LOT_ACCT;
+    panel.setAttribute("aria-label", "Boom IA — gestão de lotes");
     panel.style.cssText = [
       "position:fixed",
       "top:0",
@@ -413,7 +434,7 @@
     ].join(";");
 
     panel.innerHTML =
-      '<iframe id="boom-ia-clients-iframe" title="Boom IA — Clientes" allow="clipboard-write" style="width:100%;height:100%;border:0;background:#ffffff;display:block;" loading="eager"></iframe>';
+      '<iframe id="' + EL.iframe + '" title="Boom IA — Lotes" allow="clipboard-write" style="width:100%;height:100%;border:0;background:#ffffff;display:block;" loading="eager"></iframe>';
     document.body.appendChild(panel);
 
     applyPanelTheme();
@@ -426,14 +447,14 @@
     panel.dataset.visible = "false";
     panel.style.display = "none";
     setPageMode(false);
-    const iframe = $("#boom-ia-clients-iframe");
+    const iframe = document.getElementById(EL.iframe);
     if (iframe) iframe.src = "about:blank";
-    const link = $("#boom-ia-clients-link a");
+    const link = document.querySelector("#" + EL.link + " a");
     if (link) link.setAttribute("aria-expanded", "false");
   }
 
   function removeSidebarLink() {
-    const li = $("#boom-ia-clients-link");
+    const li = document.getElementById(EL.link);
     if (li && li.parentNode) li.parentNode.removeChild(li);
     if (panel && panel.parentNode) {
       panel.parentNode.removeChild(panel);
@@ -451,7 +472,7 @@
     }
 
     ensurePanel();
-    const iframe = $("#boom-ia-clients-iframe");
+    const iframe = document.getElementById(EL.iframe);
     if (iframe) {
       if (!iframe.dataset.boomInitBound) {
         iframe.dataset.boomInitBound = "true";
@@ -476,7 +497,7 @@
     setTimeout(layoutPanel, 600);
     setTimeout(postThemeToEmbed, 800);
 
-    const link = $("#boom-ia-clients-link a");
+    const link = document.querySelector("#" + EL.link + " a");
     if (link) link.setAttribute("aria-expanded", "true");
   }
 
@@ -490,8 +511,8 @@
   }
 
   function syncLinkCollapsed() {
-    const link = $("#boom-ia-clients-link a");
-    const textSpan = $("#boom-ia-clients-link-text");
+    const link = document.querySelector("#" + EL.link + " a");
+    const textSpan = document.getElementById(EL.linkText);
     if (!link) return;
     if (isSidebarCollapsed()) {
       link.style.justifyContent = "center";
@@ -507,16 +528,18 @@
   }
 
   function ensureSidebarLink() {
-    if ($("#boom-ia-clients-link")) return;
+    if (!isScopeAllowed()) return;
+    if (document.getElementById(EL.link)) return;
 
     const li = document.createElement("li");
-    li.id = "boom-ia-clients-link";
+    li.id = EL.link;
+    li.dataset.boomIaAccount = LOT_ACCT;
     li.style.listStyle = "none";
     li.innerHTML =
-      '<a href="#" data-boom-ia-clients-link="true" aria-expanded="false" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;text-decoration:none;color:inherit;">' +
+      '<a href="#" data-boom-ia-loteamentos-link="' + LOT_ACCT + '" aria-expanded="false" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;text-decoration:none;color:inherit;">' +
       '<span aria-hidden="true" style="display:flex;align-items:center;flex-shrink:0;">' +
       CFG.LINK_ICON +
-      '</span><span id="boom-ia-clients-link-text">' +
+      '</span><span id="' + EL.linkText + '">' +
       CFG.LINK_TEXT +
       "</span></a>";
 
@@ -566,13 +589,13 @@
     syncLinkCollapsed();
   }
 
-  function isClientsNavClick(target) {
-    return !!(target && target.closest && target.closest("[data-boom-ia-clients-link]"));
+  function isLoteamentosNavClick(target) {
+    return !!(target && target.closest && target.closest('[data-boom-ia-loteamentos-link="' + LOT_ACCT + '"]'));
   }
 
   function onSidebarNavClick(event) {
     if (!panel || panel.dataset.visible !== "true") return;
-    if (isClientsNavClick(event.target)) return;
+    if (isLoteamentosNavClick(event.target)) return;
     hidePanel();
   }
 
@@ -589,19 +612,20 @@
     roots.forEach(function (root) {
       if (seen.has(root)) return;
       seen.add(root);
-      if (root.dataset.boomIaClientsCloseBound === "true") return;
-      root.dataset.boomIaClientsCloseBound = "true";
+      if (root.dataset.boomIaLoteamentosCloseBound === "true") return;
+      root.dataset.boomIaLoteamentosCloseBound = "true";
       on(root, "click", onSidebarNavClick, { capture: true, passive: true });
     });
   }
 
   function hookSpaNavigation() {
-    if (history.__boomIaClientsPatched) return;
-    history.__boomIaClientsPatched = true;
+    if (history.__boomIaLoteamentosPatched) return;
+    history.__boomIaLoteamentosPatched = true;
     const wrap = function (fn) {
       return function () {
         const ret = fn.apply(this, arguments);
         if (panel && panel.dataset.visible === "true") hidePanel();
+        applyFeature();
         return ret;
       };
     };
@@ -647,8 +671,8 @@
   }
 
   function bindEmbedNavigateHandler() {
-    if (window.__boomIaClientsNavigateBound) return;
-    window.__boomIaClientsNavigateBound = true;
+    if (window.__boomIaLoteamentosNavigateBound) return;
+    window.__boomIaLoteamentosNavigateBound = true;
     on(window, "message", function (event) {
       var data = event.data;
       if (!data || data.type !== "boom-ia-embed:navigate" || !data.url) return;
@@ -661,12 +685,15 @@
 
   function bootstrap() {
     bindEmbedNavigateHandler();
+    hookSpaNavigation();
     applyFeature();
 
+    on(window, "popstate", function () {
+      hidePanel();
+      applyFeature();
+    });
+
     if (!isScopeAllowed()) {
-      on(window, "popstate", function () {
-        applyFeature();
-      });
       return;
     }
 
@@ -712,16 +739,10 @@
       syncLinkCollapsed();
     });
 
-    on(window, "popstate", function () {
-      hidePanel();
-      applyFeature();
-    });
-
     on(window, "hashchange", function () {
       if (panel && panel.dataset.visible === "true") hidePanel();
+      applyFeature();
     });
-
-    hookSpaNavigation();
 
     setTimeout(function () {
       observer.disconnect();
