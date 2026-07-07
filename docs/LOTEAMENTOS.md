@@ -34,7 +34,7 @@ CSV com colunas: `code`, `block`, `lot_number`, `area_m2`, `status` (separador `
 
 ## Embed Chatwoot (Mega)
 
-Script: `scripts/tenants/delta-empreendimentos-dashboard-loteamentos.script.html` (**v2**)  
+Script: `scripts/tenants/delta-empreendimentos-dashboard-loteamentos.script.html` (**v3**, menu **Lotes**)  
 Conta Chatwoot: **15** (Delta Empreendimentos) — o menu **só aparece** em `/app/accounts/15/*`.
 
 Fluxo:

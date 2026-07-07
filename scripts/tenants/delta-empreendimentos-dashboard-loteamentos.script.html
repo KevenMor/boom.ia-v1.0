@@ -3,13 +3,13 @@
   Conta Chatwoot: 15 APENAS (mega.atendai.app)
   Cole em: https://mega.atendai.app/super_admin/app_config?config=internal
   Após colar: salve, recarregue o Mega (Cmd+Shift+R) e confira no console F12:
-  "[Boom IA] Delta Loteamentos v2 carregado (conta 15)"
+  "[Boom IA] Delta Loteamentos v3 carregado (conta 15)"
   O menu NÃO aparece em outras contas do Mega — só em /app/accounts/15/*
 -->
 
 <script data-name="boom-ia-delta_empreendimentos-loteamentos">
 (function () {
-  const SCRIPT_VERSION = "v2";
+  const SCRIPT_VERSION = "v3";
   const SCRIPT_KEY = "boom_ia_delta_empreendimentos_loteamentos_" + SCRIPT_VERSION;
   if (window[SCRIPT_KEY]) return;
   window[SCRIPT_KEY] = true;
@@ -17,7 +17,9 @@
 
   /** ========== DELTA EMPREENDIMENTOS — LOTES (conta 15) ========== */
   const CFG = {
-    LINK_TEXT: "Delta Empreendimentos — Lotes",
+    LINK_TEXT: "Lotes",
+    /** Tooltip quando a sidebar está recolhida (só ícone) */
+    LINK_TITLE: "Gestão de lotes — Delta Empreendimentos",
     LINK_ICON: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>',
     BOOM_URL: "https://ia.agboom.com.br",
     EMBED_APP_URL: "https://ia.agboom.com.br/embed/chatwoot/loteamentos",
@@ -325,7 +327,10 @@
       "top:0!important;height:auto!important;" +
       "padding-top:env(safe-area-inset-top,0)!important;" +
       "padding-left:env(safe-area-inset-left,0)!important;padding-right:env(safe-area-inset-right,0)!important;" +
-      "padding-bottom:0!important;z-index:99999!important;}";
+      "padding-bottom:0!important;z-index:99999!important;" +
+      "-webkit-overflow-scrolling:touch;touch-action:manipulation;}" +
+      "#" + EL.link + " a{min-height:44px;}" +
+      "@media (max-width:" + CFG.MOBILE_MAX_WIDTH + "px){#" + EL.link + " a{font-size:14px;gap:8px;padding:10px 12px!important;}}";
     var s = document.getElementById(EL.pageStyles);
     if (s) {
       s.textContent = css;
@@ -421,7 +426,7 @@
     panel.id = EL.panel;
     panel.dataset.visible = "false";
     panel.dataset.boomIaAccount = LOT_ACCT;
-    panel.setAttribute("aria-label", "Boom IA — gestão de lotes");
+    panel.setAttribute("aria-label", "Boom IA — Lotes");
     panel.style.cssText = [
       "position:fixed",
       "top:0",
@@ -514,15 +519,16 @@
     const link = document.querySelector("#" + EL.link + " a");
     const textSpan = document.getElementById(EL.linkText);
     if (!link) return;
-    if (isSidebarCollapsed()) {
+    const iconOnly = isSidebarCollapsed();
+    if (iconOnly) {
       link.style.justifyContent = "center";
       link.style.padding = "8px 0";
-      link.title = CFG.LINK_TEXT;
+      link.title = CFG.LINK_TITLE || CFG.LINK_TEXT;
       if (textSpan) textSpan.style.display = "none";
     } else {
       link.style.justifyContent = "";
-      link.style.padding = "8px 12px";
-      link.title = "";
+      link.style.padding = isMobileViewport() ? "10px 12px" : "8px 12px";
+      link.title = CFG.LINK_TITLE || "";
       if (textSpan) textSpan.style.display = "";
     }
   }
@@ -536,7 +542,7 @@
     li.dataset.boomIaAccount = LOT_ACCT;
     li.style.listStyle = "none";
     li.innerHTML =
-      '<a href="#" data-boom-ia-loteamentos-link="' + LOT_ACCT + '" aria-expanded="false" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;text-decoration:none;color:inherit;">' +
+      '<a href="#" data-boom-ia-loteamentos-link="' + LOT_ACCT + '" aria-expanded="false" aria-label="' + (CFG.LINK_TITLE || CFG.LINK_TEXT) + '" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;text-decoration:none;color:inherit;">' +
       '<span aria-hidden="true" style="display:flex;align-items:center;flex-shrink:0;">' +
       CFG.LINK_ICON +
       '</span><span id="' + EL.linkText + '">' +
