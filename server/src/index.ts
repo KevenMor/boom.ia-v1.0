@@ -28,6 +28,8 @@ import { auditRoutes } from "./routes/audit.js";
 import { tenantAiToggleRoutes } from "./routes/tenant-ai-toggle.js";
 import { financeiroRoutes } from "./routes/financeiro.js";
 import { hospedagemRoutes } from "./routes/hospedagem.js";
+import { loteamentosRoutes } from "./routes/loteamentos.js";
+import { embedChatwootLoteamentosRoutes } from "./routes/embed-chatwoot-loteamentos.js";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 
@@ -187,6 +189,7 @@ async function build() {
   fastify.register(financeiroRoutes, { prefix: "/api" });
   fastify.register(suiteGalleriesRoutes, { prefix: "/api" });
   fastify.register(hospedagemRoutes, { prefix: "/api" });
+  fastify.register(loteamentosRoutes, { prefix: "/api" });
   fastify.register(auditRoutes, { prefix: "/api" });
   fastify.register(tenantAiToggleRoutes, { prefix: "/api" });
   fastify.register(demoRoutes, { prefix: "/api" });
@@ -194,6 +197,7 @@ async function build() {
   fastify.register(embedChatwootCrmRoutes, { prefix: "/api" });
   fastify.register(embedChatwootCrmResourceRoutes, { prefix: "/api" });
   fastify.register(embedChatwootHospedagemRoutes, { prefix: "/api" });
+  fastify.register(embedChatwootLoteamentosRoutes, { prefix: "/api" });
   fastify.register(embedChatwootInventoryRoutes, { prefix: "/api" });
   fastify.register(embedChatwootClientsRoutes, { prefix: "/api" });
 

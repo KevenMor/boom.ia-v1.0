@@ -16,6 +16,8 @@ import {
   CalendarDays,
   BedDouble,
   Receipt,
+  Map,
+  LandPlot,
   Globe,
   UserCircle,
   Key,
@@ -92,6 +94,15 @@ export const navGroups: NavGroup[] = [
       { to: "/hospedagem/calendario-parque", icon: CalendarDays, label: "Calendário do parque", moduleKey: "hospedagem" },
       { to: "/hospedagem/cadastro", icon: BedDouble, label: "Estoque de quartos", moduleKey: "hospedagem" },
       { to: "/hospedagem/valores", icon: Receipt, label: "Valores", moduleKey: "hospedagem" },
+    ],
+  },
+  {
+    collapsible: true,
+    defaultOpen: false,
+    groupLabel: "Loteamentos",
+    groupIcon: Map,
+    items: [
+      { to: "/loteamentos/empreendimentos", icon: LandPlot, label: "Empreendimentos", moduleKey: "loteamentos" },
     ],
   },
   {

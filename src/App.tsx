@@ -50,15 +50,19 @@ import ChatwootEmbedClient from "@/pages/ChatwootEmbedClient";
 import ChatwootEmbedHospedagem from "@/pages/ChatwootEmbedHospedagem";
 import ChatwootEmbedInventory from "@/pages/ChatwootEmbedInventory";
 import ChatwootEmbedClients from "@/pages/ChatwootEmbedClients";
+import ChatwootEmbedLoteamentos from "@/pages/ChatwootEmbedLoteamentos";
 import EmbedChatwootViewRedirect from "@/pages/EmbedChatwootViewRedirect";
 import EmbedChatwootHospedagemViewRedirect from "@/pages/EmbedChatwootHospedagemViewRedirect";
 import EmbedChatwootInventoryViewRedirect from "@/pages/EmbedChatwootInventoryViewRedirect";
 import EmbedChatwootClientsViewRedirect from "@/pages/EmbedChatwootClientsViewRedirect";
+import EmbedChatwootLoteamentosViewRedirect from "@/pages/EmbedChatwootLoteamentosViewRedirect";
 import NotFound from "@/pages/NotFound";
 import SuiteGalleriesPage from "@/pages/SuiteGalleriesPage";
 import ParkCalendarManagementPage from "@/pages/hospedagem/ParkCalendarManagementPage";
 import LodgingRegistryPage from "@/pages/hospedagem/LodgingRegistryPage";
 import LodgingPricingPage from "@/pages/hospedagem/LodgingPricingPage";
+import DevelopmentsListPage from "@/pages/loteamentos/DevelopmentsListPage";
+import DevelopmentMapPage from "@/pages/loteamentos/DevelopmentMapPage";
 
 import { hydrateQueryCache, persistQueryCache } from "@/lib/query-cache-persist";
 
@@ -112,10 +116,12 @@ const App = () => (
             <Route path="/embed/chatwoot/hospedagem/view" element={<EmbedChatwootHospedagemViewRedirect />} />
             <Route path="/embed/chatwoot/inventory/view" element={<EmbedChatwootInventoryViewRedirect />} />
             <Route path="/embed/chatwoot/clients/view" element={<EmbedChatwootClientsViewRedirect />} />
+            <Route path="/embed/chatwoot/loteamentos/view" element={<EmbedChatwootLoteamentosViewRedirect />} />
             <Route path="/embed/chatwoot/client" element={<ChatwootEmbedClient />} />
             <Route path="/embed/chatwoot/hospedagem/*" element={<ChatwootEmbedHospedagem />} />
             <Route path="/embed/chatwoot/inventory" element={<ChatwootEmbedInventory />} />
             <Route path="/embed/chatwoot/clients/*" element={<ChatwootEmbedClients />} />
+            <Route path="/embed/chatwoot/loteamentos/*" element={<ChatwootEmbedLoteamentos />} />
             <Route path="/embed/chatwoot" element={<ChatwootEmbedMirror />} />
             <Route path="/" element={<RootRedirect />} />
             <Route
@@ -323,6 +329,30 @@ const App = () => (
                 element={
                   <ModuleRoute moduleKey="hospedagem">
                     <LodgingPricingPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/loteamentos"
+                element={
+                  <ModuleRoute moduleKey="loteamentos">
+                    <Navigate to="/loteamentos/empreendimentos" replace />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/loteamentos/empreendimentos"
+                element={
+                  <ModuleRoute moduleKey="loteamentos">
+                    <DevelopmentsListPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/loteamentos/empreendimentos/:developmentId"
+                element={
+                  <ModuleRoute moduleKey="loteamentos">
+                    <DevelopmentMapPage />
                   </ModuleRoute>
                 }
               />

@@ -12,7 +12,13 @@ import {
 
 describe("Delta Empreendimentos — SYSTEM_PROMPT", () => {
   it("versão do prompt", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.3\.1/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.3\.3/);
+  });
+
+  it("funil SDR pede cidade de origem depois da intenção", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Cidade de origem/);
+    expect(SYSTEM_PROMPT).toMatch(/Inten[cç][aã]o de uso/);
+    expect(SYSTEM_PROMPT).toMatch(/funil do cliente/i);
   });
 
   it("Reservas do Brasil com dados InstaCasa", () => {
@@ -95,14 +101,14 @@ describe("Delta Empreendimentos — registry", () => {
   it("resolve slug delta-empreendimentos", () => {
     const cfg = getPromptConfig("delta-empreendimentos");
     expect(cfg).not.toBeNull();
-    expect(cfg!.version).toBe("v1.3.1");
+    expect(cfg!.version).toBe("v1.3.3");
     expect(cfg!.description).toMatch(/Manu/i);
   });
 
   it("buildSystemPrompt ignora prompt do banco e injeta Manu", () => {
     const prompt = buildSystemPrompt("PROMPT_BANCO_IGNORAR", "delta-empreendimentos", false);
     expect(prompt).toContain("Manu");
-    expect(prompt).toContain("v1.3.1");
+    expect(prompt).toContain("v1.3.3");
     expect(prompt).not.toContain("Sara");
     expect(prompt).not.toContain("PROMPT_BANCO_IGNORAR");
     expect(prompt).not.toContain("COMPORTAMENTO DE SAUDAÇÃO:");

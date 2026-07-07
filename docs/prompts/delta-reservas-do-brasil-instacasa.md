@@ -3,7 +3,7 @@
 > **Fonte:** [site.instacasa.com.br/empreendimentos/reservas-do-brasil](https://site.instacasa.com.br/empreendimentos/reservas-do-brasil)  
 > **Exportado em:** 2026-07-06  
 > **Uso:** alimentar prompt da Manu (Delta Empreendimentos)  
-> **Implementação no código:** `server/src/services/prompts/delta-reservas-do-brasil.ts`
+> **Implementação no código:** `server/src/services/prompts/delta-empreendimentos.ts` (bloco `RESERVAS_DO_BRASIL_KNOWLEDGE` mesclado desde `delta-reservas-do-brasil.ts` em v1.3.2)
 
 ---
 

@@ -21,7 +21,8 @@ Endpoints REST Fastify sob `/api` — recebem webhooks, processam chat com LLM, 
 1. Verificar logs do Fastify (pino-pretty em dev)
 2. Para bugs no chat: olhar `chat-local.ts` (loop de tools, sanitização)
 3. Para bugs de webhook: olhar `webhooks.ts` (formato do payload WAHA vs Chatwoot)
-4. Rodar `npm run test` no server/
+4. **Sunset Julia (hospedagem):** verificar guards em `chat-local.ts` (`shouldDeferSunsetLodgingQuote`, `userNeedsSunsetLodgingToolCall`, `maybeAutoInvokeSunsetLodging`) além do prompt em `sunset-thermas.ts`
+5. Rodar `npm run test` no server/
 
 ### Refatorar
 1. Não mover lógica de negócio para as rotas — manter em `../services/`
@@ -45,6 +46,7 @@ curl -X POST http://localhost:3001/api/chat -H "Content-Type: application/json" 
 - Nunca remover o limite de 5 iterações do tool loop sem aprovação
 - Nunca alterar o formato SSE sem atualizar o frontend
 - Sempre validar NEXUS_DB_URL/key antes de criar o client Supabase
+- **Sunset:** não reativar auto-invoke de hospedagem nos turnos 1–2 da qualificação §00d sem atualizar testes em `sunset-lodging-params.test.ts`
 
 ## Mapa de dependências
 ```

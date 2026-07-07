@@ -14,6 +14,7 @@ Documentação operacional do projeto — paridade dev/prod, relatórios E2E, si
 | DEV-PROD-PARIDADE.md | Regras de paridade entre dev e produção |
 | LEMBRETES-AGENDAMENTO.md | Documentação do sistema de lembretes |
 | CHAT-AO-VIVO-LOGS.md | Logging de chat ao vivo |
+| LOTEAMENTOS.md | Módulo gestão de lotes (painel + embed Chatwoot) |
 | E2E-*.md | Relatórios de testes end-to-end por tenant |
 | HOSPEDAGEM*.md | Documentação completa do módulo de hospedagem (ativação, exemplos, fluxos, tool spec, diagramas, correções) |
 

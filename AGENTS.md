@@ -140,6 +140,56 @@ npm run test                     # testes do frontend
 
 ---
 
+## Sunset Thermas Park (Julia) — v1.5.36
+
+Agente de hospedagem (`sunset-thermas-park`). Versão atual no registry: **v1.5.36**.
+
+### Arquivos-chave
+
+| Área | Arquivo |
+|------|---------|
+| Prompt + qualificação §00d | `server/src/services/prompts/sunset-thermas.ts` |
+| Allowlist / params tool | `server/src/utils/sunset-lodging-params.ts` |
+| Formato orçamento | `server/src/utils/sunset-lodging-quote-format.ts` |
+| Guards no loop | `server/src/routes/chat-local.ts` |
+
+### Regras de runtime (não só prompt)
+
+1. **Turnos 1–2** — `shouldDeferSunsetLodgingQuote()` impede hint `[HINT OBRIGATÓRIO]`, formatação e auto-invoke de hospedagem.
+2. **Tool sob demanda** — `userNeedsSunsetLodgingToolCall()` usa allowlist; FAQ de amenidade e turnos iniciais **não** disparam tool.
+3. **Loft no orçamento** — sem `Acomodação:` no formulário, `extractSunsetLodgingParams` usa `SUNSET_DEFAULT_LOFT_INTEREST_KEYWORDS`.
+4. **Anti-repetição** — `messageDeclaresLodgingAmenityFaq()` + `shouldRebuildSunsetQuoteFromTool()` evitam reenviar preços em dúvidas como “spa é aquecido?”.
+
+### Testes
+
+```bash
+cd server && npx vitest run src/utils/sunset-lodging-params.test.ts
+cd server && npx vitest run src/services/prompts/sunset-thermas.test.ts
+cd server && npx vitest run src/utils/sunset-lodging-quote-format.test.ts
+```
+
+### Deploy
+
+- Redeploy do **server** após mudanças em prompt ou runtime.
+- Migrations opcionais Sunset galeria: `sql/041_register_suite_gallery_tool_sunset.sql`, `sql/042_link_suite_gallery_tool_to_sunset_agent.sql`.
+
+---
+
+## Módulo loteamentos
+
+Gestão de empreendimentos e lotes (mapa visual, status, embed Chatwoot). Ver `docs/LOTEAMENTOS.md`.
+
+| Item | Caminho |
+|------|---------|
+| Rotas API | `server/src/routes/loteamentos.ts`, `loteamentos-embed-auth.ts` |
+| Frontend | `src/pages/loteamentos/`, `src/hooks/useLoteamentos.ts` |
+| SQL schema | `sql/039_lot_developments_and_lots.sql` |
+| Embed script | `scripts/tenants/delta-empreendimentos-dashboard-loteamentos.script.html` |
+
+Ativação: habilitar módulo `loteamentos` no tenant + aplicar migration 039.
+
+---
+
 ## Documentação por pasta
 
 ### Server

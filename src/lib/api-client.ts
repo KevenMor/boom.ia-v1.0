@@ -2,12 +2,14 @@ import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
 import { embedClientsFetch, type EmbedClientsCredentials } from "@/lib/embed-clients-api";
 import { embedCrmFetch, type EmbedCrmCredentials } from "@/lib/embed-crm-api";
 import { embedHospedagemFetch, type EmbedHospedagemCredentials } from "@/lib/embed-hospedagem-api";
+import { embedLoteamentosFetch, type EmbedLoteamentosCredentials } from "@/lib/embed-loteamentos-api";
 import { embedInventoryFetch, type EmbedInventoryCredentials } from "@/lib/embed-inventory-api";
 
 let activeEmbedCrm: EmbedCrmCredentials | null = null;
 let activeEmbedClients: EmbedClientsCredentials | null = null;
 let activeEmbedHospedagem: EmbedHospedagemCredentials | null = null;
 let activeEmbedInventory: EmbedInventoryCredentials | null = null;
+let activeEmbedLoteamentos: EmbedLoteamentosCredentials | null = null;
 
 export function setActiveEmbedCrm(creds: EmbedCrmCredentials | null): void {
   activeEmbedCrm = creds;
@@ -39,6 +41,14 @@ export function setActiveEmbedInventory(creds: EmbedInventoryCredentials | null)
 
 export function getActiveEmbedInventory(): EmbedInventoryCredentials | null {
   return activeEmbedInventory;
+}
+
+export function setActiveEmbedLoteamentos(creds: EmbedLoteamentosCredentials | null): void {
+  activeEmbedLoteamentos = creds;
+}
+
+export function getActiveEmbedLoteamentos(): EmbedLoteamentosCredentials | null {
+  return activeEmbedLoteamentos;
 }
 
 // Em dev (localhost) usa /api relativo (proxy do Vite); em produção usa origem atual.
@@ -73,6 +83,10 @@ export async function callAPI<T = unknown>(
 
   if (activeEmbedInventory && endpoint.startsWith("/inventory")) {
     return embedInventoryFetch<T>(endpoint, activeEmbedInventory, options);
+  }
+
+  if (activeEmbedLoteamentos && endpoint.startsWith("/loteamentos")) {
+    return embedLoteamentosFetch<T>(endpoint, activeEmbedLoteamentos, options);
   }
 
   const { method = "POST", body, headers = {} } = options;

@@ -21,6 +21,8 @@ import {
 import { VideoPlayer, AudioPlayer, extractVideos } from "@/components/sandbox/MediaBubble";
 import { nexusDb } from "@/integrations/supabase/nexus-client";
 
+const MSG_SPLIT = "<<MSG_SPLIT>>";
+
 export type ConversationMessageRow = {
   id: string;
   role: string;
@@ -360,9 +362,11 @@ export function ConversationMessagesView({
                     const rawContent = sanitizeAssistantContent(
                       deduplicateRepeatedContent(stripChatwootHeader(msg.content || ""))
                     );
-                    const paragraphs = rawContent.split(/\n\n+/);
-                    for (const para of paragraphs) {
-                      const { text: pText, images: pImages } = extractImages(para);
+                    const segments = rawContent.includes(MSG_SPLIT)
+                      ? rawContent.split(MSG_SPLIT)
+                      : rawContent.split(/\n\n+/);
+                    for (const segment of segments) {
+                      const { text: pText, images: pImages } = extractImages(segment);
                       const { text: pTextNoVideo, videoUrls } = extractVideos(pText);
                       for (const url of videoUrls) {
                         bubbles.push({ text: "", images: [], videoUrl: url });

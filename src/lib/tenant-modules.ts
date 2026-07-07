@@ -21,7 +21,8 @@ export type ModuleKey =
   | "audit"
   | "settings"
   | "suite_galleries"
-  | "hospedagem";
+  | "hospedagem"
+  | "loteamentos";
 
 export type ModuleAction = "view" | "create" | "edit" | "delete" | "export" | "reply" | "cancel" | "register";
 
@@ -115,6 +116,13 @@ export const TENANT_MODULES: TenantModuleDef[] = [
     key: "hospedagem",
     label: "Gestão de reservas",
     description: "Calendário do parque e cadastro de hospedagens.",
+    group: "overview",
+    actions: [A("view", "Visualizar"), A("create", "Criar"), A("edit", "Editar"), A("delete", "Deletar")],
+  },
+  {
+    key: "loteamentos",
+    label: "Gestão de lotes",
+    description: "Empreendimentos, mapa de lotes, reservas e vendas.",
     group: "overview",
     actions: [A("view", "Visualizar"), A("create", "Criar"), A("edit", "Editar"), A("delete", "Deletar")],
   },

@@ -43,12 +43,22 @@ cd server && npx vitest src/utils/
 - Sempre ter teste para funções de sanitização
 - Nunca logar dados sensíveis (telefones, API keys) em sendNotification
 
+## Sunset Thermas (hospedagem)
+
+| Arquivo | Função |
+|---------|--------|
+| `sunset-lodging-params.ts` | `userNeedsSunsetLodgingToolCall` (allowlist), `extractSunsetLodgingParams`, detecção FAQ amenidade |
+| `sunset-lodging-quote-format.ts` | `formatSunsetLodgingQuoteForDelivery`, `shouldRebuildSunsetQuoteFromTool` |
+| `sunset-park-params.ts` | Ingresso/parque (separado de hospedagem) |
+
+Alterações aqui afetam `chat-local.ts` diretamente — sempre rodar os `*.test.ts` correspondentes.
+
 ## Mapa de dependências
 ```
 utils/
 ├── consome → ../services/supabase.ts (apenas sendNotification)
 ├── consome → ../services/delivery.ts (getChatwootAuthHeaders)
-├── expõe para → ../routes/chat-local.ts (sanitize, extract-media, agendaNotification)
+├── expõe para → ../routes/chat-local.ts (sanitize, extract-media, agendaNotification, sunset-lodging-*)
 ├── expõe para → ../routes/delivery.ts (extract-media)
 ├── expõe para → ../services/tool-executor.ts (agendaNotification, sendNotification)
 └── depende de env → WAHA_API_URL, WAHA_API_KEY (sendNotification)

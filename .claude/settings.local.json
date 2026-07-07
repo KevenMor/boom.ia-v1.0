@@ -24,5 +24,8 @@
       "Bash(grep -r \"suite-galleries\\\\|suiteGallery\\\\|suite_gallery\\\\|mediaUrl\\\\|media_url\" /c/Users/keven/OneDrive/Área de Trabalho/Boom/boom-agents/src --include=*.ts -l)",
       "Bash(grep -r \"video\\\\|gallery\\\\|media\" /c/Users/keven/OneDrive/Área de Trabalho/Boom/boom-agents/server/src --include=*.ts -l)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "claude-flow"
+  ]
 }
