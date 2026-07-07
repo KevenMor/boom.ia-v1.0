@@ -17,7 +17,7 @@ import { buildSystemPrompt } from "./registry.js";
 
 describe("Sunset Thermas Park — SYSTEM_PROMPT (contratos de negócio)", () => {
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.31/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.32/);
   });
 
   it("mantém regra suprema de valores e vaga (tolerância zero)", () => {
@@ -783,11 +783,12 @@ describe("Sunset Thermas Park — §3d fechamento consultivo SDR (v1.5.9)", () =
     expect(SYSTEM_PROMPT).toMatch(/insistir.*nome/i);
   });
 
-  it("§2-promo v1.5.31: citar promoção 25% OFF no Turno 1 quando cliente cita hospedagem", () => {
-    // §2-promo continua no orçamento (já existia) + novo gancho Turno 1
+  it("§2-promo v1.5.32: 25% OFF no orçamento + Turno 1 §00d PROÍBE promo; gancho proativo só em lodging_intent_seen_no_form", () => {
     expect(SYSTEM_PROMPT).toMatch(/25% OFF.*promo[cç][ãa]o vigente/i);
-    expect(SYSTEM_PROMPT).toMatch(/cliente j[áa] citou hospedagem/i);
-    expect(SYSTEM_PROMPT).toMatch(/inclusive.*25.*OFF.*31\/12\/2026/i);
+    // v1.5.32: Turno 1 do §00d NÃO cita a promoção
+    expect(SYSTEM_PROMPT).toMatch(/proibido no Turno 1 §00d|Promo[çc][ãa]o entra.*Turno 3/i);
+    // Gancho proativo para fora do formulário continua valendo
+    expect(SYSTEM_PROMPT).toMatch(/inclusive.*25.*OFF|25 por cento OFF|lodging_intent_seen_no_form/i);
   });
 
   it("COMMUNICATION_RULES proíbe emoji inclusive no orçamento", () => {
@@ -1157,5 +1158,94 @@ describe("Sunset Thermas Park — regressão v1.4.4 (condicionalidade do §00d)"
 
   it("§00d proíbe alucinação de turno citando dados que o cliente não trouxe", () => {
     expect(SYSTEM_PROMPT).toMatch(/Confirmar frases como|alucina[çc][ãa]o de turno.*erro grav[íi]ssimo|1 noite[^\n]*12\/06[^\n]*Chal[ée] Aconchegante/i);
+  });
+});
+
+describe("Sunset Thermas Park — v1.5.32 Turno 1 enxuto (sem despejar tudo)", () => {
+  it("§00d Turno 1 declara explicitamente que NUNCA despeja na mesma bolha", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Turno 1[^\n]*NUNCA despeja|s[oó] abre di[áa]logo/i);
+  });
+
+  it("§00d Turno 1 proíbe recap de datas/pessoas/noites/categoria na primeira bolha", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Recapitular datas|pessoas.*noites|categoria.*[Pp]roibido|n[ãa]o recapitular/i);
+    // v1.5.32: §00d Turno 1 proíbe mencionar 25% OFF (vai só no Turno 3)
+    expect(SYSTEM_PROMPT).toMatch(/[Pp]romo[çc][ãa]o entra.*Turno 3|proibido.*Turno 1 §00d|n[ãa]o cite a promo[çc][ãa]o/i);
+  });
+
+  it("§00d Turno 1 proíbe empilhar 'pedir nome' + 'pedir valor/pacote' na mesma pergunta", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Pedir o nome.*n[ãa]o misturar|empilhe|j[aá] perguntar valor/i);
+  });
+
+  it("§00d Turno 1 proíbe eco de 'Vi sua solicitação para hospedagem de X a Y'", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Eco de|Vi sua solicita[çc][ãa]o para hospedagem|formul[áa]rio devolutivo/i);
+  });
+
+  it("§2-promo v1.5.32: Turno 1 §00d PROÍBE citar promoção 25% OFF", () => {
+    expect(SYSTEM_PROMPT).toMatch(/proibido no Turno 1|Ponto \(b\).*proibido no Turno 1/i);
+  });
+
+  it("§00d Turno 1 mostra exemplo CORRETO que cabe em uma bolha só", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Boa tarde!.*Aqui [eé] a Julia.*Como prefere ser chamado|Me conta como posso te chamar/i);
+  });
+
+  it("§00d Turno 1 mostra exemplo ERRADO com recap + promo + CTA + nome", () => {
+    expect(SYSTEM_PROMPT).toMatch(/ERRADO.*Vi sua solicita|errado.*recap|Vi sua solicita[çc][ãa]o para hospedagem de 18 a 19/i);
+  });
+});
+
+describe("Sunset Thermas Park — v1.5.32 cotação 'pacote de N noites'", () => {
+  it("§00e declara que total_price sempre vem com quantidade de noites", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Regra de exibi[çc][ãa]o do valor.*v1\.5\.32|total_price.*junto da quantidade de noites/i);
+    expect(SYSTEM_PROMPT).toMatch(/o pacote de 1 noite|o pacote de N noites/i);
+  });
+
+  it("§00e proíbe listar R$ sem clarificar que é o pacote (não diária)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Proibido.*listar.*R\$[^\n]*sem clarificar|pacote inteiro[^\n]*n[ãa]o di[áa]ria/i);
+  });
+
+  it("§00e proíbe exibir price_per_night em vez de total_price ao cliente", () => {
+    expect(SYSTEM_PROMPT).toMatch(/price_per_night.*refer[êe]ncia interna|Proibido.*R\$[^\n]*\/ di[áa]ria/i);
+  });
+
+  it("§2-promo v1.5.32: frase do orçamento deixa claro que R$ já é pacote fechado com desconto", () => {
+    expect(SYSTEM_PROMPT).toMatch(/pacote fechado.*desconto aplicado|R\$ mostrado ao lado.*j[áa] [eé] o pacote fechado/i);
+  });
+
+  it("§3b-formato mostra valores seguidos de 'o pacote de N noites' no exemplo", () => {
+    expect(SYSTEM_PROMPT).toMatch(/R\$ 552,00 o pacote de 1 noite/);
+    expect(SYSTEM_PROMPT).toMatch(/R\$ 782,00 o pacote de 1 noite/);
+    expect(SYSTEM_PROMPT).toMatch(/R\$ 832,00 o pacote de 1 noite/);
+  });
+});
+
+describe("Sunset Thermas Park — v1.5.32 Loft sempre na cotação padrão", () => {
+  it("§3b-Loft declara REGRA DURA do Loft sempre aparecer quando cliente pediu hospedagem sem categoria", () => {
+    expect(SYSTEM_PROMPT).toMatch(/REGRA DURA[^\n]*Loft SEMPRE/i);
+    expect(SYSTEM_PROMPT).toMatch(/interest_keywords.*\[.loft.*spa.*hidromassa/i);
+  });
+
+  it("§3b-Loft proíbe o Loft sumir da lista quando ocupação do cliente é menor (ex.: 2 hóspedes)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Loft.*n[ãa]o.*lista|sem isso.*or[çc]amento sai sem ele|n[ãa]o volta no array/i);
+  });
+
+  it("§3b-Loft cobre quoted_for_occupancy com tom natural (tarifa para até 6 pessoas)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/quoted_for_occupancy/i);
+    expect(SYSTEM_PROMPT).toMatch(/tarifa para at[ée] 6 pessoas|at[ée] 6 pessoas[^\n]*equipe confirma/i);
+  });
+
+  it("DISPATCHER v1.5.32: interest_keywords loft/spa/hidromassagem sempre em chamada inicial", () => {
+    expect(DISPATCHER_PROMPT).toMatch(/Loft\/SPA\/hidromassa[^\n]*por padr[ãa]o|interest_keywords.*loft.*spa.*hidromassa/i);
+    expect(DISPATCHER_PROMPT).toMatch(/N[ÃA]O veio com categoria espec[íi]fica|n[ãa]o inclua interest_keywords.*formul[áa]rio/i);
+  });
+
+  it("§3b-Loft RECOTAÇÃO inclui interest_keywords na chamada de novo período", () => {
+    expect(SYSTEM_PROMPT).toMatch(/RECOTA[ÇC][ÃA]O[^\n]*interest_keys_keywords|chame a tool de novo[^\n]*interest_keywords.*sempre/i);
+  });
+
+  it("§3b-Loft mantém o caso explícito (cliente perguntou 'quanto fica o loft?') com mesmo interest_keywords", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Cliente que j[áa] perguntou por Loft/);
+    // combina com regra já existente: nunca cotar R$ 2.700 da tabela estática
+    expect(SYSTEM_PROMPT).toMatch(/R\$ 2\.?700|2\.700,00/);
+    expect(SYSTEM_PROMPT).toMatch(/nunca.*tabela|Proibido.*2\.700/i);
   });
 });
