@@ -6,6 +6,7 @@
 import {
   collectSunsetLodgingGalleryPhotosFromToolResults,
   lodgingAccommodationDisplayLabel,
+  shouldIncludeSunsetLodgingPhotoInQuote,
   type SunsetLodgingGalleryPhoto,
 } from "./sunset-lodging-gallery-photos.js";
 import {
@@ -113,7 +114,10 @@ function parseLodgingToolPayload(toolResultStrings: string[]): LodgingToolPayloa
     pushPhoto(p);
   }
 
-  if (accommodations.length === 0 || galleryPhotos.length === 0) return null;
+  // Accommodation sozinho (sem fotos) é válido quando o toggle de orçamento sem foto
+  // está ativo (`SUNSET_LODGING_SEND_PHOTOS_WITH_QUOTE = false`). O caller trata `galleryPhotos=[]`
+  // como modo "só texto" — vide `rebuildSunsetLodgingQuoteFromTool`.
+  if (accommodations.length === 0) return null;
   return { accommodations, galleryPhotos };
 }
 
@@ -254,7 +258,8 @@ function extractIntroAndFooter(text: string): { intro: string; footer: string } 
   };
 }
 
-/** Reconstrói opções a partir da tool (foto + preço), ignorando fotos agrupadas pelo modelo. */
+/** Reconstrói opções a partir da tool (foto + preço), ignorando fotos agrupadas pelo modelo.
+ * Aceita `payload.galleryPhotos = []` (modo "só texto": orçamento sem foto, foto sob demanda). */
 export function rebuildSunsetLodgingQuoteFromTool(
   assistantText: string,
   payload: LodgingToolPayload
@@ -263,13 +268,21 @@ export function rebuildSunsetLodgingQuoteFromTool(
     (a, b) => (a.total_price ?? 0) - (b.total_price ?? 0)
   );
   const photoAssignments = buildPhotoAssignments(payload.accommodations, payload.galleryPhotos);
+  const hasPhotos = payload.galleryPhotos.length > 0;
   const optionBlocks: string[] = [];
 
   for (const acc of sorted) {
     const accName = String(acc.name ?? "").trim();
     if (!accName) continue;
     const photo = photoAssignments.get(accName);
-    if (!photo) continue;
+
+    // Modo "só texto": foto ausente — incluir bloco somente com o preço.
+    if (!photo) {
+      if (acc.total_price == null) continue;
+      const displayLabel = lodgingAccommodationDisplayLabel(accName);
+      optionBlocks.push(`*${displayLabel}* — ${formatCurrencyBR(acc.total_price)}`);
+      continue;
+    }
 
     let priceLine = findPriceLineForAccommodation(assistantText, photo, accName);
     if (!priceLine && acc.total_price != null) {
@@ -277,7 +290,11 @@ export function rebuildSunsetLodgingQuoteFromTool(
     }
     if (!priceLine) continue;
 
-    optionBlocks.push(`${photo.photoMarkdown}\n${priceLine}`);
+    if (hasPhotos) {
+      optionBlocks.push(`${photo.photoMarkdown}\n${priceLine}`);
+    } else {
+      optionBlocks.push(priceLine);
+    }
   }
 
   if (optionBlocks.length === 0) return null;
@@ -560,10 +577,12 @@ export function formatSunsetLodgingQuoteForDelivery(
     const hasImage = !!text && /!\[.*\]\(https?:/.test(text);
     const accommodationsHaveName = (toolPayload?.accommodations ?? []).map((a) => a?.name);
     const photosHaveName = (toolPayload?.galleryPhotos ?? looseGalleryPhotos).map((p) => p?.accommodationName);
+    const photoToggle = shouldIncludeSunsetLodgingPhotoInQuote() ? "on" : "off";
     console.warn(
       `[SunsetQuote][diag] branch=${branch} toolPayload=${toolPayload ? "yes" : "no"} ` +
         `accs=${toolPayload?.accommodations.length ?? 0} photos=${looseGalleryPhotos.length} ` +
-        `splits=${counts} hasImage=${hasImage} accNames=${JSON.stringify(accommodationsHaveName)} ` +
+        `splits=${counts} hasImage=${hasImage} photoToggle=${photoToggle} ` +
+        `accNames=${JSON.stringify(accommodationsHaveName)} ` +
         `photoNames=${JSON.stringify(photosHaveName)}`
     );
   } catch {

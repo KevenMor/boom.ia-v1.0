@@ -17,7 +17,7 @@ import { buildSystemPrompt } from "./registry.js";
 
 describe("Sunset Thermas Park — SYSTEM_PROMPT (contratos de negócio)", () => {
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.29/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.30/);
   });
 
   it("mantém regra suprema de valores e vaga (tolerância zero)", () => {
@@ -748,14 +748,27 @@ describe("Sunset Thermas Park — §3d fechamento consultivo SDR (v1.5.9)", () =
     expect(COMMUNICATION_RULES).toMatch(/Proibido.*encaminho|encaminhar pro setor/i);
   });
 
-  it("§3b-formato documenta layout WhatsApp limpo sem emoji", () => {
+  it("§3b-formato documenta layout WhatsApp limpo sem emoji e sem foto automática", () => {
     expect(SYSTEM_PROMPT).toMatch(/3b-formato\)/);
     expect(SYSTEM_PROMPT).toMatch(/Zero emoji no or[cç]amento|Zero emoji.*or[cç]amento/i);
+    expect(SYSTEM_PROMPT).toMatch(/SEM EMOJI.*SEM FOTO|SEM FOTO/i);
     expect(SYSTEM_PROMPT).toMatch(/\*Opções\*/);
     expect(SYSTEM_PROMPT).toMatch(/\*Chal[eé]\* — R\$/);
     expect(SYSTEM_PROMPT).toMatch(/STANDART.*Chal[eé]/i);
-    expect(SYSTEM_PROMPT).toMatch(/Proibido.*STANDART R\$/i);
+    expect(SYSTEM_PROMPT).toMatch(/Proibido.*STANDART/i);
     expect(SYSTEM_PROMPT).toMatch(/Check-in: a partir das 10h/i);
+  });
+
+  it("§3b-formato v1.5.30: foto sob demanda + escolha de acomodação", () => {
+    // Foto nunca sai no orçamento (só texto com nome + valor)
+    expect(SYSTEM_PROMPT).toMatch(/Sem foto no or[cç]amento/i);
+    expect(SYSTEM_PROMPT).toMatch(/sem imagem inline/i);
+    // Foto sob demanda com gatilhos verbais
+    expect(SYSTEM_PROMPT).toMatch(/SOB DEMANDA/i);
+    expect(SYSTEM_PROMPT).toMatch(/manda foto/i);
+    expect(SYSTEM_PROMPT).toMatch(/vou ficar no Chal[eé]/i);
+    // Tool explícita para enviar foto sob demanda
+    expect(SYSTEM_PROMPT).toMatch(/consultar_galeria_suites/);
   });
 
   it("COMMUNICATION_RULES proíbe emoji inclusive no orçamento", () => {

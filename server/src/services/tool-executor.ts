@@ -22,7 +22,7 @@ import {
 } from "../lib/vehicle-segments.js";
 import { buildInventoryPhotosMarkdown, filterValidInventoryPhotoUrls } from "../lib/inventory-photo-url.js";
 import { decodeHtmlEntities } from "../lib/html-entities.js";
-import { fetchSunsetLodgingGalleryPhotos } from "../utils/sunset-lodging-gallery-photos.js";
+import { fetchSunsetLodgingGalleryPhotos, shouldIncludeSunsetLodgingPhotoInQuote } from "../utils/sunset-lodging-gallery-photos.js";
 
 export interface ToolExecutionResult {
   success: boolean;
@@ -1700,7 +1700,7 @@ async function executeLodgingConsulta(
     ? (data.available_accommodations as Array<{ name?: string }>)
     : [];
   const accNames = accommodations.map((a) => String(a.name ?? "").trim()).filter(Boolean);
-  if (accNames.length > 0) {
+  if (accNames.length > 0 && shouldIncludeSunsetLodgingPhotoInQuote()) {
     const galleryPhotos = await fetchSunsetLodgingGalleryPhotos(supabase, tenantId, accNames);
     if (galleryPhotos.length > 0) {
       return { success: true, result: { ...data, gallery_photos: galleryPhotos } };

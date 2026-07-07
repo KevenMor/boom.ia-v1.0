@@ -2,6 +2,21 @@ import type { createNexusClient } from "../services/supabase.js";
 import { normalizeStorageUrlForExternalUse } from "../lib/supabase-storage-public-url.js";
 import { galleryRotuloParaCliente, isGalleryExcludedFromClientCatalog } from "./suite-gallery-llm-labels.js";
 
+/**
+ * Toggle master: quando `false`, fotos das suítes NUNCA são enviadas no orçamento.
+ * O pipeline "sob demanda" (`suite_gallery_query` via `userLikelyAskedForPhotos` em
+ * `suite-gallery-markdown-inject.ts`) continua ativo e cobre os casos
+ * "cliente pediu foto" e "cliente escolheu acomodação".
+ *
+ * Default Sunset = `false` desde 2026-07-07 (chamado pelo usuário).
+ * Para reativar: mudar para `true` + redeploy do server.
+ */
+export const SUNSET_LODGING_SEND_PHOTOS_WITH_QUOTE = false;
+
+export function shouldIncludeSunsetLodgingPhotoInQuote(): boolean {
+  return SUNSET_LODGING_SEND_PHOTOS_WITH_QUOTE;
+}
+
 export type SunsetLodgingGalleryPhoto = {
   accommodationName: string;
   displayLabel: string;

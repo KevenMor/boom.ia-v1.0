@@ -276,4 +276,37 @@ describe("formatSunsetLodgingQuoteForDelivery", () => {
       )
     ).toBe(true);
   });
+
+  // v1.5.30: orçamento sem foto (SUNSET_LODGING_SEND_PHOTOS_WITH_QUOTE = false).
+  // A tool não injeta mais gallery_photos; o formatter deve produzir blocos
+  // só com nome + valor, separados por MSG_SPLIT para 1 bolha por opção.
+  it("formata orçamento só texto quando tool devolve sem gallery_photos", () => {
+    const assistantText =
+      "Segue o orçamento solicitado.\n\n" +
+      "*Resumo*\n• 2 pessoas · 1 pernoite\n\n" +
+      "*Opções*\n\n" +
+      "*Incluso*\nJantar";
+
+    const toolSemFotos = JSON.stringify({
+      available_accommodations: [
+        { name: "STANDART", total_price: 414 },
+        { name: "LUXO DUPLO", total_price: 586.5 },
+        { name: "LUXO COM VARANDA", total_price: 624 },
+      ],
+      // sem gallery_photos — toggle OFF
+    });
+
+    const formatted = formatSunsetLodgingQuoteForDelivery(assistantText, [toolSemFotos]);
+
+    // Nenhuma imagem no output.
+    expect(formatted).not.toMatch(/!\[[^\]]*\]\(/);
+    // 3 acomodações com preço no output (em qualquer formato — pode estar
+    // consolidado ou por linha, conforme o ramo do formatter).
+    // Aceita separadores hífen ASCII ou NBSP usados pelo polishSunsetLodgingQuoteReadableText.
+    expect(formatted.replace(/ /g, " ")).toContain("*Chalé* — R$ 414,00");
+    expect(formatted.replace(/ /g, " ")).toContain("*Suíte Luxo* — R$ 586,50");
+    expect(formatted.replace(/ /g, " ")).toContain("*Suíte com Varanda* — R$ 624,00");
+    // Quebrou em MSG_SPLIT (uma bolha por opção + intro + footer).
+    expect(formatted).toContain("<<MSG_SPLIT>>");
+  });
 });
