@@ -1,6 +1,7 @@
 ﻿import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
 import { buildSystemPrompt, getDispatcherPrompt, getPromptConfig } from "../services/prompts/registry.js";
+import { shouldDeferSunsetLodgingQuote } from "../services/prompts/sunset-thermas.js";
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
 import { filterCommandLinesFromStream, sanitizeLLMOutput, fallbackSanitizeForRetry, stripChatbotPhrases } from "../utils/sanitize.js";
 import { emitMediaCommandsSseIfNeeded } from "../utils/extract-media-commands.js";
@@ -30,7 +31,9 @@ import {
   conversationNeedsChildAgesConfirmation,
   extractSunsetLodgingParams,
   isSunsetThermasTenantSlug,
+  messageDeclaresLodgingAmenityFaq,
   shouldReinvokeSunsetLodging,
+  userNeedsSunsetLodgingToolCall,
 } from "../utils/sunset-lodging-params.js";
 import {
   extractSunsetParkParams,
@@ -242,6 +245,15 @@ async function maybeAutoInvokeSunsetLodging(params: {
   }> = [];
 
   if (!isSunsetThermasTenantSlug(params.tenantSlug)) return debugEntries;
+
+  if (shouldDeferSunsetLodgingQuote(params.messages)) return debugEntries;
+
+  const lastUserMsg = [...params.messages].reverse().find((m) => m.role === "user" && m.content);
+  if (lastUserMsg?.content && messageDeclaresLodgingAmenityFaq(lastUserMsg.content)) {
+    return debugEntries;
+  }
+
+  if (!userNeedsSunsetLodgingToolCall(params.messages)) return debugEntries;
 
   const lodgingTool = findLodgingConsultaTool(params.nameToTool);
   if (!lodgingTool) return debugEntries;
@@ -1355,7 +1367,8 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       const applySuiteGalleryRepairs = async (
         assistantText: string,
         toolResultStrings: string[],
-        lastUserMessage: string
+        lastUserMessage: string,
+        deferSunsetLodgingQuote = false
       ): Promise<string> => {
         let text = assistantText;
         const skipSuiteGalleryBulkInject = isSunsetLodgingQuoteContext(text, toolResultStrings);
@@ -1384,16 +1397,20 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           console.log("[Chat-Local] Injetando fotos cover Omnibees no orçamento (omissão do modelo)");
           text = omnibeesPhotoInject.fullText;
         }
-        const sunsetLodgingPhotoInject = injectSunsetLodgingQuotePhotosIfMissing(
-          text,
-          collectSunsetLodgingGalleryPhotosFromToolResults(toolResultStrings)
-        );
-        if (sunsetLodgingPhotoInject) {
-          console.log("[Chat-Local] Injetando fotos galeria Sunset no orçamento (omissão do modelo)");
-          text = sunsetLodgingPhotoInject.fullText;
+        if (!deferSunsetLodgingQuote) {
+          const sunsetLodgingPhotoInject = injectSunsetLodgingQuotePhotosIfMissing(
+            text,
+            collectSunsetLodgingGalleryPhotosFromToolResults(toolResultStrings)
+          );
+          if (sunsetLodgingPhotoInject) {
+            console.log("[Chat-Local] Injetando fotos galeria Sunset no orçamento (omissão do modelo)");
+            text = sunsetLodgingPhotoInject.fullText;
+          }
         }
         text = formatOmnibeesQuoteForDelivery(text, toolResultStrings);
-        text = formatSunsetLodgingQuoteForDelivery(text, toolResultStrings);
+        if (!deferSunsetLodgingQuote) {
+          text = formatSunsetLodgingQuoteForDelivery(text, toolResultStrings);
+        }
         const inventoryPhotoInject = injectInventoryPhotosIfMissing({
           assistantText: text,
           toolResultStrings,
@@ -1405,7 +1422,11 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         text = reorderInventoryPhotosBeforeText(text);
         text = sanitizeInvalidInventoryPhotoAttempt(text);
 
-        if (isSunsetThermasTenantSlug(tenantSlug) && isSunsetLodgingQuoteContext(text, toolResultStrings)) {
+        if (
+          !deferSunsetLodgingQuote &&
+          isSunsetThermasTenantSlug(tenantSlug) &&
+          isSunsetLodgingQuoteContext(text, toolResultStrings)
+        ) {
           try {
             text = await applySunsetLodgingQuoteImageOverlays(text, supabase, tenantId);
           } catch (e) {
@@ -1414,6 +1435,9 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         }
         return text;
       };
+
+      const deferSunsetLodgingQuote =
+        isSunsetThermasTenantSlug(tenantSlug) && shouldDeferSunsetLodgingQuote(messages);
 
       // Dual-provider: OpenAI para tools (dispatcher), Gemini para conversacional
       if (useTools && dispatcherProviderId) {
@@ -1508,11 +1532,18 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             } else if (conversationNeedsChildrenConfirmation(messages) && !userAsksSunsetParkConsultation(messages)) {
               sunsetLodgingHint = `\n\n[BLOQUEIO — HOSPEDAGEM SUNSET / CRIANÇAS PENDENTES]\nO cliente informou quantidade de pessoas (ex.: "3 pessoas") mas **não confirmou crianças**. Responda **NO_TOOLS_NEEDED** para consultar_hospedagem_sunset. Julia: reconheça o nº + "Alguma criança vai junto? Se sim, quantas e com quantos anos?" — **proibido** frase redundante tipo "quantas crianças? se sim, quantas?".`;
             } else if (lodgingParamsHint && !userAsksSunsetParkConsultation(messages)) {
-              const interestPart =
-                lodgingParamsHint.interest_keywords?.length
+              if (shouldDeferSunsetLodgingQuote(messages)) {
+                sunsetLodgingHint = `\n\n[BLOQUEIO — QUALIFICAÇÃO §00d / TURNO 1-2]\nJulia está em qualificação (nome → promo → confirmação). NÃO chame consultar_hospedagem_sunset neste turno — responda **NO_TOOLS_NEEDED**. **Proibido** citar R$ ou listar categorias.`;
+              } else if (lastUserMsg && messageDeclaresLodgingAmenityFaq(lastUserMsg.content)) {
+                sunsetLodgingHint = `\n\n[BLOQUEIO — HOSPEDAGEM SUNSET / DÚVIDA AMENIDADE]\nO cliente perguntou sobre **amenidade** (SPA, hidromassagem, equipamento do quarto, etc.) — **NÃO** chame consultar_hospedagem_sunset. Responda **NO_TOOLS_NEEDED** com texto consultivo. **Proibido** repetir a lista de preços já enviada neste fio.`;
+              } else if (userNeedsSunsetLodgingToolCall(messages)) {
+                const interestPart = lodgingParamsHint.interest_keywords?.length
                   ? `, interest_keywords=${JSON.stringify(lodgingParamsHint.interest_keywords)}`
                   : "";
-              sunsetLodgingHint = `\n\n[HINT OBRIGATÓRIO — HOSPEDAGEM SUNSET]\nDatas e composição já constam no histórico. NÃO responda NO_TOOLS_NEEDED para consultar_hospedagem_sunset. Chame a tool agora com check_in="${lodgingParamsHint.check_in}", check_out="${lodgingParamsHint.check_out}", guests=${JSON.stringify(lodgingParamsHint.guests)}${interestPart}. Se o cliente perguntou Loft/SPA/hidromassagem, inclua interest_keywords e use total_price retornado — PROIBIDO citar R$ 2.700 da tabela §2.`;
+                sunsetLodgingHint = `\n\n[HINT OBRIGATÓRIO — HOSPEDAGEM SUNSET]\nDatas e composição já constam no histórico. NÃO responda NO_TOOLS_NEEDED para consultar_hospedagem_sunset. Chame a tool agora com check_in="${lodgingParamsHint.check_in}", check_out="${lodgingParamsHint.check_out}", guests=${JSON.stringify(lodgingParamsHint.guests)}${interestPart}. **Obrigatório** interest_keywords ["loft","spa","hidromassagem"] quando o cliente NÃO escolheu categoria no formulário — força o Loft no orçamento. Se o cliente perguntou Loft/SPA/hidromassagem, use total_price retornado — PROIBIDO citar R$ 2.700 da tabela §2.`;
+              } else {
+                sunsetLodgingHint = `\n\n[BLOQUEIO — HOSPEDAGEM SUNSET / SEM NECESSIDADE DE TOOL]\nNeste turno **NÃO** chame consultar_hospedagem_sunset — responda **NO_TOOLS_NEEDED**. O pedido do cliente não exige nova consulta de tarifas (qualificação, nome, dúvida de amenidade ou conversa). **Proibido** chamar tool só porque datas/hóspedes constam no histórico — economia de tokens.`;
+              }
             }
           }
 
@@ -2048,7 +2079,12 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
 
           const lastUserForGalleryInject = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
-          convFullContent = await applySuiteGalleryRepairs(convFullContent, toolResults, lastUserForGalleryInject);
+          convFullContent = await applySuiteGalleryRepairs(
+            convFullContent,
+            toolResults,
+            lastUserForGalleryInject,
+            deferSunsetLodgingQuote
+          );
 
           if (/HANDOFF_COMERCIAL/i.test(convFullContent)) {
             sendHandoffNotification(agent_id, agent, messages, external_user_id).catch((e) => {
@@ -2365,7 +2401,12 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             const c = (m as { content?: unknown }).content;
             if (role === "tool" && typeof c === "string") toolStringsSP.push(c);
           }
-          fullContent = await applySuiteGalleryRepairs(fullContent, toolStringsSP, lastUserForGalleryInjectSP);
+          fullContent = await applySuiteGalleryRepairs(
+            fullContent,
+            toolStringsSP,
+            lastUserForGalleryInjectSP,
+            deferSunsetLodgingQuote
+          );
           emitMediaCommandsSseIfNeeded(sendSse, fullContent);
           sendSingleProviderSandboxDebug();
           if (singleProviderUsageAccum.total_tokens > 0) {
@@ -2547,7 +2588,12 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           const c = (m as { content?: unknown }).content;
           if (role === "tool" && typeof c === "string") toolStrsLoop.push(c);
         }
-        let finalAssistantRaw = await applySuiteGalleryRepairs(fullContent, toolStrsLoop, lastUserGI);
+        let finalAssistantRaw = await applySuiteGalleryRepairs(
+          fullContent,
+          toolStrsLoop,
+          lastUserGI,
+          deferSunsetLodgingQuote
+        );
         emitMediaCommandsSseIfNeeded(sendSse, finalAssistantRaw);
         const rawLoopAssist = prependWelcomeToAssistantText((finalAssistantRaw || "").trim());
         emitRepairedAssistant(rawLoopAssist);

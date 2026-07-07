@@ -12,6 +12,9 @@ export type SunsetLodgingParams = {
 
 type ChatMessage = { role: string; content?: string };
 
+/** Força Loft na tool quando ocupação < mínimo do Loft (§3b-Loft / dispatcher v1.5.32). */
+export const SUNSET_DEFAULT_LOFT_INTEREST_KEYWORDS = ["loft", "spa", "hidromassagem"] as const;
+
 const WORD_NUMBERS: Record<string, number> = {
   um: 1,
   uma: 1,
@@ -239,8 +242,26 @@ function extractCheckOutFromMessages(messages: ChatMessage[], checkIn: string, r
   return null;
 }
 
+/** Contagem do formulário do site: `Adultos: N` (+ `Crianças: M` quando presente). */
+function parseFormGuestCountFromText(text: string): number | null {
+  const adultMatch = text.match(/adultos\s*:\s*(\d+)/i);
+  if (!adultMatch) return null;
+  const adults = parseInt(adultMatch[1], 10);
+  if (!Number.isFinite(adults) || adults < 1) return null;
+  const childMatch = text.match(/criancas?\s*:\s*(\d+)/i);
+  const children = childMatch ? parseInt(childMatch[1], 10) : 0;
+  const total = adults + (Number.isFinite(children) && children > 0 ? children : 0);
+  return total > 0 ? total : null;
+}
+
 function extractGuestCountFromMessages(messages: ChatMessage[]): number | null {
   if (!conversationHasCompleteGuestComposition(messages)) return null;
+
+  for (const m of messages) {
+    if (m.role !== "user" || !m.content) continue;
+    const fromForm = parseFormGuestCountFromText(m.content);
+    if (fromForm != null) return fromForm;
+  }
 
   for (const m of [...messages].reverse()) {
     if (m.role !== "user" || !m.content) continue;
@@ -287,6 +308,21 @@ export function detectSunsetLodgingInterestKeywords(text: string): string[] {
   return keywords;
 }
 
+/** Categoria escolhida no formulário do site (ex.: "Chalé Aconchegante"). Null se o campo não veio. */
+export function extractSunsetFormAccommodationFromMessages(messages: ChatMessage[]): string | null {
+  const firstUser = messages.find((m) => m.role === "user" && m.content)?.content ?? "";
+  const m = firstUser.match(
+    /acomoda[çc][ãa]o:\s*(.+?)(?=\s*check-in:|\s*check-out:|\s*total de noites:|\s*adultos:|\s*crian[çc]as:|$)/i
+  );
+  const raw = m?.[1]?.trim();
+  return raw || null;
+}
+
+/** Incluir interest_keywords padrão (Loft) exceto quando o formulário já trouxe categoria específica. */
+export function shouldIncludeDefaultLoftInterestKeywords(messages: ChatMessage[]): boolean {
+  return !extractSunsetFormAccommodationFromMessages(messages);
+}
+
 export function parseLodgingAccommodationNamesFromToolContent(content: string): string[] {
   try {
     const obj = JSON.parse(content) as { available_accommodations?: Array<{ name?: string }> };
@@ -297,11 +333,91 @@ export function parseLodgingAccommodationNamesFromToolContent(content: string): 
   }
 }
 
+/** Cliente aceitou receber orçamento ou pediu valor explicitamente. */
+export function messageDeclaresLodgingQuoteReadiness(text: string): boolean {
+  const t = normalizeText(text);
+  return (
+    /quanto fica|qual (o )?valor|quanto custa|quanto [eé]|passa(r)? (o )?(valor|pacote|orcamento)|manda(r)? (o )?(valor|pacote|orcamento)|quero ver (o )?(valor|pacote|orcamento)|me passa|pode passar|pode mandar|pode sim|^sim[,!.]?\s*(pode|quero|manda|passa|por favor)|^ok[,!.]?\s*(pode|manda|passa)|bora ver|manda ai|show[,!.]?\s*(pode|manda)|pode (sim|ser)|manda (ai|la)|quero (o |os )?(valor|orcamento|preco)|^certo$|^isso$|^pode ser$/.test(
+      t
+    )
+  );
+}
+
+/** Pergunta sobre amenidade (SPA aquecido, tem TV…) — não é pedido de orçamento nem re-cotação. */
+export function messageDeclaresLodgingAmenityFaq(text: string): boolean {
+  const t = normalizeText(text);
+  if (/quanto|valor|preco|tarifa|custa|or[cç]amento|manda(r)?\s+(o\s+)?(valor|pacote)/.test(t)) {
+    return false;
+  }
+  if (/tem algum|tem alguma|gostei|saber mais|quero saber se tem|alguma suite|algum suite/.test(t)) {
+    return false;
+  }
+  if (/(e|é|eh)\s+(aquecid|quente|frio|limpo|grande|pequen)/.test(t)) return true;
+  if (/tem\s+(tv|frigobar|ar[\s-]?cond|wifi|secador|toalha|vista|varanda|hidro)/.test(t)) {
+    return true;
+  }
+  if (/(como\s+(e|é)|como\s+funciona).*(spa|hidro|hidromassagem)/.test(t)) return true;
+  if (/(spa|hidro|hidromassagem)\s+(e|é|eh)\s+/.test(t)) return true;
+  return false;
+}
+
+export function conversationAlreadyDeliveredLodgingQuote(messages: ChatMessage[]): boolean {
+  return messages.some(
+    (m) =>
+      m.role === "assistant" &&
+      m.content &&
+      /\bR\$\s*[\d.,]+/.test(m.content) &&
+      (m.content.match(/R\$\s*[\d.,]+/g)?.length ?? 0) >= 2
+  );
+}
+
+/**
+ * Neste turno o dispatcher deve chamar consultar_hospedagem_sunset?
+ * **Padrão: NÃO** (NO_TOOLS_NEEDED) — só allowlist explícita (economia de tokens).
+ */
+export function messageDeclaresLodgingPriceOrAvailabilityInquiry(text: string): boolean {
+  const t = normalizeText(text);
+  if (messageDeclaresLodgingQuoteReadiness(text)) return true;
+  if (
+    /disponibilidade|tem vaga|verificar disponibilidade|quanto|valor|preco|tarifa|orcamento/.test(t) &&
+    /hosped|hotel|chal|suite|loft|quarto|pernoite|diaria|pacote|acomoda/.test(t)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+export function userNeedsSunsetLodgingToolCall(messages: ChatMessage[]): boolean {
+  const lastUser = [...messages].reverse().find((m) => m.role === "user" && m.content);
+  if (!lastUser?.content) return false;
+
+  if (messageDeclaresLodgingAmenityFaq(lastUser.content)) return false;
+
+  if (messageDeclaresLodgingQuoteReadiness(lastUser.content)) return true;
+
+  if (messageDeclaresDateCorrection(lastUser.content)) return true;
+
+  const t = normalizeText(lastUser.content);
+  if (
+    /quanto\s+(fica|custa|e)|qual\s+(o\s+)?valor|disponibilidade|tem vaga/.test(t) &&
+    /hosped|hotel|quarto|loft|chal|suite|acomoda|pernoite|diaria|pacote/.test(t)
+  ) {
+    return true;
+  }
+
+  if (conversationAlreadyDeliveredLodgingQuote(messages)) {
+    return userAsksSunsetLodgingCategoryOrPrice(messages);
+  }
+
+  return messageDeclaresLodgingPriceOrAvailabilityInquiry(lastUser.content);
+}
+
 /** Cliente pergunta tarifa/detalhe de categoria específica (loft, hidro, suíte…). */
 export function userAsksSunsetLodgingCategoryOrPrice(messages: ChatMessage[]): boolean {
   const lastUser = [...messages].reverse().find((m) => m.role === "user");
   if (!lastUser?.content) return false;
   const text = lastUser.content;
+  if (messageDeclaresLodgingAmenityFaq(text)) return false;
   if (detectSunsetLodgingInterestKeywords(text).length > 0) return true;
   const t = normalizeText(text);
   const asksPrice = /quanto\s+(fica|custa|e)|valor|preco|tarifa/.test(t);
@@ -312,11 +428,13 @@ export function userAsksSunsetLodgingCategoryOrPrice(messages: ChatMessage[]): b
 
 /** Reconsultar quando a categoria pedida não consta no último resultado da tool. */
 export function shouldReinvokeSunsetLodging(messages: ChatMessage[], toolContents: string[]): boolean {
-  if (!userAsksSunsetLodgingCategoryOrPrice(messages)) return false;
-  if (toolContents.length === 0) return true;
-
   const lastUser = [...messages].reverse().find((m) => m.role === "user");
   if (!lastUser?.content) return false;
+  if (messageDeclaresLodgingAmenityFaq(lastUser.content)) return false;
+
+  if (!userAsksSunsetLodgingCategoryOrPrice(messages)) return false;
+
+  if (toolContents.length === 0) return true;
 
   const interests = detectSunsetLodgingInterestKeywords(lastUser.content);
   const knownNorm = toolContents
@@ -364,9 +482,13 @@ export function extractSunsetLodgingParams(
   const guests: SunsetLodgingGuest[] = Array.from({ length: guestCount }, () => ({ type: "adult" }));
 
   const lastUser = [...messages].reverse().find((m) => m.role === "user");
-  const interest_keywords = lastUser?.content
+  let interest_keywords = lastUser?.content
     ? detectSunsetLodgingInterestKeywords(lastUser.content)
     : [];
+
+  if (interest_keywords.length === 0 && shouldIncludeDefaultLoftInterestKeywords(messages)) {
+    interest_keywords = [...SUNSET_DEFAULT_LOFT_INTEREST_KEYWORDS];
+  }
 
   return {
     check_in,

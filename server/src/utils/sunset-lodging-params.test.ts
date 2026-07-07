@@ -8,8 +8,16 @@ import {
   detectSunsetLodgingInterestKeywords,
   extractSunsetClientNameFromMessages,
   extractSunsetLodgingParams,
+  extractSunsetFormAccommodationFromMessages,
+  shouldIncludeDefaultLoftInterestKeywords,
+  SUNSET_DEFAULT_LOFT_INTEREST_KEYWORDS,
   messageDeclaresGuestCompositionComplete,
   messageDeclaresLodgingReservationInterest,
+  messageDeclaresLodgingAmenityFaq,
+  messageDeclaresLodgingPriceOrAvailabilityInquiry,
+  messageDeclaresLodgingQuoteReadiness,
+  userNeedsSunsetLodgingToolCall,
+  conversationAlreadyDeliveredLodgingQuote,
   messageUsesVagueGuestCountOnly,
   parseExplicitGuestCount,
   shouldReinvokeSunsetLodging,
@@ -59,6 +67,7 @@ describe("extractSunsetLodgingParams — caso Dia dos Namorados + duas pessoas",
       check_in: "2026-06-12",
       check_out: "2026-06-14",
       guests: [{ type: "adult" }, { type: "adult" }],
+      interest_keywords: [...SUNSET_DEFAULT_LOFT_INTEREST_KEYWORDS],
     });
   });
 
@@ -130,6 +139,7 @@ describe("extractSunsetLodgingParams — hoje até amanhã", () => {
       check_in: "2026-06-13",
       check_out: "2026-06-14",
       guests: Array.from({ length: 8 }, () => ({ type: "adult" })),
+      interest_keywords: [...SUNSET_DEFAULT_LOFT_INTEREST_KEYWORDS],
     });
   });
 
@@ -151,7 +161,45 @@ describe("extractSunsetLodgingParams — datas explícitas", () => {
       check_in: "2026-05-16",
       check_out: "2026-05-17",
       guests: [{ type: "adult" }, { type: "adult" }],
+      interest_keywords: [...SUNSET_DEFAULT_LOFT_INTEREST_KEYWORDS],
     });
+  });
+});
+
+describe("extractSunsetLodgingParams — Loft interest_keywords padrão (v1.5.36)", () => {
+  const FORM_NO_CATEGORY =
+    "Olá! Gostaria de verificar disponibilidade para hospedagem no Hotel Sunset Thermas. Check-in: 18/07/2026 Check-out: 19/07/2026 Total de noites: 1 noite Adultos: 2";
+
+  it("inclui interest_keywords padrão quando cliente confirma 'sim' (sem categoria no formulário)", () => {
+    const messages = [
+      { role: "user", content: FORM_NO_CATEGORY },
+      { role: "assistant", content: "Como posso te chamar?" },
+      { role: "user", content: "Keven" },
+      { role: "assistant", content: "Prazer! Posso te passar o pacote?" },
+      { role: "user", content: "sim" },
+    ];
+    const params = extractSunsetLodgingParams(messages, new Date("2026-07-01T12:00:00Z"));
+    expect(params).not.toBeNull();
+    expect(params!.guests).toHaveLength(2);
+    expect(params!.interest_keywords).toEqual([...SUNSET_DEFAULT_LOFT_INTEREST_KEYWORDS]);
+  });
+
+  it("NÃO inclui interest_keywords padrão quando formulário trouxe Acomodação específica", () => {
+    const messages = [
+      {
+        role: "user",
+        content:
+          "Olá! Gostaria de verificar disponibilidade. Acomodação: Chalé Aconchegante Check-in: 16/05/2026 Check-out: 17/05/2026 Adultos: 2",
+      },
+      { role: "assistant", content: "Como posso te chamar?" },
+      { role: "user", content: "Maria" },
+      { role: "assistant", content: "Posso te passar o pacote?" },
+      { role: "user", content: "sim" },
+    ];
+    expect(extractSunsetFormAccommodationFromMessages(messages)).toBe("Chalé Aconchegante");
+    expect(shouldIncludeDefaultLoftInterestKeywords(messages)).toBe(false);
+    const params = extractSunsetLodgingParams(messages, new Date("2026-05-01T12:00:00Z"));
+    expect(params?.interest_keywords).toBeUndefined();
   });
 });
 
@@ -272,5 +320,55 @@ describe("messageDeclaresLodgingReservationInterest", () => {
   it("não confunde pergunta genérica com interesse", () => {
     expect(messageDeclaresLodgingReservationInterest("quanto fica?")).toBe(false);
     expect(messageDeclaresLodgingReservationInterest("8 pessoas")).toBe(false);
+  });
+});
+
+describe("dúvida de amenidade pós-orçamento (v1.5.36)", () => {
+  it("messageDeclaresLodgingAmenityFaq detecta 'spa é aquecido?'", () => {
+    expect(messageDeclaresLodgingAmenityFaq("spa é aquecido?")).toBe(true);
+    expect(messageDeclaresLodgingAmenityFaq("quanto fica o loft?")).toBe(false);
+  });
+
+  it("userNeedsSunsetLodgingToolCall é false após orçamento para dúvida de amenidade", () => {
+    const messages = [
+      { role: "user", content: "form..." },
+      { role: "assistant", content: "*Chalé* — R$ 414,00\n*Suíte Luxo* — R$ 586,50" },
+      { role: "user", content: "spa é aquecido?" },
+    ];
+    expect(conversationAlreadyDeliveredLodgingQuote(messages)).toBe(true);
+    expect(userNeedsSunsetLodgingToolCall(messages)).toBe(false);
+  });
+
+  it("userNeedsSunsetLodgingToolCall é true quando ainda não houve orçamento", () => {
+    const messages = [
+      { role: "user", content: "check-in 18/07 adultos 2" },
+      { role: "user", content: "sim, pode passar" },
+    ];
+    expect(userNeedsSunsetLodgingToolCall(messages)).toBe(true);
+  });
+
+  it("userNeedsSunsetLodgingToolCall é false só com nome ou composição (sem pedido de valor)", () => {
+    const FORM_MSG =
+      "Check-in: 18/07/2026 Check-out: 19/07/2026 Adultos: 2";
+    expect(
+      userNeedsSunsetLodgingToolCall([
+        { role: "user", content: FORM_MSG },
+        { role: "assistant", content: "Como posso te chamar?" },
+        { role: "user", content: "Keven" },
+      ])
+    ).toBe(false);
+    expect(
+      userNeedsSunsetLodgingToolCall([
+        { role: "user", content: "hospedagem 18 a 19 julho" },
+        { role: "assistant", content: "Quantas pessoas?" },
+        { role: "user", content: "2 adultos" },
+      ])
+    ).toBe(false);
+  });
+
+  it("messageDeclaresLodgingPriceOrAvailabilityInquiry exige pedido explícito", () => {
+    expect(messageDeclaresLodgingPriceOrAvailabilityInquiry("quanto fica?")).toBe(true);
+    expect(messageDeclaresLodgingPriceOrAvailabilityInquiry("Keven")).toBe(false);
+    expect(messageDeclaresLodgingPriceOrAvailabilityInquiry("2 adultos")).toBe(false);
   });
 });

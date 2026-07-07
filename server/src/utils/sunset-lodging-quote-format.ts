@@ -43,6 +43,32 @@ function assistantDeliversLodgingQuote(text: string): boolean {
   );
 }
 
+/** Exportado para runtime (bloquear re-cotação em dúvidas de amenidade). */
+export function assistantMessageDeliversLodgingQuote(text: string): boolean {
+  return assistantDeliversLodgingQuote(text);
+}
+
+/** Reconstrói orçamento da tool só quando a resposta é (ou deveria ser) cotação — não em FAQ. */
+export function shouldRebuildSunsetQuoteFromTool(
+  assistantText: string,
+  toolPayload: { accommodations: Array<{ name?: string }> } | null
+): boolean {
+  if (!toolPayload) return false;
+  const base = (assistantText ?? "").trim();
+  if (!base) return true;
+  if (assistantDeliversLodgingQuote(base)) return true;
+  const priceCount = base.match(/R\$\s*[\d.,]+/g)?.length ?? 0;
+  const accCount = toolPayload.accommodations.length;
+  if (
+    /orçamento|orcamento|pacote|valores abaixo|op[cç][õo]es/i.test(base) &&
+    accCount > 0 &&
+    priceCount < Math.min(accCount, 2)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export function isSunsetLodgingQuoteContext(
   assistantText: string,
   toolResultStrings: string[]
@@ -522,6 +548,14 @@ export function formatSunsetLodgingQuoteForDelivery(
   const toolPayload =
     parseLodgingToolPayload(toolResultStrings) ||
     parseLodgingToolPayloadLoose(toolResultStrings, looseGalleryPhotos);
+
+  if (
+    !shouldRebuildSunsetQuoteFromTool(base, toolPayload) &&
+    !assistantDeliversLodgingQuote(base)
+  ) {
+    return assistantText ?? "";
+  }
+
   const shouldFormat =
     !!toolPayload ||
     assistantDeliversLodgingQuote(base) ||

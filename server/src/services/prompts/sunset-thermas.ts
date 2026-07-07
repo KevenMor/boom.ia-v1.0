@@ -8,6 +8,7 @@
   extractSunsetClientNameFromMessages,
   extractSunsetLodgingDateRange,
   messageDeclaresDateCorrection,
+  messageDeclaresLodgingQuoteReadiness,
   messageDeclaresLodgingReservationInterest,
   messageDeclaresRelativeLodgingStay,
   messageUsesVagueGuestCountOnly,
@@ -18,7 +19,8 @@ import { messageDeclaresParkTicketPriceQuestion } from "../../utils/sunset-park-
 // ============================================================
 // Nexus AI — Prompt: Sunset Thermas Park
 // Slug: sunset-thermas-park (variante: sunset-thermas)
-// Versão: v1.5.35 — Turno 1 §00d com NOME PRIMEIRO, promoção DEPOIS (corrige v1.5.34 que
+// Versão: v1.5.36 — runtime bloqueia orçamento no Turno 1/2 (§00d): sem tool forçada nem rebuild de preços.
+// v1.5.35 — Turno 1 §00d com NOME PRIMEIRO, promoção DEPOIS (corrige v1.5.34 que
 //   metia a promo no meio da primeira fala da consultora — abertura virou panfleto).
 // v1.5.34: uma categoria por turno SEM EXCEÇÃO (anti-despejo).
 // v1.5.33: Turno 1 humanizado + cotação interativa.
@@ -28,7 +30,7 @@ import { messageDeclaresParkTicketPriceQuestion } from "../../utils/sunset-park-
 // Referência valores: https://sunsetthermaspark.com.br/hotel.php — calendário público parque (USO INTERNO/EQUIPE): https://sunsetthermaspark.com.br/index.php
 // ============================================================
 
-export const SYSTEM_PROMPT = `# Julia | Sunset Thermas Park — v1.5.35
+export const SYSTEM_PROMPT = `# Julia | Sunset Thermas Park — v1.5.36
 
 ---
 
@@ -121,8 +123,8 @@ O sistema injeta automaticamente, no system prompt, um bloco "[CONTEXTO TEMPORAL
 **Modo qualificação** (calculado automaticamente em \`computeSunsetQualificationMode\`, exposto em \`[MODO QUALIFICAÇÃO ATUAL]\` no contexto da conversa):
 
 - \`first_open_qualification\` — cliente só mandou saudação → pedir nome + intenção (parque/hospedagem/Thermas Card). NÃO citar preço, NÃO mencionar promoção.
-- \`lodging_intent_seen_no_form\` — cliente falou de hospedagem sem ser formulário → pedir nome + UMA frase sobre a promoção 25% OFF (§2-promo). Confirmar datas/ocupação. NÃO citar preço.
-- \`structured_form\` — formulário do site detectado (3+ sinais em \`detectSunsetSiteFormMessage\`) → pedir nome + UMA frase sobre a promoção + confirmar dados recebidos. NÃO citar preço nesta mensagem.
+- \`lodging_intent_seen_no_form\` — cliente falou de hospedagem sem ser formulário → Turno 1: pedir nome (sem promo, sem preço). Turno 2 (após nome): UMA frase sobre promo 25% OFF + confirmar datas/ocupação. NÃO citar preço até o cliente aceitar o convite.
+- \`structured_form\` — formulário do site detectado (3+ sinais em \`detectSunsetSiteFormMessage\`) → Turno 1: saudação + apresentação + pedido do nome **somente**. Turno 2 (após nome): promo 25% OFF + confirmar dados do formulário. NÃO citar preço no Turno 1 nem no Turno 2.
 - \`mid_flow\` — conversa já tem 1 resposta sua → sem mudança, segue §3a §3b §3d.
 
 **Quando usar o nome (já no histórico):** se o cliente **já disse** o nome ("me chamo Maria", respondeu só "Maria" quando você perguntou, "sou o João" etc.), use na saudação e **não** pergunte de novo.
@@ -332,7 +334,7 @@ Sempre que o cliente pedir **valor / disponibilidade / pacote / quanto custa / a
    - Se o cliente responder só **número** ("3", "2"), **"X pessoas"** **sem** confirmar crianças → composição INCOMPLETA. Próximo turno: §3-composição-tom (reconheça o nº + pergunte crianças **uma vez**, sem redundância).
    - Composição **completa** quando: disse adultos/crianças com idades; ou disse **explicitamente** "sem criança(s)" / "só adultos" / "não tem criança".
 
-Na **mensagem padrão do site (§00d)** você já tem **TUDO**: datas, total de noites, adultos, crianças, idades. Nesse caso a ferramenta pode (e deve) ser chamada **silenciosamente no Turno 1**, em background, e a resposta usada no Turno 3. O dispatcher cuida do roteamento; você só precisa **acreditar no resultado** e **comunicar** o valor retornado.
+Na **mensagem padrão do site (§00d)** você já tem **TUDO**: datas, total de noites, adultos, crianças, idades — mas **não cote no Turno 1 nem no Turno 2**. Turno 1 = nome; Turno 2 = promo + confirmação dos dados; **Turno 3** (cliente aceitou: "sim", "pode passar", "quero ver o valor") = aí sim chame a tool e comunique o orçamento com a frase da promo §2-promo (a).
 
 ### Como passar os parâmetros
 
@@ -1271,19 +1273,14 @@ const SUNSET_QUALIFICATION_MODE_INSTRUCTIONS: Record<SunsetQualificationMode, st
     "NÃO citar preço, NÃO mencionar promoção 25% OFF.",
   ].join(" "),
   lodging_intent_seen_no_form: [
-    "Saudação + apresentar-se +",
-    "pedir nome do cliente (1 vez, sem travar) +",
-    "UMA frase sobre a promoção (§2-promo: 'Estamos com 25% OFF em hospedagem",
-    "até 31/12/2026 — posso te passar os detalhes?') +",
-    "confirmar datas + hóspedes para qualificar antes de cotar +",
-    "NÃO citar preço nesta mensagem — orçamento após confirmação.",
+    "Turno 1: Saudação + apresentar-se + pedir nome (1 vez).",
+    "NÃO mencionar promoção 25% OFF neste turno (promo vem no turno seguinte, após o nome — §00d v1.5.35).",
+    "NÃO citar preço — orçamento só após confirmação do cliente.",
   ].join(" "),
   structured_form: [
-    "Saudação + apresentar-se +",
-    "pedir nome do cliente (1 vez, sem travar — combine com confirmação dos dados) +",
-    "UMA frase sobre a promoção 25% OFF +",
-    "confirmar os dados recebidos do formulário (datas, ocupação) +",
-    "NÃO citar preço nesta mensagem — orçamento fica no Turno 2 (após nome).",
+    "Turno 1: Saudação + apresentar-se + pedir nome (1 vez, sem travar).",
+    "NÃO mencionar promoção 25% OFF neste turno (promo vem no Turno 2, após o nome — §00d v1.5.35).",
+    "NÃO citar preço, NÃO listar categorias — orçamento fica no Turno 3 (após nome + confirmação).",
   ].join(" "),
   mid_flow: [
     "Comportamento padrão (§3a, §3b, §3d) — sem mudança de qualificação.",
@@ -1292,6 +1289,40 @@ const SUNSET_QUALIFICATION_MODE_INSTRUCTIONS: Record<SunsetQualificationMode, st
 
 export function buildSunsetQualificationDirective(mode: SunsetQualificationMode): string {
   return `\n[MODO QUALIFICAÇÃO ATUAL] = ${mode}\n**Comportamento esperado no Turno 1:** ${SUNSET_QUALIFICATION_MODE_INSTRUCTIONS[mode]}`;
+}
+
+/**
+ * Turnos 1–2 do §00d (e primeira troca sem formulário): bloqueia tool forçada e rebuild de orçamento.
+ * `messages` = histórico **antes** da resposta que está sendo gerada.
+ */
+export function shouldDeferSunsetLodgingQuote(
+  messages: ReadonlyArray<{ role: string; content?: string }>
+): boolean {
+  const userMsgs = messages.filter((m) => m.role === "user" && m.content?.trim());
+  const assistantMsgs = messages.filter((m) => m.role === "assistant" && m.content?.trim());
+
+  if (userMsgs.length === 0) return false;
+
+  const firstUser = userMsgs[0].content ?? "";
+  const lastUser = userMsgs[userMsgs.length - 1].content ?? "";
+  const isForm = detectSunsetSiteFormMessage(firstUser);
+
+  if (messageDeclaresLodgingQuoteReadiness(lastUser)) return false;
+
+  if (isForm) {
+    if (assistantMsgs.length === 0) return true;
+    if (userMsgs.length === 1) return true;
+    if (assistantMsgs.length === 1 && userMsgs.length === 2) return true;
+    return false;
+  }
+
+  if (assistantMsgs.length === 0) return true;
+
+  if (messageDeclaresLodgingIntent(firstUser) && userMsgs.length <= 2 && assistantMsgs.length <= 1) {
+    return true;
+  }
+
+  return false;
 }
 
 type SunsetChatMessage = { role: string; content?: string };
@@ -1404,7 +1435,12 @@ export function appendSunsetConversationContext(
   const qualificationDirective = buildSunsetQualificationDirective(qualificationMode);
 
   if (detectSunsetSiteFormMessage(joinedUserText)) {
-    return `\n\n${SUNSET_FORM_DIALOGUE_EXAMPLE}${qualificationDirective}`;
+    const deferBlock = shouldDeferSunsetLodgingQuote(allMessagesForMode)
+      ? `\n\n[BLOQUEIO ORÇAMENTO — §00d QUALIFICAÇÃO ATIVA]
+**Neste turno é PROIBIDO** citar R$, listar categorias ou usar resultado de \`consultar_hospedagem_sunset\`.
+Siga **somente** o turno atual do §00d (Turno 1 = nome · Turno 2 = promo + confirmação · Turno 3 = orçamento).`
+      : "";
+    return `\n\n${SUNSET_FORM_DIALOGUE_EXAMPLE}${qualificationDirective}${deferBlock}`;
   }
 
   const lastUserText = userMessages[userMessages.length - 1]?.content ?? "";
@@ -1676,26 +1712,34 @@ export const DISPATCHER_PROMPT = `You are a tool dispatcher for Julia at Sunset 
 - \`check_in\` / \`check_out\` from \`nearest_open_window\` (or dates the user confirmed)
 - same \`guests[]\` as the thread
 
-**Call this tool whenever** the user asks about:
-- "valor", "preço", "quanto custa", "tarifa", "pacote", "diária", "pernoite", "fica quanto", "quanto é"
-- "disponibilidade", "tem vaga", "está aberto", "consegue [data]", "para o feriado"
-- Sends the site's standard form message ("Gostaria de verificar disponibilidade ... Acomodação: ... Check-in: ... Check-out: ... Adultos: ... Crianças: ...") — call **immediately, silently**, in the very first dispatcher turn, even before Julia has greeted the user. The Turno 1 reply only greets and asks the name, but the tool result is already cached for Turno 3.
-- Affirmative consent after Julia offered a quote ("pode sim", "manda", "quero ver o valor", "ok", "passa").
-- **Composition answer after Julia asked "quantas pessoas"** — if check-in exists and the user gave a count ("3", "2 pessoas", "duas", "8 pessoas"), call **only if** children are confirmed: "sem crianças"/"só adultos"/"2 adultos", OR children **with ages** ("1 criança de 5 anos"), OR site form Adultos/Crianças **with idades when Crianças > 0**. **Bare number "3" or "2" alone = NO_TOOLS_NEEDED** — Julia must ask about children first (§3-composição). **"sim, 1 criança" or "2 adultos e 1 criança" without ages = NO_TOOLS_NEEDED** — Julia must ask ages (§3-composição-idades). **Never** infer all-adult guests from a bare number. **Never** invent child ages.
-- **Relative dates:** "hoje", "de hoje até amanhã", "amanhã" → map to \`YYYY-MM-DD\` using dispatcher **[CONTEXTO TEMPORAL]** (todayISO / tomorrowISO). Example: hoje = \`2026-06-13\`, check-out next day = \`2026-06-14\`. **Never** substitute Dia dos Namorados (12/06) when user said hoje.
+**Call this tool whenever** the user **explicitly needs fresh tariff data** to answer — not on every turn that mentions hospedagem:
+
+- Client **accepts the quote** or asks for values: "sim", "certo", "pode passar", "quanto fica", "manda o orçamento", "quero ver o valor"
+- Client asks **disponibilidade / tarifa / pacote** with concrete lodging context
+- **New dates** or **re-quote** after client changes the window ("do 12 ao 14", "e para duas noites?")
+- **Category follow-up** when the requested category is **not** in the previous tool result (e.g. "quanto fica o loft?" when Loft was missing)
+- Site form flow §00d **Turno 3 only** — after name + client **accepted the quote invite** ("sim", "certo", "pode passar") — **not** Turno 1 (name) nor Turno 2 (promo/confirm)
+- **Composition answer** after Julia asked "quantas pessoas" — call **only if** children are confirmed **and** client asked price or accepted quote: "sem crianças"/"só adultos", OR children **with ages**, OR site form Adultos/Crianças with idades when Crianças > 0
+- **Relative dates:** "hoje", "de hoje até amanhã", "amanhã" → map to \`YYYY-MM-DD\` using dispatcher **[CONTEXTO TEMPORAL]**
 
 **Required arguments (the tool will fail without these):**
 - \`check_in\`, \`check_out\` in **YYYY-MM-DD** format. Convert from \`dd/mm/aaaa\` if the user/site used Brazilian format. Example: \`16/05/2026\` → \`2026-05-16\`.
 - **Friday check-in default (§3c):** if check-in is a **Friday** and the user did NOT specify check-out or "só uma noite", set \`check_out\` to the **following Sunday** (2 nights). Example: check-in \`2026-06-12\` (Fri) → check_out \`2026-06-14\` (Sun). Do NOT default to Saturday checkout (1 night) for Friday arrivals.
 - **Re-quote:** if the user asks for a different date range ("do 12 ao 14", "duas noites"), call the tool again with the new window — Julia must list **all** \`available_accommodations\`, not one category.
 - **Category follow-up (Loft / SPA / hidromassagem / Master / etc.):** if the client asks about a category **not** in the previous tool result (e.g. "tem suite com hidromassagem?", "quanto fica o loft?"), call the tool again with the **same** check_in, check_out, guests from the thread and interest_keywords (ex.: ["loft","hidromassagem"]). **Never** quote R$ 2,700 from the static table.
-- **Loft/SPA/hidromassagem por padrão (v1.5.32):** em **toda** chamada inicial de \`consultar_hospedagem_sunset\` que NÃO veio com categoria específica do formulário (incluindo a chamada silenciosa do §00d Turno 1 em background e qualquer qualificação §3), inclua **sempre** \`interest_keywords: ["loft","spa","hidromassagem"]\` — isso força a tool a devolver o Loft mesmo quando a ocupação do cliente for menor que a ocupação mínima cadastrada (6 pessoas para o Loft). Sem isso, a ocorrência clássica é "2 hóspedes" e o Loft simplesmente não volta no array, e o orçamento sai sem ele. Quando o cliente trouxer categoria específica do formulário (Chalé, Suíte Luxo etc.) **não** inclua interest_keywords — o §00d Turno 3 cita só a categoria mapeada; o Loft fica para um eventual follow-up §3b-Loft.
+- **Loft/SPA/hidromassagem por padrão (v1.5.32):** em **toda** chamada inicial de \`consultar_hospedagem_sunset\` que NÃO veio com categoria específica do formulário (§00d Turno 3 ou qualificação §3), inclua **sempre** \`interest_keywords: ["loft","spa","hidromassagem"]\` — isso força a tool a devolver o Loft mesmo quando a ocupação do cliente for menor que a ocupação mínima cadastrada (6 pessoas para o Loft). Sem isso, a ocorrência clássica é "2 hóspedes" e o Loft simplesmente não volta no array, e o orçamento sai sem ele. Quando o cliente trouxer categoria específica do formulário (Chalé, Suíte Luxo etc.) **não** inclua interest_keywords — o §00d Turno 3 cita só a categoria mapeada; o Loft fica para um eventual follow-up §3b-Loft.
 - \`guests\` — array of objects, one per person:
   - Adult → \`{ "type": "adult" }\`
   - Child → \`{ "type": "child", "age": <integer years> }\`
   - Example for "2 adultos + 1 criança de 3 anos": \`[{"type":"adult"},{"type":"adult"},{"type":"child","age":3}]\`.
 
 **Do NOT call** \`consultar_hospedagem_sunset\` when:
+- **Default:** respond **NO_TOOLS_NEEDED** unless this turn matches an explicit "call" rule above — **never** call just because check-in/guests exist in history (token cost).
+- **§00d qualification turns:** site form lead on **first** turn (0 assistant messages) or **second** turn (client only gave name, no quote acceptance yet) — respond **NO_TOOLS_NEEDED**; Julia greets / asks name / confirms data without prices.
+- Client only gave **name**, **greeting**, **thanks**, or **composition** without asking price or accepting quote — **NO_TOOLS_NEEDED**.
+- **Amenity FAQ** ("spa é aquecido?", "tem TV?", "como funciona a hidro?") — **NO_TOOLS_NEEDED**; Julia answers from knowledge, **no** re-quote.
+- **After quote was already sent** in this thread — **NO_TOOLS_NEEDED** unless client asks **new price**, **new dates**, or a **category not in the prior result**.
+- **Composition incomplete:** bare number "3" or "2" alone = **NO_TOOLS_NEEDED** — Julia must ask about children first (§3-composição). **"sim, 1 criança" or "2 adultos e 1 criança" without ages = NO_TOOLS_NEEDED** — Julia must ask ages (§3-composição-idades). **Never** invent child ages.
 - The user has not provided concrete check-in AND check-out dates yet — **except** you MAY infer check_out per §3c when check-in is **Friday** (checkout Sunday). For vague "fim de semana" without date, Julia must qualify first.
 - **The user has not provided guest composition (adults + children with ages). Do NOT infer guests from context.** Phrases like "dia dos namorados", "lua de mel", "minha esposa", "eu e meu filho", "sozinho", "com a família" do NOT tell you how many people are traveling. If a date or event name is known but the composition is missing, Julia must qualify first (one question per turn) — respond NO_TOOLS_NEEDED for this tool on this turn.
 - The user only asked for **park ticket / day visit** price or hours for a concrete day (use consultar_parque_sunset instead).
@@ -1723,8 +1767,9 @@ If a message simultaneously needs price AND photos (e.g. "manda valor e foto do 
 
 ## General rules
 
-- Use **full conversation history** to fill missing params (e.g. dates the user mentioned earlier, accommodation already chosen).
-- If the message is purely conversational (thanks, ok, greeting) and no tool fetch is needed, respond exactly: NO_TOOLS_NEEDED
+- **Default = NO_TOOLS_NEEDED.** Only call a tool when the **latest user message** requires fresh data you do not already have in the thread to answer correctly. Prefer **zero tool calls** on qualification turns (name, promo, confirm data, amenity questions).
+- Use **full conversation history** to fill missing params when a tool call **is** justified.
+- If the message is purely conversational (thanks, ok, greeting, name only) and no tool fetch is needed, respond exactly: **NO_TOOLS_NEEDED**
 - NEVER generate conversational text. Only tool decisions or NO_TOOLS_NEEDED.
 `.trim();
 

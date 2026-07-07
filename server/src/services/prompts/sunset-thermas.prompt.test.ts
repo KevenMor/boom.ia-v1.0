@@ -303,8 +303,8 @@ describe("Sunset Thermas Park — §00e TOOL DE HOSPEDAGEM (v1.4.0 — fonte pri
     expect(SYSTEM_PROMPT).toMatch(/n[aã]o.*calcule pagantes na m[aã]o|n[aã]o precisa calcular pagantes/i);
   });
 
-  it("manda chamar a tool silenciosamente no Turno 1 quando a §00d traz todos os dados", () => {
-    expect(SYSTEM_PROMPT).toMatch(/silenciosamente no Turno 1|chamada.*silenciosa/i);
+  it("§00d v1.5.36: tool só no Turno 3 (após nome + confirmação), não no Turno 1", () => {
+    expect(SYSTEM_PROMPT).toMatch(/n[aã]o cote no Turno 1 nem no Turno 2|Turno 3.*chame a tool/i);
     expect(SYSTEM_PROMPT).toMatch(/N[aã]o diga[^\n]*"vou consultar nosso sistema"|sem fazer roleplay|n[aã]o[^\n]*roleplay/i);
   });
 
@@ -356,9 +356,10 @@ describe("Sunset Thermas Park — DISPATCHER_PROMPT (v1.4.0)", () => {
     expect(DISPATCHER_PROMPT).toMatch(/disponibilidade|tem vaga|est[aá] aberto/i);
   });
 
-  it("manda chamar a tool imediatamente quando recebe a mensagem padrão do site", () => {
-    expect(DISPATCHER_PROMPT).toMatch(/standard form|mensagem padr[aã]o do site|"Gostaria de verificar disponibilidade"/i);
-    expect(DISPATCHER_PROMPT).toMatch(/immediately|silently|first dispatcher turn/i);
+  it("§00d v1.5.36: NÃO chama tool no primeiro turno do formulário — só após aceite do cliente", () => {
+    expect(DISPATCHER_PROMPT).toMatch(/Turno 3 only|§00d qualification turns/i);
+    expect(DISPATCHER_PROMPT).toMatch(/accepted the quote invite|pode passar/i);
+    expect(DISPATCHER_PROMPT).toMatch(/Default.*NO_TOOLS_NEEDED|never.*call just because/i);
   });
 
   it("documenta YYYY-MM-DD e conversão de dd/mm/aaaa", () => {

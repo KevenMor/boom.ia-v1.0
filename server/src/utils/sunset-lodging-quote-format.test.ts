@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatSunsetLodgingQuoteForDelivery,
   reorganizeSunsetLodgingQuotePhotos,
+  shouldRebuildSunsetQuoteFromTool,
 } from "./sunset-lodging-quote-format.js";
 
 const GALLERY_PHOTOS = [
@@ -308,5 +309,25 @@ describe("formatSunsetLodgingQuoteForDelivery", () => {
     expect(formatted.replace(/ /g, " ")).toContain("*Suíte com Varanda* — R$ 624,00");
     // Quebrou em MSG_SPLIT (uma bolha por opção + intro + footer).
     expect(formatted).toContain("<<MSG_SPLIT>>");
+  });
+
+  it("não reconstrói orçamento quando resposta é FAQ de amenidade (spa aquecido)", () => {
+    const toolJson = JSON.stringify({
+      available_accommodations: [
+        { name: "STANDART", total_price: 414 },
+        { name: "LOFT COM SPA", total_price: 2025 },
+      ],
+    });
+    const faqAnswer =
+      "Sim! O Loft com SPA tem hidromassagem. Quer ver alguma foto do Loft?";
+    expect(
+      shouldRebuildSunsetQuoteFromTool(faqAnswer, {
+        accommodations: [{ name: "STANDART" }, { name: "LOFT" }],
+      })
+    ).toBe(false);
+    const formatted = formatSunsetLodgingQuoteForDelivery(faqAnswer, [toolJson]);
+    expect(formatted).toBe(faqAnswer);
+    expect(formatted).not.toContain("<<MSG_SPLIT>>");
+    expect(formatted).not.toContain("R$ 414");
   });
 });
