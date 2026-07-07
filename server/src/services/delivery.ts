@@ -409,10 +409,53 @@ function consolidateImageParts(parts: string[]): ConsolidatedPart[] {
   return mergeAdjacentImageAndTextBlocks(result);
 }
 
+const LODGING_PRICE_LINE_RE = /\bR\$\s*[\d.,]+/;
+
+/**
+ * Junta pares `![foto](url)\n\n*Linha de preço*` num único bloco `foto\nLinha de preço`,
+ * antes do split por parágrafo em branco. Cobre o caso do LLM escrever foto e preço
+ * separados por uma linha em branco (cenário que produzia 2 bolhões separados).
+ * Restrição: só atua quando a primeira linha é markdown puro de imagem,
+ * a terceira linha tem R$, e ambas pertecem ao mesmo bloco (sem outra R$ depois
+ * até a terceira linha). Heurística simples para não agrupar errado.
+ */
+function tryJoinImageWithAdjacentPrice(text: string): string {
+  const lines = text.split(/\r?\n/);
+  if (lines.length < 3) return text;
+
+  const IMAGE_MD_RE = /^!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)\s*$/i;
+  const out: string[] = [];
+  let i = 0;
+  let touched = false;
+  while (i < lines.length) {
+    const cur = lines[i].trim();
+    const next = (lines[i + 1] ?? "").trim();
+    const after = (lines[i + 2] ?? "").trim();
+    if (
+      !touched &&
+      cur &&
+      IMAGE_MD_RE.test(cur) &&
+      next === "" &&
+      after &&
+      LODGING_PRICE_LINE_RE.test(after)
+    ) {
+      // Junta: foto\npreço (sem linha em branco)
+      out.push(cur);
+      out.push(after);
+      i += 3;
+      touched = true;
+      continue;
+    }
+    out.push(lines[i]);
+    i += 1;
+  }
+  return touched ? out.join("\n") : text;
+}
+
 /** Expande partes para bolhas WhatsApp; blocos foto+preço do orçamento ficam intactos (legenda na imagem). */
 function expandDeliveryParts(rawParts: string[]): string[] {
   return rawParts.flatMap((p) => {
-    const trimmed = p.trim();
+    const trimmed = tryJoinImageWithAdjacentPrice(p.trim()).trim();
     if (!trimmed) return [];
     if (isLodgingQuoteImageWithPriceBlock(trimmed)) return [trimmed];
     return trimmed

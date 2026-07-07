@@ -166,12 +166,24 @@ function buildPhotoAssignments(
     usedUrls.add(photo.imageUrl);
   }
 
-  if (assignments.size === 0 && sorted.length === galleryPhotos.length) {
-    sorted.forEach((acc, idx) => {
-      const accName = String(acc.name ?? "").trim();
-      const photo = galleryPhotos[idx];
-      if (accName && photo) assignments.set(accName, photo);
+  // Fallback por posição: cobre o caso em que fuzzy match falha (label diverge do nome)
+  // mas a tool devolveu o mesmo nº de acomodações e fotos. Ordena por preço + atribui índice.
+  if (assignments.size < sorted.length) {
+    const stillMissing = sorted.filter((acc) => {
+      const n = String(acc.name ?? "").trim();
+      return n && !assignments.has(n);
     });
+    const remainingPhotos = galleryPhotos.filter((p) => !usedUrls.has(p.imageUrl));
+    if (stillMissing.length > 0 && stillMissing.length <= remainingPhotos.length) {
+      stillMissing.forEach((acc, idx) => {
+        const accName = String(acc.name ?? "").trim();
+        const photo = remainingPhotos[idx];
+        if (accName && photo) {
+          assignments.set(accName, photo);
+          usedUrls.add(photo.imageUrl);
+        }
+      });
+    }
   }
 
   return assignments;
@@ -449,12 +461,50 @@ function insertSunsetLodgingMessageSplits(text: string): string {
   return parts.join(`\n${MSG_SPLIT}\n`);
 }
 
+/** Quando o LLM omitiu fotos inline mas a tool tem `gallery_photos` + `available_accommodations`
+ * mesmo que `parseLodgingToolPayload` tenha falhado, conseguimos reconstruir via os campos
+ * `rooms`/`loft_cotado_por`/preço/... que `runLodgingConsulta` retorna na tool principal.
+ *
+ * Aqui usamos o `toolResultStrings` direto: cada JSON é parseado e usamos
+ * `(acomodação, preço)` quando casar uma foto da galeria.
+ */
+function parseLodgingToolPayloadLoose(
+  toolResultStrings: string[],
+  galleryPhotos: SunsetLodgingGalleryPhoto[]
+): LodgingToolPayload | null {
+  // Tentar via parser estrito primeiro (cobre o caso principal).
+  const strict = parseLodgingToolPayload(toolResultStrings);
+  if (strict) return strict;
+
+  // Fallback: extrair accommodations do JSON cru (sem exigir gallery_photos junto).
+  const accs: Array<{ name?: string; total_price?: number }> = [];
+  for (const raw of toolResultStrings) {
+    try {
+      const parsed = JSON.parse(raw) as {
+        available_accommodations?: Array<{ name?: string; total_price?: number }>;
+      };
+      if (Array.isArray(parsed.available_accommodations) && parsed.available_accommodations.length > 0) {
+        for (const a of parsed.available_accommodations) {
+          if (a?.name && typeof a.total_price === "number") accs.push(a);
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  if (accs.length === 0 || galleryPhotos.length === 0) return null;
+  return { accommodations: accs, galleryPhotos };
+}
+
 export function formatSunsetLodgingQuoteForDelivery(
   assistantText: string,
   toolResultStrings: string[]
 ): string {
   const base = (assistantText ?? "").trim();
-  const toolPayload = parseLodgingToolPayload(toolResultStrings);
+  const looseGalleryPhotos = collectSunsetLodgingGalleryPhotosFromToolResults(toolResultStrings);
+  const toolPayload =
+    parseLodgingToolPayload(toolResultStrings) ||
+    parseLodgingToolPayloadLoose(toolResultStrings, looseGalleryPhotos);
   const shouldFormat =
     !!toolPayload ||
     assistantDeliversLodgingQuote(base) ||
@@ -462,24 +512,63 @@ export function formatSunsetLodgingQuoteForDelivery(
 
   if (!shouldFormat) return assistantText ?? "";
 
+  let branch: "B-rebuild" | "C-bypass" | "D-reorganize" = "D-reorganize";
   let text: string;
   if (toolPayload) {
     const rebuilt = rebuildSunsetLodgingQuoteFromTool(
       base || "Segue o orçamento solicitado.",
       toolPayload
     );
-    text = rebuilt ?? base;
+    if (rebuilt) {
+      branch = "B-rebuild";
+      text = rebuilt;
+    } else {
+      // Caminho extra: tentar novamente com `galleryPhotos` explícito quando o caller anterior
+      // falhou por mismatch de label. Mantém o texto original como último recurso.
+      branch = "D-reorganize";
+      if (looseGalleryPhotos.length === 0) {
+        text = base;
+      } else {
+        text = reorganizeSunsetLodgingQuotePhotos(base, looseGalleryPhotos);
+        text = insertSunsetLodgingMessageSplits(text);
+      }
+    }
   } else if (!base) {
-    return assistantText ?? "";
+    branch = "C-bypass";
+    text = assistantText ?? "";
   } else {
-    const galleryPhotos = collectSunsetLodgingGalleryPhotosFromToolResults(toolResultStrings);
-    if (galleryPhotos.length === 0) return base;
-    text = reorganizeSunsetLodgingQuotePhotos(base, galleryPhotos);
-    text = insertSunsetLodgingMessageSplits(text);
+    if (looseGalleryPhotos.length === 0) {
+      branch = "C-bypass";
+      text = base;
+    } else {
+      branch = "D-reorganize";
+      text = reorganizeSunsetLodgingQuotePhotos(base, looseGalleryPhotos);
+      text = insertSunsetLodgingMessageSplits(text);
+    }
   }
 
-  if (!text.includes(MSG_SPLIT)) {
+  if (text && !text.includes(MSG_SPLIT)) {
     text = polishSunsetLodgingQuoteReadableText(text);
   }
-  return text;
+
+  // [diag] transient — confirma em produção qual ramo foi tomado e se agrupou MSG_SPLIT.
+  // Filtro: `grep '\[SunsetQuote\]\[diag\]' server.log`
+  try {
+    const counts = text?.includes(MSG_SPLIT)
+      ? text.split(MSG_SPLIT).length
+      : 0;
+    const hasImage = !!text && /!\[.*\]\(https?:/.test(text);
+    const accommodationsHaveName = (toolPayload?.accommodations ?? []).map((a) => a?.name);
+    const photosHaveName = (toolPayload?.galleryPhotos ?? looseGalleryPhotos).map((p) => p?.accommodationName);
+    console.warn(
+      `[SunsetQuote][diag] branch=${branch} toolPayload=${toolPayload ? "yes" : "no"} ` +
+        `accs=${toolPayload?.accommodations.length ?? 0} photos=${looseGalleryPhotos.length} ` +
+        `splits=${counts} hasImage=${hasImage} accNames=${JSON.stringify(accommodationsHaveName)} ` +
+        `photoNames=${JSON.stringify(photosHaveName)}`
+    );
+  } catch {
+    /* ignore logger errors */
+  }
+
+  return text ?? assistantText ?? "";
 }

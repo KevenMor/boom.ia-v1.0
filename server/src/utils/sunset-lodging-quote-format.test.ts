@@ -185,4 +185,95 @@ describe("formatSunsetLodgingQuoteForDelivery", () => {
     expect(questionPart).toBeDefined();
     expect(footerPart).not.toMatch(/Das opções/i);
   });
+
+  // Regressão 2026-07-06: usuário viu 4 balões separados no WhatsApp.
+  // Antes do fix, photoForAccommodation/bindPhotoAssignments perdiam match parcial
+  // e o formatter caía no caminho (D) com texto cru + split por parágrafo.
+  it("reconstrói mesmo quando apenas 1 foto tem match e a outra cai por fallback de posição", () => {
+    const assistantText =
+      "Segue o orçamento.\n\n" +
+      "*Opções*\n" +
+      "Chalé — R$ 414,00\n" +
+      "Suíte Luxo Sem Varanda — R$ 586,50\n\n" +
+      "*Incluso no pacote*\nJantar";
+
+    // Tool devolve photos com nomes divergentes dos accommodations — fuzzy match falha.
+    const toolJson = JSON.stringify({
+      available_accommodations: [
+        { name: "STANDART", total_price: 414 },
+        { name: "LUXO DUPLO_SEM_VARANDA", total_price: 586.5 },
+      ],
+      gallery_photos: [
+        {
+          accommodationName: "STANDART",
+          displayLabel: "Chalé",
+          galleryName: "Chalé",
+          imageUrl: "https://cdn.example/chale.jpg",
+          photoMarkdown: "![Chalé](https://cdn.example/chale.jpg)",
+        },
+        {
+          // Nome totalmente divergente — fuzzy match só passa via fallback de posição.
+          accommodationName: "LUXO_DUPLO_RAW",
+          displayLabel: "Suíte Luxo Sem Varanda",
+          galleryName: "Suite Luxo Sem Varanda",
+          imageUrl: "https://cdn.example/luxo.jpg",
+          photoMarkdown: "![Suíte Luxo Sem Varanda](https://cdn.example/luxo.jpg)",
+        },
+      ],
+    });
+
+    const formatted = formatSunsetLodgingQuoteForDelivery(assistantText, [toolJson]);
+    const parts = formatted.split("<<MSG_SPLIT>>");
+
+    // Ambos os quartos precisam virar bloco foto+preço.
+    expect(parts.some((p) => p.includes("![Chalé]") && p.includes("R$ 414,00"))).toBe(true);
+    expect(parts.some((p) => p.includes("![Suíte Luxo Sem Varanda]") && p.includes("R$ 586,50"))).toBe(true);
+  });
+
+  it("reconstrói via parseLodgingToolPayloadLoose quando tool só tem accommodations sem gallery_photos juntos", () => {
+    const assistantText =
+      "Segue o orçamento solicitado.\n\n" +
+      "Chalé — R$ 414,00\n" +
+      "Suíte Luxo Sem Varanda — R$ 586,50\n\n" +
+      "*Incluso*\nJantar";
+
+    // Cada tool result tem fotos e accommodations em chamadas separadas.
+    const toolAccommodation = JSON.stringify({
+      available_accommodations: [
+        { name: "STANDART", total_price: 414 },
+        { name: "LUXO DUPLO", total_price: 586.5 },
+      ],
+    });
+    const toolGallery = JSON.stringify({
+      gallery_photos: [
+        {
+          accommodationName: "STANDART",
+          displayLabel: "Chalé",
+          galleryName: "Chalé",
+          imageUrl: "https://cdn.example/chale.jpg",
+          photoMarkdown: "![Chalé](https://cdn.example/chale.jpg)",
+        },
+        {
+          accommodationName: "LUXO DUPLO",
+          displayLabel: "Suíte Luxo Sem Varanda",
+          galleryName: "Suite Luxo Sem Varanda",
+          imageUrl: "https://cdn.example/luxo.jpg",
+          photoMarkdown: "![Suíte Luxo Sem Varanda](https://cdn.example/luxo.jpg)",
+        },
+      ],
+    });
+
+    const formatted = formatSunsetLodgingQuoteForDelivery(assistantText, [
+      toolAccommodation,
+      toolGallery,
+    ]);
+    const parts = formatted.split("<<MSG_SPLIT>>");
+
+    expect(parts.some((p) => p.includes("![Chalé]") && p.includes("R$ 414,00"))).toBe(true);
+    expect(
+      parts.some(
+        (p) => p.includes("![Suíte Luxo Sem Varanda]") && p.includes("R$ 586,50")
+      )
+    ).toBe(true);
+  });
 });

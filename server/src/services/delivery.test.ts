@@ -211,4 +211,25 @@ describe("expandDeliveryParts", () => {
     expect(consolidated[0].imageUrls).toHaveLength(1);
     expect(consolidated[0].content).toContain("*Chalé* — R$ 414,00");
   });
+
+  // Regressão 2026-07-06: usuário viu foto+preço em 2 balões separados
+  // quando o LLM deixou linha em branco entre eles.
+  it("une foto+preço com linha em branco entre eles antes de split", () => {
+    const block =
+      "![Chalé](https://cdn.example/chale.jpg)\n\n*Chalé* — R$ 414,00";
+    const expanded = expandDeliveryParts([block]);
+    expect(expanded).toHaveLength(1);
+    expect(expanded[0]).toMatch(/!\[Chalé\][\s\S]*\*Chalé\* — R\$ 414,00/);
+    expect(expanded[0]).not.toContain("\n\n");
+    const consolidated = consolidateImageParts(expanded);
+    expect(consolidated).toHaveLength(1);
+    expect(consolidated[0].type).toBe("images");
+    expect(consolidated[0].content).toContain("*Chalé* — R$ 414,00");
+  });
+
+  it("não agrupa indevidamente quando só tem preço sem foto", () => {
+    const block = "Chalé — R$ 414,00";
+    const expanded = expandDeliveryParts([block]);
+    expect(expanded).toEqual(["Chalé — R$ 414,00"]);
+  });
 });
