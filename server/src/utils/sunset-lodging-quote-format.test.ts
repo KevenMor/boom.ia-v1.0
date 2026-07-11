@@ -330,4 +330,54 @@ describe("formatSunsetLodgingQuoteForDelivery", () => {
     expect(formatted).not.toContain("<<MSG_SPLIT>>");
     expect(formatted).not.toContain("R$ 414");
   });
+
+  it("quebra parágrafo denso em MSG_SPLIT e intro com pagantes/cortesia", () => {
+    const toolJson = JSON.stringify({
+      status: "success",
+      nights: 1,
+      guests_in_family: 10,
+      guests_for_pricing: 9,
+      kids_under_12: [{ age: 3 }, { age: 10 }],
+      rooms_in_quote: 3,
+      promotion: { label: "25% OFF" },
+      available_accommodations: [
+        { name: "STANDART", total_price: 2277, rooms_count: 3, nights: 1 },
+        { name: "LUXO DUPLO", total_price: 2794.5, rooms_count: 3, nights: 1 },
+      ],
+    });
+    const dense =
+      "Como vocês são 10, organizamos em 3 quartos: *Chalé* — R$ 2.277,00 o pacote de 1 noite — total do grupo (3 unidades) *Suíte Luxo* — R$ 2.794,50 o pacote de 1 noite — total do grupo (3 unidades)";
+    const formatted = formatSunsetLodgingQuoteForDelivery(dense, [toolJson]);
+    expect(formatted).toContain("<<MSG_SPLIT>>");
+    expect(formatted).toMatch(/Como vocês são 10, organizamos em 3 quartos/);
+    expect(formatted).not.toMatch(/soma das idades|pagantes.*pagantes|cortesia/i);
+    expect(formatted).toMatch(/\*Chalé\* — R\$/);
+    expect(formatted).toMatch(/\*Suíte Luxo\* — R\$/);
+  });
+
+  it("não reconstrói orçamento quando cliente pediu só fotos do loft", () => {
+    const toolJson = JSON.stringify({
+      status: "success",
+      nights: 1,
+      guests_in_family: 10,
+      guests_for_pricing: 9,
+      available_accommodations: [
+        { name: "STANDART", total_price: 2277, rooms_count: 3, nights: 1 },
+        { name: "LOFT", total_price: 4050, rooms_count: 2, nights: 1 },
+      ],
+    });
+    const galleryReply =
+      "Para o Loft Premium com SPA, temos estas fotos:\n\n![Loft](https://example.com/loft.jpg)";
+    expect(
+      shouldRebuildSunsetQuoteFromTool(galleryReply, {
+        accommodations: [{ name: "STANDART" }, { name: "LOFT" }],
+      }, { lastUserMessage: "tem foto do loft?" })
+    ).toBe(false);
+    const formatted = formatSunsetLodgingQuoteForDelivery(galleryReply, [toolJson], {
+      lastUserMessage: "tem foto do loft?",
+    });
+    expect(formatted).toBe(galleryReply);
+    expect(formatted).not.toContain("<<MSG_SPLIT>>");
+    expect(formatted).not.toContain("Chalé");
+  });
 });

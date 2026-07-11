@@ -60,9 +60,101 @@ export type LodgingConsultaErr = { error: string; detail?: string };
  */
 const LOFT_MIN_GUESTS_FOR_RATE = 6;
 /** Máximo de hóspedes por unidade nas tarifas padrão (Chalé/Suítes). Acima disso: multi-quarto. */
-const MAX_GUESTS_PER_STANDARD_ROOM = 4;
+export const MAX_GUESTS_PER_STANDARD_ROOM = 4;
+
+export type SunsetLodgingGuestPricing = {
+  adults: number;
+  childrenUnder12: Array<{ age: number }>;
+  childrenAgesSum: number;
+  allChildrenCourtesy: boolean;
+  childrenCourtesyCount: number;
+  guestsFamilyTotal: number;
+  guestsForPricing: number;
+  rateGuestCount: number;
+  roomsInQuote: number;
+};
+
+/** Regra oficial: soma das idades ≤12 → todas cortesia; senão 1 criança cortesia + demais pagantes. */
+export function computeSunsetLodgingGuestPricing(
+  guests: LodgingGuestInput[],
+  maxGuestsPerRoom: number = MAX_GUESTS_PER_STANDARD_ROOM,
+): SunsetLodgingGuestPricing {
+  const adults = guests.filter((g) => g.type === "adult").length;
+  const childrenUnder12 = guests
+    .filter((g) => g.type === "child" && (g.age ?? 0) <= 12)
+    .map((g) => ({ age: g.age! }));
+
+  const childrenAgesSum = childrenUnder12.reduce((sum, c) => sum + c.age, 0);
+  const allChildrenCourtesy = childrenAgesSum <= 12 && childrenUnder12.length > 0;
+  const childrenCourtesyCount = allChildrenCourtesy
+    ? childrenUnder12.length
+    : childrenUnder12.length > 0
+      ? 1
+      : 0;
+
+  let guestsForPricing = adults;
+  if (!allChildrenCourtesy && childrenUnder12.length > 0) {
+    guestsForPricing += 1;
+  }
+
+  const guestsFamilyTotal = guests.length;
+  let rateGuestCount = guestsForPricing;
+  let roomsInQuote = 1;
+  if (guestsForPricing > maxGuestsPerRoom) {
+    rateGuestCount = maxGuestsPerRoom;
+    roomsInQuote = Math.ceil(guestsForPricing / maxGuestsPerRoom);
+  }
+
+  return {
+    adults,
+    childrenUnder12,
+    childrenAgesSum,
+    allChildrenCourtesy,
+    childrenCourtesyCount,
+    guestsFamilyTotal,
+    guestsForPricing,
+    rateGuestCount,
+    roomsInQuote,
+  };
+}
+
+export function formatSunsetChildrenCourtesyMessage(pricing: Pick<
+  SunsetLodgingGuestPricing,
+  "childrenUnder12" | "allChildrenCourtesy" | "childrenAgesSum" | "childrenCourtesyCount"
+>): string {
+  if (pricing.childrenUnder12.length === 0) return "";
+  if (pricing.allChildrenCourtesy) {
+    const n = pricing.childrenUnder12.length;
+    return n === 1
+      ? "1 criança até 12 anos em cortesia (colchão adicional incluso)."
+      : `${n} crianças até 12 anos em cortesia — soma das idades ${pricing.childrenAgesSum} anos (colchões adicionais inclusos).`;
+  }
+  return "1 criança até 12 anos em cortesia (soma das idades das crianças passa de 12 anos — apenas uma cortesia por grupo; colchão adicional incluso).";
+}
 
 type LodgingAccommodationRow = Extract<LodgingConsultaOk, { status: "success" }>["available_accommodations"][number];
+
+/** Preço de grupo = tarifa cadastrada por unidade × nº de quartos necessários. */
+export function computeLodgingGroupPrice(
+  unitListPrice: number,
+  roomsInQuote: number,
+  nights: number,
+  applyPromo: boolean,
+): {
+  listTotal: number;
+  promoTotal: number;
+  listUnitTotal: number;
+  promoUnitTotal: number;
+  pricePerUnitPerNight: number;
+} {
+  const rooms = Math.max(1, roomsInQuote);
+  const listUnitTotal = unitListPrice;
+  const listTotal = Math.round(listUnitTotal * rooms * 100) / 100;
+  const promoTotal = applyPromo ? applySunsetLodgingPromoPrice(listTotal) : listTotal;
+  const promoUnitTotal = applyPromo ? applySunsetLodgingPromoPrice(listUnitTotal) : listUnitTotal;
+  const pricePerUnitPerNight = Math.round((promoUnitTotal / Math.max(1, nights)) * 100) / 100;
+  return { listTotal, promoTotal, listUnitTotal, promoUnitTotal, pricePerUnitPerNight };
+}
 
 export type ParkDayRow = { calendar_date: string; day_kind: string };
 
@@ -186,7 +278,7 @@ async function fetchLoftSupplementalAccommodation(
   supabase: ReturnType<typeof createNexusClient>,
   tenant_id: string,
   nights: number,
-  guestsForPricing: number
+  guestsForPricing: number,
 ): Promise<LodgingAccommodationRow | null> {
   const { data: types, error: typesError } = await supabase
     .from("lodging_accommodation_types")
@@ -212,30 +304,38 @@ async function fetchLoftSupplementalAccommodation(
   if (ratesError || !rates?.length) return null;
 
   const rate = rates[0];
-  const total = parseFloat(String(rate.price));
+  const unitList = parseFloat(String(rate.price));
+  const loftUnitsNeeded =
+    guestsForPricing > LOFT_MIN_GUESTS_FOR_RATE
+      ? Math.ceil(guestsForPricing / LOFT_MIN_GUESTS_FOR_RATE)
+      : 1;
+  const priced = computeLodgingGroupPrice(unitList, loftUnitsNeeded, nights, false);
   const occupancyNote =
-    `Tarifa cadastrada para até ${LOFT_MIN_GUESTS_FOR_RATE} pessoas (hidromassagem/SPA). ` +
-    `Para ${guestsForPricing} pessoa${guestsForPricing === 1 ? "" : "s"}, confirmar condição com a equipe antes de fechar.`;
+    guestsForPricing > LOFT_MIN_GUESTS_FOR_RATE
+      ? `${loftUnitsNeeded} unidade(s) Loft (até ${LOFT_MIN_GUESTS_FOR_RATE} pessoas cada) — referência para ${guestsForPricing} hóspedes. Confirmar condição com a equipe antes de fechar.`
+      : `Tarifa cadastrada para até ${LOFT_MIN_GUESTS_FOR_RATE} pessoas (hidromassagem/SPA).`;
 
   return {
     id: String(rate.id),
     name: typeName,
     guests: LOFT_MIN_GUESTS_FOR_RATE,
     nights,
-    price_per_night: total / nights,
-    total_price: total,
+    price_per_night: priced.pricePerUnitPerNight,
+    total_price: priced.listTotal,
     currency: String(rate.currency ?? "BRL"),
     notes: rate.notes ? `${rate.notes} ${occupancyNote}` : occupancyNote,
-    quoted_for_occupancy: LOFT_MIN_GUESTS_FOR_RATE,
+    ...(guestsForPricing > LOFT_MIN_GUESTS_FOR_RATE
+      ? { quoted_for_occupancy: LOFT_MIN_GUESTS_FOR_RATE }
+      : {}),
+    ...(loftUnitsNeeded > 1 ? { rooms_count: loftUnitsNeeded } : {}),
   };
 }
 
-function wantsLoftOrSpaInterest(interest_keywords: string[] | undefined): boolean {
-  if (!interest_keywords?.length) return false;
-  return interest_keywords.some((k) => {
-    const n = k.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    return n.includes("loft") || n.includes("spa") || n.includes("hidro");
-  });
+/** Lista de acomodações ainda não inclui Loft/SPA (tarifa mínima 6 hóspedes). */
+export function accommodationListNeedsLoftSupplement(
+  accommodations: Array<{ name?: string }>,
+): boolean {
+  return !accommodations.some((a) => /loft|spa/i.test(String(a.name ?? "")));
 }
 
 export async function runLodgingConsulta(
@@ -271,31 +371,18 @@ export async function runLodgingConsulta(
   }
 
   try {
-    const adults = guests.filter((g) => g.type === "adult").length;
-    const childrenUnder12 = guests
-      .filter((g) => g.type === "child" && (g.age ?? 0) <= 12)
-      .map((g) => ({ age: g.age! }));
-
-    const childrenAgesSum = childrenUnder12.reduce((sum, c) => sum + c.age, 0);
-    const allChildrenCourtesy = childrenAgesSum <= 12 && childrenUnder12.length > 0;
-
-    let guestsForPricing = adults;
-    if (!allChildrenCourtesy && childrenUnder12.length > 0) {
-      guestsForPricing += 1;
-    }
-
-    const guestsFamilyTotal = guests.length;
+    const pricing = computeSunsetLodgingGuestPricing(guests);
+    const {
+      childrenUnder12,
+      guestsForPricing,
+      guestsFamilyTotal,
+      rateGuestCount,
+      roomsInQuote,
+    } = pricing;
 
     const checkInDate = new Date(check_in + "T00:00:00Z");
     const checkOutDate = new Date(check_out + "T00:00:00Z");
     const nights = Math.floor((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
-
-    let rateGuestCount = guestsForPricing;
-    let roomsInQuote = 1;
-    if (guestsForPricing > MAX_GUESTS_PER_STANDARD_ROOM) {
-      rateGuestCount = MAX_GUESTS_PER_STANDARD_ROOM;
-      roomsInQuote = Math.ceil(guestsForPricing / MAX_GUESTS_PER_STANDARD_ROOM);
-    }
 
     const { data: parkDays, error: parkError } = await supabase
       .from("lodging_park_days")
@@ -425,8 +512,8 @@ export async function runLodgingConsulta(
     );
 
     const accommodations = uniqueRates.map((rate) => {
-      const unitTotal = parseFloat(String(rate.price));
-      const totalForGroup = unitTotal * roomsInQuote;
+      const unitList = parseFloat(String(rate.price));
+      const priced = computeLodgingGroupPrice(unitList, roomsInQuote, nights, false);
       const multiRoomNote =
         roomsInQuote > 1
           ? `${roomsInQuote} unidades (até ${rateGuestCount} pessoas cada) — referência para ${guestsForPricing} hóspedes no total.`
@@ -437,8 +524,8 @@ export async function runLodgingConsulta(
         name: rate.lodging_accommodation_types?.name ?? "Acomodação",
         guests: rate.guests,
         nights: rate.nights,
-        price_per_night: unitTotal / nights,
-        total_price: totalForGroup,
+        price_per_night: priced.pricePerUnitPerNight,
+        total_price: priced.listTotal,
         currency: rate.currency,
         notes: mergedNotes,
         ...(roomsInQuote > 1
@@ -447,49 +534,48 @@ export async function runLodgingConsulta(
       };
     });
 
-    const loftInterest = wantsLoftOrSpaInterest(params.interest_keywords);
-    const hasLoftInList = accommodations.some((a) => /loft|spa/i.test(a.name));
-    if (loftInterest && !hasLoftInList) {
+    if (accommodationListNeedsLoftSupplement(accommodations)) {
       const supplemental = await fetchLoftSupplementalAccommodation(
         supabase,
         tenant_id,
         nights,
-        guestsForPricing
+        guestsForPricing,
       );
       if (supplemental) accommodations.push(supplemental);
     }
 
     const promoEligible = isSunsetLodgingPromoEligibleForStay(check_in);
-    const pricedAccommodations = promoEligible
+    const pricedAccommodations = (promoEligible
       ? accommodations.map((acc) => {
+          const rooms = acc.rooms_count ?? 1;
           const listTotal = acc.total_price;
           const promoTotal = applySunsetLodgingPromoPrice(listTotal);
+          const promoUnitTotal = applySunsetLodgingPromoPrice(listTotal / rooms);
           return {
             ...acc,
             list_total_price: listTotal,
             total_price: promoTotal,
-            price_per_night: Math.round((promoTotal / nights) * 100) / 100,
+            price_per_night: Math.round((promoUnitTotal / nights) * 100) / 100,
           };
         })
-      : accommodations;
+      : [...accommodations]
+    ).sort((a, b) => a.total_price - b.total_price);
 
-    const messageKids =
-      childrenUnder12.length > 0
-        ? `${childrenUnder12.length === 1 ? "1 criança até 12 anos em cortesia" : `${childrenUnder12.length} crianças até 12 anos em cortesia`} (colchão${childrenUnder12.length > 1 ? "ões" : ""} adicional${childrenUnder12.length > 1 ? "is" : ""} inclusos).`
-        : "";
+    const messageKids = formatSunsetChildrenCourtesyMessage(pricing);
 
-    const optWord = uniqueRates.length === 1 ? "opção" : "opções";
+    const accCount = pricedAccommodations.length;
+    const optWord = accCount === 1 ? "opção" : "opções";
     const groupRoomHint =
       roomsInQuote > 1
         ? ` (orçamento com ${roomsInQuote} unidades de até ${rateGuestCount} pessoas cada para acomodar ${guestsForPricing} hóspedes)`
         : "";
     const promoHint = promoEligible ? " Valores com 25% OFF da promoção vigente." : "";
     const message =
-      `Encontramos ${uniqueRates.length} ${optWord} de hospedagem para ${guestsForPricing} pessoa${guestsForPricing === 1 ? "" : "s"}${groupRoomHint}` +
+      `Encontramos ${accCount} ${optWord} de hospedagem para ${guestsForPricing} pessoa${guestsForPricing === 1 ? "" : "s"}${groupRoomHint}` +
       (guestsFamilyTotal > guestsForPricing
         ? ` (sua família tem ${guestsFamilyTotal} pessoa${guestsFamilyTotal === 1 ? "" : "s"}), `
         : `, `) +
-      `de ${new Date(check_in).toLocaleDateString("pt-BR")} a ${new Date(check_out).toLocaleDateString("pt-BR")} (${nights} noite${nights === 1 ? "" : "s"}). ` +
+      `de ${formatDateIsoBR(check_in)} a ${formatDateIsoBR(check_out)} (${nights} noite${nights === 1 ? "" : "s"}). ` +
       (messageKids ? messageKids : "") +
       promoHint;
 

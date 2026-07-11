@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildOpenParkRangeSuggestions,
   findNearestOpenLodgingWindowFromRows,
+  accommodationListNeedsLoftSupplement,
+  computeLodgingGroupPrice,
+  computeSunsetLodgingGuestPricing,
+  formatSunsetChildrenCourtesyMessage,
 } from "./lodging-consulta.js";
 
 describe("findNearestOpenLodgingWindowFromRows", () => {
@@ -68,5 +72,77 @@ describe("buildOpenParkRangeSuggestions", () => {
         { calendar_date: "2026-07-19", day_kind: "fechado" },
       ])
     ).toEqual(["Parque aberto: 18/07/2026"]);
+  });
+});
+
+describe("accommodationListNeedsLoftSupplement", () => {
+  it("retorna true quando Loft não está na lista", () => {
+    expect(
+      accommodationListNeedsLoftSupplement([
+        { name: "STANDART" },
+        { name: "LUXO DUPLO" },
+      ])
+    ).toBe(true);
+  });
+
+  it("retorna false quando LOFT ou SPA já está na lista", () => {
+    expect(accommodationListNeedsLoftSupplement([{ name: "LOFT" }])).toBe(false);
+    expect(accommodationListNeedsLoftSupplement([{ name: "LOFT PREMIUM COM SPA" }])).toBe(false);
+  });
+});
+
+describe("computeLodgingGroupPrice", () => {
+  it("multiplica tarifa por unidade × quartos e aplica promo no total do grupo", () => {
+    const priced = computeLodgingGroupPrice(3036, 3, 1, true);
+    expect(priced.listTotal).toBe(9108);
+    expect(priced.promoTotal).toBe(6831);
+    expect(priced.promoUnitTotal).toBe(2277);
+  });
+
+  it("1 quarto mantém total igual à tarifa unitária", () => {
+    const priced = computeLodgingGroupPrice(1104, 1, 1, true);
+    expect(priced.listTotal).toBe(1104);
+    expect(priced.promoTotal).toBe(828);
+  });
+});
+
+describe("computeSunsetLodgingGuestPricing — cortesia crianças", () => {
+  const adults = Array.from({ length: 8 }, () => ({ type: "adult" as const }));
+
+  it("10 pessoas (8 adultos + 2 crianças 3 e 10) = 9 pagantes e 3 quartos", () => {
+    const guests = [
+      ...adults,
+      { type: "child" as const, age: 3 },
+      { type: "child" as const, age: 10 },
+    ];
+    const p = computeSunsetLodgingGuestPricing(guests);
+    expect(p.guestsFamilyTotal).toBe(10);
+    expect(p.guestsForPricing).toBe(9);
+    expect(p.allChildrenCourtesy).toBe(false);
+    expect(p.childrenCourtesyCount).toBe(1);
+    expect(p.roomsInQuote).toBe(3);
+  });
+
+  it("2 adultos + 2 crianças (3 e 5) soma 8 = todas cortesia → 2 pagantes", () => {
+    const guests = [
+      { type: "adult" as const },
+      { type: "adult" as const },
+      { type: "child" as const, age: 3 },
+      { type: "child" as const, age: 5 },
+    ];
+    const p = computeSunsetLodgingGuestPricing(guests);
+    expect(p.guestsForPricing).toBe(2);
+    expect(p.allChildrenCourtesy).toBe(true);
+    expect(p.childrenCourtesyCount).toBe(2);
+  });
+
+  it("mensagem de cortesia parcial quando soma > 12", () => {
+    const p = computeSunsetLodgingGuestPricing([
+      ...adults,
+      { type: "child", age: 3 },
+      { type: "child", age: 10 },
+    ]);
+    expect(formatSunsetChildrenCourtesyMessage(p)).toMatch(/1 criança até 12 anos em cortesia/);
+    expect(formatSunsetChildrenCourtesyMessage(p)).toMatch(/soma das idades/);
   });
 });

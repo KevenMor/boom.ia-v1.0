@@ -107,16 +107,28 @@ export function formatLodgingConsultaForLlm(obj: Record<string, unknown>): strin
     );
   }
   if (guestsPricing != null) {
-    lines.push(`Pessoas no grupo: ${guestsPricing}.`);
+    const familyTotal = obj.guests_in_family;
+    if (typeof familyTotal === "number" && familyTotal > guestsPricing) {
+      lines.push(
+        `Grupo: ${familyTotal} pessoas (tarifa calculada internamente para ${guestsPricing} pagantes — NÃO explique regra de cortesia ao cliente).`
+      );
+    } else {
+      lines.push(`Pessoas pagantes para tarifa: ${guestsPricing}.`);
+    }
   }
   const roomsInQuote = obj.rooms_in_quote;
   if (typeof roomsInQuote === "number" && roomsInQuote > 1) {
     const guestsTotal = guestsPricing ?? "?";
+    const familyTotal = obj.guests_in_family;
     lines.push(
-      `ORÇAMENTO MULTI-QUARTO (${roomsInQuote} quartos/unidades para ${guestsTotal} hóspedes): total_price abaixo já é a SOMA de todas as unidades.`
+      `ORÇAMENTO MULTI-QUARTO (${roomsInQuote} quartos/unidades para ${guestsTotal} hóspedes pagantes): total_price abaixo já é a SOMA de todas as unidades.`
     );
+    const familyPhrase =
+      typeof familyTotal === "number" && familyTotal > Number(guestsTotal)
+        ? String(familyTotal)
+        : String(guestsTotal);
     lines.push(
-      `TOM OBRIGATÓRIO (§3b-grupos-tom): ANTES de listar preços, escreva UMA frase natural explicando que, pelo nº de hóspedes, são necessários ${roomsInQuote} quartos (até ${Math.ceil(Number(guestsTotal) / roomsInQuote) || 4} pessoas por unidade). Ex.: "Como vocês são ${guestsTotal}, organizamos em ${roomsInQuote} quartos — o valor de cada opção já é o total do pacote para o grupo."`
+      `TOM OBRIGATÓRIO (§3b-grupos-tom): ANTES de listar preços, UMA frase curta — ex.: "Como vocês são ${familyPhrase}, organizamos em ${roomsInQuote} quartos — cada opção abaixo traz o total do pacote para o grupo." PROIBIDO explicar cortesia, soma de idades ou regras internas neste turno.`
     );
     lines.push(
       `PROIBIDO listar só "*CATEGORIA* — R$ X (para ${roomsInQuote} unidades)" sem essa frase introdutória.`
@@ -144,14 +156,21 @@ export function formatLodgingConsultaForLlm(obj: Record<string, unknown>): strin
   for (const acc of sorted) {
     const name = acc.name ?? "Acomodação";
     const total = acc.total_price != null ? formatCurrencyBR(acc.total_price) : "?";
+    const nights = typeof acc.nights === "number" && acc.nights > 0 ? acc.nights : 1;
+    const nightsLabel = nights === 1 ? "1 noite" : `${nights} noites`;
+    const rooms = acc.rooms_count ?? 1;
     const roomsHint =
-      acc.rooms_count != null && acc.rooms_count > 1 ? ` (${acc.rooms_count} unidades)` : "";
+      rooms > 1
+        ? ` — total do grupo (${rooms} unidades${acc.quoted_for_occupancy != null ? ` de até ${acc.quoted_for_occupancy} pessoas cada` : ""})`
+        : "";
     const occupancyHint =
-      acc.quoted_for_occupancy != null
-        ? ` [tarifa base até ${acc.quoted_for_occupancy} pessoas/unidade — total_price já inclui todas as unidades]`
+      acc.quoted_for_occupancy != null && rooms <= 1
+        ? ` [tarifa para até ${acc.quoted_for_occupancy} pessoas — confirmar condição com a equipe se o grupo for maior]`
         : "";
     const note = acc.notes?.trim() ? ` (${acc.notes.trim()})` : "";
-    lines.push(`- *${name}* — ${total}${roomsHint}${occupancyHint}${note}`);
+    lines.push(
+      `- *${name}* — ${total} o pacote de ${nightsLabel}${roomsHint}${occupancyHint}${note}`,
+    );
   }
 
   return lines.join("\n");

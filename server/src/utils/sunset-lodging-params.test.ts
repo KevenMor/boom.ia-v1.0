@@ -8,6 +8,7 @@ import {
   detectSunsetLodgingInterestKeywords,
   extractSunsetClientNameFromMessages,
   extractSunsetLodgingParams,
+  extractSunsetLodgingDateRange,
   extractSunsetFormAccommodationFromMessages,
   shouldIncludeDefaultLoftInterestKeywords,
   SUNSET_DEFAULT_LOFT_INTEREST_KEYWORDS,
@@ -17,11 +18,23 @@ import {
   messageDeclaresLodgingPriceOrAvailabilityInquiry,
   messageDeclaresLodgingQuoteReadiness,
   userNeedsSunsetLodgingToolCall,
+  conversationHasPendingLodgingQuote,
+  conversationHadLodgingQuoteRequest,
+  shouldAutoInvokeSunsetLodgingTool,
+  shouldBlockSunsetLodgingToolCall,
+  getSunsetLodgingToolBlockInstruction,
+  buildSunsetChildrenConfirmationReply,
+  messageDeclaresExplicitLodgingDates,
+  messageDeclaresNewLodgingQuoteIntent,
+  sliceActiveLodgingQuoteMessages,
+  lodgingQuoteNeedsFreshToolResult,
+  conversationHasCompleteGuestComposition,
   conversationAlreadyDeliveredLodgingQuote,
   messageUsesVagueGuestCountOnly,
   parseExplicitGuestCount,
   shouldReinvokeSunsetLodging,
   userAsksSunsetLodgingCategoryOrPrice,
+  userMessageIsPhotoRequestOnly,
 } from "./sunset-lodging-params.js";
 
 describe("parseExplicitGuestCount", () => {
@@ -370,5 +383,255 @@ describe("dúvida de amenidade pós-orçamento (v1.5.36)", () => {
     expect(messageDeclaresLodgingPriceOrAvailabilityInquiry("quanto fica?")).toBe(true);
     expect(messageDeclaresLodgingPriceOrAvailabilityInquiry("Keven")).toBe(false);
     expect(messageDeclaresLodgingPriceOrAvailabilityInquiry("2 adultos")).toBe(false);
+    expect(messageDeclaresLodgingPriceOrAvailabilityInquiry("Faz um orçamento para 10 pessoas")).toBe(true);
+  });
+});
+
+describe("orçamento 10 pessoas + data única (18/7)", () => {
+  const ref = new Date("2026-07-11T12:00:00Z");
+
+  const messagesAfterDate = [
+    { role: "user", content: "Faz um orçamento para 10 pessoas" },
+    { role: "assistant", content: "Para qual período você gostaria do orçamento para 10 pessoas?" },
+    { role: "user", content: "25/7" },
+    {
+      role: "assistant",
+      content:
+        "Para 25/7, o parque estará fechado. A próxima data em que o parque estará aberto é em 26 de julho. Gostaria de verificar a disponibilidade para esse período?",
+    },
+    { role: "user", content: "18/7" },
+  ];
+
+  it("10 pessoas exige confirmar crianças antes de cotar", () => {
+    expect(conversationHasCompleteGuestComposition(messagesAfterDate)).toBe(false);
+    expect(conversationNeedsChildrenConfirmation(messagesAfterDate)).toBe(true);
+    expect(extractSunsetLodgingParams(messagesAfterDate, ref)).toBeNull();
+    expect(userNeedsSunsetLodgingToolCall(messagesAfterDate)).toBe(false);
+    expect(shouldAutoInvokeSunsetLodgingTool(messagesAfterDate)).toBe(false);
+  });
+
+  it("10 pessoas + sem crianças declaradas libera orçamento com datas", () => {
+    const msgs = [
+      ...messagesAfterDate,
+      { role: "assistant", content: "Alguma criança vai junto? Se sim, quantas e com quantos anos?" },
+      { role: "user", content: "nao, so adultos" },
+    ];
+    expect(conversationHasCompleteGuestComposition(msgs)).toBe(true);
+    expect(extractSunsetLodgingParams(msgs, ref)?.guests).toHaveLength(10);
+    expect(userNeedsSunsetLodgingToolCall(msgs)).toBe(true);
+  });
+
+  it("pedido único com 10 pessoas e datas ainda pergunta crianças", () => {
+    const msgs = [
+      {
+        role: "user",
+        content: "Faz um orçamento para 10 pessoas para o dia 18 e 19/07",
+      },
+    ];
+    expect(conversationNeedsChildrenConfirmation(msgs)).toBe(true);
+    expect(extractSunsetLodgingDateRange(msgs, ref)).toEqual({
+      check_in: "2026-07-18",
+      check_out: "2026-07-19",
+    });
+    expect(extractSunsetLodgingParams(msgs, ref)).toBeNull();
+    expect(shouldAutoInvokeSunsetLodgingTool(msgs)).toBe(false);
+  });
+
+  it("após informar idades das crianças libera orçamento e não repete pergunta", () => {
+    const msgs = [
+      { role: "user", content: "Faz um orçamento para 10 pessoas para o dia 18 e 19/07" },
+      { role: "assistant", content: "Perfeito, 10 pessoas! Alguma criança vai junto? Se sim, quantas e com quantos anos?" },
+      { role: "user", content: "apenas duas, sendo uma de 3 anos e uma de 10" },
+    ];
+    expect(conversationNeedsChildrenConfirmation(msgs)).toBe(false);
+    expect(shouldBlockSunsetLodgingToolCall(msgs)).toBe(false);
+    expect(extractSunsetLodgingParams(msgs, ref)?.guests).toEqual([
+      ...Array.from({ length: 8 }, () => ({ type: "adult" })),
+      { type: "child", age: 3 },
+      { type: "child", age: 10 },
+    ]);
+    expect(shouldAutoInvokeSunsetLodgingTool(msgs)).toBe(true);
+  });
+
+  it("novo orçamento 10 pessoas após sem criancas em ciclo anterior ainda pergunta crianças", () => {
+    const msgs = [
+      { role: "user", content: "Faz orçamento 2 pessoas dia 01/08 a 02/08" },
+      { role: "assistant", content: "Alguma criança vai junto?" },
+      { role: "user", content: "nao, so adultos" },
+      { role: "assistant", content: "Chalé R$ 500 Loft R$ 800" },
+      { role: "user", content: "Faz um orçamento para 10 pessoas para o dia 18 e 19/07" },
+    ];
+    expect(conversationNeedsChildrenConfirmation(msgs)).toBe(true);
+    expect(conversationHasCompleteGuestComposition(sliceActiveLodgingQuoteMessages(msgs))).toBe(false);
+    expect(shouldBlockSunsetLodgingToolCall(msgs)).toBe(true);
+    expect(buildSunsetChildrenConfirmationReply(msgs)).toMatch(/10 pessoas.*criança/i);
+  });
+
+  it("pedido único dia 18 e 19/07 não pede período de novo após repetir mensagem", () => {
+    const msgs = [
+      { role: "user", content: "Faz um orçamento para 10 pessoas para o dia 18 e 19/07" },
+      { role: "assistant", content: "Para qual período você gostaria do orçamento para 10 pessoas?" },
+      { role: "user", content: "Faz um orçamento para 10 pessoas para o dia 18 e 19/07" },
+    ];
+    expect(conversationHasDeclaredLodgingDates(msgs, ref)).toBe(true);
+    expect(conversationNeedsChildrenConfirmation(msgs)).toBe(true);
+    expect(extractSunsetLodgingParams(msgs, ref)).toBeNull();
+    expect(shouldBlockSunsetLodgingToolCall(msgs)).toBe(true);
+    expect(getSunsetLodgingToolBlockInstruction(msgs)).toMatch(/Alguma criança vai junto/i);
+    expect(shouldAutoInvokeSunsetLodgingTool(msgs)).toBe(false);
+  });
+
+  it("extrai check-in 18/07, check-out +1 noite e 10 hóspedes após confirmar adultos", () => {
+    const msgs = [
+      ...messagesAfterDate,
+      { role: "assistant", content: "Alguma criança vai junto?" },
+      { role: "user", content: "sem criancas" },
+    ];
+    const params = extractSunsetLodgingParams(msgs, ref);
+    expect(params).toEqual({
+      check_in: "2026-07-18",
+      check_out: "2026-07-19",
+      guests: Array.from({ length: 10 }, () => ({ type: "adult" })),
+      interest_keywords: [...SUNSET_DEFAULT_LOFT_INTEREST_KEYWORDS],
+    });
+  });
+
+  it("dispara tool quando cliente informa data e confirma composição", () => {
+    const msgs = [
+      ...messagesAfterDate,
+      { role: "assistant", content: "Alguma criança vai junto?" },
+      { role: "user", content: "nao, todos adultos" },
+    ];
+    expect(conversationHasPendingLodgingQuote(msgs)).toBe(true);
+    expect(userNeedsSunsetLodgingToolCall(msgs)).toBe(true);
+  });
+
+  it("não dispara tool só com pedido de período (sem data ainda)", () => {
+    const msgs = messagesAfterDate.slice(0, 2);
+    expect(conversationHasPendingLodgingQuote(msgs)).toBe(true);
+    expect(extractSunsetLodgingParams(msgs, ref)).toBeNull();
+    expect(userNeedsSunsetLodgingToolCall(msgs)).toBe(false);
+  });
+
+  it("pedido só com 10 pessoas (sem datas) é orçamento pendente", () => {
+    const msgs = [{ role: "user", content: "Faz um orçamento para 10 pessoas" }];
+    expect(conversationHasPendingLodgingQuote(msgs)).toBe(true);
+    expect(extractSunsetLodgingParams(msgs, ref)).toBeNull();
+    expect(userNeedsSunsetLodgingToolCall(msgs)).toBe(false);
+  });
+
+  it("recota após orçamento anterior errado quando cliente informa novas datas", () => {
+    const msgs = [
+      { role: "user", content: "Faz um orçamento para 10 pessoas" },
+      { role: "assistant", content: "Para qual período?" },
+      { role: "user", content: "18/07" },
+      { role: "assistant", content: "Alguma criança vai junto?" },
+      { role: "user", content: "nao, so adultos" },
+      {
+        role: "assistant",
+        content: "Chalé — R$ 2.070,00 o pacote. Loft — R$ 3.500,00 o pacote.",
+      },
+      { role: "user", content: "dia 18/07 a 19/07" },
+    ];
+    expect(conversationAlreadyDeliveredLodgingQuote(msgs)).toBe(true);
+    expect(conversationHasPendingLodgingQuote(msgs)).toBe(true);
+    expect(extractSunsetLodgingParams(msgs, ref)?.guests).toHaveLength(10);
+    expect(userNeedsSunsetLodgingToolCall(msgs)).toBe(true);
+    expect(shouldAutoInvokeSunsetLodgingTool(msgs)).toBe(true);
+  });
+
+  it("sandbox longo: novo pedido 10 pessoas após orçamentos antigos no histórico", () => {
+    const msgs = [
+      { role: "user", content: "quero hospedagem" },
+      { role: "assistant", content: "Chalé R$ 2.070 e Loft R$ 3.500 para 2 pessoas." },
+      { role: "user", content: "Faz um orçamento para 10 pessoas" },
+      { role: "assistant", content: "Para qual período você gostaria do orçamento para 10 pessoas?" },
+      { role: "user", content: "dia 18/07 a 19/07" },
+      { role: "assistant", content: "Alguma criança vai junto?" },
+      { role: "user", content: "sem criancas" },
+    ];
+    expect(conversationHadLodgingQuoteRequest(msgs)).toBe(true);
+    expect(conversationHasPendingLodgingQuote(msgs)).toBe(true);
+    expect(userNeedsSunsetLodgingToolCall(msgs)).toBe(true);
+    expect(shouldAutoInvokeSunsetLodgingTool(msgs)).toBe(true);
+    expect(lodgingQuoteNeedsFreshToolResult(msgs)).toBe(true);
+    expect(messageDeclaresExplicitLodgingDates("dia 18/07 a 19/07")).toBe(true);
+    const params = extractSunsetLodgingParams(msgs, ref);
+    expect(params?.guests).toHaveLength(10);
+    expect(params?.check_in).toBe("2026-07-18");
+    expect(params?.check_out).toBe("2026-07-19");
+  });
+
+  it("não mistura datas/composição de orçamento anterior no histórico longo", () => {
+    const msgs = [
+      { role: "user", content: "orçamento para 2 pessoas, 15/6 a 16/6" },
+      {
+        role: "assistant",
+        content: "Chalé — R$ 900,00 o pacote. Loft — R$ 1.200,00 o pacote.",
+      },
+      { role: "user", content: "obrigado, depois vejo" },
+      { role: "assistant", content: "Combinado! Estou à disposição." },
+      { role: "user", content: "Faz um orçamento para 10 pessoas" },
+      { role: "assistant", content: "Para qual período?" },
+      { role: "user", content: "18/07 a 19/07" },
+      { role: "assistant", content: "Alguma criança vai junto?" },
+      { role: "user", content: "nao, todos adultos" },
+    ];
+    const params = extractSunsetLodgingParams(msgs, ref);
+    expect(params?.guests).toHaveLength(10);
+    expect(params?.check_in).toBe("2026-07-18");
+    expect(params?.check_out).toBe("2026-07-19");
+    expect(params?.check_in).not.toBe("2026-06-15");
+    expect(shouldAutoInvokeSunsetLodgingTool(msgs)).toBe(true);
+  });
+
+  it("outro orçamento totalmente diferente após conversa longa", () => {
+    const msgs = [
+      { role: "user", content: "oi" },
+      { role: "assistant", content: "Olá! Sou a Julia." },
+      { role: "user", content: "quero orçamento 4 pessoas 10/8 a 11/8" },
+      {
+        role: "assistant",
+        content: "Chalé — R$ 1.600. Loft — R$ 2.100.",
+      },
+      { role: "user", content: "e ingresso do parque?" },
+      { role: "assistant", content: "Ingresso adulto R$ 50." },
+      { role: "user", content: "outro orçamento: 8 adultos, 20/12 a 22/12" },
+    ];
+    expect(messageDeclaresNewLodgingQuoteIntent("outro orçamento: 8 adultos, 20/12 a 22/12")).toBe(true);
+    expect(sliceActiveLodgingQuoteMessages(msgs).length).toBe(1);
+    const params = extractSunsetLodgingParams(msgs, ref);
+    expect(params?.guests).toHaveLength(8);
+    expect(params?.check_in).toBe("2026-12-20");
+    expect(params?.check_out).toBe("2026-12-22");
+    expect(shouldAutoInvokeSunsetLodgingTool(msgs)).toBe(true);
+  });
+});
+
+describe("pedido de fotos após orçamento — não re-cotar", () => {
+  const quotedThread = [
+    { role: "user", content: "orçamento 10 pessoas, dia 18 e 19/07" },
+    { role: "assistant", content: "Alguma criança vai junto?" },
+    { role: "user", content: "apenas duas, uma de 3 anos e uma de 10" },
+    {
+      role: "assistant",
+      content:
+        "Como vocês são 10, organizamos em 3 quartos. Chalé — R$ 2.277,00. Loft — R$ 4.050,00.",
+    },
+    { role: "user", content: "tem foto do loft?" },
+  ];
+
+  it("detecta pedido só de fotos", () => {
+    expect(userMessageIsPhotoRequestOnly("tem foto do loft?")).toBe(true);
+    expect(userMessageIsPhotoRequestOnly("quanto fica o loft?")).toBe(false);
+  });
+
+  it("não trata pedido de foto como pergunta de categoria/preço", () => {
+    expect(userAsksSunsetLodgingCategoryOrPrice(quotedThread)).toBe(false);
+  });
+
+  it("não auto-invoca lodging_consulta após pedido de foto", () => {
+    expect(shouldAutoInvokeSunsetLodgingTool(quotedThread)).toBe(false);
+    expect(userNeedsSunsetLodgingToolCall(quotedThread)).toBe(false);
   });
 });

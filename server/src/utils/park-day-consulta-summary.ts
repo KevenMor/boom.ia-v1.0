@@ -15,11 +15,22 @@ function formatSingleDayForLlm(obj: Record<string, unknown>): string | null {
 
   if (status === "no_data") {
     const message = typeof obj.message === "string" ? obj.message : "Sem registro no calendário.";
-    return [
-      "CONSULTA PARQUE — sem registro cadastrado para esta data.",
+    const thermasCard = obj._thermas_card_compare === true;
+    const lines = [
+      thermasCard
+        ? "CONSULTA PARQUE (apoio Thermas Card §3g-compare) — sem ingresso cadastrado para esta data."
+        : "CONSULTA PARQUE — sem registro cadastrado para esta data.",
       message,
-      "PROIBIDO inventar valores de ingresso. Pode orientar à área de ingressos do site oficial.",
-    ].join("\n");
+      "PROIBIDO inventar valores de ingresso.",
+    ];
+    if (thermasCard) {
+      lines.push(
+        "Fio THERMAS CARD ativo: continue a venda consultiva — cite R$ 135,90/mês (5 pessoas, 5 anos), explique benefícios e pergunte frequência de visitas. PROIBIDO responder só com link do site de ingressos ou trocar de assunto."
+      );
+    } else {
+      lines.push("Pode orientar à área de ingressos do site oficial.");
+    }
+    return lines.join("\n");
   }
 
   if (status !== "success") return null;
@@ -67,9 +78,15 @@ function formatSingleDayForLlm(obj: Record<string, unknown>): string | null {
     );
     lines.push("PROIBIDO substituir por link genérico do site quando estes valores existem.");
   } else {
-    lines.push(
-      "Sem valores de ingresso cadastrados para esta data. Pode orientar à área de ingressos em https://sunsetthermaspark.com.br/ sem inventar R$."
-    );
+    if (obj._thermas_card_compare === true) {
+      lines.push(
+        "Sem valores de ingresso cadastrados para esta data. No fio Thermas Card: explique qualitativamente (5 pessoas, ilimitado 5 anos, R$ 135,90/mês) — PROIBIDO mandar só link do site de ingressos."
+      );
+    } else {
+      lines.push(
+        "Sem valores de ingresso cadastrados para esta data. Pode orientar à área de ingressos em https://sunsetthermaspark.com.br/ sem inventar R$."
+      );
+    }
   }
 
   return lines.join("\n");

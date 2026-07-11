@@ -170,7 +170,58 @@ export function messageDeclaresParkTicketPriceQuestion(text: string): boolean {
   return asksPrice || (visitIntent && /hoje|amanha|\d{1,2}\/\d{1,2}/.test(t));
 }
 
+/** Pergunta genérica de preço/valor sem citar parque, hospedagem nem produto. */
+export function messageDeclaresGenericPriceOrValueQuestion(text: string): boolean {
+  const t = normalizeText(text);
+  if (!t) return false;
+  if (/parque|ingresso|\bpark\b|hospedagem|hotel|pernoite|chal[eé]|suite|loft|quarto|estadia/.test(t)) {
+    return false;
+  }
+  if (/^qual\s+(o\s+)?valor\s*\??$/.test(t)) return true;
+  if (/^quanto\s+(custa|fica|e)\??$/.test(t)) return true;
+  if (/^qual\s+(o\s+)?preco\s*\??$/.test(t)) return true;
+  if (/^valor\s*\??$/.test(t)) return true;
+  return /\b(qual|quanto).{0,24}\b(valor|preco|custa|fica)\b/.test(t);
+}
+
+/** Fio Thermas Card ativo — cliente pediu preço do cartão (não ingresso avulso). */
+export function userAsksThermasCardPricing(messages: ChatMessage[]): boolean {
+  if (!conversationDeclaresThermasCardIntent(messages)) return false;
+  const lastUser = [...messages].reverse().find((m) => m.role === "user" && m.content?.trim());
+  if (!lastUser?.content) return false;
+  const text = lastUser.content;
+  if (messageDeclaresThermasCardIntent(text)) return true;
+  if (messageDeclaresParkTicketPriceQuestion(text)) return false;
+  const t = normalizeText(text);
+  if (/parque|ingresso|\bpark\b/.test(t) && !/thermas\s*card|cartao|cartão/.test(t)) return false;
+  if (/hospedagem|hotel|pernoite|chal[eé]|suite|loft|quarto/.test(t)) return false;
+  return messageDeclaresGenericPriceOrValueQuestion(text);
+}
+
+function userRequestsThermasCardTicketComparison(messages: ChatMessage[]): boolean {
+  const lastUser = [...messages].reverse().find((m) => m.role === "user" && m.content?.trim());
+  if (!lastUser?.content) return false;
+  const t = normalizeText(lastUser.content);
+  return /compar|compensa|vale a pena|caro|meio caro|achei caro|preco alto|preço alto|faz a conta|mostra a conta/.test(
+    t
+  );
+}
+
+/** Cliente só confirmou composição no fio Thermas Card (qualificação §3g) — não é pedido de comparação. */
+export function userConfirmsThermasCardCompositionOnly(messages: ChatMessage[]): boolean {
+  if (!conversationDeclaresThermasCardIntent(messages)) return false;
+  const lastUser = [...messages].reverse().find((m) => m.role === "user" && m.content?.trim());
+  if (!lastUser?.content) return false;
+  if (userRequestsThermasCardTicketComparison(messages)) return false;
+  const t = normalizeText(lastUser.content);
+  return (
+    /\b(seria|sao|são|somos|seremos)\b.{0,20}\b(\d+|cinco)\s*pessoas?\b/.test(t) ||
+    /\b(\d+|cinco)\s*pessoas?\s*(mesmo|certo|isso)\b/.test(t)
+  );
+}
+
 export function userAsksSunsetParkConsultation(messages: ChatMessage[]): boolean {
+  if (userAsksThermasCardPricing(messages)) return false;
   const lastUser = [...messages].reverse().find((m) => m.role === "user");
   if (!lastUser?.content) return false;
   const text = lastUser.content;
@@ -260,17 +311,21 @@ export function conversationDeclaresThermasCardIntent(messages: ChatMessage[]): 
 }
 
 /**
- * Thermas Card §3g-compare: auto-consultar ingresso quando há composição ou objeção de preço.
+ * Thermas Card §3g-compare: auto-consultar ingresso somente com objeção/comparação de preço.
+ * Composição sozinha (ex.: "seria 5 pessoas") é qualificação — não dispara consulta de ingresso.
  */
 export function shouldAutoInvokeParkForThermasCard(messages: ChatMessage[]): boolean {
   if (!conversationDeclaresThermasCardIntent(messages)) return false;
+  if (userAsksThermasCardPricing(messages) && !userRequestsThermasCardTicketComparison(messages)) {
+    return false;
+  }
+  if (userConfirmsThermasCardCompositionOnly(messages)) return false;
   const norm = normalizeText(messages.map((m) => m.content ?? "").join("\n"));
-  const hasComposition =
-    /\b(\d+|duas?|dois|tres|tr[eê]s|quatro|cinco)\s*(pessoas?|adultos?|gente)\b/.test(norm) ||
-    /\bcasal\b|n[oó]s\s+dois|somos\s+duas?|somos\s+dois|eu\s+e\s+(meu|minha)/.test(norm);
   const hasPriceConcern =
-    /caro|compensa|vale a pena|ingresso|compar|meio caro|achei caro|preco alto|preço alto/.test(norm);
-  return hasComposition || hasPriceConcern;
+    /caro|compensa|vale a pena|compar|meio caro|achei caro|preco alto|preço alto|faz a conta|mostra a conta/.test(
+      norm
+    );
+  return hasPriceConcern;
 }
 
 /** Data de referência para comparar ingresso × Thermas Card (default: hoje). */

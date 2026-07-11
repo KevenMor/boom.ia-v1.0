@@ -5,6 +5,8 @@ import {
   messageDeclaresParkTicketPriceQuestion,
   shouldAutoInvokeParkForThermasCard,
   userAsksSunsetParkConsultation,
+  userAsksThermasCardPricing,
+  userConfirmsThermasCardCompositionOnly,
 } from "./sunset-park-params.js";
 
 describe("sunset-park-params", () => {
@@ -48,5 +50,46 @@ describe("sunset-park-params", () => {
     const messages = [{ role: "user", content: "o que é o Thermas Card?" }];
     expect(shouldAutoInvokeParkForThermasCard(messages)).toBe(false);
     expect(extractSunsetParkParamsForThermasCard(messages, refJul6)).toBeNull();
+  });
+
+  it("Thermas Card + confirmação de 5 pessoas (qualificação) não dispara consulta de ingresso", () => {
+    const messages = [
+      { role: "user", content: "quero saber sobre o thermas card" },
+      { role: "assistant", content: "Quantas pessoas entrariam no plano?" },
+      { role: "user", content: "seria 5 pessoas mesmo" },
+    ];
+    expect(userConfirmsThermasCardCompositionOnly(messages)).toBe(true);
+    expect(shouldAutoInvokeParkForThermasCard(messages)).toBe(false);
+    expect(extractSunsetParkParamsForThermasCard(messages, refJul6)).toBeNull();
+  });
+
+  it("Thermas Card + fluxo nunca fui + 5 pessoas não dispara consulta de ingresso", () => {
+    const messages = [
+      { role: "user", content: "quero saber sobre o thermas card" },
+      { role: "assistant", content: "Com que frequência vocês costumam vir?" },
+      { role: "user", content: "nunca fui" },
+      {
+        role: "assistant",
+        content: "Quantas pessoas entrariam no plano? São R$ 135,90/mês para até 5.",
+      },
+      { role: "user", content: "seria 5 pessoas mesmo" },
+    ];
+    expect(shouldAutoInvokeParkForThermasCard(messages)).toBe(false);
+    expect(extractSunsetParkParamsForThermasCard(messages, refJul6)).toBeNull();
+  });
+
+  it("Thermas Card + 'qual valor?' não dispara consulta de ingresso", () => {
+    const messages = [
+      { role: "user", content: "quero saber sobre o thermas card" },
+      {
+        role: "assistant",
+        content: "O Thermas Card dá acesso ilimitado ao parque por 5 anos. Com que frequência vocês costumam vir?",
+      },
+      { role: "user", content: "qual valor?" },
+    ];
+    expect(userAsksThermasCardPricing(messages)).toBe(true);
+    expect(userAsksSunsetParkConsultation(messages)).toBe(false);
+    expect(shouldAutoInvokeParkForThermasCard(messages)).toBe(false);
+    expect(extractSunsetParkParams(messages, refJul6)).toBeNull();
   });
 });

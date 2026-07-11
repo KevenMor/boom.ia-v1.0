@@ -1,5 +1,7 @@
 /** Extrai parâmetros de consultar_hospedagem_sunset do histórico (Sunset Thermas). */
 
+import { userLikelyAskedForPhotos } from "./suite-gallery-markdown-inject.js";
+
 export type SunsetLodgingGuest = { type: "adult" } | { type: "child"; age: number };
 
 export type SunsetLodgingParams = {
@@ -134,6 +136,76 @@ export function assistantAskedGuestComposition(messages: ChatMessage[]): boolean
   return /quantas?\s+pessoas|quantos?\s+adultos|quantas?\s+pessoas vao|composicao|criancas?/.test(t);
 }
 
+/** Assistente perguntou especificamente sobre crianças no fio. */
+export function assistantAskedAboutChildren(messages: ChatMessage[]): boolean {
+  return messages.some(
+    (m) =>
+      m.role === "assistant" &&
+      m.content &&
+      /alguma crianca|crianca vai junto|quantas crianc|tem crianc|com crianc|menor(es)?|filh/.test(
+        normalizeText(m.content),
+      ),
+  );
+}
+
+/** Extrai idades citadas (ex.: "uma de 3 anos e uma de 10"). */
+export function parseChildAgesFromText(text: string): number[] {
+  const ages: number[] = [];
+  const seen = new Set<number>();
+  const add = (raw: string) => {
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n) || n < 0 || n > 17 || seen.has(n)) return;
+    ages.push(n);
+    seen.add(n);
+  };
+
+  for (const m of text.matchAll(/\b(\d{1,2})\s+anos?\b/gi)) add(m[1]);
+  for (const m of text.matchAll(
+    /\b(?:uma|duas|tres|tr[eê]s|quatro|cinco|seis|\d{1,2})\s+de\s+(\d{1,2})(?:\s+anos?)?\b/gi,
+  )) {
+    add(m[1]);
+  }
+  return ages;
+}
+
+function extractTotalGuestCountFromScopedMessages(messages: ChatMessage[]): number | null {
+  for (const m of messages) {
+    if (m.role !== "user" || !m.content) continue;
+    const n = resolveGuestCountFromAnswer(m.content, messages);
+    if (n != null && /\bpessoas?\b|\badultos?\b|\bhospedes?\b/.test(normalizeText(m.content))) {
+      return n;
+    }
+  }
+  return null;
+}
+
+function buildSunsetLodgingGuests(messages: ChatMessage[], totalCount: number): SunsetLodgingGuest[] {
+  const userMsgs = messages.filter((m) => m.role === "user" && m.content);
+  if (userMsgs.some((m) => messageDeclaresNoChildren(m.content!))) {
+    return Array.from({ length: totalCount }, () => ({ type: "adult" }));
+  }
+
+  const childAges: number[] = [];
+  for (const m of userMsgs) childAges.push(...parseChildAgesFromText(m.content!));
+
+  if (childAges.length > 0) {
+    const adults = Math.max(0, totalCount - childAges.length);
+    return [
+      ...Array.from({ length: adults }, () => ({ type: "adult" as const })),
+      ...childAges.map((age) => ({ type: "child" as const, age })),
+    ];
+  }
+
+  return Array.from({ length: totalCount }, () => ({ type: "adult" }));
+}
+
+function conversationDeclaresChildrenAnswerInThread(messages: ChatMessage[]): boolean {
+  const userMsgs = messages.filter((m) => m.role === "user" && m.content);
+  if (userMsgs.some((m) => messageDeclaresNoChildren(m.content!))) return true;
+  if (!assistantAskedAboutChildren(messages)) return false;
+  return userMsgs.some((m) => parseChildAgesFromText(m.content!).length > 0);
+}
+
 function parseExplicitDateIso(text: string, ref: Date): string | null {
   const t = text;
   const ymd = t.match(/\b(20\d{2})-(\d{2})-(\d{2})\b/);
@@ -154,6 +226,38 @@ function parseExplicitDateIso(text: string, ref: Date): string | null {
     return `${y}-${mm}-${dd}`;
   }
 
+  return null;
+}
+
+/** "dia 18 e 19/07", "para o dia 18 e 19/07" → check-in 18/07, check-out 19/07. */
+function parseDayAndSlashDateRangeIso(
+  text: string,
+  ref: Date,
+): { check_in: string; check_out: string } | null {
+  const m = text.match(
+    /\b(?:para\s+o\s+)?(?:dia\s+)?(\d{1,2})\s+e\s+(\d{1,2})\/(\d{1,2})(?:\/(20\d{2}))?\b/i,
+  );
+  if (!m) return null;
+
+  const dayIn = parseInt(m[1], 10);
+  const dayOut = parseInt(m[2], 10);
+  const mm = m[3].padStart(2, "0");
+  const y = m[4] ?? String(yearForFixedEvent(parseInt(mm, 10), dayOut, ref));
+  const check_in = `${y}-${mm}-${String(dayIn).padStart(2, "0")}`;
+  const check_out = `${y}-${mm}-${String(dayOut).padStart(2, "0")}`;
+  if (check_out <= check_in) return null;
+  return { check_in, check_out };
+}
+
+function findDayAndSlashDateRangeInMessages(
+  messages: ChatMessage[],
+  ref: Date,
+): { check_in: string; check_out: string } | null {
+  for (const m of [...messages].reverse()) {
+    if (m.role !== "user" || !m.content) continue;
+    const range = parseDayAndSlashDateRangeIso(m.content, ref);
+    if (range) return range;
+  }
   return null;
 }
 
@@ -191,6 +295,8 @@ function extractCheckInFromMessages(messages: ChatMessage[], ref: Date): string 
 
   for (const m of [...userMessages].reverse()) {
     if (m.role !== "user" || !m.content) continue;
+    const range = parseDayAndSlashDateRangeIso(m.content, ref);
+    if (range) return range.check_in;
     const relative = parseRelativeCheckIn(m.content, ref);
     if (relative) return relative;
     const explicit = parseExplicitDateIso(m.content, ref);
@@ -205,6 +311,9 @@ function extractCheckOutFromMessages(messages: ChatMessage[], checkIn: string, r
   const thread = messages.map((m) => m.content ?? "").join("\n");
   const norm = normalizeText(thread);
 
+  const daySlashRange = findDayAndSlashDateRangeInMessages(messages, ref);
+  if (daySlashRange?.check_in === checkIn) return daySlashRange.check_out;
+
   for (const m of [...messages].reverse()) {
     if (m.role !== "user" || !m.content) continue;
     const relativeOut = parseRelativeCheckOut(m.content, checkIn, ref);
@@ -217,9 +326,13 @@ function extractCheckOutFromMessages(messages: ChatMessage[], checkIn: string, r
     if (checkOutLabels) return explicit;
   }
 
-  const range = thread.match(
-    /\b(?:de|do)\s+(\d{1,2})\/(\d{1,2})(?:\/(20\d{2}))?\s+(?:a|ao|ate)\s+(\d{1,2})\/(\d{1,2})(?:\/(20\d{2}))?/i
+  const rangeWithPrefix = thread.match(
+    /\b(?:de|do|dia)\s+(\d{1,2})\/(\d{1,2})(?:\/(20\d{2}))?\s+(?:a|ao|ate)\s+(\d{1,2})\/(\d{1,2})(?:\/(20\d{2}))?/i,
   );
+  const rangeBare = thread.match(
+    /\b(\d{1,2})\/(\d{1,2})(?:\/(20\d{2}))?\s+(?:a|ao|ate)\s+(\d{1,2})\/(\d{1,2})(?:\/(20\d{2}))?/i,
+  );
+  const range = rangeWithPrefix ?? rangeBare;
   if (range) {
     const yOut = range[6] ?? range[3] ?? checkIn.slice(0, 4);
     const dd = range[4].padStart(2, "0");
@@ -239,7 +352,61 @@ function extractCheckOutFromMessages(messages: ChatMessage[], checkIn: string, r
     if (n > 0) return isoAddDays(checkIn, n);
   }
 
+  if (shouldDefaultSingleNightCheckout(messages, checkIn, ref)) {
+    return isoAddDays(checkIn, 1);
+  }
+
   return null;
+}
+
+function findLastUserCheckInMessageIndex(
+  messages: ChatMessage[],
+  checkIn: string,
+  ref: Date,
+): number {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role !== "user" || !m.content) continue;
+    if (parseExplicitDateIso(m.content, ref) === checkIn) return i;
+    if (parseRelativeCheckIn(m.content, ref) === checkIn) return i;
+    if (parseEventCheckIn(m.content, ref) === checkIn) return i;
+  }
+  return -1;
+}
+
+/** Cliente informou check-in no fio mas ainda não check-out — assume 1 noite. */
+function shouldDefaultSingleNightCheckout(
+  messages: ChatMessage[],
+  checkIn: string,
+  ref: Date,
+): boolean {
+  const userMsgs = messages.filter((m) => m.role === "user" && m.content);
+  if (userMsgs.length === 0) return false;
+
+  const checkInIdx = findLastUserCheckInMessageIndex(messages, checkIn, ref);
+  const scopedMessages = checkInIdx >= 0 ? messages.slice(checkInIdx) : messages;
+
+  const threadNorm = normalizeText(scopedMessages.map((m) => m.content ?? "").join("\n"));
+  if (
+    /\bate\s+\d{1,2}\/\d{1,2}|\bcheck[\s-]?out|\b(?:de|do|dia)\s+\d{1,2}\/\d{1,2}\s+(?:a|ao|ate)\s+\d|\b\d{1,2}\/\d{1,2}\s+(?:a|ao|ate)\s+\d{1,2}\/\d|\b\d{1,2}\s+e\s+\d{1,2}\/\d{1,2}/.test(
+      threadNorm,
+    )
+  ) {
+    return false;
+  }
+  if (/\b\d+\s+noites?\b/.test(threadNorm)) return false;
+
+  const hasCheckInDeclared = checkInIdx >= 0;
+  if (!hasCheckInDeclared) return false;
+
+  const explicitOut = scopedMessages
+    .slice(1)
+    .filter((m) => m.role === "user" && m.content)
+    .map((m) => parseExplicitDateIso(m.content!, ref))
+    .filter((d): d is string => d != null && d > checkIn);
+  if (explicitOut.length > 0) return false;
+
+  return true;
 }
 
 /** Contagem do formulário do site: `Adultos: N` (+ `Crianças: M` quando presente). */
@@ -378,13 +545,203 @@ export function conversationAlreadyDeliveredLodgingQuote(messages: ChatMessage[]
 export function messageDeclaresLodgingPriceOrAvailabilityInquiry(text: string): boolean {
   const t = normalizeText(text);
   if (messageDeclaresLodgingQuoteReadiness(text)) return true;
+  if (/faz(er)?\s+(um\s+)?or[cç]amento|fazer\s+or[cç]amento/.test(t)) return true;
+  if (/or[cç]amento/.test(t) && /\d+\s+pessoas?/.test(t)) return true;
   if (
     /disponibilidade|tem vaga|verificar disponibilidade|quanto|valor|preco|tarifa|orcamento/.test(t) &&
-    /hosped|hotel|chal|suite|loft|quarto|pernoite|diaria|pacote|acomoda/.test(t)
+    /hosped|hotel|chal|suite|loft|quarto|pernoite|diaria|pacote|acomoda|pessoas?/.test(t)
   ) {
     return true;
   }
   return false;
+}
+
+/** Índice da última mensagem do assistente com orçamento de hospedagem entregue (2+ preços). */
+function lastAssistantDeliveredLodgingQuoteIndex(messages: ChatMessage[]): number {
+  let last = -1;
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    if (m.role !== "assistant" || !m.content) continue;
+    const priceCount = m.content.match(/R\$\s*[\d.,]+/g)?.length ?? 0;
+    if (priceCount >= 2) last = i;
+  }
+  return last;
+}
+
+function previousAssistantDeliveredLodgingQuoteIndex(
+  messages: ChatMessage[],
+  beforeIndex: number,
+): number {
+  let last = -1;
+  for (let i = 0; i < beforeIndex; i++) {
+    const m = messages[i];
+    if (m.role !== "assistant" || !m.content) continue;
+    const priceCount = m.content.match(/R\$\s*[\d.,]+/g)?.length ?? 0;
+    if (priceCount >= 2) last = i;
+  }
+  return last;
+}
+
+/**
+ * Cliente inicia um **novo** pedido de orçamento (pode ser diferente do anterior no mesmo fio).
+ */
+export function messageDeclaresNewLodgingQuoteIntent(text: string): boolean {
+  if (messageDeclaresLodgingPriceOrAvailabilityInquiry(text)) return true;
+  const t = normalizeText(text);
+  if (
+    /outr[oa]\s+or[cç]amento|nov[oa]\s+or[cç]amento|nova\s+consulta|refaz(er)?\s+(o\s+)?or[cç]amento|outra\s+consulta/.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+  if (
+    /agora\s+(preciso|quero|vou\s+precisar|gostaria)/.test(t) &&
+    /or[cç]amento|hosped|hotel|quarto|pacote|pessoas?|\d+\s+pessoas?/.test(t)
+  ) {
+    return true;
+  }
+  if (
+    /na\s+verdade|mudou|alterou|troc(ar|ou)|mudei/.test(t) &&
+    /or[cç]amento|hosped|\d+\s+pessoas?|\d{1,2}\/\d{1,2}|datas?|periodo/.test(t)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Início da janela do orçamento **ativo** — ignora pedidos antigos no histórico longo.
+ * Um ciclo = pedido + datas/composição + (possível) cotação; novo pedido abre outro ciclo.
+ */
+export function activeLodgingQuoteStartIndex(messages: ChatMessage[]): number {
+  const lastQuoteIdx = lastAssistantDeliveredLodgingQuoteIndex(messages);
+  const prevQuoteIdx =
+    lastQuoteIdx >= 0 ? previousAssistantDeliveredLodgingQuoteIndex(messages, lastQuoteIdx) : -1;
+  const cycleFloor = prevQuoteIdx + 1;
+
+  const hasUserAfterLastQuote =
+    lastQuoteIdx >= 0 &&
+    messages.slice(lastQuoteIdx + 1).some((m) => m.role === "user" && m.content?.trim());
+
+  if (hasUserAfterLastQuote) {
+    for (let i = messages.length - 1; i > lastQuoteIdx; i--) {
+      const m = messages[i];
+      if (m.role === "user" && m.content?.trim() && messageDeclaresNewLodgingQuoteIntent(m.content)) {
+        return i;
+      }
+    }
+    // Correção de datas / follow-up no mesmo ciclo (ex.: recota após orçamento errado)
+    return cycleFloor;
+  }
+
+  for (let i = (lastQuoteIdx >= 0 ? lastQuoteIdx : messages.length) - 1; i >= cycleFloor; i--) {
+    const m = messages[i];
+    if (m.role === "user" && m.content?.trim() && messageDeclaresNewLodgingQuoteIntent(m.content)) {
+      return i;
+    }
+  }
+  return cycleFloor;
+}
+
+/** Mensagens relevantes para extrair datas/hóspedes do pedido de orçamento corrente. */
+export function sliceActiveLodgingQuoteMessages(messages: ChatMessage[]): ChatMessage[] {
+  return messages.slice(activeLodgingQuoteStartIndex(messages));
+}
+
+/** Novo pedido após cotação anterior exige consulta fresca à tool (mesmo fio longo). */
+export function lodgingQuoteNeedsFreshToolResult(messages: ChatMessage[]): boolean {
+  if (lastAssistantDeliveredLodgingQuoteIndex(messages) < 0) return false;
+  if (!conversationHasPendingLodgingQuote(messages)) return false;
+  return extractSunsetLodgingParams(messages) != null;
+}
+
+/** Cliente informou data ou intervalo de estadia na mensagem. */
+export function messageDeclaresExplicitLodgingDates(text: string, ref: Date = new Date()): boolean {
+  if (parseDayAndSlashDateRangeIso(text, ref)) return true;
+  if (parseExplicitDateIso(text, ref)) return true;
+  const t = normalizeText(text);
+  return (
+    /\b(?:de|do|dia)\s+\d{1,2}\/\d{1,2}\s+(?:a|ao|ate)\s+\d{1,2}\/\d{1,2}\b/.test(t) ||
+    /\b\d{1,2}\/\d{1,2}\s+(?:a|ao|ate)\s+\d{1,2}\/\d{1,2}\b/.test(t) ||
+    /\b(?:para\s+o\s+)?(?:dia\s+)?\d{1,2}\s+e\s+\d{1,2}\/\d{1,2}\b/.test(t)
+  );
+}
+
+function threadDeclaresLodgingQuoteRequest(
+  userTexts: string[],
+  contextMessages: ChatMessage[],
+): boolean {
+  if (userTexts.length === 0) return false;
+
+  if (userTexts.some((t) => messageDeclaresNewLodgingQuoteIntent(t))) return true;
+
+  const joined = normalizeText(userTexts.join(" "));
+  if (/faz(er)?\s+(um\s+)?or[cç]amento|fazer\s+or[cç]amento|or[cç]amento\s+para/.test(joined)) {
+    return true;
+  }
+  if (/or[cç]amento/.test(joined) && /\d+\s+pessoas?/.test(joined)) return true;
+  if (
+    /\d+\s+pessoas?/.test(joined) &&
+    contextMessages.some(
+      (m) =>
+        m.role === "assistant" &&
+        /qual\s+periodo|para\s+qual\s+periodo|quais?\s+datas|check-in|data\s+(de\s+)?check|quando\s+(vem|pretende)|periodo\s+voce/.test(
+          normalizeText(m.content ?? ""),
+        ),
+    )
+  ) {
+    return true;
+  }
+  if (
+    /quanto\s+(fica|custa)|qual\s+(o\s+)?valor/.test(joined) &&
+    /hosped|hotel|quarto|acomoda|pernoite/.test(joined)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** Thread já teve pedido explícito de orçamento/valor de hospedagem (qualquer turno). */
+export function conversationHadLodgingQuoteRequest(messages: ChatMessage[]): boolean {
+  const scoped = sliceActiveLodgingQuoteMessages(messages);
+  const userTexts = scoped.filter((m) => m.role === "user" && m.content).map((m) => m.content!);
+  return threadDeclaresLodgingQuoteRequest(userTexts, scoped);
+}
+
+/**
+ * Orçamento de hospedagem em andamento.
+ * Considera só mensagens do cliente **após** o último orçamento entregue (sandbox longo).
+ */
+export function conversationHasPendingLodgingQuote(messages: ChatMessage[]): boolean {
+  const lastQuoteIdx = lastAssistantDeliveredLodgingQuoteIndex(messages);
+  const contextFrom = lastQuoteIdx >= 0 ? messages.slice(lastQuoteIdx + 1) : messages;
+  const userTextsAfterQuote = contextFrom
+    .filter((m) => m.role === "user" && m.content)
+    .map((m) => m.content!);
+
+  if (lastQuoteIdx >= 0) {
+    if (userTextsAfterQuote.length === 0) return false;
+
+    const lastAfter = userTextsAfterQuote[userTextsAfterQuote.length - 1] ?? "";
+    const cycleStart = activeLodgingQuoteStartIndex(messages);
+    const cycleMessages = messages.slice(cycleStart);
+
+    if (messageDeclaresExplicitLodgingDates(lastAfter)) {
+      if (threadDeclaresLodgingQuoteRequest(userTextsAfterQuote, contextFrom)) return true;
+      const cycleUserTexts = cycleMessages
+        .filter((m) => m.role === "user" && m.content)
+        .map((m) => m.content!);
+      if (threadDeclaresLodgingQuoteRequest(cycleUserTexts, cycleMessages)) return true;
+    }
+
+    return threadDeclaresLodgingQuoteRequest(userTextsAfterQuote, contextFrom);
+  }
+
+  return threadDeclaresLodgingQuoteRequest(
+    messages.filter((m) => m.role === "user" && m.content).map((m) => m.content!),
+    messages,
+  );
 }
 
 export function userNeedsSunsetLodgingToolCall(messages: ChatMessage[]): boolean {
@@ -392,6 +749,10 @@ export function userNeedsSunsetLodgingToolCall(messages: ChatMessage[]): boolean
   if (!lastUser?.content) return false;
 
   if (messageDeclaresLodgingAmenityFaq(lastUser.content)) return false;
+
+  if (conversationHasPendingLodgingQuote(messages) && extractSunsetLodgingParams(messages) != null) {
+    return true;
+  }
 
   if (messageDeclaresLodgingQuoteReadiness(lastUser.content)) return true;
 
@@ -402,6 +763,14 @@ export function userNeedsSunsetLodgingToolCall(messages: ChatMessage[]): boolean
     /quanto\s+(fica|custa|e)|qual\s+(o\s+)?valor|disponibilidade|tem vaga/.test(t) &&
     /hosped|hotel|quarto|loft|chal|suite|acomoda|pernoite|diaria|pacote/.test(t)
   ) {
+    return extractSunsetLodgingParams(messages) != null;
+  }
+
+  if (
+    extractSunsetLodgingParams(messages) != null &&
+    messageDeclaresExplicitLodgingDates(lastUser.content) &&
+    conversationHadLodgingQuoteRequest(messages)
+  ) {
     return true;
   }
 
@@ -409,7 +778,45 @@ export function userNeedsSunsetLodgingToolCall(messages: ChatMessage[]): boolean
     return userAsksSunsetLodgingCategoryOrPrice(messages);
   }
 
-  return messageDeclaresLodgingPriceOrAvailabilityInquiry(lastUser.content);
+  if (messageDeclaresLodgingPriceOrAvailabilityInquiry(lastUser.content)) {
+    return extractSunsetLodgingParams(messages) != null;
+  }
+
+  return false;
+}
+
+/** Auto-invoke no runtime quando params completos e o fio exige cotação real. */
+export function shouldAutoInvokeSunsetLodgingTool(messages: ChatMessage[]): boolean {
+  const lastUser = [...messages].reverse().find((m) => m.role === "user" && m.content);
+  if (lastUser?.content && messageDeclaresLodgingAmenityFaq(lastUser.content)) return false;
+  if (lastUser?.content && userMessageIsPhotoRequestOnly(lastUser.content)) return false;
+  if (shouldBlockSunsetLodgingToolCall(messages)) return false;
+  if (extractSunsetLodgingParams(messages) == null) return false;
+  return userNeedsSunsetLodgingToolCall(messages);
+}
+
+/** Bloqueia consultar_hospedagem_sunset quando composição (crianças/idades) ou params estão incompletos. */
+export function shouldBlockSunsetLodgingToolCall(messages: ChatMessage[]): boolean {
+  if (conversationNeedsChildAgesConfirmation(messages)) return true;
+  if (conversationNeedsChildrenConfirmation(messages)) return true;
+  return extractSunsetLodgingParams(messages) == null;
+}
+
+export function getSunsetLodgingToolBlockInstruction(messages: ChatMessage[]): string {
+  if (conversationNeedsChildAgesConfirmation(messages)) {
+    return "Composição incompleta: falta idade das crianças. Pergunte quantos anos tem cada criança. PROIBIDO citar preços ou listar categorias neste turno.";
+  }
+  if (conversationNeedsChildrenConfirmation(messages)) {
+    return 'Composição incompleta: falta confirmar crianças. Pergunte: "Alguma criança vai junto? Se sim, quantas e com quantos anos?" PROIBIDO citar preços ou listar categorias neste turno.';
+  }
+  return "Faltam datas ou composição completa para cotar hospedagem. PROIBIDO citar preços ou listar categorias neste turno.";
+}
+
+/** Pedido só de fotos/galeria — não re-cotar hospedagem nem tratar como pergunta de preço. */
+export function userMessageIsPhotoRequestOnly(text: string): boolean {
+  if (!userLikelyAskedForPhotos(text)) return false;
+  const t = normalizeText(text);
+  return !/quanto\s+(fica|custa|e)|qual\s+(o\s+)?valor|preco|tarifa|or[cç]amento/.test(t);
 }
 
 /** Cliente pergunta tarifa/detalhe de categoria específica (loft, hidro, suíte…). */
@@ -418,6 +825,7 @@ export function userAsksSunsetLodgingCategoryOrPrice(messages: ChatMessage[]): b
   if (!lastUser?.content) return false;
   const text = lastUser.content;
   if (messageDeclaresLodgingAmenityFaq(text)) return false;
+  if (userMessageIsPhotoRequestOnly(text)) return false;
   if (detectSunsetLodgingInterestKeywords(text).length > 0) return true;
   const t = normalizeText(text);
   const asksPrice = /quanto\s+(fica|custa|e)|valor|preco|tarifa/.test(t);
@@ -468,25 +876,28 @@ export function extractSunsetLodgingParams(
   messages: ChatMessage[],
   referenceDate: Date = new Date()
 ): SunsetLodgingParams | null {
-  const check_in = extractCheckInFromMessages(messages, referenceDate);
+  const scoped = sliceActiveLodgingQuoteMessages(messages);
+  if (scoped.length === 0) return null;
+
+  const check_in = extractCheckInFromMessages(scoped, referenceDate);
   if (!check_in) return null;
 
-  const check_out = extractCheckOutFromMessages(messages, check_in, referenceDate);
+  const check_out = extractCheckOutFromMessages(scoped, check_in, referenceDate);
   if (!check_out || check_out <= check_in) return null;
 
-  const guestCount = extractGuestCountFromMessages(messages);
+  const guestCount = extractGuestCountFromMessages(scoped);
   if (guestCount == null || guestCount < 1) return null;
 
-  if (!conversationHasCompleteGuestComposition(messages)) return null;
+  if (!conversationHasCompleteGuestComposition(scoped)) return null;
 
-  const guests: SunsetLodgingGuest[] = Array.from({ length: guestCount }, () => ({ type: "adult" }));
+  const guests: SunsetLodgingGuest[] = buildSunsetLodgingGuests(scoped, guestCount);
 
-  const lastUser = [...messages].reverse().find((m) => m.role === "user");
+  const lastUser = [...scoped].reverse().find((m) => m.role === "user");
   let interest_keywords = lastUser?.content
     ? detectSunsetLodgingInterestKeywords(lastUser.content)
     : [];
 
-  if (interest_keywords.length === 0 && shouldIncludeDefaultLoftInterestKeywords(messages)) {
+  if (interest_keywords.length === 0 && shouldIncludeDefaultLoftInterestKeywords(scoped)) {
     interest_keywords = [...SUNSET_DEFAULT_LOFT_INTEREST_KEYWORDS];
   }
 
@@ -538,12 +949,13 @@ export function messageDeclaresChildAges(text: string): boolean {
   if (/idades?\s*:\s*\d+|\(\s*idades?/i.test(text)) return true;
   if (/\d+\s+anos?/.test(text)) return true;
   if (/crianc[aã]?\s+de\s+\d+|\bfilh[oa]\s+de\s+\d+|\bbeb[eê]\s+de\s+\d+/i.test(text)) return true;
+  if (/\b(?:uma|duas|tres|tr[eê]s|\d{1,2})\s+de\s+\d{1,2}(?:\s+anos?)?\b/i.test(text)) return true;
   if (/\d+\s+mes(es)?/.test(normalizeText(text))) return true;
   return false;
 }
 
 /** Cliente disse que há criança(s), sem declarar ausência. */
-export function messageMentionsChildren(text: string): boolean {
+export function messageMentionsChildren(text: string, messages: ChatMessage[] = []): boolean {
   if (messageDeclaresNoChildren(text)) return false;
   const t = normalizeText(text);
 
@@ -551,6 +963,8 @@ export function messageMentionsChildren(text: string): boolean {
   if (formChild && parseInt(formChild[1], 10) > 0) return true;
 
   if (/\d+\s+crianc|\b(uma|duas|tres|1|2|3)\s+crianc/.test(t)) return true;
+  if (/\b(apenas|so)\s+(uma|duas|tres|quatro|\d+)\b/.test(t) && assistantAskedAboutChildren(messages)) return true;
+  if (parseChildAgesFromText(text).length > 0 && assistantAskedAboutChildren(messages)) return true;
   if (/tem\s+(crianc|menor|filh)|com\s+(crianc|menor|filh)|vai\s+crianc/.test(t)) return true;
   if (/bebes?|\bfilh/.test(t)) return true;
   if (/^sim\b/.test(t) && /crianc|menor|filh/.test(t)) return true;
@@ -579,7 +993,10 @@ export function messageAffirmsChildrenWithoutAges(text: string, messages: ChatMe
 }
 
 /** Composição explícita: adultos/crianças com idades, formulário do site, ou "sem crianças". */
-export function messageDeclaresGuestCompositionComplete(text: string): boolean {
+export function messageDeclaresGuestCompositionComplete(
+  text: string,
+  messages: ChatMessage[] = [],
+): boolean {
   const t = normalizeText(text);
 
   const formChild = text.match(/criancas?\s*:\s*(\d+)/i);
@@ -591,7 +1008,9 @@ export function messageDeclaresGuestCompositionComplete(text: string): boolean {
 
   if (messageDeclaresNoChildren(text)) return true;
 
-  if (messageMentionsChildren(text)) {
+  if (messageDeclaresChildAges(text) && assistantAskedAboutChildren(messages)) return true;
+
+  if (messageMentionsChildren(text, messages)) {
     return messageDeclaresChildAges(text);
   }
 
@@ -615,7 +1034,12 @@ export function conversationHasCompleteGuestComposition(messages: ChatMessage[])
   }
 
   for (const text of userTexts) {
-    if (messageDeclaresGuestCompositionComplete(text)) return true;
+    if (messageDeclaresGuestCompositionComplete(text, messages)) return true;
+  }
+
+  const totalCount = extractTotalGuestCountFromScopedMessages(messages);
+  if (totalCount != null && conversationDeclaresChildrenAnswerInThread(messages)) {
+    return true;
   }
 
   const lastUser = [...messages].reverse().find((m) => m.role === "user" && m.content);
@@ -626,7 +1050,8 @@ export function conversationHasCompleteGuestComposition(messages: ChatMessage[])
 
 /** Cliente confirmou criança(s) mas não informou idade(s). */
 export function conversationNeedsChildAgesConfirmation(messages: ChatMessage[]): boolean {
-  const userMsgs = messages.filter((m) => m.role === "user" && m.content);
+  const scoped = sliceActiveLodgingQuoteMessages(messages);
+  const userMsgs = scoped.filter((m) => m.role === "user" && m.content);
   if (userMsgs.length === 0) return false;
 
   if (userMsgs.some((m) => messageDeclaresNoChildren(m.content!))) return false;
@@ -642,8 +1067,8 @@ export function conversationNeedsChildAgesConfirmation(messages: ChatMessage[]):
 
   for (const m of userMsgs) {
     const text = m.content!;
-    if (messageMentionsChildren(text)) mentionedChildren = true;
-    if (messageAffirmsChildrenWithoutAges(text, messages)) mentionedChildren = true;
+    if (messageMentionsChildren(text, messages)) mentionedChildren = true;
+    if (messageAffirmsChildrenWithoutAges(text, scoped)) mentionedChildren = true;
     if (messageDeclaresChildAges(text)) hasAges = true;
   }
 
@@ -652,17 +1077,38 @@ export function conversationNeedsChildAgesConfirmation(messages: ChatMessage[]):
 
 /** Já sabe quantas pessoas, mas falta confirmar crianças (ex.: respondeu só "3"). */
 export function conversationNeedsChildrenConfirmation(messages: ChatMessage[]): boolean {
-  if (conversationHasCompleteGuestComposition(messages)) return false;
+  const scoped = sliceActiveLodgingQuoteMessages(messages);
+  if (scoped.length === 0) return false;
+  if (conversationHasCompleteGuestComposition(scoped)) return false;
   if (conversationNeedsChildAgesConfirmation(messages)) return false;
-  for (const m of messages) {
-    if (m.role !== "user" || !m.content) continue;
-    if (resolveGuestCountFromAnswer(m.content, messages) != null) return true;
-  }
-  return false;
+
+  const hasGuestCount = scoped.some(
+    (m) => m.role === "user" && m.content && resolveGuestCountFromAnswer(m.content, scoped) != null,
+  );
+  if (!hasGuestCount) return false;
+
+  return !conversationDeclaresChildrenAnswerInThread(scoped);
 }
 
 export function conversationHasDeclaredGuestCount(messages: ChatMessage[]): boolean {
-  return conversationNeedsChildrenConfirmation(messages) || conversationHasCompleteGuestComposition(messages);
+  const scoped = sliceActiveLodgingQuoteMessages(messages);
+  return (
+    conversationNeedsChildrenConfirmation(messages) ||
+    conversationHasCompleteGuestComposition(scoped)
+  );
+}
+
+/** Resposta padrão quando falta confirmar crianças no pedido de orçamento ativo. */
+export function buildSunsetChildrenConfirmationReply(messages: ChatMessage[]): string {
+  const scoped = sliceActiveLodgingQuoteMessages(messages);
+  let count: number | null = null;
+  for (const m of [...scoped].reverse()) {
+    if (m.role !== "user" || !m.content) continue;
+    count = resolveGuestCountFromAnswer(m.content, scoped);
+    if (count != null) break;
+  }
+  const label = count != null ? `${count} pessoas` : "esse grupo";
+  return `Perfeito, ${label}! Alguma criança vai junto? Se sim, quantas e com quantos anos?`;
 }
 
 const SUNSET_NON_NAME_WORDS = new Set([

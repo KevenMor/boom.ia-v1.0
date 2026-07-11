@@ -29,4 +29,17 @@ describe("formatParkDayConsultaForLlm", () => {
     expect(text).toMatch(/PROIBIDO citar valores de ingresso/);
     expect(text).toMatch(/PRÓXIMA DATA COM PARQUE ABERTO.*2026-06-14/);
   });
+
+  it("formata no_data no fio Thermas Card sem mandar só link do site", () => {
+    const text = formatParkDayConsultaForLlm({
+      status: "no_data",
+      date: "2026-07-11",
+      message: "Sem registro.",
+      _thermas_card_compare: true,
+    });
+    expect(text).toMatch(/THERMAS CARD|Thermas Card/i);
+    expect(text).toMatch(/135,90/);
+    expect(text).toMatch(/PROIBIDO.*link do site de ingressos/i);
+    expect(text).not.toMatch(/Pode orientar à área de ingressos do site oficial\.$/);
+  });
 });

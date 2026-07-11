@@ -180,6 +180,9 @@ export function DebugBlock({ debug, edgeLogs, tokenUsage }: DebugBlockProps) {
               <div className="text-[#00a884] font-semibold mb-1">⚙️ Configuração LLM</div>
               <div className="text-[#8696a0] space-y-0.5">
                 <div>Modelo: <span className="text-[#e9edef]">{config.model}</span></div>
+                {config.dispatcher_provider && (
+                  <div>Dispatcher provider: <span className="text-[#e9edef]">{String(config.dispatcher_provider)}</span></div>
+                )}
                 <div>Temperature: <span className="text-[#e9edef]">{config.temperature}</span></div>
                 {config.top_p && <div>Top-P: <span className="text-[#e9edef]">{config.top_p}</span></div>}
                 {config.top_k && <div>Top-K: <span className="text-[#e9edef]">{config.top_k}</span></div>}

@@ -221,9 +221,9 @@ export function injectSuiteGalleryVideosIfMissing(params: {
   };
 }
 
-function userLikelyAskedForPhotos(text: string): boolean {
+export function userLikelyAskedForPhotos(text: string): boolean {
   const t = (text || "").toLowerCase();
-  if (/\b(todas|todos|cada\s+uma|todas\s+as|as\s+3|as\s+tr[êe]s)\b/.test(t)) return true;
+  if (/\b(todas|todos|cada\s+uma|todas\s+as|as\s+3|as\s+tr[êe]s)\b/.test(t) && /\bfotos?\b/.test(t)) return true;
   if (/^\s*quero\s+fotos?\s*$/i.test((text || "").trim())) return true;
   if (/\bquero\s+fotos?\b/.test(t)) return true;
   if (/\b(tem|mostra|mostrar|manda)\b/.test(t) && /\bfotos?\b/.test(t)) return true;

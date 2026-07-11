@@ -13,6 +13,7 @@ import {
   extractLodgingQuoteClosingQuestion,
   polishSunsetLodgingQuoteReadableText,
 } from "./sunset-lodging-quote-layout.js";
+import { userMessageIsPhotoRequestOnly } from "./sunset-lodging-params.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 const IMAGE_MD_RE = /^!\[[^\]]*\]\(https?:\/\/[^)\s]+\)\s*$/i;
@@ -51,9 +52,13 @@ export function assistantMessageDeliversLodgingQuote(text: string): boolean {
 /** Reconstrói orçamento da tool só quando a resposta é (ou deveria ser) cotação — não em FAQ. */
 export function shouldRebuildSunsetQuoteFromTool(
   assistantText: string,
-  toolPayload: { accommodations: Array<{ name?: string }> } | null
+  toolPayload: { accommodations: Array<{ name?: string }> } | null,
+  opts?: { lastUserMessage?: string }
 ): boolean {
   if (!toolPayload) return false;
+  if (opts?.lastUserMessage && userMessageIsPhotoRequestOnly(opts.lastUserMessage)) {
+    return false;
+  }
   const base = (assistantText ?? "").trim();
   if (!base) return true;
   if (assistantDeliversLodgingQuote(base)) return true;
@@ -103,14 +108,95 @@ function lineLooksLikeLodgingQuote(line: string, displayLabel: string): boolean 
 }
 
 type LodgingToolPayload = {
-  accommodations: Array<{ name?: string; total_price?: number }>;
+  nights: number;
+  accommodations: Array<{
+    name?: string;
+    total_price?: number;
+    nights?: number;
+    rooms_count?: number;
+    quoted_for_occupancy?: number;
+  }>;
   galleryPhotos: SunsetLodgingGalleryPhoto[];
+  guestsInFamily?: number;
+  guestsForPricing?: number;
+  kidsUnder12?: Array<{ age: number }>;
+  roomsInQuote?: number;
+  hasPromotion?: boolean;
 };
 
+function buildSunsetLodgingQuoteIntroFromTool(payload: LodgingToolPayload): string {
+  const groupSize = payload.guestsInFamily ?? payload.guestsForPricing;
+  const rooms = payload.roomsInQuote ?? payload.accommodations[0]?.rooms_count ?? 1;
+  if (groupSize == null) return "";
+
+  const promoLine = payload.hasPromotion
+    ? " Os valores já incluem 25% OFF e o pacote fechado (pernoite + jantar + café + acesso ao parque)."
+    : " Cada valor abaixo é o total do pacote para o grupo.";
+
+  if (rooms > 1) {
+    return `Como vocês são ${groupSize}, organizamos em ${rooms} quartos — cada opção abaixo traz o total do pacote para o grupo.${promoLine}`;
+  }
+  return `Segue o orçamento para ${groupSize} pessoa${groupSize === 1 ? "" : "s"}.${promoLine}`;
+}
+
+/** Quebra parágrafo denso (*Chalé* — R$ … *Suíte* — R$) em bolhas MSG_SPLIT. */
+function splitDenseLodgingQuoteParagraph(text: string): string {
+  if (!text || text.includes(MSG_SPLIT)) return text;
+  const optionStarts = [...text.matchAll(/\*[^*]+?\*\s*[—–-]\s*R\$/g)];
+  if (optionStarts.length < 2) return text;
+
+  const parts: string[] = [];
+  const introEnd = optionStarts[0].index ?? 0;
+  if (introEnd > 0) {
+    const intro = text.slice(0, introEnd).trim();
+    if (intro) parts.push(polishSunsetLodgingQuoteReadableText(intro));
+  }
+
+  for (let i = 0; i < optionStarts.length; i++) {
+    const start = optionStarts[i].index ?? 0;
+    const end = i + 1 < optionStarts.length ? (optionStarts[i + 1].index ?? text.length) : text.length;
+    const chunk = text.slice(start, end).trim();
+    if (chunk) parts.push(chunk);
+  }
+
+  if (parts.length <= 1) return text;
+  return parts.join(`\n${MSG_SPLIT}\n`);
+}
+
+function ensureSunsetLodgingQuoteMessageSplits(text: string): string {
+  if (!text || text.includes(MSG_SPLIT)) return text;
+  let split = insertSunsetLodgingMessageSplits(text);
+  if (split.includes(MSG_SPLIT)) return split;
+  split = splitDenseLodgingQuoteParagraph(text);
+  return split;
+}
+
+function formatLodgingOptionPriceLine(
+  acc: LodgingToolPayload["accommodations"][number],
+  displayLabel: string,
+  defaultNights: number,
+): string {
+  if (acc.total_price == null) return "";
+  const nights = acc.nights ?? defaultNights;
+  const nightsLabel = nights === 1 ? "1 noite" : `${nights} noites`;
+  const rooms = acc.rooms_count ?? 1;
+  const roomsSuffix = rooms > 1 ? ` — total do grupo (${rooms} unidades)` : "";
+  const occupancySuffix =
+    acc.quoted_for_occupancy != null && rooms <= 1
+      ? ` (tarifa até ${acc.quoted_for_occupancy} pessoas; confirmar condição com a equipe se o grupo for maior)`
+      : "";
+  return `*${displayLabel}* — ${formatCurrencyBR(acc.total_price)} o pacote de ${nightsLabel}${roomsSuffix}${occupancySuffix}`;
+}
+
 function parseLodgingToolPayload(toolResultStrings: string[]): LodgingToolPayload | null {
-  let accommodations: Array<{ name?: string; total_price?: number }> = [];
+  let accommodations: LodgingToolPayload["accommodations"] = [];
+  let nights = 1;
   const galleryPhotos: SunsetLodgingGalleryPhoto[] = [];
   const seenPhotoUrls = new Set<string>();
+  const meta: Pick<
+    LodgingToolPayload,
+    "guestsInFamily" | "guestsForPricing" | "kidsUnder12" | "roomsInQuote" | "hasPromotion"
+  > = {};
 
   const pushPhoto = (p: SunsetLodgingGalleryPhoto | undefined) => {
     if (!p?.imageUrl || !p?.photoMarkdown) return;
@@ -122,9 +208,33 @@ function parseLodgingToolPayload(toolResultStrings: string[]): LodgingToolPayloa
   for (const raw of toolResultStrings) {
     try {
       const parsed = JSON.parse(raw) as {
-        available_accommodations?: Array<{ name?: string; total_price?: number }>;
+        nights?: number;
+        guests_in_family?: number;
+        guests_for_pricing?: number;
+        kids_under_12?: Array<{ age: number }>;
+        rooms_in_quote?: number;
+        promotion?: unknown;
+        available_accommodations?: LodgingToolPayload["accommodations"];
         gallery_photos?: SunsetLodgingGalleryPhoto[];
       };
+      if (typeof parsed.nights === "number" && parsed.nights > 0) {
+        nights = parsed.nights;
+      }
+      if (typeof parsed.guests_in_family === "number") {
+        meta.guestsInFamily = parsed.guests_in_family;
+      }
+      if (typeof parsed.guests_for_pricing === "number") {
+        meta.guestsForPricing = parsed.guests_for_pricing;
+      }
+      if (Array.isArray(parsed.kids_under_12)) {
+        meta.kidsUnder12 = parsed.kids_under_12;
+      }
+      if (typeof parsed.rooms_in_quote === "number") {
+        meta.roomsInQuote = parsed.rooms_in_quote;
+      }
+      if (parsed.promotion) {
+        meta.hasPromotion = true;
+      }
       if (Array.isArray(parsed.available_accommodations) && parsed.available_accommodations.length > 0) {
         accommodations = parsed.available_accommodations;
       }
@@ -144,7 +254,7 @@ function parseLodgingToolPayload(toolResultStrings: string[]): LodgingToolPayloa
   // está ativo (`SUNSET_LODGING_SEND_PHOTOS_WITH_QUOTE = false`). O caller trata `galleryPhotos=[]`
   // como modo "só texto" — vide `rebuildSunsetLodgingQuoteFromTool`.
   if (accommodations.length === 0) return null;
-  return { accommodations, galleryPhotos };
+  return { nights, accommodations, galleryPhotos, ...meta };
 }
 
 function photoForAccommodation(
@@ -306,13 +416,13 @@ export function rebuildSunsetLodgingQuoteFromTool(
     if (!photo) {
       if (acc.total_price == null) continue;
       const displayLabel = lodgingAccommodationDisplayLabel(accName);
-      optionBlocks.push(`*${displayLabel}* — ${formatCurrencyBR(acc.total_price)}`);
+      optionBlocks.push(formatLodgingOptionPriceLine(acc, displayLabel, payload.nights));
       continue;
     }
 
     let priceLine = findPriceLineForAccommodation(assistantText, photo, accName);
     if (!priceLine && acc.total_price != null) {
-      priceLine = `*${photo.displayLabel}* — ${formatCurrencyBR(acc.total_price)}`;
+      priceLine = formatLodgingOptionPriceLine(acc, photo.displayLabel, payload.nights);
     }
     if (!priceLine) continue;
 
@@ -325,9 +435,11 @@ export function rebuildSunsetLodgingQuoteFromTool(
 
   if (optionBlocks.length === 0) return null;
 
+  const toolIntro = buildSunsetLodgingQuoteIntroFromTool(payload);
   const { intro, footer } = extractIntroAndFooter(assistantText);
   const parts: string[] = [];
-  if (intro) parts.push(polishSunsetLodgingQuoteReadableText(intro));
+  if (toolIntro) parts.push(toolIntro);
+  else if (intro) parts.push(polishSunsetLodgingQuoteReadableText(intro));
   parts.push(...optionBlocks);
   if (footer) {
     const { body, question } = extractLodgingQuoteClosingQuestion(footer);
@@ -541,16 +653,20 @@ function parseLodgingToolPayloadLoose(
 
 export function formatSunsetLodgingQuoteForDelivery(
   assistantText: string,
-  toolResultStrings: string[]
+  toolResultStrings: string[],
+  opts?: { lastUserMessage?: string }
 ): string {
   const base = (assistantText ?? "").trim();
+  if (opts?.lastUserMessage && userMessageIsPhotoRequestOnly(opts.lastUserMessage)) {
+    return assistantText ?? "";
+  }
   const looseGalleryPhotos = collectSunsetLodgingGalleryPhotosFromToolResults(toolResultStrings);
   const toolPayload =
     parseLodgingToolPayload(toolResultStrings) ||
     parseLodgingToolPayloadLoose(toolResultStrings, looseGalleryPhotos);
 
   if (
-    !shouldRebuildSunsetQuoteFromTool(base, toolPayload) &&
+    !shouldRebuildSunsetQuoteFromTool(base, toolPayload, opts) &&
     !assistantDeliversLodgingQuote(base)
   ) {
     return assistantText ?? "";
@@ -598,6 +714,9 @@ export function formatSunsetLodgingQuoteForDelivery(
     }
   }
 
+  if (text && !text.includes(MSG_SPLIT)) {
+    text = ensureSunsetLodgingQuoteMessageSplits(text);
+  }
   if (text && !text.includes(MSG_SPLIT)) {
     text = polishSunsetLodgingQuoteReadableText(text);
   }

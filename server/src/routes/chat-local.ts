@@ -1,5 +1,6 @@
 ﻿import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
+import { resolveDispatcherModel } from "../services/provider-api.js";
 import { buildSystemPrompt, getDispatcherPrompt, getPromptConfig } from "../services/prompts/registry.js";
 import { shouldDeferSunsetLodgingQuote } from "../services/prompts/sunset-thermas.js";
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
@@ -15,6 +16,7 @@ import {
 import {
   formatSunsetLodgingQuoteForDelivery,
   isSunsetLodgingQuoteContext,
+  assistantMessageDeliversLodgingQuote,
 } from "../utils/sunset-lodging-quote-format.js";
 import { applySunsetLodgingQuoteImageOverlays } from "../utils/sunset-lodging-quote-image-overlays.js";
 import {
@@ -30,18 +32,29 @@ import { formatParkDayConsultaForLlm } from "../utils/park-day-consulta-summary.
 import {
   conversationNeedsChildrenConfirmation,
   conversationNeedsChildAgesConfirmation,
+  conversationHasPendingLodgingQuote,
+  conversationHasDeclaredLodgingDates,
   extractSunsetLodgingParams,
   isSunsetThermasTenantSlug,
   messageDeclaresLodgingAmenityFaq,
+  lodgingQuoteNeedsFreshToolResult,
+  shouldAutoInvokeSunsetLodgingTool,
+  shouldBlockSunsetLodgingToolCall,
+  getSunsetLodgingToolBlockInstruction,
+  buildSunsetChildrenConfirmationReply,
   shouldReinvokeSunsetLodging,
   userNeedsSunsetLodgingToolCall,
+  userMessageIsPhotoRequestOnly,
 } from "../utils/sunset-lodging-params.js";
 import {
   extractSunsetParkParams,
   extractSunsetParkParamsForThermasCard,
   hasSunsetParkToolResult,
+  messageDeclaresParkTicketPriceQuestion,
   shouldAutoInvokeParkForThermasCard,
   userAsksSunsetParkConsultation,
+  userAsksThermasCardPricing,
+  userConfirmsThermasCardCompositionOnly,
 } from "../utils/sunset-park-params.js";
 import { mergeBuiltinAgentTools } from "../utils/builtin-agent-tools.js";
 import {
@@ -249,12 +262,17 @@ async function maybeAutoInvokeSunsetLodging(params: {
 
   if (shouldDeferSunsetLodgingQuote(params.messages)) return debugEntries;
 
+  if (shouldBlockSunsetLodgingToolCall(params.messages)) return debugEntries;
+
   const lastUserMsg = [...params.messages].reverse().find((m) => m.role === "user" && m.content);
   if (lastUserMsg?.content && messageDeclaresLodgingAmenityFaq(lastUserMsg.content)) {
     return debugEntries;
   }
+  if (lastUserMsg?.content && userMessageIsPhotoRequestOnly(lastUserMsg.content)) {
+    return debugEntries;
+  }
 
-  if (!userNeedsSunsetLodgingToolCall(params.messages)) return debugEntries;
+  if (!shouldAutoInvokeSunsetLodgingTool(params.messages)) return debugEntries;
 
   const lodgingTool = findLodgingConsultaTool(params.nameToTool);
   if (!lodgingTool) return debugEntries;
@@ -269,7 +287,11 @@ async function maybeAutoInvokeSunsetLodging(params: {
     .map((m) => m.content as string);
 
   const hasLodgingResult = lodgingToolContents.length > 0;
-  if (hasLodgingResult && !shouldReinvokeSunsetLodging(params.messages, lodgingToolContents)) {
+  if (
+    hasLodgingResult &&
+    !shouldReinvokeSunsetLodging(params.messages, lodgingToolContents) &&
+    !lodgingQuoteNeedsFreshToolResult(params.messages)
+  ) {
     return debugEntries;
   }
 
@@ -339,6 +361,8 @@ async function maybeAutoInvokeSunsetPark(params: {
 
   if (!isSunsetThermasTenantSlug(params.tenantSlug)) return debugEntries;
 
+  if (userAsksThermasCardPricing(params.messages)) return debugEntries;
+
   const parkToolContents = params.conversationalMessages
     .filter(
       (m) =>
@@ -370,7 +394,16 @@ async function maybeAutoInvokeSunsetPark(params: {
     : "auto_sunset_park";
   console.log(`[Chat-Local] Auto park_consulta (${source}):`, JSON.stringify(autoParams));
   const result = await executeTool(parkTool, autoParams, params.agentId);
-  const content = buildOmnibeesGuardedContent(parkTool.name, result);
+  const thermasCardCompare = source === "auto_sunset_park_thermas_card";
+  let content: string;
+  if (result.success && typeof result.result === "object" && result.result !== null) {
+    const enriched = { ...(result.result as Record<string, unknown>) };
+    if (thermasCardCompare) enriched._thermas_card_compare = true;
+    const summary = formatParkDayConsultaForLlm(enriched);
+    content = summary ?? JSON.stringify(enriched);
+  } else {
+    content = buildOmnibeesGuardedContent(parkTool.name, result);
+  }
   params.conversationalMessages.push({
     role: "tool",
     tool_call_id: "auto-park-consulta",
@@ -1369,9 +1402,20 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         assistantText: string,
         toolResultStrings: string[],
         lastUserMessage: string,
-        deferSunsetLodgingQuote = false
+        deferSunsetLodgingQuote = false,
+        blockSunsetLodgingQuote = false
       ): Promise<string> => {
         let text = assistantText;
+
+        if (
+          conversationNeedsChildrenConfirmation(messages) &&
+          (assistantMessageDeliversLodgingQuote(text) ||
+            (/\bR\$\s*[\d.,]+/.test(text) && /chal[eé]|su[ií]te|loft|apartamento/i.test(text)))
+        ) {
+          console.warn("[Chat-Local] Orçamento Sunset bloqueado — substituindo resposta por pergunta de crianças");
+          return buildSunsetChildrenConfirmationReply(messages);
+        }
+
         const skipSuiteGalleryBulkInject = isSunsetLodgingQuoteContext(text, toolResultStrings);
         if (!skipSuiteGalleryBulkInject) {
           const galleryInject = injectSuiteGalleryMarkdownIfMissing({
@@ -1398,7 +1442,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           console.log("[Chat-Local] Injetando fotos cover Omnibees no orçamento (omissão do modelo)");
           text = omnibeesPhotoInject.fullText;
         }
-        if (!deferSunsetLodgingQuote) {
+        if (!deferSunsetLodgingQuote && !blockSunsetLodgingQuote) {
           const sunsetLodgingPhotoInject = injectSunsetLodgingQuotePhotosIfMissing(
             text,
             collectSunsetLodgingGalleryPhotosFromToolResults(toolResultStrings)
@@ -1409,8 +1453,10 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           }
         }
         text = formatOmnibeesQuoteForDelivery(text, toolResultStrings);
-        if (!deferSunsetLodgingQuote) {
-          text = formatSunsetLodgingQuoteForDelivery(text, toolResultStrings);
+        if (!deferSunsetLodgingQuote && !blockSunsetLodgingQuote) {
+          text = formatSunsetLodgingQuoteForDelivery(text, toolResultStrings, {
+            lastUserMessage,
+          });
         }
         const inventoryPhotoInject = injectInventoryPhotosIfMissing({
           assistantText: text,
@@ -1425,6 +1471,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
 
         if (
           !deferSunsetLodgingQuote &&
+          !blockSunsetLodgingQuote &&
           isSunsetThermasTenantSlug(tenantSlug) &&
           isSunsetLodgingQuoteContext(text, toolResultStrings)
         ) {
@@ -1439,6 +1486,8 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
 
       const deferSunsetLodgingQuote =
         isSunsetThermasTenantSlug(tenantSlug) && shouldDeferSunsetLodgingQuote(messages);
+      const blockSunsetLodgingQuote =
+        isSunsetThermasTenantSlug(tenantSlug) && shouldBlockSunsetLodgingToolCall(messages);
 
       // Dual-provider: OpenAI para tools (dispatcher), Gemini para conversacional
       if (useTools && dispatcherProviderId) {
@@ -1446,20 +1495,26 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         if (dispatcherConfig) {
           console.log("[Chat-Local] Dual-provider: dispatcher (tools) + conversacional");
           const { openaiTools: dispatcherTools, nameToTool: dispatcherNameToTool } = buildOpenAITools(tools, dispatcherConfig.baseUrl);
-          let dispatcherModel = (agentConfig.dispatcher_model as string)
-            || (tenantSettings.dispatcher_model as string)
-            || "gpt-4o";
-          if (dispatcherModel === "gpt-4o-mini") {
-            dispatcherModel = "gpt-4o";
-            console.log("[Chat-Local] Dispatcher upgrade: gpt-4o-mini -> gpt-4o (maior inteligência para tool calls)");
-          }
-          console.log("[Chat-Local] Dispatcher model:", dispatcherModel);
+          const { data: dispatcherProviderRow } = await supabase
+            .from("providers")
+            .select("name, model_default, base_url")
+            .eq("id", dispatcherProviderId)
+            .single();
+
+          const dispatcherModel = resolveDispatcherModel(
+            agentConfig.dispatcher_model as string | undefined,
+            tenantSettings.dispatcher_model as string | undefined,
+            dispatcherProviderRow,
+          );
+          console.log("[Chat-Local] Dispatcher model:", dispatcherModel, "| provider:", dispatcherProviderRow?.name);
 
           /** Sandbox: com dual-provider, sem tool calls no dispatcher não havia evento `debug` — a UI ficava sem bloco. */
           const dualSandboxCfg = (agent.config || {}) as Record<string, unknown>;
           const dualSandboxDebugConfig: { type: string; [k: string]: unknown } = {
             type: "config",
             model: `${dispatcherModel} (dispatcher) → ${model} (conversacional)`,
+            dispatcher_provider: dispatcherProviderRow?.name ?? null,
+            dispatcher_base_url: dispatcherProviderRow?.base_url ?? null,
             temperature: agent.temperature ?? 0.7,
             tools_count: openaiTools.length,
           };
@@ -1515,12 +1570,18 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           let sunsetLodgingHint = "";
           let sunsetParkHint = "";
           if (isSunsetThermasTenantSlug(tenantSlug)) {
+            if (userAsksThermasCardPricing(messages)) {
+              sunsetParkHint = `\n\n[HINT OBRIGATÓRIO — THERMAS CARD / PREÇO]\nO cliente perguntou **valor/preço** no fio do **Thermas Card**. Responda **NO_TOOLS_NEEDED** para consultar_parque_sunset. **Proibido** citar ingresso avulso, data do parque ou link do site de ingressos — informe os valores oficiais do cartão §2 (R$ 135,90 crédito / R$ 145,90 boleto, taxa zero).`;
+            } else if (userConfirmsThermasCardCompositionOnly(messages)) {
+              sunsetParkHint = `\n\n[HINT OBRIGATÓRIO — THERMAS CARD / QUALIFICAÇÃO]\nO cliente **confirmou composição** (quantas pessoas no plano). Responda **NO_TOOLS_NEEDED** para consultar_parque_sunset. Reconheça o número, cite R$ 135,90/mês (até 5 pessoas) e pergunte **frequência de visitas**. **Proibido** "sem registro de ingressos", data do parque ou link do site de ingressos.`;
+            }
             const parkParamsHint =
               extractSunsetParkParams(messages) ??
               extractSunsetParkParamsForThermasCard(messages);
-            if (parkParamsHint && userAsksSunsetParkConsultation(messages)) {
+            if (!userAsksThermasCardPricing(messages) && parkParamsHint && userAsksSunsetParkConsultation(messages)) {
               sunsetParkHint = `\n\n[HINT OBRIGATÓRIO — PARQUE SUNSET]\nO cliente perguntou sobre ingresso/valor/abertura do parque. NÃO responda NO_TOOLS_NEEDED para consultar_parque_sunset. Chame a tool agora com date="${parkParamsHint.date}" (YYYY-MM-DD)${parkParamsHint.date_to ? ` e date_to="${parkParamsHint.date_to}"` : ""}. Se o cliente citou intervalo (ex.: "01 a 03"), date_to é OBRIGATÓRIO — consulte TODOS os dias do período. Use day_kind/park_open/days[] retornados — PROIBIDO inventar abertura de dia não consultado.`;
             } else if (
+              !userAsksThermasCardPricing(messages) &&
               parkParamsHint &&
               shouldAutoInvokeParkForThermasCard(messages) &&
               !userAsksSunsetParkConsultation(messages)
@@ -1545,6 +1606,14 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               } else {
                 sunsetLodgingHint = `\n\n[BLOQUEIO — HOSPEDAGEM SUNSET / SEM NECESSIDADE DE TOOL]\nNeste turno **NÃO** chame consultar_hospedagem_sunset — responda **NO_TOOLS_NEEDED**. O pedido do cliente não exige nova consulta de tarifas (qualificação, nome, dúvida de amenidade ou conversa). **Proibido** chamar tool só porque datas/hóspedes constam no histórico — economia de tokens.`;
               }
+            } else if (
+              conversationHasPendingLodgingQuote(messages) &&
+              !userAsksSunsetParkConsultation(messages) &&
+              !conversationNeedsChildAgesConfirmation(messages) &&
+              !conversationNeedsChildrenConfirmation(messages) &&
+              !conversationHasDeclaredLodgingDates(messages)
+            ) {
+              sunsetLodgingHint = `\n\n[BLOQUEIO — HOSPEDAGEM SUNSET / FALTAM DATAS]\nCliente pediu orçamento mas **ainda não informou período** (check-in/check-out). Responda **NO_TOOLS_NEEDED**. Julia (conversacional) deve **perguntar as datas** — **PROIBIDO** citar R$, listar categorias ou usar tabela §2 neste turno.`;
             }
           }
 
@@ -1821,6 +1890,23 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   }
                 }
 
+                if (
+                  isSunsetThermasTenantSlug(tenantSlug) &&
+                  isLodgingConsultaTool(tool) &&
+                  shouldBlockSunsetLodgingToolCall(messages)
+                ) {
+                  const blockInstruction = getSunsetLodgingToolBlockInstruction(messages);
+                  console.warn("[Chat-Local] consultar_hospedagem_sunset BLOQUEADO:", blockInstruction);
+                  debugEntries.push({ type: "tool_call", tool: tc.function.name, args, tool_type: tool.tool_type });
+                  debugEntries.push({ type: "tool_result", preview: { error: blockInstruction } });
+                  conversationalMessages.push({
+                    role: "tool",
+                    tool_call_id: tc.id,
+                    content: JSON.stringify({ error: blockInstruction }),
+                  });
+                  continue;
+                }
+
                 const argsForExec = injectChatwootToolContext(tool, args, responseConvId, chatwoot_conversation_id);
                 console.log("[Chat-Local] Executando tool:", tc.function.name, "| args:", JSON.stringify(argsForExec));
                 debugEntries.push({ type: "tool_call", tool: tc.function.name, args: argsForExec, tool_type: "function" });
@@ -1903,6 +1989,49 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             conversationalMessagesClean.push({
               role: "user",
               content: `Resultados obtidos:\n${naturalToolResultsText}\n\nCom base nesses resultados, responda ao cliente de forma natural e objetiva. NÃO inclua JSON, nomes de ferramentas ou artefatos técnicos.`,
+            });
+          }
+
+          if (
+            isSunsetThermasTenantSlug(tenantSlug) &&
+            conversationNeedsChildAgesConfirmation(messages)
+          ) {
+            conversationalMessagesClean.push({
+              role: "user",
+              content:
+                '[INSTRUÇÃO INTERNA — NÃO REPETIR AO CLIENTE] Cliente confirmou criança(s) mas **não informou idade(s)**. Pergunte: "Quantos anos tem a criança?" (ou idade de cada uma se forem 2+). PROIBIDO citar R$ ou listar categorias neste turno.',
+            });
+          } else if (
+            isSunsetThermasTenantSlug(tenantSlug) &&
+            conversationNeedsChildrenConfirmation(messages)
+          ) {
+            const datesAlreadyKnown = conversationHasDeclaredLodgingDates(messages);
+            conversationalMessagesClean.push({
+              role: "user",
+              content:
+                `[INSTRUÇÃO INTERNA — NÃO REPETIR AO CLIENTE] Cliente informou quantidade de pessoas${datesAlreadyKnown ? " e **já citou as datas** (check-in/check-out)" : ""}, mas **não confirmou crianças**. Pergunte: "Alguma criança vai junto? Se sim, quantas e com quantos anos?" **PROIBIDO** pedir período ou datas de novo neste turno. PROIBIDO citar R$ ou listar categorias neste turno — ignore qualquer resultado parcial de tool neste turno.`,
+            });
+          } else if (
+            isSunsetThermasTenantSlug(tenantSlug) &&
+            toolResults.length === 0 &&
+            conversationHasPendingLodgingQuote(messages) &&
+            !extractSunsetLodgingParams(messages) &&
+            !conversationHasDeclaredLodgingDates(messages)
+          ) {
+            conversationalMessagesClean.push({
+              role: "user",
+              content:
+                "[INSTRUÇÃO INTERNA — NÃO REPETIR AO CLIENTE] Orçamento de hospedagem pendente, mas faltam datas (check-in/check-out). Pergunte o período ao cliente. PROIBIDO citar qualquer valor em R$ ou listar categorias com preço neste turno.",
+            });
+          } else if (
+            isSunsetThermasTenantSlug(tenantSlug) &&
+            toolResults.length === 0 &&
+            shouldAutoInvokeSunsetLodgingTool(messages)
+          ) {
+            conversationalMessagesClean.push({
+              role: "user",
+              content:
+                "[INSTRUÇÃO INTERNA — NÃO REPETIR AO CLIENTE] Datas e hóspedes já estão no histórico, mas a consulta de tarifas não rodou neste turno. Não invente preços. Peça confirmação das datas ou aguarde — PROIBIDO citar R$ sem resultado da tool consultar_hospedagem_sunset.",
             });
           }
 
@@ -2086,7 +2215,8 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             convFullContent,
             toolResults,
             lastUserForGalleryInject,
-            deferSunsetLodgingQuote
+            deferSunsetLodgingQuote,
+            blockSunsetLodgingQuote
           );
 
           if (/HANDOFF_COMERCIAL/i.test(convFullContent)) {
@@ -2412,7 +2542,8 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             fullContent,
             toolStringsSP,
             lastUserForGalleryInjectSP,
-            deferSunsetLodgingQuote
+            deferSunsetLodgingQuote,
+            blockSunsetLodgingQuote
           );
           emitMediaCommandsSseIfNeeded(sendSse, fullContent);
           sendSingleProviderSandboxDebug();
@@ -2547,6 +2678,21 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }
           }
 
+          if (
+            isSunsetThermasTenantSlug(tenantSlug) &&
+            isLodgingConsultaTool(tool) &&
+            shouldBlockSunsetLodgingToolCall(messages)
+          ) {
+            const blockInstruction = getSunsetLodgingToolBlockInstruction(messages);
+            console.warn("[Chat-Local] consultar_hospedagem_sunset BLOQUEADO (single-provider):", blockInstruction);
+            llmMessages.push({
+              role: "tool",
+              tool_call_id: tc.id,
+              content: JSON.stringify({ error: blockInstruction }),
+            });
+            continue;
+          }
+
           const argsForExecSp = injectChatwootToolContext(tool, args, responseConvId, chatwoot_conversation_id);
           console.log("[Chat-Local] Executando tool (single-provider):", tc.function.name, "| args:", JSON.stringify(argsForExecSp));
           const result = await executeTool(tool, argsForExecSp, agent_id);
@@ -2601,7 +2747,8 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           fullContent,
           toolStrsLoop,
           lastUserGI,
-          deferSunsetLodgingQuote
+          deferSunsetLodgingQuote,
+          blockSunsetLodgingQuote
         );
         emitMediaCommandsSseIfNeeded(sendSse, finalAssistantRaw);
         const rawLoopAssist = prependWelcomeToAssistantText((finalAssistantRaw || "").trim());

@@ -17,7 +17,7 @@ import { buildSystemPrompt } from "./registry.js";
 
 describe("Sunset Thermas Park — SYSTEM_PROMPT (contratos de negócio)", () => {
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.35/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.40/);
   });
 
   it("mantém regra suprema de valores e vaga (tolerância zero)", () => {
@@ -431,7 +431,7 @@ describe("Sunset Thermas Park — regressão v1.4.2 (tom hoje/amanhã)", () => {
 
   it("§3 tem exemplo positivo oi → Maria → perguntar intenção (não curtir o parque nem §00d)", () => {
     expect(SYSTEM_PROMPT).toMatch(/Cliente Turno 2: "Maria"/i);
-    expect(SYSTEM_PROMPT).toMatch(/parque.*hospedagem.*os dois|hospedagem no hotel.*os dois/i);
+    expect(SYSTEM_PROMPT).toMatch(/parque.*hospedagem.*Thermas Card|Thermas Card.*parque.*hospedagem/i);
     expect(SYSTEM_PROMPT).toMatch(/ERRADO.*curtir o parque|vi[eé]s s[oó] parque/i);
     expect(SYSTEM_PROMPT).not.toMatch(/Turno 2 \(CORRETO\)[^\n]*curtir o parque/i);
   });
@@ -592,6 +592,34 @@ describe("Sunset Thermas Park — §3g Thermas Card (v1.5.18+)", () => {
     expect(ctx).toMatch(/5 pessoas|sempre.*5/i);
     expect(ctx).toMatch(/NÃO.*parque.*hospedagem/i);
     expect(ctx).not.toMatch(/aderir\/contratar.*99860-5662/i);
+  });
+
+  it("injeta bloco de qualificação quando cliente confirma composição (5 pessoas)", () => {
+    const ctx = appendSunsetConversationContext(undefined, [
+      { role: "user", content: "quero saber sobre o thermas card" },
+      { role: "assistant", content: "Quantas pessoas entrariam no plano?" },
+      { role: "user", content: "seria 5 pessoas mesmo" },
+    ]);
+    expect(ctx).toMatch(/THERMAS CARD/i);
+    expect(ctx).toMatch(/QUALIFICAÇÃO.*composição|TURNO ATUAL — QUALIFICAÇÃO/i);
+    expect(ctx).toMatch(/135,90/);
+    expect(ctx).toMatch(/frequência|frequencia/i);
+    expect(ctx).toMatch(/PROIBIDO.*ingressos|sem registro de ingressos/i);
+    expect(ctx).not.toMatch(/CONTEXTO DESTA CONVERSA — PARQUE/i);
+  });
+
+  it("injeta bloco de preço Thermas Card em follow-up 'qual valor?'", () => {
+    const ctx = appendSunsetConversationContext(undefined, [
+      { role: "user", content: "quero saber sobre o thermas card" },
+      { role: "assistant", content: "O Thermas Card dá acesso ilimitado por 5 anos." },
+      { role: "user", content: "qual valor?" },
+    ]);
+    expect(ctx).toMatch(/THERMAS CARD/i);
+    expect(ctx).toMatch(/PREÇO DO THERMAS CARD|TURNO ATUAL — PREÇO/i);
+    expect(ctx).toMatch(/135,90/);
+    expect(ctx).toMatch(/145,90/);
+    expect(ctx).toMatch(/PROIBIDO.*ingresso avulso|ingresso avulso/i);
+    expect(ctx).not.toMatch(/CONTEXTO DESTA CONVERSA — PARQUE/i);
   });
 
   it("COMMUNICATION_RULES item 25 reforça venda consultiva Thermas Card", () => {
@@ -1335,5 +1363,67 @@ describe("Sunset Thermas Park — v1.5.35 SEM EXCEÇÃO (anti-despejo no formul�
   it("§3b v1.5.35: lista de PROIBIÇÕES absolutas está explícita no prompt", () => {
     expect(SYSTEM_PROMPT).toMatch(/PROIBI[ÇC][ÕO]ES absolutas|PROIBI[ÇC][OO]ES absolutas/i);
     expect(SYSTEM_PROMPT).toMatch(/passivo-agressivo|primeira mensagem do formul[áa]rio/i);
+  });
+});
+
+describe("Sunset Thermas Park — §3g-objeções Thermas Card (v1.5.40)", () => {
+  it("declara a seção §3g-objeções como roteiros de venda para objeções de preço e uso", () => {
+    expect(SYSTEM_PROMPT).toMatch(/3g-obje[çc][oõ]es\)|3g-obje[çc][oõ]es.*TRATAMENTO DE OBJE[ÇC][ÕO]ES/i);
+  });
+
+  it("§3g-objeções lista os gatilhos de 'preço alto' (meio caro / achei caro)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/meio caro|achei caro|pre[çc]o alto|salgado/i);
+  });
+
+  it("§3g-objeções lista os gatilhos de 'ceticismo de uso' (não vou aproveitar / não moro perto)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/n[ãa]o vou aproveitar|n[ãa]o vou usar 5 anos|n[ãa]o moro perto|[ée] longe|duvido/i);
+  });
+
+  it("§3g-objeções obriga a usar a conta de 5 pessoas (mesma lógica do §3g-compare)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/5 pessoas|cinco pessoas/);
+  });
+
+  it("§3g-objeções proíbe responder 'vale a pena' sem a conta numérica antes", () => {
+    expect(SYSTEM_PROMPT).toMatch(/sem.*conta.*n[uú]mero|frases vazias.*vale a pena|sem n[uú]mero.*conta|conta.*antes/i);
+  });
+
+  it("§3g-objeções proíbe fugir para link do site de ingressos na objeção (erro do print)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/N[ÃA]O responda.*site.*ingressos|[áa]rea de ingressos.*N[ÃA]O|conferir no site.*N[ÃA]O|[áa]rea de ingressos do nosso site/i);
+  });
+
+  it("§3g-objeções proíbe trocar de assunto (hospedagem, parque, excursão) na objeção", () => {
+    expect(SYSTEM_PROMPT).toMatch(/trocando de assunto|trocar.*hospedagem|hospedagem.*parque.*excurs[ãa]o/i);
+  });
+
+  it("§3g-objeções proíbe diminuir a objeção do cliente ('isso não é caro', 'todo mundo acha caro')", () => {
+    expect(SYSTEM_PROMPT).toMatch(/N[ÃA]O diminua|diminuir a obje[çc][ãa]o|todo mundo acha caro|isso n[ãa]o [eé] caro/i);
+  });
+
+  it("§3g-objeções proíbe oferecer cancelar, parcelar diferente ou 'experimentar 1 ano' fora do §2", () => {
+    expect(SYSTEM_PROMPT).toMatch(/experimentar 1 ano|N[ÃA]O ofere[çc]a cancelar|fidelidade.*[oó] 12 meses|regras oficiais do §2/i);
+  });
+
+  it("§3g-objeções ancora a frequência que o cliente já citou (sem repetir pergunta)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/FREQU[ÊE]NCIA.*que.*mencionou|j[áa] constam no hist[óo]rio|N[ÃA]O pe[çc]a novamente/i);
+  });
+
+  it("§3g-objeções cobre ceticismo de 5 anos com piso de 12–18 meses e ganho pós-fidelidade", () => {
+    expect(SYSTEM_PROMPT).toMatch(/12 a 18 meses|primeiros.*12.*18 meses|custo zero por visita|piso real/i);
+  });
+
+  it("§3g-objeções quebra a objeção 'longe' com guichê exclusivo sem fila", () => {
+    expect(SYSTEM_PROMPT).toMatch(/longe.*assusta|distance.*assusta|guich[êe] exclusivo sem fila|dia de pico/i);
+  });
+
+  it("§3g-objeções exemplo canônico ERRADO reproduz o caso do print (mandar conferir site em vez de vender)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/ERRADO.*v1\.5\.40|fugir do assunto.*cart[ãa]o|ERRADO.*conferir os valores|site oficial.*ERRADO/i);
+  });
+
+  it("§3g-objeções exemplo canônico CORRETO cobre os 5 elementos: composição, frequência, multiplicação, 5 anos, gancho", () => {
+    expect(SYSTEM_PROMPT).toMatch(/voc[êe]s s[ãa]o.*4.*cobre at[ée] 5|multip.*valor.*1.*2|pre[çc]o.*135,90.*5 anos|Faz sentido pro perfil de voc[êe]s/i);
+  });
+
+  it("§3g-objeções referencia runtime de detecção (não duplica detecção)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/detec[çc][ãa]o.*runtime|sunset-park-params|decis[ãa]o de runtime/);
   });
 });
