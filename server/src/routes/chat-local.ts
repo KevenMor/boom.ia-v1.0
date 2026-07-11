@@ -57,6 +57,11 @@ import {
   userAsksThermasCardPricing,
   userConfirmsThermasCardCompositionOnly,
 } from "../utils/sunset-park-params.js";
+import {
+  buildSunsetHandoffToolArgs,
+  resolveSunsetHandoffReason,
+  shouldAutoInvokeSunsetHandoff,
+} from "../utils/sunset-handoff-params.js";
 import { mergeBuiltinAgentTools } from "../utils/builtin-agent-tools.js";
 import {
   registerToolNameKeys,
@@ -232,6 +237,13 @@ function findParkConsultaTool(nameToTool: Map<string, ToolDef>): ToolDef | undef
 function findLodgingConsultaTool(nameToTool: Map<string, ToolDef>): ToolDef | undefined {
   for (const tool of nameToTool.values()) {
     if (isLodgingConsultaTool(tool)) return tool;
+  }
+  return undefined;
+}
+
+function findSunsetHandoffTool(nameToTool: Map<string, ToolDef>): ToolDef | undefined {
+  for (const tool of nameToTool.values()) {
+    if (tool.tool_type === "chatwoot_assign") return tool;
   }
   return undefined;
 }
@@ -431,6 +443,88 @@ async function maybeAutoInvokeSunsetPark(params: {
           ? { value: String(result.result).slice(0, 500) }
           : { error: result.error },
   });
+
+  return debugEntries;
+}
+
+/** Sunset: transferência Chatwoot quando assunto exige setor humano. */
+async function maybeAutoInvokeSunsetHandoff(params: {
+  tenantSlug: string | null;
+  messages: Array<{ role: string; content: string }>;
+  conversationalMessages: Array<{ role: string; content?: string; tool_call_id?: string }>;
+  nameToTool: Map<string, ToolDef>;
+  agentId: string;
+  conversationId: string | null | undefined;
+  chatwootConversationId: number | null | undefined;
+  agent: { config?: Record<string, unknown>; tenant_id?: string };
+  externalUserId?: string | null;
+  supabase: ReturnType<typeof createNexusClient>;
+}): Promise<
+  Array<{ type: string; tool?: string; args?: Record<string, unknown>; tool_type?: string; preview?: unknown; source?: string }>
+> {
+  const debugEntries: Array<{
+    type: string;
+    tool?: string;
+    args?: Record<string, unknown>;
+    tool_type?: string;
+    preview?: unknown;
+    source?: string;
+  }> = [];
+
+  if (!isSunsetThermasTenantSlug(params.tenantSlug)) return debugEntries;
+  if (!shouldAutoInvokeSunsetHandoff(params.messages)) return debugEntries;
+
+  const handoffReason = resolveSunsetHandoffReason(params.messages);
+  if (!handoffReason) return debugEntries;
+
+  const handoffTool = findSunsetHandoffTool(params.nameToTool);
+  if (!handoffTool) return debugEntries;
+
+  const autoParams = buildSunsetHandoffToolArgs(handoffReason);
+  const argsForExec = injectChatwootToolContext(
+    handoffTool,
+    autoParams,
+    params.conversationId,
+    params.chatwootConversationId
+  );
+
+  console.log("[Chat-Local] Auto chatwoot_assign (sunset handoff):", JSON.stringify(argsForExec));
+  const result = await executeTool(handoffTool, argsForExec, params.agentId);
+  const content = buildOmnibeesGuardedContent(handoffTool.name, result);
+  params.conversationalMessages.push({
+    role: "tool",
+    tool_call_id: "auto-sunset-handoff",
+    content,
+  });
+  debugEntries.push({
+    type: "tool_call",
+    tool: handoffTool.name,
+    args: argsForExec,
+    tool_type: "chatwoot_assign",
+    source: "auto_sunset_handoff",
+  });
+  debugEntries.push({
+    type: "tool_result",
+    preview:
+      result.success && typeof result.result === "object"
+        ? result.result
+        : result.success
+          ? { value: String(result.result).slice(0, 500) }
+          : { error: result.error },
+  });
+
+  if (result.success) {
+    applyChatwootHandoffSideEffects(
+      params.agentId,
+      params.agent,
+      params.messages,
+      params.externalUserId,
+      params.conversationId ?? null,
+      params.supabase
+    ).catch((e) => {
+      console.warn("[Chat-Local] Erro no side-effect de handoff Sunset:", (e as Error)?.message);
+    });
+  }
 
   return debugEntries;
 }
@@ -984,6 +1078,30 @@ async function sendAgendaNotification(
   }
 
   await sendNotificationToGroup(agentId, agent, message);
+}
+
+/** Cancela follow-ups e notifica equipe após transferência Chatwoot bem-sucedida. */
+async function applyChatwootHandoffSideEffects(
+  agentId: string,
+  agent: { config?: Record<string, unknown>; tenant_id?: string },
+  messages: Array<{ role: string; content: string }>,
+  externalUserId: string | null | undefined,
+  responseConvId: string | null,
+  supabase: ReturnType<typeof createNexusClient>
+): Promise<void> {
+  await sendHandoffNotification(agentId, agent, messages, externalUserId);
+  if (!responseConvId) return;
+  try {
+    const { data: cancelled } = await supabase.rpc("cancel_pending_followups", {
+      p_agent_id: agentId,
+      p_conversation_id: responseConvId,
+    });
+    if (cancelled != null && (cancelled as number) > 0) {
+      console.log("[Chat-Local] Follow-up(s) cancelado(s) no handoff Chatwoot:", cancelled);
+    }
+  } catch (e) {
+    console.warn("[Chat-Local] Erro ao cancelar follow-up no handoff Chatwoot:", (e as Error)?.message);
+  }
 }
 
 /**
@@ -1575,9 +1693,16 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
           let sunsetLodgingHint = "";
           let sunsetParkHint = "";
+          let sunsetHandoffHint = "";
           if (isSunsetThermasTenantSlug(tenantSlug)) {
             const lastUserContent = lastUserMsg?.content ?? "";
-            if (messageDeclaresGratitudeOrConversationClose(lastUserContent)) {
+            const handoffReason = resolveSunsetHandoffReason(messages);
+            if (handoffReason) {
+              const reasonLabel = buildSunsetHandoffToolArgs(handoffReason).reason;
+              sunsetHandoffHint = `\n\n[HINT OBRIGATÓRIO — ENCAMINHAR SETOR RESPONSÁVEL]\nAssunto exige **atendimento humano** (§4-b). **Chame encaminhar_setor_responsavel** neste turno com reason="${reasonLabel}" — **proibido** NO_TOOLS_NEEDED antes da transferência.\nJulia (conversacional): 1–2 frases informando que **vai encaminhar** ao setor responsável; **proibido** dizer "reserva confirmada".`;
+              sunsetLodgingHint = `\n\n[BLOQUEIO — HANDOFF PENDENTE]\nTransferência ao setor humano tem prioridade — **não** chame consultar_hospedagem_sunset neste turno.`;
+              sunsetParkHint = `\n\n[BLOQUEIO — HANDOFF PENDENTE]\nTransferência ao setor humano tem prioridade — **não** chame consultar_parque_sunset neste turno.`;
+            } else if (messageDeclaresGratitudeOrConversationClose(lastUserContent)) {
               sunsetParkHint = `\n\n[HINT OBRIGATÓRIO — AGRADECIMENTO / ENCERRAMENTO]\nO cliente **agradecu** ou encerrou. Responda **NO_TOOLS_NEEDED** — **proibido** consultar_parque_sunset, consultar_hospedagem_sunset ou reiniciar pitch. Uma frase curta de despedida basta.`;
               sunsetLodgingHint = `\n\n[BLOQUEIO — AGRADECIMENTO]\nCliente agradeceu — **NO_TOOLS_NEEDED**. Não cotar hospedagem neste turno.`;
             } else if (userAsksThermasCardPricing(messages)) {
@@ -1649,7 +1774,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
 
           const dispatcherMessages = toOpenAIMessages(
-            getDispatcherPrompt(tenantSlug) + dispatcherDateContext + entityHint + schedulingHint + referencyInventoryHint + sunsetParkHint + sunsetLodgingHint,
+            getDispatcherPrompt(tenantSlug) + dispatcherDateContext + entityHint + schedulingHint + referencyInventoryHint + sunsetHandoffHint + sunsetParkHint + sunsetLodgingHint,
             messages
           );
 
@@ -1937,6 +2062,18 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   tool_call_id: tc.id,
                   content: buildOmnibeesGuardedContent(tc.function.name, result),
                 });
+                if (tool.tool_type === "chatwoot_assign" && result.success) {
+                  applyChatwootHandoffSideEffects(
+                    agent_id,
+                    agent,
+                    messages,
+                    external_user_id,
+                    responseConvId,
+                    supabase
+                  ).catch((e) => {
+                    console.warn("[Chat-Local] Erro no side-effect handoff (dispatcher):", (e as Error)?.message);
+                  });
+                }
                 if (tc.function.name === "consultar_agenda" && result.success && result.result) {
                   sendAgendaNotification(agent_id, agent, result.result, messages, external_user_id, responseConvId, chatwoot_conversation_id).catch(() => {});
                 }
@@ -1947,14 +2084,29 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             conversationalMessages = toOpenAIMessages(systemPrompt, messages);
           }
 
-          const autoParkDebugEntries = await maybeAutoInvokeSunsetPark({
+          const autoHandoffDebugEntries = await maybeAutoInvokeSunsetHandoff({
+            tenantSlug,
+            messages,
+            conversationalMessages,
+            nameToTool: dispatcherNameToTool,
+            agentId: agent_id,
+            conversationId: responseConvId,
+            chatwootConversationId: chatwoot_conversation_id,
+            agent,
+            externalUserId: external_user_id,
+            supabase,
+          });
+          const autoParkDebugEntries = shouldAutoInvokeSunsetHandoff(messages)
+            ? []
+            : await maybeAutoInvokeSunsetPark({
             tenantSlug,
             messages,
             conversationalMessages,
             nameToTool: dispatcherNameToTool,
             agentId: agent_id,
           });
-          const autoLodgingDebugEntries = userAsksSunsetParkConsultation(messages)
+          const autoLodgingDebugEntries =
+            userAsksSunsetParkConsultation(messages) || shouldAutoInvokeSunsetHandoff(messages)
             ? []
             : await maybeAutoInvokeSunsetLodging({
                 tenantSlug,
@@ -1963,7 +2115,11 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 nameToTool: dispatcherNameToTool,
                 agentId: agent_id,
               });
-          const autoSunsetDebugEntries = [...autoParkDebugEntries, ...autoLodgingDebugEntries];
+          const autoSunsetDebugEntries = [
+            ...autoHandoffDebugEntries,
+            ...autoParkDebugEntries,
+            ...autoLodgingDebugEntries,
+          ];
           if (autoSunsetDebugEntries.length > 0) {
             if (phase1ToolCalls.length > 0) {
               sendSse({ debug: autoSunsetDebugEntries });
@@ -2715,6 +2871,18 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             tool_call_id: tc.id,
             content: buildOmnibeesGuardedContent(tc.function.name, result),
           });
+          if (tool.tool_type === "chatwoot_assign" && result.success) {
+            applyChatwootHandoffSideEffects(
+              agent_id,
+              agent,
+              messages,
+              external_user_id,
+              responseConvId,
+              supabase
+            ).catch((e) => {
+              console.warn("[Chat-Local] Erro no side-effect handoff (single-provider):", (e as Error)?.message);
+            });
+          }
           if (tc.function.name === "consultar_agenda" && result.success && result.result) {
             sendAgendaNotification(agent_id, agent, result.result, messages, external_user_id, responseConvId, chatwoot_conversation_id).catch(() => {});
           }

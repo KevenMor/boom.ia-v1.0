@@ -17,7 +17,7 @@ import { buildSystemPrompt } from "./registry.js";
 
 describe("Sunset Thermas Park — SYSTEM_PROMPT (contratos de negócio)", () => {
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.43/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.44/);
   });
 
   it("mantém regra suprema de valores e vaga (tolerância zero)", () => {
@@ -425,6 +425,15 @@ describe("Sunset Thermas Park — regressão v1.4.2 (tom hoje/amanhã)", () => {
     expect(SYSTEM_PROMPT).toMatch(/18:00–04:59/);
     expect(SYSTEM_PROMPT).toMatch(/nunca.*replique cegamente|Nunca.*replique cegamente/i);
     expect(COMMUNICATION_RULES).toMatch(/Saudação temporal \(§00c-1\)/);
+  });
+
+  it("§4-b: transferência obrigatória via encaminhar_setor_responsavel", () => {
+    expect(SYSTEM_PROMPT).toMatch(/4-b\)/);
+    expect(SYSTEM_PROMPT).toMatch(/encaminhar_setor_responsavel/);
+    expect(SYSTEM_PROMPT).toMatch(/Setor de reservas/);
+    expect(SYSTEM_PROMPT).toMatch(/Excursões/);
+    expect(COMMUNICATION_RULES).toMatch(/Transferência humana \(§4-b\)/);
+    expect(DISPATCHER_PROMPT).toMatch(/encaminhar_setor_responsavel/);
   });
 
   it("proíbe encher linguiça com 'hoje?' ou ganchos inventados a partir do contexto temporal", () => {
