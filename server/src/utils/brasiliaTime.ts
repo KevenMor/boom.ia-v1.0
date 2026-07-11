@@ -34,6 +34,52 @@ export function getBrasiliaDateStr(now: Date = new Date()): string {
   }).format(now);
 }
 
+export type BrasiliaGreetingPeriod = "bom_dia" | "boa_tarde" | "boa_noite";
+
+/** Faixas: Bom dia 05:00–11:59 | Boa tarde 12:00–17:59 | Boa noite 18:00–04:59 */
+export function getBrasiliaGreetingPeriod(now: Date = new Date()): BrasiliaGreetingPeriod {
+  const h = getBrasiliaHour(now);
+  if (h >= 5 && h <= 11) return "bom_dia";
+  if (h >= 12 && h <= 17) return "boa_tarde";
+  return "boa_noite";
+}
+
+export function formatBrasiliaGreeting(period: BrasiliaGreetingPeriod): string {
+  switch (period) {
+    case "bom_dia":
+      return "Bom dia!";
+    case "boa_tarde":
+      return "Boa tarde!";
+    case "boa_noite":
+      return "Boa noite!";
+  }
+}
+
+/** Bloco [CONTEXTO TEMPORAL] injetado no system prompt dos agentes. */
+export function buildBrasiliaTemporalContext(now: Date = new Date()): string {
+  const nowStr = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: TZ,
+    weekday: "long",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(now);
+  const todayISO = getBrasiliaDateStr(now);
+  const tomorrowISO = getBrasiliaTomorrowStr(now);
+  const greeting = formatBrasiliaGreeting(getBrasiliaGreetingPeriod(now));
+
+  return (
+    `\n\n[CONTEXTO TEMPORAL] Agora: ${nowStr} (Brasília). ` +
+    `Hoje: ${todayISO}. Amanhã: ${tomorrowISO}. ` +
+    `Saudação recomendada neste horário: ${greeting} ` +
+    `Faixas: Bom dia 05:00–11:59 | Boa tarde 12:00–17:59 | Boa noite 18:00–04:59. ` +
+    `Use estas datas como referência ao falar de "hoje", "amanhã", dias da semana etc. ` +
+    `Não replique cegamente a saudação do cliente se ela estiver errada para o horário atual.`
+  );
+}
+
 /** Retorna data de amanhã em Brasília (YYYY-MM-DD). */
 export function getBrasiliaTomorrowStr(now: Date = new Date()): string {
   const today = getBrasiliaDateStr(now);

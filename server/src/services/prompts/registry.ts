@@ -4,6 +4,7 @@
 // To add a new tenant: create a file and register it here.
 // ============================================================
 
+import { buildBrasiliaTemporalContext } from "../../utils/brasiliaTime.js";
 import { BASE_GREETING, DEFAULT_DISPATCHER_PROMPT } from "./base.js";
 import {
   SYSTEM_PROMPT as PPL_SYSTEM,
@@ -237,7 +238,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: ST_DISPATCHER,
     followupPrompt: ST_FOLLOWUP,
     alwaysInjectCommRules: true,
-    version: "v1.5.41",
+    version: "v1.5.43",
     description: "Julia — Consultora de reservas Sunset Thermas Park",
   },
   "sunset-thermas": {
@@ -246,7 +247,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: ST_DISPATCHER,
     followupPrompt: ST_FOLLOWUP,
     alwaysInjectCommRules: true,
-    version: "v1.5.41",
+    version: "v1.5.43",
     description: "Julia — Consultora de reservas Sunset Thermas Park",
   },
   /** Slugs alinhados ao cabeçalho de durce-vita.ts */
@@ -471,12 +472,8 @@ export function buildSystemPrompt(
   const commRules = (shouldInjectComm && config?.communicationRules) ? "\n\n" + config.communicationRules : "";
   const greeting = config?.skipGreeting ? "" : "\n\n" + BASE_GREETING;
 
-  // Inject current Brasilia datetime so the model knows "hoje" and "amanh?�"
   const now = new Date();
-  const brasiliaFormatter = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-  const nowStr = brasiliaFormatter.format(now);
-  const todayISO = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(now);
-  const dateContext = `\n\n[CONTEXTO TEMPORAL] Agora: ${nowStr} (Bras?�lia). Hoje: ${todayISO}. Use estas datas como refer?�ncia ao falar de "hoje", "amanh?�", dias da semana, etc.`;
+  const dateContext = buildBrasiliaTemporalContext(now);
 
   const sunsetContext = isSunsetThermasPromptConfig(config)
     ? appendSunsetConversationContext(options?.firstUserMessage, options?.messages, now)

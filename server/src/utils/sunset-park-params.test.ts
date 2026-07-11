@@ -3,6 +3,7 @@ import {
   extractSunsetParkParams,
   extractSunsetParkParamsForThermasCard,
   messageDeclaresParkTicketPriceQuestion,
+  messageDeclaresGratitudeOrConversationClose,
   shouldAutoInvokeParkForThermasCard,
   userAsksSunsetParkConsultation,
   userAsksThermasCardPricing,
@@ -91,5 +92,34 @@ describe("sunset-park-params", () => {
     expect(userAsksSunsetParkConsultation(messages)).toBe(false);
     expect(shouldAutoInvokeParkForThermasCard(messages)).toBe(false);
     expect(extractSunsetParkParams(messages, refJul6)).toBeNull();
+  });
+
+  it("detecta agradecimento puro", () => {
+    expect(messageDeclaresGratitudeOrConversationClose("obrigadoo")).toBe(true);
+    expect(messageDeclaresGratitudeOrConversationClose("muito obrigado")).toBe(true);
+    expect(messageDeclaresGratitudeOrConversationClose("legal, muito obrigado")).toBe(true);
+    expect(messageDeclaresGratitudeOrConversationClose("quanto custa o cartão?")).toBe(false);
+  });
+
+  it("Thermas Card após compra + obrigado não dispara consulta de ingresso", () => {
+    const messages = [
+      { role: "user", content: "quero saber sobre o thermas card" },
+      { role: "assistant", content: "O Thermas Card dá acesso ilimitado por 5 anos..." },
+      { role: "user", content: "pensando assim vale a pena, como compro?" },
+      { role: "assistant", content: "Cadastro em https://socio.grupothermas.com.br/cadastro" },
+      {
+        role: "user",
+        content: "legal, muito obrigado. assim que eu fechar, consigo ja reservar hotel com desconto?",
+      },
+      {
+        role: "assistant",
+        content: "Sim! Com o cartão ativo você tem 20% na hospedagem. Me chama quando ativar.",
+      },
+      { role: "user", content: "obrigadoo" },
+    ];
+    expect(messageDeclaresGratitudeOrConversationClose("obrigadoo")).toBe(true);
+    expect(shouldAutoInvokeParkForThermasCard(messages)).toBe(false);
+    expect(extractSunsetParkParamsForThermasCard(messages, refJul6)).toBeNull();
+    expect(userAsksSunsetParkConsultation(messages)).toBe(false);
   });
 });

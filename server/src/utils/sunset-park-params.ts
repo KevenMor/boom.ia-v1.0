@@ -198,10 +198,32 @@ export function userAsksThermasCardPricing(messages: ChatMessage[]): boolean {
   return messageDeclaresGenericPriceOrValueQuestion(text);
 }
 
+/** Cliente agradeceu ou encerrou — não reiniciar venda nem consultar ingresso. */
+export function messageDeclaresGratitudeOrConversationClose(text: string): boolean {
+  const raw = (text || "").trim();
+  const t = normalizeText(raw);
+  if (!t) return false;
+  if (/^(muito\s+)?obrigad[oao]+[!.\s]*$/.test(t)) return true;
+  if (/^(obrigad[oao]+|valeu|agrade[cç]o)[!.\s]*$/.test(t)) return true;
+  if (
+    /^(ok|certo|perfeito|combinado|show|legal|otimo|ótimo)[,!.\s]*(obrigad|valeu)?[!.\s]*$/.test(t) &&
+    t.length < 40
+  ) {
+    return true;
+  }
+  if (/\b(obrigad[oao]+|valeu|agrade[cç]o)\b/.test(t) && !/\?/.test(t) && t.split(/\s+/).length <= 6) {
+    return true;
+  }
+  return false;
+}
+
 function userRequestsThermasCardTicketComparison(messages: ChatMessage[]): boolean {
   const lastUser = [...messages].reverse().find((m) => m.role === "user" && m.content?.trim());
   if (!lastUser?.content) return false;
   const t = normalizeText(lastUser.content);
+  if (/como compr|como contrat|como ader|onde compro|link de cadastro|quero aderir|quero contratar/.test(t)) {
+    return false;
+  }
   return /compar|compensa|vale a pena|caro|meio caro|achei caro|preco alto|preço alto|faz a conta|mostra a conta/.test(
     t
   );
@@ -224,6 +246,7 @@ export function userAsksSunsetParkConsultation(messages: ChatMessage[]): boolean
   if (userAsksThermasCardPricing(messages)) return false;
   const lastUser = [...messages].reverse().find((m) => m.role === "user");
   if (!lastUser?.content) return false;
+  if (messageDeclaresGratitudeOrConversationClose(lastUser.content)) return false;
   const text = lastUser.content;
   if (messageDeclaresParkTicketPriceQuestion(text)) return true;
   const t = normalizeText(text);
@@ -316,16 +339,13 @@ export function conversationDeclaresThermasCardIntent(messages: ChatMessage[]): 
  */
 export function shouldAutoInvokeParkForThermasCard(messages: ChatMessage[]): boolean {
   if (!conversationDeclaresThermasCardIntent(messages)) return false;
+  const lastUser = [...messages].reverse().find((m) => m.role === "user" && m.content?.trim());
+  if (lastUser?.content && messageDeclaresGratitudeOrConversationClose(lastUser.content)) return false;
   if (userAsksThermasCardPricing(messages) && !userRequestsThermasCardTicketComparison(messages)) {
     return false;
   }
   if (userConfirmsThermasCardCompositionOnly(messages)) return false;
-  const norm = normalizeText(messages.map((m) => m.content ?? "").join("\n"));
-  const hasPriceConcern =
-    /caro|compensa|vale a pena|compar|meio caro|achei caro|preco alto|preço alto|faz a conta|mostra a conta/.test(
-      norm
-    );
-  return hasPriceConcern;
+  return userRequestsThermasCardTicketComparison(messages);
 }
 
 /** Data de referência para comparar ingresso × Thermas Card (default: hoje). */

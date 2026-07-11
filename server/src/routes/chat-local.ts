@@ -50,6 +50,7 @@ import {
   extractSunsetParkParams,
   extractSunsetParkParamsForThermasCard,
   hasSunsetParkToolResult,
+  messageDeclaresGratitudeOrConversationClose,
   messageDeclaresParkTicketPriceQuestion,
   shouldAutoInvokeParkForThermasCard,
   userAsksSunsetParkConsultation,
@@ -362,6 +363,11 @@ async function maybeAutoInvokeSunsetPark(params: {
   if (!isSunsetThermasTenantSlug(params.tenantSlug)) return debugEntries;
 
   if (userAsksThermasCardPricing(params.messages)) return debugEntries;
+
+  const lastUserMsg = [...params.messages].reverse().find((m) => m.role === "user" && m.content);
+  if (lastUserMsg?.content && messageDeclaresGratitudeOrConversationClose(lastUserMsg.content)) {
+    return debugEntries;
+  }
 
   const parkToolContents = params.conversationalMessages
     .filter(
@@ -1570,7 +1576,11 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           let sunsetLodgingHint = "";
           let sunsetParkHint = "";
           if (isSunsetThermasTenantSlug(tenantSlug)) {
-            if (userAsksThermasCardPricing(messages)) {
+            const lastUserContent = lastUserMsg?.content ?? "";
+            if (messageDeclaresGratitudeOrConversationClose(lastUserContent)) {
+              sunsetParkHint = `\n\n[HINT OBRIGATÓRIO — AGRADECIMENTO / ENCERRAMENTO]\nO cliente **agradecu** ou encerrou. Responda **NO_TOOLS_NEEDED** — **proibido** consultar_parque_sunset, consultar_hospedagem_sunset ou reiniciar pitch. Uma frase curta de despedida basta.`;
+              sunsetLodgingHint = `\n\n[BLOQUEIO — AGRADECIMENTO]\nCliente agradeceu — **NO_TOOLS_NEEDED**. Não cotar hospedagem neste turno.`;
+            } else if (userAsksThermasCardPricing(messages)) {
               sunsetParkHint = `\n\n[HINT OBRIGATÓRIO — THERMAS CARD / PREÇO]\nO cliente perguntou **valor/preço** no fio do **Thermas Card**. Responda **NO_TOOLS_NEEDED** para consultar_parque_sunset. **Proibido** citar ingresso avulso, data do parque ou link do site de ingressos — informe os valores oficiais do cartão §2 (R$ 135,90 crédito / R$ 145,90 boleto, taxa zero).`;
             } else if (userConfirmsThermasCardCompositionOnly(messages)) {
               sunsetParkHint = `\n\n[HINT OBRIGATÓRIO — THERMAS CARD / QUALIFICAÇÃO]\nO cliente **confirmou composição** (quantas pessoas no plano). Responda **NO_TOOLS_NEEDED** para consultar_parque_sunset. Reconheça o número, cite R$ 135,90/mês (até 5 pessoas) e pergunte **frequência de visitas**. **Proibido** "sem registro de ingressos", data do parque ou link do site de ingressos.`;

@@ -17,7 +17,7 @@ import { buildSystemPrompt } from "./registry.js";
 
 describe("Sunset Thermas Park — SYSTEM_PROMPT (contratos de negócio)", () => {
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.40/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.43/);
   });
 
   it("mantém regra suprema de valores e vaga (tolerância zero)", () => {
@@ -418,6 +418,15 @@ describe("Sunset Thermas Park — regressão v1.4.2 (tom hoje/amanhã)", () => {
     expect(SYSTEM_PROMPT).toMatch(/CONTEXTO TEMPORAL|USO INTERNO|n[ãa]o [eé] fala do cliente/i);
   });
 
+  it("§00c-1: faixas horárias e proíbe copiar saudação errada do cliente", () => {
+    expect(SYSTEM_PROMPT).toMatch(/00c-1\)/);
+    expect(SYSTEM_PROMPT).toMatch(/05:00–11:59/);
+    expect(SYSTEM_PROMPT).toMatch(/12:00–17:59/);
+    expect(SYSTEM_PROMPT).toMatch(/18:00–04:59/);
+    expect(SYSTEM_PROMPT).toMatch(/nunca.*replique cegamente|Nunca.*replique cegamente/i);
+    expect(COMMUNICATION_RULES).toMatch(/Saudação temporal \(§00c-1\)/);
+  });
+
   it("proíbe encher linguiça com 'hoje?' ou ganchos inventados a partir do contexto temporal", () => {
     expect(SYSTEM_PROMPT).toMatch(/N[UÚ]NCA[^\n]*trate esse bloco|n[ãa]o[^\n]*enche[nc]ha?[^\n]*lingui[çc]a|n[ãa]o encha lingui[çc]a/i);
     expect(SYSTEM_PROMPT).toMatch(/hoje\?/i);
@@ -619,6 +628,18 @@ describe("Sunset Thermas Park — §3g Thermas Card (v1.5.18+)", () => {
     expect(ctx).toMatch(/135,90/);
     expect(ctx).toMatch(/145,90/);
     expect(ctx).toMatch(/PROIBIDO.*ingresso avulso|ingresso avulso/i);
+    expect(ctx).not.toMatch(/CONTEXTO DESTA CONVERSA — PARQUE/i);
+  });
+
+  it("injeta bloco de encerramento quando cliente só agradece", () => {
+    const ctx = appendSunsetConversationContext(undefined, [
+      { role: "user", content: "quero saber sobre o thermas card" },
+      { role: "assistant", content: "Cadastro em https://socio.grupothermas.com.br/cadastro" },
+      { role: "user", content: "obrigadoo" },
+    ]);
+    expect(ctx).toMatch(/AGRADECIMENTO|ENCERRAMENTO/i);
+    expect(ctx).toMatch(/1 frase curta|Por nada/i);
+    expect(ctx).toMatch(/PROIBIDO.*pitch|repetir pitch/i);
     expect(ctx).not.toMatch(/CONTEXTO DESTA CONVERSA — PARQUE/i);
   });
 
@@ -1159,6 +1180,14 @@ describe("Sunset Thermas Park — detecção formulário do site (runtime §00d)
     const prompt = buildSystemPrompt("", "sunset-thermas-park", false, { firstUserMessage: "ola" });
     expect(prompt).toMatch(/\[CONTEXTO DESTA CONVERSA\]/);
     expect(prompt).not.toMatch(/Prazer, Marina\. Vi aqui que vocês querem 1 noite/);
+  });
+
+  it("buildSystemPrompt injeta saudação recomendada no [CONTEXTO TEMPORAL]", () => {
+    const prompt = buildSystemPrompt("", "sunset-thermas-park", false);
+    expect(prompt).toMatch(/\[CONTEXTO TEMPORAL\]/);
+    expect(prompt).toMatch(/Saudação recomendada neste horário:/);
+    expect(prompt).toMatch(/Brasília/);
+    expect(prompt).toMatch(/Amanhã:/);
   });
 });
 
