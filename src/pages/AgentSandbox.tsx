@@ -508,6 +508,7 @@ export default function AgentSandbox() {
 
     let debugData: DebugEntry[] | null = null;
     let edgeLogsData: LogEntry[] | null = null;
+    let tokenUsageData: TokenUsageData | null = null;
     let hasAssistantContent = false;
     const allMessages = [...messages, userMsg];
 
@@ -566,11 +567,11 @@ export default function AgentSandbox() {
                   i === prev.length - 1 ? { ...m, content: m.content + partBefore } : m
                 );
               } else {
-                out = [...prev, { role: "assistant" as const, content: partBefore, timestamp: new Date(), debug: debugData, edgeLogs: edgeLogsData }];
+                out = [...prev, { role: "assistant" as const, content: partBefore, timestamp: new Date(), debug: debugData, edgeLogs: edgeLogsData, tokenUsage: tokenUsageData ?? undefined }];
               }
             }
             if (streamAccum !== "") {
-              out = [...out, { role: "assistant" as const, content: "", timestamp: new Date(), debug: debugData, edgeLogs: edgeLogsData }];
+              out = [...out, { role: "assistant" as const, content: "", timestamp: new Date(), debug: debugData, edgeLogs: edgeLogsData, tokenUsage: tokenUsageData ?? undefined }];
             }
             return out;
           });
@@ -586,7 +587,7 @@ export default function AgentSandbox() {
               i === prev.length - 1 ? { ...m, content: streamAccum } : m
             );
           }
-          return [...prev, { role: "assistant" as const, content: streamAccum, timestamp: new Date(), debug: debugData, edgeLogs: edgeLogsData }];
+          return [...prev, { role: "assistant" as const, content: streamAccum, timestamp: new Date(), debug: debugData, edgeLogs: edgeLogsData, tokenUsage: tokenUsageData ?? undefined }];
         });
       };
 
@@ -657,6 +658,7 @@ export default function AgentSandbox() {
                   timestamp: ts,
                   debug: debugData,
                   edgeLogs: edgeLogsData,
+                  tokenUsage: tokenUsageData ?? undefined,
                 }));
                 return [...base, ...assistantMsgs];
               });
@@ -698,11 +700,12 @@ export default function AgentSandbox() {
             }
 
             if (parsed.token_usage) {
+              tokenUsageData = parsed.token_usage as TokenUsageData;
               setMessages((prev) => {
                 const lastIdx = prev.length - 1;
                 if (lastIdx >= 0 && prev[lastIdx].role === "assistant") {
                   return prev.map((m, idx) =>
-                    idx === lastIdx ? { ...m, tokenUsage: parsed.token_usage } : m
+                    idx === lastIdx ? { ...m, tokenUsage: tokenUsageData ?? undefined } : m
                   );
                 }
                 return prev;

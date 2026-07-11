@@ -8,6 +8,7 @@ type TokenUsageEntry = {
   completion_tokens: number;
   total_tokens: number;
   model?: string;
+  cached_tokens?: number;
 };
 
 type TokenUsageData = {
@@ -29,20 +30,26 @@ export interface LogEntry {
   message: string;
 }
 
-// Preços por 1M tokens (USD) - atualizado 2025
-const PRICING: Record<string, { input: number; output: number }> = {
+// Preços por 1M tokens (USD) - input / output / input em cache (Gemini implicit)
+const PRICING: Record<string, { input: number; output: number; cachedInput?: number }> = {
   "gpt-4o-mini": { input: 0.15, output: 0.6 },
   "gpt-4o": { input: 2.5, output: 10 },
   "gpt-4": { input: 30, output: 60 },
   "gemini-2.0-flash": { input: 0.075, output: 0.3 },
   "gemini-2.0-flash-exp": { input: 0.075, output: 0.3 },
+  "gemini-2.5-flash-lite": { input: 0.1, output: 0.4, cachedInput: 0.01 },
   "gemini-3-flash-preview": { input: 0.075, output: 0.3 },
 };
 
 function estimateCost(entry: TokenUsageEntry): number {
   const model = (entry.model || "").toLowerCase();
   const prices = PRICING[model] || PRICING["gpt-4o-mini"];
-  const inputCost = (entry.prompt_tokens / 1_000_000) * prices.input;
+  const cached = entry.cached_tokens ?? 0;
+  const uncachedPrompt = Math.max(0, entry.prompt_tokens - cached);
+  const cachedRate = prices.cachedInput ?? prices.input;
+  const inputCost =
+    (uncachedPrompt / 1_000_000) * prices.input +
+    (cached / 1_000_000) * cachedRate;
   const outputCost = (entry.completion_tokens / 1_000_000) * prices.output;
   return inputCost + outputCost;
 }
@@ -282,11 +289,17 @@ export function DebugBlock({ debug, edgeLogs, tokenUsage }: DebugBlockProps) {
                 {tokenUsage?.conversational && convTokens.total > 0 && (
                   <div>
                     🧠 Conversacional ({tokenUsage.conversational.model}): <span className="text-[#e9edef]">{convTokens.prompt.toLocaleString()}</span> in + <span className="text-[#e9edef]">{convTokens.completion.toLocaleString()}</span> out = <span className="text-emerald-300 font-semibold">{convTokens.total.toLocaleString()}</span>
+                    {(tokenUsage.conversational.cached_tokens ?? 0) > 0 && (
+                      <span className="ml-2 text-teal-400">({tokenUsage.conversational.cached_tokens!.toLocaleString()} em cache)</span>
+                    )}
                   </div>
                 )}
                 {tokenUsage?.single && convTokens.total > 0 && (
                   <div>
                     🧠 LLM ({tokenUsage.single.model}): <span className="text-[#e9edef]">{convTokens.prompt.toLocaleString()}</span> in + <span className="text-[#e9edef]">{convTokens.completion.toLocaleString()}</span> out = <span className="text-emerald-300 font-semibold">{convTokens.total.toLocaleString()}</span>
+                    {(tokenUsage.single.cached_tokens ?? 0) > 0 && (
+                      <span className="ml-2 text-teal-400">({tokenUsage.single.cached_tokens!.toLocaleString()} em cache)</span>
+                    )}
                   </div>
                 )}
                 {!tokenUsage && dispatcherTokens.total > 0 && (

@@ -4,6 +4,7 @@ import { buildSystemPrompt, getDispatcherPrompt, getPromptConfig } from "../serv
 import { shouldDeferSunsetLodgingQuote } from "../services/prompts/sunset-thermas.js";
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
 import { filterCommandLinesFromStream, sanitizeLLMOutput, fallbackSanitizeForRetry, stripChatbotPhrases } from "../utils/sanitize.js";
+import { mergeLlmStreamUsage, parseOpenAIStreamUsage, type LlmStreamUsage } from "../utils/llm-usage.js";
 import { emitMediaCommandsSseIfNeeded } from "../utils/extract-media-commands.js";
 import { injectSuiteGalleryMarkdownIfMissing, injectSuiteGalleryVideosIfMissing } from "../utils/suite-gallery-markdown-inject.js";
 import { injectOmnibeesQuotePhotosIfMissing } from "../utils/omnibees-photo-markdown.js";
@@ -1631,7 +1632,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           let buf = "";
           let dispatcherContent = "";
           const toolCallsAccum: Record<number, { id: string; name: string; args: string }> = {};
-          let dispatcherUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null = null;
+          let dispatcherUsage: LlmStreamUsage | null = null;
 
           while (true) {
             const { done, value } = await reader.read();
@@ -1646,11 +1647,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 try {
                   const ev = JSON.parse(jsonStr);
                   if (ev.usage) {
-                    dispatcherUsage = {
-                      prompt_tokens: ev.usage.prompt_tokens ?? 0,
-                      completion_tokens: ev.usage.completion_tokens ?? 0,
-                      total_tokens: ev.usage.total_tokens ?? 0,
-                    };
+                    dispatcherUsage = parseOpenAIStreamUsage(ev.usage);
                   }
                   const delta = ev.choices?.[0]?.delta;
                   if (delta?.tool_calls) {
@@ -2014,7 +2011,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           let convBuf = "";
           let streamFilterBuffer = "";
           let convFullContent = welcomeImagePrefix;
-          let conversationalUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null = null;
+          let conversationalUsage: LlmStreamUsage | null = null;
 
           while (true) {
             const { done, value } = await convReader.read();
@@ -2029,11 +2026,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 try {
                   const ev = JSON.parse(jsonStr);
                   if (ev.usage) {
-                    conversationalUsage = {
-                      prompt_tokens: ev.usage.prompt_tokens ?? 0,
-                      completion_tokens: ev.usage.completion_tokens ?? 0,
-                      total_tokens: ev.usage.total_tokens ?? 0,
-                    };
+                    conversationalUsage = parseOpenAIStreamUsage(ev.usage);
                   }
                   const delta = ev.choices?.[0]?.delta;
                   if (delta?.content) {
@@ -2076,6 +2069,16 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               }
               break;
             }
+          }
+
+          if (conversationalUsage?.cached_tokens) {
+            console.log(
+              "[Chat-Local] Gemini cache hit (conversacional):",
+              conversationalUsage.cached_tokens,
+              "tokens cacheados de",
+              conversationalUsage.prompt_tokens,
+              "prompt"
+            );
           }
 
           const lastUserForGalleryInject = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
@@ -2183,6 +2186,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 metadata: {
                   dispatcher: dispatcherUsage,
                   conversational: conversationalUsage,
+                  cached_tokens: conversationalUsage?.cached_tokens ?? 0,
                   latency_ms: Date.now() - requestStartTime,
                   tool_calls_count: phase1ToolCalls.length,
                 },
@@ -2230,7 +2234,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
       let llmMessages = toOpenAIMessages(systemPrompt, messages);
       let fullContent = "";
       let iteration = 0;
-      let singleProviderUsageAccum = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+      let singleProviderUsageAccum: LlmStreamUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
       let toolCallsAccum: Record<number, { id: string; name: string; args: string }> = {};
 
       while (iteration < MAX_TOOL_ITERATIONS) {
@@ -2282,7 +2286,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
         let buf = "";
         let content = "";
         let streamFilterBuffer = "";
-        let iterUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null = null;
+        let iterUsage: LlmStreamUsage | null = null;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -2300,11 +2304,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               try {
                 const ev = JSON.parse(jsonStr);
                 if (ev.usage) {
-                  iterUsage = {
-                    prompt_tokens: ev.usage.prompt_tokens ?? 0,
-                    completion_tokens: ev.usage.completion_tokens ?? 0,
-                    total_tokens: ev.usage.total_tokens ?? 0,
-                  };
+                  iterUsage = parseOpenAIStreamUsage(ev.usage);
                 }
                 const delta = ev.choices?.[0]?.delta;
 
@@ -2362,9 +2362,16 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
         }
 
         if (iterUsage) {
-          singleProviderUsageAccum.prompt_tokens += iterUsage.prompt_tokens;
-          singleProviderUsageAccum.completion_tokens += iterUsage.completion_tokens;
-          singleProviderUsageAccum.total_tokens += iterUsage.total_tokens;
+          singleProviderUsageAccum = mergeLlmStreamUsage(singleProviderUsageAccum, iterUsage);
+          if (iterUsage?.cached_tokens && isGeminiProvider) {
+            console.log(
+              "[Chat-Local] Gemini cache hit (single-provider):",
+              iterUsage.cached_tokens,
+              "tokens cacheados de",
+              iterUsage.prompt_tokens,
+              "prompt"
+            );
+          }
         }
 
         const toolCalls = Object.values(toolCallsAccum)
@@ -2423,6 +2430,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                 total_tokens: singleProviderUsageAccum.total_tokens,
                 metadata: {
                   iterations: iteration,
+                  cached_tokens: singleProviderUsageAccum.cached_tokens ?? 0,
                   latency_ms: Date.now() - requestStartTime,
                   tool_calls_count: toolCalls.length,
                 },
@@ -2572,6 +2580,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             total_tokens: singleProviderUsageAccum.total_tokens,
             metadata: {
               iterations: iteration,
+              cached_tokens: singleProviderUsageAccum.cached_tokens ?? 0,
               latency_ms: Date.now() - requestStartTime,
               tool_calls_count: finalToolCallsCount,
             },
