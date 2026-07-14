@@ -1468,6 +1468,22 @@ describe("Sunset Thermas Park — §3g-objeções Thermas Card (v1.5.40)", () =>
   });
 });
 
+describe("Sunset Thermas Park — v1.5.51 loja online de ingressos", () => {
+  it("documenta §2-loja-ingressos com URL da loja oficial", () => {
+    expect(SYSTEM_PROMPT).toMatch(/§2-loja-ingressos/);
+    expect(SYSTEM_PROMPT).toContain(
+      "https://lojasunsetthermas.com.br/produtos/ingresso-sunset-thermas-park-4744.html"
+    );
+    expect(COMMUNICATION_RULES).toContain(
+      "https://lojasunsetthermas.com.br/produtos/ingresso-sunset-thermas-park-4744.html"
+    );
+  });
+
+  it("proíbe substituir a loja por home/index.php", () => {
+    expect(SYSTEM_PROMPT).toMatch(/PROIBIDO.*index\.php.*loja|PROIBIDO.*sunsetthermaspark\.com\.br\/.*loja/i);
+  });
+});
+
 describe("Sunset Thermas Park — v1.5.49 anti-repetição composição / info sem data", () => {
   it("§3-composição trata casal como 2 adultos sem criança", () => {
     expect(SYSTEM_PROMPT).toMatch(/casal.*2 adultos|apenas um casal|s[oó] n[oó]s dois/i);
