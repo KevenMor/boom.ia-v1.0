@@ -633,11 +633,16 @@ function parseLodgingToolPayloadLoose(
 
   // Fallback: extrair accommodations do JSON cru (sem exigir gallery_photos junto).
   const accs: Array<{ name?: string; total_price?: number }> = [];
+  let nights = 1;
   for (const raw of toolResultStrings) {
     try {
       const parsed = JSON.parse(raw) as {
+        nights?: number;
         available_accommodations?: Array<{ name?: string; total_price?: number }>;
       };
+      if (typeof parsed.nights === "number" && parsed.nights > 0) {
+        nights = parsed.nights;
+      }
       if (Array.isArray(parsed.available_accommodations) && parsed.available_accommodations.length > 0) {
         for (const a of parsed.available_accommodations) {
           if (a?.name && typeof a.total_price === "number") accs.push(a);
@@ -648,7 +653,7 @@ function parseLodgingToolPayloadLoose(
     }
   }
   if (accs.length === 0 || galleryPhotos.length === 0) return null;
-  return { accommodations: accs, galleryPhotos };
+  return { nights, accommodations: accs, galleryPhotos };
 }
 
 export function formatSunsetLodgingQuoteForDelivery(

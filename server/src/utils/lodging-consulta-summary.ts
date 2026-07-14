@@ -88,8 +88,9 @@ export function formatLodgingConsultaForLlm(obj: Record<string, unknown>): strin
 
   const checkIn = typeof obj.check_in === "string" ? obj.check_in : "";
   const checkOut = typeof obj.check_out === "string" ? obj.check_out : "";
-  const nights = obj.nights;
-  const guestsPricing = obj.guests_for_pricing;
+  const nights = typeof obj.nights === "number" ? obj.nights : null;
+  const guestsPricing =
+    typeof obj.guests_for_pricing === "number" ? obj.guests_for_pricing : null;
 
   const sorted = [...accommodations].sort((a, b) => (a.total_price ?? 0) - (b.total_price ?? 0));
 
