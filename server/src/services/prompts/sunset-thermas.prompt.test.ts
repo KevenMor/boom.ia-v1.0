@@ -9,6 +9,8 @@ import {
   messageDeclaresLodgingIntent,
   messageDeclaresExcursionIntent,
   messageDeclaresParkDayVisitQuestion,
+  messageDeclaresParkPhotoRequest,
+  messageDeclaresParkLocationRequest,
   messageDeclaresThermasCardIntent,
   SUNSET_FORM_DIALOGUE_EXAMPLE,
   SYSTEM_PROMPT,
@@ -17,7 +19,7 @@ import { buildSystemPrompt } from "./registry.js";
 
 describe("Sunset Thermas Park — SYSTEM_PROMPT (contratos de negócio)", () => {
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.44/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.46/);
   });
 
   it("mantém regra suprema de valores e vaga (tolerância zero)", () => {
@@ -491,6 +493,78 @@ describe("Sunset Thermas Park — §3h excursões (v1.5.20)", () => {
     expect(COMMUNICATION_RULES).toMatch(/27\./);
     expect(COMMUNICATION_RULES).toMatch(/Excurs[oõ]es|§3h/i);
     expect(COMMUNICATION_RULES).toMatch(/08h.*18h/i);
+  });
+});
+
+describe("Sunset Thermas Park — §2-fotos-parque Instagram (v1.5.45)", () => {
+  it("declara §2-fotos-parque com Instagram oficial", () => {
+    expect(SYSTEM_PROMPT).toMatch(/2-fotos-parque/i);
+    expect(SYSTEM_PROMPT).toMatch(/https:\/\/www\.instagram\.com\/sunsetthermasparkoficial\//);
+  });
+
+  it("orienta redes sociais e proíbe galeria para fotos do parque", () => {
+    expect(SYSTEM_PROMPT).toMatch(/redes sociais|postagens/i);
+    expect(SYSTEM_PROMPT).toMatch(/N[aã]o.*chame.*suite_gallery_query|n[aã]o.*suite_gallery_query/i);
+  });
+
+  it("detecta pedido de fotos do parque e ignora foto de acomodação", () => {
+    expect(messageDeclaresParkPhotoRequest("manda fotos do parque")).toBe(true);
+    expect(messageDeclaresParkPhotoRequest("quero ver imagens do park")).toBe(true);
+    expect(messageDeclaresParkPhotoRequest("tem foto do chalé?")).toBe(false);
+    expect(messageDeclaresParkPhotoRequest("quanto custa o ingresso")).toBe(false);
+  });
+
+  it("injeta contexto com link do Instagram e sem suite_gallery", () => {
+    const ctx = appendSunsetConversationContext(undefined, [
+      { role: "user", content: "manda fotos do parque pra eu ver" },
+    ]);
+    expect(ctx).toMatch(/FOTOS DO PARQUE/i);
+    expect(ctx).toMatch(/instagram\.com\/sunsetthermasparkoficial/i);
+    expect(ctx).toMatch(/PROIBIDO.*suite_gallery_query/i);
+  });
+
+  it("COMMUNICATION_RULES item 31 e DISPATCHER reforçam Instagram", () => {
+    expect(COMMUNICATION_RULES).toMatch(/31\./);
+    expect(COMMUNICATION_RULES).toMatch(/Fotos do parque|§2-fotos-parque/i);
+    expect(DISPATCHER_PROMPT).toMatch(/fotos do parque|park photos/i);
+    expect(DISPATCHER_PROMPT).toMatch(/sunsetthermasparkoficial/);
+    expect(DISPATCHER_PROMPT).toMatch(/NO_TOOLS_NEEDED/);
+  });
+});
+
+describe("Sunset Thermas Park — §2-localizacao Maps/Waze (v1.5.46)", () => {
+  it("declara §2-localizacao com Maps e endereço oficial", () => {
+    expect(SYSTEM_PROMPT).toMatch(/2-localizacao/i);
+    expect(SYSTEM_PROMPT).toMatch(/https:\/\/maps\.google\.com\/\?q=-23\.322983,-48\.984127/);
+    expect(SYSTEM_PROMPT).toMatch(/Raposo Tavares/i);
+    expect(SYSTEM_PROMPT).toMatch(/KM 266/);
+    expect(SYSTEM_PROMPT).toMatch(/Riviera de Santa Cristina 13/i);
+    expect(SYSTEM_PROMPT).toMatch(/SUNSET THERMAS PARK/);
+  });
+
+  it("detecta pedido de localização e ignora endereço pessoal do formulário", () => {
+    expect(messageDeclaresParkLocationRequest("qual a localização do parque?")).toBe(true);
+    expect(messageDeclaresParkLocationRequest("como chegar?")).toBe(true);
+    expect(messageDeclaresParkLocationRequest("manda o maps no waze")).toBe(true);
+    expect(messageDeclaresParkLocationRequest("onde fica?")).toBe(true);
+    expect(messageDeclaresParkLocationRequest("meu endereço: Rua das Flores, 100, CEP 12345")).toBe(false);
+    expect(messageDeclaresParkLocationRequest("quanto custa o ingresso")).toBe(false);
+  });
+
+  it("injeta contexto com Maps, KM 266 e Waze", () => {
+    const ctx = appendSunsetConversationContext(undefined, [
+      { role: "user", content: "pode me mandar a localização?" },
+    ]);
+    expect(ctx).toMatch(/LOCALIZA/i);
+    expect(ctx).toMatch(/maps\.google\.com\/\?q=-23\.322983,-48\.984127/);
+    expect(ctx).toMatch(/KM 266/);
+    expect(ctx).toMatch(/SUNSET THERMAS PARK/);
+  });
+
+  it("COMMUNICATION_RULES item 32 reforça localização", () => {
+    expect(COMMUNICATION_RULES).toMatch(/32\./);
+    expect(COMMUNICATION_RULES).toMatch(/Localiza[cç][aã]o|§2-localizacao/i);
+    expect(COMMUNICATION_RULES).toMatch(/maps\.google\.com\/\?q=-23\.322983,-48\.984127/);
   });
 });
 
