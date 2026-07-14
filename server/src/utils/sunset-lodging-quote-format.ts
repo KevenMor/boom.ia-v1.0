@@ -37,10 +37,11 @@ function formatCurrencyBR(value: number): string {
 function assistantDeliversLodgingQuote(text: string): boolean {
   const t = text || "";
   if (!LODGING_QUOTE_RE.test(t)) return false;
+  const priceCount = t.match(/R\$\s*[\d.,]+/g)?.length ?? 0;
   return (
     OPCOES_SECTION_RE.test(t) ||
-    /Segue o orçamento|orçamento solicitado/i.test(t) ||
-    (t.match(/R\$\s*[\d.,]+/g)?.length ?? 0) >= 2
+    /Segue o orçamento|orçamento solicitado|pacote de \d+ noite/i.test(t) ||
+    priceCount >= 1
   );
 }
 
@@ -61,13 +62,19 @@ export function shouldRebuildSunsetQuoteFromTool(
   }
   const base = (assistantText ?? "").trim();
   if (!base) return true;
-  if (assistantDeliversLodgingQuote(base)) return true;
+  if (assistantDeliversLodgingQuote(base)) {
+    const priceCount = base.match(/R\$\s*[\d.,]+/g)?.length ?? 0;
+    const accCount = toolPayload.accommodations.length;
+    // Sempre rebuild se faltou qualquer categoria da tool (anti-omissão).
+    if (accCount > 0 && priceCount < accCount) return true;
+    return true;
+  }
   const priceCount = base.match(/R\$\s*[\d.,]+/g)?.length ?? 0;
   const accCount = toolPayload.accommodations.length;
   if (
-    /orçamento|orcamento|pacote|valores abaixo|op[cç][õo]es/i.test(base) &&
+    /orçamento|orcamento|pacote|valores abaixo|op[cç][õo]es|próxima op[cç][ãa]o|proxima opcao/i.test(base) &&
     accCount > 0 &&
-    priceCount < Math.min(accCount, 2)
+    priceCount < accCount
   ) {
     return true;
   }

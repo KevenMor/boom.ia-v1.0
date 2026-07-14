@@ -1,5 +1,6 @@
 /** Extrai data(s) de visita ao parque do histórico (Sunset Thermas). */
 
+import { parsePortugueseWeekdayMention } from "./brasiliaTime.js";
 import {
   brasiliaTodayIso,
   extractSunsetLodgingDateRange,
@@ -146,7 +147,13 @@ function parseRelativeVisitDate(text: string, ref: Date): string | null {
   const t = normalizeText(text);
   const today = brasiliaTodayIso(ref);
 
-  if (/\bhoje\b|\bagora\b|\bneste momento\b/.test(t)) return today;
+  // "sábado agora" / "esse domingo" → calendário Brasília (antes de "agora"=hoje)
+  const weekday = parsePortugueseWeekdayMention(text, ref);
+  if (weekday) return weekday;
+
+  if (/\bhoje\b|\bneste momento\b/.test(t)) return today;
+  // "agora" sozinho = hoje; com dia da semana já foi resolvido acima
+  if (/\bagora\b/.test(t)) return today;
   if (/\bamanha\b/.test(t)) return isoAddDays(today, 1);
   if (/depois de amanha/.test(t)) return isoAddDays(today, 2);
 
@@ -250,9 +257,42 @@ export function userAsksSunsetParkConsultation(messages: ChatMessage[]): boolean
   const text = lastUser.content;
   if (messageDeclaresParkTicketPriceQuestion(text)) return true;
   const t = normalizeText(text);
+
+  // Ex.: "Sábado agora" / "20/07" respondendo pergunta de dia do parque (sem repetir "parque")
+  if (isParkVisitDateOnlyReply(text) && conversationHasRecentParkVisitContext(messages)) {
+    return true;
+  }
+
   if (!/parque|ingresso|\bpark\b/.test(t)) return false;
   if (/hospedagem|hotel|pernoite/.test(t) && !/parque|ingresso|\bpark\b/.test(t)) return false;
   return /hor[aá]rio|funciona|abre|aberto|fecha|passar.*dia|somente o dia|esta aberto|est[aá] aberto/.test(t);
+}
+
+/** Mensagem curta só com data relativa/explícita/dia da semana (sem produto). */
+function isParkVisitDateOnlyReply(text: string, ref: Date = new Date()): boolean {
+  const t = normalizeText(text);
+  if (!t || t.length > 80) return false;
+  if (/parque|ingresso|\bpark\b|hospedagem|hotel|thermas|suite|chal[eé]|loft/.test(t)) return false;
+  if (parsePortugueseWeekdayMention(text, ref)) return true;
+  if (parseRelativeVisitDate(text, ref)) return true;
+  if (parseExplicitDateIso(text, ref)) return true;
+  return false;
+}
+
+/** Há intenção recente de visita/ingresso ao parque (não só hospedagem). */
+function conversationHasRecentParkVisitContext(messages: ChatMessage[]): boolean {
+  const recent = messages.slice(-12);
+  for (let i = recent.length - 1; i >= 0; i--) {
+    const m = recent[i];
+    if (!m.content) continue;
+    const t = normalizeText(m.content);
+    if (m.role === "user" && messageDeclaresParkTicketPriceQuestion(m.content)) return true;
+    if (/parque|ingresso|\bpark\b/.test(t)) {
+      // Lodging-only follow-up after park mention still counts if park was named
+      return true;
+    }
+  }
+  return false;
 }
 
 /**

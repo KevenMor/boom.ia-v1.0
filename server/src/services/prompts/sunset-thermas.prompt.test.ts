@@ -19,7 +19,7 @@ import { buildSystemPrompt } from "./registry.js";
 
 describe("Sunset Thermas Park — SYSTEM_PROMPT (contratos de negócio)", () => {
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.46/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.49/);
   });
 
   it("mantém regra suprema de valores e vaga (tolerância zero)", () => {
@@ -397,10 +397,10 @@ describe("Sunset Thermas Park — regressão v1.4.1 (caso 'dia dos namorados')",
     expect(SYSTEM_PROMPT).toMatch(/n[aã]o temos|Esgotado|Esgotado|lotou|n[aã]o h[áa] pacotes/i);
   });
 
-  it("§3 proíbe inferir nº de hóspedes a partir do contexto do cliente", () => {
-    expect(SYSTEM_PROMPT).toMatch(/NUNCA INFERIR|nunca[^\n]*infere[^\n]*h[oó]spedes|N[UÚ]NCA[^\n]*inferir/i);
-    expect(SYSTEM_PROMPT).toMatch(/dia dos namorados/);
-    expect(SYSTEM_PROMPT).toMatch(/lua de mel|minha esposa|sozinho|com a fam[ií]lia/i);
+  it("§3 proíbe inventar nº de hóspedes, mas lê o que o cliente escreveu", () => {
+    expect(SYSTEM_PROMPT).toMatch(/N[AÃ]O INVENTAR|LER O QUE FOI DITO|PROIBIDO perguntar de novo.*quantas pessoas/i);
+    expect(SYSTEM_PROMPT).toMatch(/dia dos namorados|lua de mel|com a fam[ií]lia/i);
+    expect(SYSTEM_PROMPT).toMatch(/casal.*2 adultos|apenas um casal/i);
   });
 
   it("§3 manda PERGUNTAR composição ao cliente quando só a data veio", () => {
@@ -418,6 +418,7 @@ describe("Sunset Thermas Park — regressão v1.4.2 (tom hoje/amanhã)", () => {
   it("declara §00c-2 sobre CONTEXTO TEMPORAL como uso interno, não fala do cliente", () => {
     expect(SYSTEM_PROMPT).toMatch(/00c-2\)/);
     expect(SYSTEM_PROMPT).toMatch(/CONTEXTO TEMPORAL|USO INTERNO|n[ãa]o [eé] fala do cliente/i);
+    expect(SYSTEM_PROMPT).toMatch(/[Ss][aá]bado agora|Pr[oó]ximos 7 dias|America\/Sao_Paulo|PROIBIDO inventar/i);
   });
 
   it("§00c-1: faixas horárias e proíbe copiar saudação errada do cliente", () => {
@@ -1271,6 +1272,8 @@ describe("Sunset Thermas Park — detecção formulário do site (runtime §00d)
     expect(prompt).toMatch(/Saudação recomendada neste horário:/);
     expect(prompt).toMatch(/Brasília/);
     expect(prompt).toMatch(/Amanhã:/);
+    expect(prompt).toMatch(/Próximos 7 dias/);
+    expect(prompt).toMatch(/America\/Sao_Paulo/);
   });
 });
 
@@ -1404,77 +1407,47 @@ describe("Sunset Thermas Park — v1.5.35 Loft sempre na cotação padrão", () 
     expect(SYSTEM_PROMPT).toMatch(/nunca.*tabela|Proibido.*2\.700/i);
   });
 
-  // v1.5.35: Loft também aparece no fluxo INTERATIVO (não só na lista completa)
-  it("§3b-Loft v1.5.35: Loft entra na SUA VEZ dentro do fluxo interativo §3b", () => {
-    expect(SYSTEM_PROMPT).toMatch(/listar o Loft na sua vez|Loft na sua vez|na ordem.*total_price.*crescente/i);
+  // v1.5.47: Loft entra na lista completa (não mais "na sua vez" interativa)
+  it("§3b-Loft v1.5.47: Loft entra na lista de todas as acomodações", () => {
+    expect(SYSTEM_PROMPT).toMatch(/inclui o Loft na mesma lista|Loft na mesma lista|TODAS as acomoda/i);
   });
 });
 
-describe("Sunset Thermas Park — v1.5.35 cotação INTERATIVA (uma categoria por turno)", () => {
-  it("§3b declara explicitamente COTAÇÃO INTERATIVA com regra dura contra despejo", () => {
-    expect(SYSTEM_PROMPT).toMatch(/COTA[ÇC][ÃA]O INTERATIVA|REGRA DURA v1\.5\.33[\s\S]*INTERA[ÇC][ÃA]O REAL/i);
-    expect(SYSTEM_PROMPT).toMatch(/uma categoria por turno|categoria por turno/i);
+describe("Sunset Thermas Park — v1.5.47 cotação lista TODAS as acomodações", () => {
+  it("§3b declara REGRA DURA de listar todas no mesmo turno", () => {
+    expect(SYSTEM_PROMPT).toMatch(/REGRA DURA v1\.5\.47|TODAS AS OP[ÇC][ÕO]ES NO MESMO TURNO/i);
+    expect(SYSTEM_PROMPT).toMatch(/available_accommodations/i);
   });
 
-  it("§3b proíbe despejar a lista inteira em várias bolhas seguidas sem gancho", () => {
-    expect(SYSTEM_PROMPT).toMatch(/PROIBIDO[\s\S]*Listar|rob[ôo] disparando|4 bolhas seguidas|despejo disfar[çc]ado/i);
+  it("§3b proíbe modo interativo de uma categoria por turno", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Proibido.*interativa|abandonado|Quer ver a pr[óo]xima op[çc][ãa]o.*abandonado/i);
   });
 
-  it("§3b exige PARE entre cada categoria (esperar o cliente digitar antes de continuar)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/PARE aqui[\s\S]*espera|espera o cliente digitar|cliente precisa digitar|PARAR entre cada/i);
+  it("§3b exige todas as categorias na mesma resposta", () => {
+    expect(SYSTEM_PROMPT).toMatch(/todas as acomoda[çc][õo]es|cada.*entrada|TODAS.*mesmo turno/i);
   });
 
-  it("§3b v1.5.35: frase de contexto (pacote+jantar+café+parque com promo) vem ANTES da primeira categoria", () => {
-    expect(SYSTEM_PROMPT).toMatch(/frase de contexto[\s\S]*pacote fechado|primeira bolha[\s\S]*frase de contexto/i);
+  it("§3b exemplos CORRETO listam várias categorias juntas", () => {
+    expect(SYSTEM_PROMPT).toMatch(/CORRETO[\s\S]*Chal[ée][\s\S]*Su[íi]te Luxo/i);
   });
 
-  it("§3b v1.5.35: cada categoria termina com gancho §3d (ex.: 'Quer ver a próxima opção?')", () => {
-    expect(SYSTEM_PROMPT).toMatch(/Quer ver a pr[óo]xima op[çc][ãa]o|Mais alguma\?|termin[ea] com gancho/i);
+  it("§3b exemplos ERRADO mostram só uma + próxima opção", () => {
+    expect(SYSTEM_PROMPT).toMatch(/ERRADO[\s\S]*Quer ver a pr[óo]xima|ERRADO[\s\S]*s[óo] Chal/i);
   });
 
-  it("§3b v1.5.35: exemplos CORRETO mostram 1 bolha por categoria com gancho entre cada", () => {
-    expect(SYSTEM_PROMPT).toMatch(/CORRETO[\s\S]*Chal[é][\s\S]*Su[íi]te Luxo[\s\S]*Su[íi]te com Varanda/i);
-  });
-
-  it("§3b v1.5.35: exemplos ERRADO mostram despejo em sequência", () => {
-    expect(SYSTEM_PROMPT).toMatch(/ERRADO[\s\S]*Chal[é][\s\S]*Su[íi]te Luxo[\s\S]*Su[íi]te com Varanda/i);
-  });
-
-  it("§3b mantém exceção de lista em 1 bolha SÓ quando cliente pedir explicitamente", () => {
-    expect(SYSTEM_PROMPT).toMatch(/lista completa explicitamente|me manda todas as op[çc][oõ]es|pode mandar a lista/i);
-  });
-
-  it("§3b proíbe 'encaminho pro setor de reservas' na cotação (regra §3d)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/PROIBIDO.*encaminho pro setor|encaminho[\s\S]*setor de reservas[\s\S]*PROIBIDO/i);
+  it("§3b proíbe encaminhar ao setor só porque listou preços", () => {
+    expect(SYSTEM_PROMPT).toMatch(/sem.*encaminhar ao setor|Encaminhar ao setor de reservas s[óo] porque/i);
   });
 });
 
-describe("Sunset Thermas Park — v1.5.35 SEM EXCEÇÃO (anti-despejo no formulário)", () => {
-  it("§3b v1.5.35: Turno 1 da cotação é apenas contexto + 1ª categoria, SEM lista", () => {
-    expect(SYSTEM_PROMPT).toMatch(/Turno de cota[çc][ãa]o 1/i);
-    expect(SYSTEM_PROMPT).toMatch(/UMA categoria apenas/i);
-    expect(SYSTEM_PROMPT).toMatch(/PARE aqui/i);
+describe("Sunset Thermas Park — v1.5.47 anti-omissão (todas as opções)", () => {
+  it("§3b proíbe omitir item de available_accommodations", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Omitir qualquer item|Proibido.*Omitir/i);
   });
 
-  it("§3b v1.5.35: Julia NÃO começa cotação sozinha sem reação do cliente", () => {
-    expect(SYSTEM_PROMPT).toMatch(/Julia.*N[ÃA]O.*come[çc]a cota[çc][ãa]o|come[çc]a cota[çc][ãa]o por conta pr[óo]pia/i);
-  });
-
-  it("§3b v1.5.35: cliente que veio do formulário NÃO dá autorização pra despejo", () => {
-    expect(SYSTEM_PROMPT).toMatch(/primeira mensagem do formul[áa]rio.*autoriza|autoriza[çc][ãa]o pra despejar|N[ÃA]O [eé].*autoriza[çc][ãa]o/i);
-  });
-
-  it("§3b v1.5.35: lista em 1 bolha SÓ quando gatilho verbal explícito do cliente", () => {
-    expect(SYSTEM_PROMPT).toMatch(/gatlhos verbais|manda todas juntas|EXCE[ÇC][ÃA]O [ÚU]NICA|pediu explicitamente/i);
-  });
-
-  it("§3b v1.5.35: proíbe explícito <<MSG_SPLIT>> entre categorias na mesma resposta (despejo disfarçado)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/MSG_SPLIT.*v[áa]rias vezes|MSG_SPLIT.*mesma.*resposta|despejo disfar[çc]ado/i);
-  });
-
-  it("§3b v1.5.35: lista de PROIBIÇÕES absolutas está explícita no prompt", () => {
-    expect(SYSTEM_PROMPT).toMatch(/PROIBI[ÇC][ÕO]ES absolutas|PROIBI[ÇC][OO]ES absolutas/i);
-    expect(SYSTEM_PROMPT).toMatch(/passivo-agressivo|primeira mensagem do formul[áa]rio/i);
+  it("§3b mantém MSG_SPLIT para bolhas WhatsApp sem omitir categorias", () => {
+    expect(SYSTEM_PROMPT).toMatch(/MSG_SPLIT/);
+    expect(SYSTEM_PROMPT).toMatch(/todas na mesma resposta/i);
   });
 });
 
@@ -1537,5 +1510,40 @@ describe("Sunset Thermas Park — §3g-objeções Thermas Card (v1.5.40)", () =>
 
   it("§3g-objeções referencia runtime de detecção (não duplica detecção)", () => {
     expect(SYSTEM_PROMPT).toMatch(/detec[çc][ãa]o.*runtime|sunset-park-params|decis[ãa]o de runtime/);
+  });
+});
+
+describe("Sunset Thermas Park — v1.5.49 anti-repetição composição / info sem data", () => {
+  it("§3-composição trata casal como 2 adultos sem criança", () => {
+    expect(SYSTEM_PROMPT).toMatch(/casal.*2 adultos|apenas um casal|s[oó] n[oó]s dois/i);
+    expect(SYSTEM_PROMPT).toMatch(/PROIBIDO.*quantas pessoas/i);
+  });
+
+  it("contexto: 2 pessoas já ditas → não repergunta pessoas", () => {
+    const ctx = appendSunsetConversationContext(undefined, [
+      { role: "user", content: "gostaria de saber sobre a hospedagem Para 2 pessoas" },
+    ]);
+    expect(ctx).toMatch(/2 pessoa|PROIBIDO.*[Qq]uantas pessoas/i);
+  });
+
+  it("contexto: casal → composição completa, pede período", () => {
+    const ctx = appendSunsetConversationContext(undefined, [
+      { role: "user", content: "quero hospedagem" },
+      { role: "assistant", content: "Quantas pessoas?" },
+      { role: "user", content: "São apenas um casal" },
+    ]);
+    expect(ctx).toMatch(/composição completa|PROIBIDO.*criança|período/i);
+    expect(ctx).not.toMatch(/CRIANÇAS PENDENTES/);
+  });
+
+  it("contexto: info sem data entrega incluso em vez de loop", () => {
+    const ctx = appendSunsetConversationContext(undefined, [
+      { role: "user", content: "quero hospedagem para 2 pessoas" },
+      { role: "assistant", content: "Tem data em mente?" },
+      { role: "user", content: "Não tem data. Só quero informações por enquanto. De qual o valor, o que é incluso" },
+    ]);
+    expect(ctx).toMatch(/INFO SEM DATA/);
+    expect(ctx).toMatch(/incluso|inclui/i);
+    expect(ctx).toMatch(/PROIBIDO.*preciso das datas/i);
   });
 });

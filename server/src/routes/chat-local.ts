@@ -71,6 +71,7 @@ import {
   resolveToolFromDispatcherCall,
   sanitizeFunctionName,
 } from "../utils/tool-dispatcher-resolver.js";
+import { formatBrasiliaUpcomingWeekdays, getBrasiliaTomorrowStr } from "../utils/brasiliaTime.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 const MAX_TOOL_ITERATIONS = 5;
@@ -1660,12 +1661,13 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           if (typeof dualSandboxCfg.top_k === "number") dualSandboxDebugConfig.top_k = dualSandboxCfg.top_k;
 
           const todayISO = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
-          const tomorrowDate = new Date();
-          tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-          const tomorrowISO = tomorrowDate.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+          const tomorrowISO = getBrasiliaTomorrowStr();
+          const weekMap = formatBrasiliaUpcomingWeekdays();
           const dispatcherDateContext = `
 
-[CONTEXTO TEMPORAL] Data de hoje (Brasília): ${todayISO}. Amanhã: ${tomorrowISO}.
+[CONTEXTO TEMPORAL] Data de hoje (Brasília / America/Sao_Paulo): ${todayISO}. Amanhã: ${tomorrowISO}.
+Próximos 7 dias: ${weekMap}.
+"sábado agora" / "esse domingo" / dias da semana → use EXATAMENTE a data ISO do mapa acima. PROIBIDO inventar ou inverter dia da semana.
 Quando o cliente ESCOLHER um horário após você ter oferecido opções:
 - Se você ofereceu horários para HOJE → use start_at="${todayISO}T[HORA]:00:00-03:00".
 - Se você ofereceu horários para AMANHÃ (ex.: "amanhã de manhã", "amanhã às 11h") → use start_at="${tomorrowISO}T[HORA]:00:00-03:00", NÃO use a data de hoje.

@@ -1,5 +1,6 @@
 /** Extrai parâmetros de consultar_hospedagem_sunset do histórico (Sunset Thermas). */
 
+import { parsePortugueseWeekdayMention } from "./brasiliaTime.js";
 import { userLikelyAskedForPhotos } from "./suite-gallery-markdown-inject.js";
 
 export type SunsetLodgingGuest = { type: "adult" } | { type: "child"; age: number };
@@ -64,6 +65,9 @@ export function brasiliaTodayIso(ref: Date = new Date()): string {
 
 function parseRelativeCheckIn(text: string, ref: Date): string | null {
   const t = normalizeText(text);
+  // "sábado agora" ≠ hoje — resolve dia da semana em Brasília primeiro
+  const weekday = parsePortugueseWeekdayMention(text, ref);
+  if (weekday) return weekday;
   if (!/\bhoje\b|\bagora\b|\bneste momento\b|\bdia de hoje\b/.test(t)) return null;
   return brasiliaTodayIso(ref);
 }
@@ -443,6 +447,9 @@ function extractGuestCountFromMessages(messages: ChatMessage[]): number | null {
 export function resolveGuestCountFromAnswer(text: string, messages: ChatMessage[] = []): number | null {
   if (!text.trim()) return null;
   const t = normalizeText(text.trim());
+
+  if (messageDeclaresCoupleAsTwoAdults(text)) return 2;
+
   const fromExplicit = parseExplicitGuestCount(text);
 
   if (fromExplicit != null) {
@@ -940,9 +947,47 @@ export function messageUsesVagueGuestCountOnly(text: string, messages: ChatMessa
 
 export function messageDeclaresNoChildren(text: string): boolean {
   const t = normalizeText(text);
-  return /sem\s+crianc|nao\s+tem\s+crianc|nenhuma\s+crianc|so\s+adultos|todos\s+adultos|somente\s+adultos|nao[,.\s]+so\s+adultos|nao[,.\s]+apenas\s+adultos/.test(
-    t
+  if (
+    /sem\s+crianc|nao\s+tem\s+crianc|nenhuma\s+crianc|so\s+adultos|todos\s+adultos|somente\s+adultos|nao[,.\s]+so\s+adultos|nao[,.\s]+apenas\s+adultos/.test(
+      t
+    )
+  ) {
+    return true;
+  }
+  // "casal" / "só nós dois" = 2 adultos sem criança (salvo se citar filho/criança)
+  return messageDeclaresCoupleAsTwoAdults(text);
+}
+
+/**
+ * Cliente disse explicitamente casal / só os dois (sem criança no texto).
+ * Conta como 2 adultos e composição de crianças resolvida (0).
+ */
+export function messageDeclaresCoupleAsTwoAdults(text: string): boolean {
+  const t = normalizeText(text);
+  if (!t) return false;
+  if (/\b(crianc|filh[oa]s?|bebe|bebes|menor(es)?)\b/.test(t)) return false;
+  return (
+    /\bcasal\b/.test(t) ||
+    /\b(so|apenas)\s+(o\s+)?casal\b/.test(t) ||
+    /\bapenas\s+um\s+casal\b/.test(t) ||
+    /\b(so\s+)?n[oó]s\s+dois\b/.test(t) ||
+    /\bsomos\s+(so\s+)?(os\s+)?dois\b/.test(t) ||
+    /\beu\s+e\s+(minha\s+|meu\s+)?(esposa|marido|namorad[oa]|companheir[oa])\b/.test(t)
   );
+}
+
+/** Pedido de valor/incluso sem data fechada ("só quero informações por enquanto"). */
+export function messageDeclaresLodgingInfoWithoutFixedDates(text: string): boolean {
+  const t = normalizeText(text);
+  if (!t) return false;
+  const noDate =
+    /nao tem data|ainda nao (tenho|sei|tem)|sem data|por enquanto|ainda estou (vendo|pensando)|nao sei (a|a )?data|nao tenho data/.test(
+      t
+    );
+  const wantsInfo =
+    /valor|preco|quanto|incluso|inclui|informa|o que (tem|e incluso|vem)|pacote|opcoes|opções/.test(t) ||
+    /so quero (saber|informa)/.test(t);
+  return noDate && wantsInfo;
 }
 
 export function messageDeclaresChildAges(text: string): boolean {

@@ -5,6 +5,7 @@ import {
   conversationNeedsChildrenConfirmation,
   conversationNeedsChildAgesConfirmation,
   conversationHasDeclaredLodgingDates,
+  conversationHasDeclaredGuestCount,
   detectSunsetLodgingInterestKeywords,
   extractSunsetClientNameFromMessages,
   extractSunsetLodgingParams,
@@ -13,11 +14,16 @@ import {
   shouldIncludeDefaultLoftInterestKeywords,
   SUNSET_DEFAULT_LOFT_INTEREST_KEYWORDS,
   messageDeclaresGuestCompositionComplete,
+  messageDeclaresCoupleAsTwoAdults,
+  messageDeclaresNoChildren,
   messageDeclaresLodgingReservationInterest,
   messageDeclaresLodgingAmenityFaq,
   messageDeclaresLodgingPriceOrAvailabilityInquiry,
   messageDeclaresLodgingQuoteReadiness,
+  messageDeclaresLodgingInfoWithoutFixedDates,
   userNeedsSunsetLodgingToolCall,
+  resolveGuestCountFromAnswer,
+  messageUsesVagueGuestCountOnly,
   conversationHasPendingLodgingQuote,
   conversationHadLodgingQuoteRequest,
   shouldAutoInvokeSunsetLodgingTool,
@@ -28,9 +34,7 @@ import {
   messageDeclaresNewLodgingQuoteIntent,
   sliceActiveLodgingQuoteMessages,
   lodgingQuoteNeedsFreshToolResult,
-  conversationHasCompleteGuestComposition,
   conversationAlreadyDeliveredLodgingQuote,
-  messageUsesVagueGuestCountOnly,
   parseExplicitGuestCount,
   shouldReinvokeSunsetLodging,
   userAsksSunsetLodgingCategoryOrPrice,
@@ -160,6 +164,23 @@ describe("extractSunsetLodgingParams — hoje até amanhã", () => {
     const msgs = [{ role: "user", content: "hospedagem de hoje ate amanha" }];
     expect(conversationHasDeclaredLodgingDates(msgs, ref)).toBe(true);
   });
+
+  it("'Sábado agora' em terça 14/07 → check-in sábado 18/07 (não hoje nem domingo 19)", () => {
+    const refTue = new Date("2026-07-14T15:00:00.000Z");
+    const messages = [
+      { role: "user", content: "quero hospedagem" },
+      { role: "assistant", content: "Para qual data?" },
+      { role: "user", content: "Sábado agora" },
+      { role: "assistant", content: "Quantas pessoas?" },
+      { role: "user", content: "2 adultos" },
+      { role: "assistant", content: "Alguma criança?" },
+      { role: "user", content: "não" },
+    ];
+    expect(conversationHasDeclaredLodgingDates(messages, refTue)).toBe(true);
+    const params = extractSunsetLodgingParams(messages, refTue);
+    expect(params?.check_in).toBe("2026-07-18");
+    expect(params?.check_out).toBe("2026-07-19");
+  });
 });
 
 describe("extractSunsetLodgingParams — datas explícitas", () => {
@@ -242,6 +263,41 @@ describe("composição com crianças (v1.5.9)", () => {
     ];
     expect(conversationHasCompleteGuestComposition(msgs)).toBe(false);
     expect(extractSunsetLodgingParams(msgs, new Date("2026-06-13T12:00:00Z"))).toBeNull();
+  });
+
+  it("'Para 2 pessoas' declara contagem — ainda pede crianças (não casal)", () => {
+    const msgs = [
+      { role: "user", content: "gostaria de saber sobre a hospedagem Para 2 pessoas" },
+    ];
+    expect(conversationHasDeclaredGuestCount(msgs)).toBe(true);
+    expect(conversationNeedsChildrenConfirmation(msgs)).toBe(true);
+    expect(conversationHasCompleteGuestComposition(msgs)).toBe(false);
+  });
+
+  it("'apenas um casal' = 2 adultos sem criança (composição completa)", () => {
+    const msgs = [
+      { role: "user", content: "gostaria de saber sobre a hospedagem Para 2 pessoas" },
+      { role: "assistant", content: "Quantas pessoas vão? Alguma criança?" },
+      { role: "user", content: "São apenas um casal" },
+    ];
+    expect(resolveGuestCountFromAnswer("São apenas um casal", msgs)).toBe(2);
+    expect(messageDeclaresCoupleAsTwoAdults("São apenas um casal")).toBe(true);
+    expect(conversationNeedsChildrenConfirmation(msgs)).toBe(false);
+    expect(conversationHasCompleteGuestComposition(msgs)).toBe(true);
+  });
+
+  it("não trata casal com filho como só adultos", () => {
+    expect(messageDeclaresCoupleAsTwoAdults("casal com 1 filho")).toBe(false);
+    expect(messageDeclaresNoChildren("casal com 1 filho")).toBe(false);
+  });
+
+  it("detecta pedido de info/valor sem data fechada", () => {
+    expect(
+      messageDeclaresLodgingInfoWithoutFixedDates(
+        "Não tem data. Só quero informações por enquanto. De qual o valor, o que é incluso"
+      )
+    ).toBe(true);
+    expect(messageDeclaresLodgingInfoWithoutFixedDates("quero hospedagem sábado")).toBe(false);
   });
 });
 

@@ -331,6 +331,29 @@ describe("formatSunsetLodgingQuoteForDelivery", () => {
     expect(formatted).not.toContain("R$ 414");
   });
 
+  it("reconstrói lista completa quando Julia mandou só uma categoria (anti-omissão)", () => {
+    const toolJson = JSON.stringify({
+      status: "success",
+      nights: 1,
+      available_accommodations: [
+        { name: "STANDART", total_price: 414 },
+        { name: "LUXO DUPLO", total_price: 586.5 },
+        { name: "LUXO COM VARANDA", total_price: 624 },
+      ],
+    });
+    const onlyOne = "*Chalé* — R$ 414,00 o pacote de 1 noite. Quer ver a próxima opção?";
+    expect(
+      shouldRebuildSunsetQuoteFromTool(onlyOne, {
+        accommodations: [{ name: "STANDART" }, { name: "LUXO" }, { name: "VARANDA" }],
+      })
+    ).toBe(true);
+    const formatted = formatSunsetLodgingQuoteForDelivery(onlyOne, [toolJson]);
+    const normalized = formatted.replace(/ /g, " ");
+    expect(normalized).toContain("*Chalé* — R$ 414,00");
+    expect(normalized).toContain("*Suíte Luxo* — R$ 586,50");
+    expect(normalized).toContain("*Suíte com Varanda* — R$ 624,00");
+  });
+
   it("quebra parágrafo denso em MSG_SPLIT e intro com pagantes/cortesia", () => {
     const toolJson = JSON.stringify({
       status: "success",

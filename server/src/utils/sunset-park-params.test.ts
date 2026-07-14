@@ -122,4 +122,20 @@ describe("sunset-park-params", () => {
     expect(extractSunsetParkParamsForThermasCard(messages, refJul6)).toBeNull();
     expect(userAsksSunsetParkConsultation(messages)).toBe(false);
   });
+
+  it("'Sábado agora' em terça 14/07 → visita no sábado 18/07 (não domingo 19)", () => {
+    const refTue = new Date("2026-07-14T15:00:00.000Z");
+    const messages = [
+      { role: "user", content: "qual valor do ingresso do parque?" },
+      { role: "assistant", content: "Para qual dia você pretende ir?" },
+      { role: "user", content: "Sábado agora" },
+    ];
+    expect(extractSunsetParkParams(messages, refTue)).toEqual({ date: "2026-07-18" });
+  });
+
+  it("'agora' sozinho ainda é hoje", () => {
+    const refTue = new Date("2026-07-14T15:00:00.000Z");
+    const messages = [{ role: "user", content: "qual valor do parque agora?" }];
+    expect(extractSunsetParkParams(messages, refTue)).toEqual({ date: "2026-07-14" });
+  });
 });
