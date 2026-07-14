@@ -71,11 +71,54 @@ export function resolveSunsetHandoffReason(messages: ChatMessage[]): SunsetHando
     return "setor_reservas";
   }
 
+  // Confirmação curta / escolha após interesse em reservar já declarado no fio
+  if (
+    conversationDeclaresLodgingReservationInterest(messages) &&
+    messageLooksLikeHandoffConfirmation(text)
+  ) {
+    return "setor_reservas";
+  }
+
   if (messageDeclaresHumanAgentRequest(text) || messageDeclaresOutOfScopeTopic(text)) {
     return "atendimento_geral";
   }
 
   return null;
+}
+
+/** Já houve interesse explícito em reservar em alguma mensagem do usuário. */
+export function conversationDeclaresLodgingReservationInterest(messages: ChatMessage[]): boolean {
+  return messages
+    .filter((m) => m.role === "user" && m.content)
+    .some((m) => messageDeclaresLodgingReservationInterest(m.content!));
+}
+
+/** Confirmação curta que, no fio de reserva, deve fechar handoff. */
+export function messageLooksLikeHandoffConfirmation(text: string): boolean {
+  const t = normalizeText(text).trim();
+  if (!t || t.length > 80) return false;
+  return /^(sim|ok|pode|pode ser|vamos|fechou|fechamos|quero|isso|certeza|perfeito|otimo|bom|manda|segue|encaminha|pode encaminhar)([!.?…]|\s|$)/.test(
+    t
+  );
+}
+
+/**
+ * Julia anunciou encaminhamento no texto (sem tool). Usado como rede de segurança pós-resposta.
+ */
+export function assistantAnnouncesSunsetHandoff(text: string): boolean {
+  const t = normalizeText(text);
+  return (
+    /vou (te )?encaminhar|encaminhar (para|pro|ao) (o )?setor|setor de reservas dar continuidade|setor responsavel/.test(
+      t
+    ) && /encaminh|setor|reserva|humano|atendente/.test(t)
+  );
+}
+
+export function resolveSunsetHandoffReasonFromAssistantText(text: string): SunsetHandoffReason {
+  const t = normalizeText(text);
+  if (/excurs/.test(t)) return "excursao";
+  if (/reserva/.test(t)) return "setor_reservas";
+  return "atendimento_geral";
 }
 
 export function shouldAutoInvokeSunsetHandoff(messages: ChatMessage[]): boolean {

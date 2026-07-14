@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  assistantAnnouncesSunsetHandoff,
   buildSunsetHandoffToolArgs,
   messageDeclaresHumanAgentRequest,
   messageDeclaresOutOfScopeTopic,
   resolveSunsetHandoffReason,
+  resolveSunsetHandoffReasonFromAssistantText,
   shouldAutoInvokeSunsetHandoff,
 } from "./sunset-handoff-params.js";
 
@@ -31,6 +33,28 @@ describe("sunset-handoff-params", () => {
       reason: "Setor de reservas",
     });
     expect(shouldAutoInvokeSunsetHandoff(messages)).toBe(true);
+  });
+
+  it("confirmação curta após interesse em reservar dispara handoff", () => {
+    const messages = [
+      { role: "user", content: "quero reservar a suíte luxo" },
+      { role: "assistant", content: "Perfeito, valor R$ 586" },
+      { role: "user", content: "sim" },
+    ];
+    expect(resolveSunsetHandoffReason(messages)).toBe("setor_reservas");
+    expect(shouldAutoInvokeSunsetHandoff(messages)).toBe(true);
+  });
+
+  it("detecta anúncio de encaminhamento da Julia no texto", () => {
+    expect(
+      assistantAnnouncesSunsetHandoff(
+        "Vou encaminhar para o setor de reservas dar continuidade por aqui. Eles confirmam a disponibilidade."
+      )
+    ).toBe(true);
+    expect(resolveSunsetHandoffReasonFromAssistantText("vou encaminhar ao setor de reservas")).toBe(
+      "setor_reservas"
+    );
+    expect(assistantAnnouncesSunsetHandoff("Quer ver a próxima opção?")).toBe(false);
   });
 
   it("resolve motivo de handoff para excursão", () => {

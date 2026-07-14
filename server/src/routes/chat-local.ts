@@ -58,9 +58,12 @@ import {
   userConfirmsThermasCardCompositionOnly,
 } from "../utils/sunset-park-params.js";
 import {
+  assistantAnnouncesSunsetHandoff,
   buildSunsetHandoffToolArgs,
   resolveSunsetHandoffReason,
+  resolveSunsetHandoffReasonFromAssistantText,
   shouldAutoInvokeSunsetHandoff,
+  type SunsetHandoffReason,
 } from "../utils/sunset-handoff-params.js";
 import { mergeBuiltinAgentTools } from "../utils/builtin-agent-tools.js";
 import {
@@ -459,6 +462,9 @@ async function maybeAutoInvokeSunsetHandoff(params: {
   agent: { config?: Record<string, unknown>; tenant_id?: string };
   externalUserId?: string | null;
   supabase: ReturnType<typeof createNexusClient>;
+  /** Força motivo (ex.: anúncio da Julia sem tool no turno). */
+  forcedReason?: SunsetHandoffReason | null;
+  source?: string;
 }): Promise<
   Array<{ type: string; tool?: string; args?: Record<string, unknown>; tool_type?: string; preview?: unknown; source?: string }>
 > {
@@ -472,9 +478,10 @@ async function maybeAutoInvokeSunsetHandoff(params: {
   }> = [];
 
   if (!isSunsetThermasTenantSlug(params.tenantSlug)) return debugEntries;
-  if (!shouldAutoInvokeSunsetHandoff(params.messages)) return debugEntries;
 
-  const handoffReason = resolveSunsetHandoffReason(params.messages);
+  const handoffReason =
+    params.forcedReason ??
+    (shouldAutoInvokeSunsetHandoff(params.messages) ? resolveSunsetHandoffReason(params.messages) : null);
   if (!handoffReason) return debugEntries;
 
   const handoffTool = findSunsetHandoffTool(params.nameToTool);
@@ -488,7 +495,8 @@ async function maybeAutoInvokeSunsetHandoff(params: {
     params.chatwootConversationId
   );
 
-  console.log("[Chat-Local] Auto chatwoot_assign (sunset handoff):", JSON.stringify(argsForExec));
+  const source = params.source ?? "auto_sunset_handoff";
+  console.log("[Chat-Local] Auto chatwoot_assign (sunset handoff):", JSON.stringify(argsForExec), "source=", source);
   const result = await executeTool(handoffTool, argsForExec, params.agentId);
   const content = buildOmnibeesGuardedContent(handoffTool.name, result);
   params.conversationalMessages.push({
@@ -501,7 +509,7 @@ async function maybeAutoInvokeSunsetHandoff(params: {
     tool: handoffTool.name,
     args: argsForExec,
     tool_type: "chatwoot_assign",
-    source: "auto_sunset_handoff",
+    source,
   });
   debugEntries.push({
     type: "tool_result",
@@ -948,11 +956,15 @@ async function sendNotificationToGroup(
 ): Promise<void> {
   const supabase = createNexusClient();
   try {
-    const { data: notifTools } = await supabase
+    let notifQuery = supabase
       .from("tools")
-      .select("id, tool_type, execution_config")
+      .select("id, tool_type, execution_config, tenant_id")
       .eq("tool_type", "send_notification")
-      .limit(10);
+      .limit(20);
+    if (agent.tenant_id) {
+      notifQuery = notifQuery.eq("tenant_id", agent.tenant_id);
+    }
+    const { data: notifTools } = await notifQuery;
 
     if (!notifTools || notifTools.length === 0) {
       console.warn("[Chat-Local] Nenhuma tool send_notification encontrada");
@@ -1178,6 +1190,8 @@ function buildOpenAITools(
   const nameToTool = new Map<string, ToolDef>();
   const openaiTools = tools
     .filter((t) => {
+      // send_notification é config-only (grupo Chatwoot); o handoff dispara a mensagem automaticamente.
+      if (t.tool_type === "send_notification") return false;
       const fd = t.function_def as Record<string, unknown> | undefined;
       if (fd && typeof fd.name === "string" && fd.name.trim()) return true;
       // tool_type interno sem function_def.name — expor pelo name da tabela ou alias padrão
@@ -1890,6 +1904,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
 
           let conversationalMessages: typeof dispatcherMessages;
+          let dispatcherHandoffSucceeded = false;
 
           if (phase1ToolCalls.length > 0) {
             const assistantMsg: { role: "assistant"; content: string; tool_calls: Array<{ id: string; type: string; function: { name: string; arguments: string } }> } = {
@@ -2063,6 +2078,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   content: buildOmnibeesGuardedContent(tc.function.name, result),
                 });
                 if (tool.tool_type === "chatwoot_assign" && result.success) {
+                  dispatcherHandoffSucceeded = true;
                   applyChatwootHandoffSideEffects(
                     agent_id,
                     agent,
@@ -2405,6 +2421,36 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               );
             }
           }
+
+          // Rede de segurança: Julia anunciou encaminhamento sem chamar chatwoot_assign neste turno.
+          const handoffAlreadyRan =
+            dispatcherHandoffSucceeded ||
+            autoHandoffDebugEntries.some((e) => e.type === "tool_call" && e.tool_type === "chatwoot_assign");
+          if (
+            isSunsetThermasTenantSlug(tenantSlug) &&
+            !handoffAlreadyRan &&
+            assistantAnnouncesSunsetHandoff(convFullContent)
+          ) {
+            const forcedReason = resolveSunsetHandoffReasonFromAssistantText(convFullContent);
+            const lateHandoff = await maybeAutoInvokeSunsetHandoff({
+              tenantSlug,
+              messages,
+              conversationalMessages,
+              nameToTool: dispatcherNameToTool,
+              agentId: agent_id,
+              conversationId: responseConvId,
+              chatwootConversationId: chatwoot_conversation_id,
+              agent,
+              externalUserId: external_user_id,
+              supabase,
+              forcedReason,
+              source: "auto_sunset_handoff_announcement",
+            });
+            if (lateHandoff.length > 0) {
+              sendSse({ debug: lateHandoff });
+            }
+          }
+
           emitMediaCommandsSseIfNeeded(sendSse, convFullContent);
 
           if (debugSendTotalLen === 0) {
