@@ -15,6 +15,16 @@ import {
   SUNSET_FORM_DIALOGUE_EXAMPLE,
   SYSTEM_PROMPT,
 } from "./sunset-thermas.js";
+
+
+describe("appendSunsetConversationContext — runtime desativado", () => {
+  it("retorna string vazia (contexto fica a cargo do LLM + histórico)", () => {
+    expect(appendSunsetConversationContext("ola")).toBe("");
+    expect(
+      appendSunsetConversationContext(undefined, [{ role: "user", content: "quero hospedagem" }])
+    ).toBe("");
+  });
+});
 import { buildSystemPrompt } from "./registry.js";
 
 describe("Sunset Thermas Park — SYSTEM_PROMPT (contratos de negócio)", () => {
@@ -484,10 +494,7 @@ describe("Sunset Thermas Park — §3h excursões (v1.5.20)", () => {
     const ctx = appendSunsetConversationContext(undefined, [
       { role: "user", content: "quero informações sobre excursão" },
     ]);
-    expect(ctx).toMatch(/EXCURS[AÃ]O/i);
-    expect(ctx).toMatch(/08h.*18h/i);
-    expect(ctx).toMatch(/setor respons[aá]vel/i);
-    expect(ctx).toMatch(/NÃO.*parque.*hospedagem/i);
+    expect(ctx).toBe("");
   });
 
   it("COMMUNICATION_RULES item 27 reforça excursões", () => {
@@ -519,9 +526,7 @@ describe("Sunset Thermas Park — §2-fotos-parque Instagram (v1.5.45)", () => {
     const ctx = appendSunsetConversationContext(undefined, [
       { role: "user", content: "manda fotos do parque pra eu ver" },
     ]);
-    expect(ctx).toMatch(/FOTOS DO PARQUE/i);
-    expect(ctx).toMatch(/instagram\.com\/sunsetthermasparkoficial/i);
-    expect(ctx).toMatch(/PROIBIDO.*suite_gallery_query/i);
+    expect(ctx).toBe("");
   });
 
   it("COMMUNICATION_RULES item 31 e DISPATCHER reforçam Instagram", () => {
@@ -556,10 +561,7 @@ describe("Sunset Thermas Park — §2-localizacao Maps/Waze (v1.5.46)", () => {
     const ctx = appendSunsetConversationContext(undefined, [
       { role: "user", content: "pode me mandar a localização?" },
     ]);
-    expect(ctx).toMatch(/LOCALIZA/i);
-    expect(ctx).toMatch(/maps\.google\.com\/\?q=-23\.322983,-48\.984127/);
-    expect(ctx).toMatch(/KM 266/);
-    expect(ctx).toMatch(/SUNSET THERMAS PARK/);
+    expect(ctx).toBe("");
   });
 
   it("COMMUNICATION_RULES item 32 reforça localização", () => {
@@ -676,15 +678,7 @@ describe("Sunset Thermas Park — §3g Thermas Card (v1.5.18+)", () => {
     const ctx = appendSunsetConversationContext(undefined, [
       { role: "user", content: "quero saber sobre o Thermas Card" },
     ]);
-    expect(ctx).toMatch(/THERMAS CARD/i);
-    expect(ctx).toMatch(/135,90/);
-    expect(ctx).toMatch(/145,90/);
-    expect(ctx).toMatch(/cidade|regi[aã]o/i);
-    expect(ctx).toMatch(/3g-compare|compara[cç][aã]o/i);
-    expect(ctx).toMatch(/socio\.grupothermas\.com\.br\/cadastro/);
-    expect(ctx).toMatch(/5 pessoas|sempre.*5/i);
-    expect(ctx).toMatch(/NÃO.*parque.*hospedagem/i);
-    expect(ctx).not.toMatch(/aderir\/contratar.*99860-5662/i);
+    expect(ctx).toBe("");
   });
 
   it("injeta bloco de qualificação quando cliente confirma composição (5 pessoas)", () => {
@@ -693,12 +687,7 @@ describe("Sunset Thermas Park — §3g Thermas Card (v1.5.18+)", () => {
       { role: "assistant", content: "Quantas pessoas entrariam no plano?" },
       { role: "user", content: "seria 5 pessoas mesmo" },
     ]);
-    expect(ctx).toMatch(/THERMAS CARD/i);
-    expect(ctx).toMatch(/QUALIFICAÇÃO.*composição|TURNO ATUAL — QUALIFICAÇÃO/i);
-    expect(ctx).toMatch(/135,90/);
-    expect(ctx).toMatch(/frequência|frequencia/i);
-    expect(ctx).toMatch(/PROIBIDO.*ingressos|sem registro de ingressos/i);
-    expect(ctx).not.toMatch(/CONTEXTO DESTA CONVERSA — PARQUE/i);
+    expect(ctx).toBe("");
   });
 
   it("injeta bloco de preço Thermas Card em follow-up 'qual valor?'", () => {
@@ -707,12 +696,7 @@ describe("Sunset Thermas Park — §3g Thermas Card (v1.5.18+)", () => {
       { role: "assistant", content: "O Thermas Card dá acesso ilimitado por 5 anos." },
       { role: "user", content: "qual valor?" },
     ]);
-    expect(ctx).toMatch(/THERMAS CARD/i);
-    expect(ctx).toMatch(/PREÇO DO THERMAS CARD|TURNO ATUAL — PREÇO/i);
-    expect(ctx).toMatch(/135,90/);
-    expect(ctx).toMatch(/145,90/);
-    expect(ctx).toMatch(/PROIBIDO.*ingresso avulso|ingresso avulso/i);
-    expect(ctx).not.toMatch(/CONTEXTO DESTA CONVERSA — PARQUE/i);
+    expect(ctx).toBe("");
   });
 
   it("injeta bloco de encerramento quando cliente só agradece", () => {
@@ -721,10 +705,7 @@ describe("Sunset Thermas Park — §3g Thermas Card (v1.5.18+)", () => {
       { role: "assistant", content: "Cadastro em https://socio.grupothermas.com.br/cadastro" },
       { role: "user", content: "obrigadoo" },
     ]);
-    expect(ctx).toMatch(/AGRADECIMENTO|ENCERRAMENTO/i);
-    expect(ctx).toMatch(/1 frase curta|Por nada/i);
-    expect(ctx).toMatch(/PROIBIDO.*pitch|repetir pitch/i);
-    expect(ctx).not.toMatch(/CONTEXTO DESTA CONVERSA — PARQUE/i);
+    expect(ctx).toBe("");
   });
 
   it("COMMUNICATION_RULES item 25 reforça venda consultiva Thermas Card", () => {
@@ -978,12 +959,7 @@ describe("Sunset Thermas Park — §3f-form reserva antecipada (v1.5.21+)", () =
       { role: "assistant", content: "Valores..." },
       { role: "user", content: "gostei do Standart, quero reservar" },
     ]);
-    expect(ctx).toMatch(/INTERESSE|CONVERS[AÃ]O SDR/i);
-    expect(ctx).toMatch(/setor de reservas/i);
-    expect(ctx).toMatch(/3f-form|lista vertical/i);
-    expect(ctx).toMatch(/PROIBIDO.*hotel\.php|hotel\.php/i);
-    expect(ctx).toMatch(/PROIBIDO.*99860-5662|99860-5662/i);
-    expect(ctx).toMatch(/reserva confirmada/i);
+    expect(ctx).toBe("");
   });
 
   it("COMMUNICATION_RULES item 28 reforça §3f-form sem site no fechamento", () => {
@@ -1018,9 +994,7 @@ describe("Sunset Thermas Park — §3f conversão SDR (v1.5.8+)", () => {
       { role: "assistant", content: "Valores..." },
       { role: "user", content: "gostei do Standart, quero reservar" },
     ], ref);
-    expect(ctx).toMatch(/INTERESSE|CONVERS[AÃ]O SDR/i);
-    expect(ctx).toMatch(/setor de reservas/i);
-    expect(ctx).toMatch(/reserva confirmada/i);
+    expect(ctx).toBe("");
   });
 
   it("COMMUNICATION_RULES item 24 reforça papel SDR só com interesse", () => {
@@ -1046,9 +1020,7 @@ describe("Sunset Thermas Park — §3f conversão SDR (v1.5.8+)", () => {
       { role: "assistant", content: "Como prefere ser chamado(a)?" },
       { role: "user", content: "hospedagem para o dia de hoje ate amanha" },
     ]);
-    expect(ctx).toMatch(/PROIBIDO.*Prazer/i);
-    expect(ctx).toMatch(/Continue o atendimento|n[aã]o informou.*nome/i);
-    expect(ctx).toMatch(/travar|insistir/i);
+    expect(ctx).toBe("");
   });
 
   it("§3-composição-idades exige idade quando há criança", () => {
@@ -1066,9 +1038,7 @@ describe("Sunset Thermas Park — §3f conversão SDR (v1.5.8+)", () => {
       { role: "assistant", content: "Alguma criança vai junto?" },
       { role: "user", content: "sim, 1 criança" },
     ], ref);
-    expect(ctx).toMatch(/IDADES PENDENTES/i);
-    expect(ctx).toMatch(/Quantos anos/i);
-    expect(ctx).toMatch(/PROIBIDO.*cotar/i);
+    expect(ctx).toBe("");
   });
 
   it("injeta contexto crianças pendentes quando cliente disse só número", () => {
@@ -1078,9 +1048,7 @@ describe("Sunset Thermas Park — §3f conversão SDR (v1.5.8+)", () => {
       { role: "assistant", content: "Quantas pessoas vão na estadia?" },
       { role: "user", content: "3" },
     ], ref);
-    expect(ctx).toMatch(/CRIAN[CÇ]AS PENDENTES/i);
-    expect(ctx).toMatch(/PROIBIDO.*repetir.*quantas pessoas/i);
-    expect(ctx).toMatch(/PROIBIDO.*cotar/i);
+    expect(ctx).toBe("");
   });
 });
 
@@ -1140,10 +1108,7 @@ describe("Sunset Thermas Park — mudança de assunto parque (v1.5.4)", () => {
 
   it("injeta contexto de ingresso na 1ª mensagem sem pedir intenção", () => {
     const ctx = appendSunsetConversationContext(undefined, [{ role: "user", content: parkPriceToday }]);
-    expect(ctx).toMatch(/PARQUE \/ INGRESSO/i);
-    expect(ctx).toMatch(/consultar_parque_sunset/);
-    expect(ctx).toMatch(/NÃO.*parque\/hospedagem\/ambos/i);
-    expect(ctx).toMatch(/PROIBIDO.*Prazer/i);
+    expect(ctx).toBe("");
   });
 
   it("§3e proíbe repetir hospedagem quando cliente pede só parque", () => {
@@ -1159,9 +1124,7 @@ describe("Sunset Thermas Park — mudança de assunto parque (v1.5.4)", () => {
       { role: "user", content: parkDayQuestion },
     ];
     const ctx = appendSunsetConversationContext(undefined, msgs);
-    expect(ctx).toMatch(/PARQUE \/ INGRESSO/i);
-    expect(ctx).toMatch(/consultar_parque_sunset/);
-    expect(ctx).toMatch(/PROIBIDO.*repetir.*hospedagem/i);
+    expect(ctx).toBe("");
   });
 
   it("COMMUNICATION_RULES item 17 reforça §3e", () => {
@@ -1190,11 +1153,7 @@ describe("Sunset Thermas Park — mudança de assunto parque (v1.5.4)", () => {
       [{ role: "user", content: "Maria, quero hospedagem para o dia de hoje ate amanha" }],
       ref
     );
-    expect(ctx).toMatch(/HOJE\/AMANHÃ|13\/06\/2026/i);
-    expect(ctx).toMatch(/§3a-tom|certo\?/i);
-    expect(ctx).toMatch(/PROIBIDO.*Dia dos Namorados|12\/06/i);
-    expect(ctx).toMatch(/quantas pessoas/i);
-    expect(ctx).toMatch(/n[aã]o.*repita essas datas/i);
+    expect(ctx).toBe("");
   });
 
   it("§3a-tom proíbe confirmar hoje/amanhã roboticamente", () => {
@@ -1228,9 +1187,7 @@ describe("Sunset Thermas Park — intenção já declarada (v1.5.3)", () => {
       { role: "user", content: "Maria, quero hospedagem para o dia dos namorados" },
     ];
     const ctx = appendSunsetConversationContext(undefined, msgs);
-    expect(ctx).toMatch(/j[aá] declarou HOSPEDAGEM/i);
-    expect(ctx).toMatch(/NÃO.*parque.*hospedagem.*ambos/i);
-    expect(ctx).toMatch(/composi[çc][ãa]o|quantas pessoas/i);
+    expect(ctx).toBe("");
     expect(conversationDeclaresLodgingIntent(msgs)).toBe(true);
   });
 });
@@ -1250,19 +1207,17 @@ describe("Sunset Thermas Park — detecção formulário do site (runtime §00d)
 
   it("injeta contexto negativo quando cliente não veio do formulário", () => {
     const ctx = appendSunsetConversationContext("ola");
-    expect(ctx).toMatch(/NÃO se aplica/);
-    expect(ctx).toMatch(/inten[çc][ãa]o|§3a/i);
-    expect(ctx).not.toMatch(/Exemplo §00d — ATIVO/);
+    expect(ctx).toBe("");
   });
 
   it("injeta exemplo §00d só quando formulário foi detectado", () => {
     const ctx = appendSunsetConversationContext(formMessage);
-    expect(ctx).toMatch(/Exemplo §00d — ATIVO NESTA CONVERSA/);
+    expect(ctx).toBe("");
   });
 
-  it("buildSystemPrompt injeta contexto negativo para oi no Sunset Thermas", () => {
+  it("buildSystemPrompt não injeta contexto runtime de conversa para oi no Sunset Thermas", () => {
     const prompt = buildSystemPrompt("", "sunset-thermas-park", false, { firstUserMessage: "ola" });
-    expect(prompt).toMatch(/\[CONTEXTO DESTA CONVERSA\]/);
+    expect(prompt).not.toMatch(/\[CONTEXTO DESTA CONVERSA\]/);
     expect(prompt).not.toMatch(/Prazer, Marina\. Vi aqui que vocês querem 1 noite/);
   });
 
@@ -1523,7 +1478,7 @@ describe("Sunset Thermas Park — v1.5.49 anti-repetição composição / info s
     const ctx = appendSunsetConversationContext(undefined, [
       { role: "user", content: "gostaria de saber sobre a hospedagem Para 2 pessoas" },
     ]);
-    expect(ctx).toMatch(/2 pessoa|PROIBIDO.*[Qq]uantas pessoas/i);
+    expect(ctx).toBe("");
   });
 
   it("contexto: casal → composição completa, pede período", () => {
@@ -1532,8 +1487,7 @@ describe("Sunset Thermas Park — v1.5.49 anti-repetição composição / info s
       { role: "assistant", content: "Quantas pessoas?" },
       { role: "user", content: "São apenas um casal" },
     ]);
-    expect(ctx).toMatch(/composição completa|PROIBIDO.*criança|período/i);
-    expect(ctx).not.toMatch(/CRIANÇAS PENDENTES/);
+    expect(ctx).toBe("");
   });
 
   it("contexto: info sem data entrega incluso em vez de loop", () => {
@@ -1542,8 +1496,6 @@ describe("Sunset Thermas Park — v1.5.49 anti-repetição composição / info s
       { role: "assistant", content: "Tem data em mente?" },
       { role: "user", content: "Não tem data. Só quero informações por enquanto. De qual o valor, o que é incluso" },
     ]);
-    expect(ctx).toMatch(/INFO SEM DATA/);
-    expect(ctx).toMatch(/incluso|inclui/i);
-    expect(ctx).toMatch(/PROIBIDO.*preciso das datas/i);
+    expect(ctx).toBe("");
   });
 });

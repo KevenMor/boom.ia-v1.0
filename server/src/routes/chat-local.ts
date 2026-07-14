@@ -2,7 +2,6 @@
 import { createNexusClient } from "../services/supabase.js";
 import { resolveDispatcherModel } from "../services/provider-api.js";
 import { buildSystemPrompt, getDispatcherPrompt, getPromptConfig } from "../services/prompts/registry.js";
-import { shouldDeferSunsetLodgingQuote } from "../services/prompts/sunset-thermas.js";
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
 import { filterCommandLinesFromStream, sanitizeLLMOutput, fallbackSanitizeForRetry, stripChatbotPhrases } from "../utils/sanitize.js";
 import { mergeLlmStreamUsage, parseOpenAIStreamUsage, type LlmStreamUsage } from "../utils/llm-usage.js";
@@ -16,7 +15,6 @@ import {
 import {
   formatSunsetLodgingQuoteForDelivery,
   isSunsetLodgingQuoteContext,
-  assistantMessageDeliversLodgingQuote,
 } from "../utils/sunset-lodging-quote-format.js";
 import { applySunsetLodgingQuoteImageOverlays } from "../utils/sunset-lodging-quote-image-overlays.js";
 import {
@@ -29,34 +27,7 @@ import { getWelcomeConversationImageMarkdown } from "../utils/suite-gallery-welc
 import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification, buildHandoffNotification, extractClientNameFromMessages, toBrasiliaISO } from "../utils/agendaNotification.js";
 import { formatLodgingConsultaForLlm } from "../utils/lodging-consulta-summary.js";
 import { formatParkDayConsultaForLlm } from "../utils/park-day-consulta-summary.js";
-import {
-  conversationNeedsChildrenConfirmation,
-  conversationNeedsChildAgesConfirmation,
-  conversationHasPendingLodgingQuote,
-  conversationHasDeclaredLodgingDates,
-  extractSunsetLodgingParams,
-  isSunsetThermasTenantSlug,
-  messageDeclaresLodgingAmenityFaq,
-  lodgingQuoteNeedsFreshToolResult,
-  shouldAutoInvokeSunsetLodgingTool,
-  shouldBlockSunsetLodgingToolCall,
-  getSunsetLodgingToolBlockInstruction,
-  buildSunsetChildrenConfirmationReply,
-  shouldReinvokeSunsetLodging,
-  userNeedsSunsetLodgingToolCall,
-  userMessageIsPhotoRequestOnly,
-} from "../utils/sunset-lodging-params.js";
-import {
-  extractSunsetParkParams,
-  extractSunsetParkParamsForThermasCard,
-  hasSunsetParkToolResult,
-  messageDeclaresGratitudeOrConversationClose,
-  messageDeclaresParkTicketPriceQuestion,
-  shouldAutoInvokeParkForThermasCard,
-  userAsksSunsetParkConsultation,
-  userAsksThermasCardPricing,
-  userConfirmsThermasCardCompositionOnly,
-} from "../utils/sunset-park-params.js";
+import { isSunsetThermasTenantSlug } from "../utils/sunset-lodging-params.js";
 import {
   assistantAnnouncesSunsetHandoff,
   buildSunsetHandoffToolArgs,
@@ -223,232 +194,11 @@ function isOmnibeesTool(toolName: string): boolean {
   return OMNIBEES_TOOL_NAMES.has(toolName);
 }
 
-function isLodgingConsultaTool(tool: ToolDef): boolean {
-  return tool.tool_type === "lodging_consulta";
-}
-
-function isParkConsultaTool(tool: ToolDef): boolean {
-  return tool.tool_type === "park_consulta";
-}
-
-function findParkConsultaTool(nameToTool: Map<string, ToolDef>): ToolDef | undefined {
-  for (const tool of nameToTool.values()) {
-    if (isParkConsultaTool(tool)) return tool;
-  }
-  return undefined;
-}
-
-function findLodgingConsultaTool(nameToTool: Map<string, ToolDef>): ToolDef | undefined {
-  for (const tool of nameToTool.values()) {
-    if (isLodgingConsultaTool(tool)) return tool;
-  }
-  return undefined;
-}
-
 function findSunsetHandoffTool(nameToTool: Map<string, ToolDef>): ToolDef | undefined {
   for (const tool of nameToTool.values()) {
     if (tool.tool_type === "chatwoot_assign") return tool;
   }
   return undefined;
-}
-
-function messageContentLooksLikeLodgingResult(content: string): boolean {
-  return content.includes('"available_accommodations"') || content.includes('"park_closed"');
-}
-
-/** Sunset: se o dispatcher não chamou lodging_consulta mas datas + hóspedes estão no histórico, executa a tool. */
-async function maybeAutoInvokeSunsetLodging(params: {
-  tenantSlug: string | null;
-  messages: Array<{ role: string; content: string }>;
-  conversationalMessages: Array<{ role: string; content?: string; tool_call_id?: string }>;
-  nameToTool: Map<string, ToolDef>;
-  agentId: string;
-}): Promise<
-  Array<{ type: string; tool?: string; args?: Record<string, unknown>; tool_type?: string; preview?: unknown; source?: string }>
-> {
-  const debugEntries: Array<{
-    type: string;
-    tool?: string;
-    args?: Record<string, unknown>;
-    tool_type?: string;
-    preview?: unknown;
-    source?: string;
-  }> = [];
-
-  if (!isSunsetThermasTenantSlug(params.tenantSlug)) return debugEntries;
-
-  if (shouldDeferSunsetLodgingQuote(params.messages)) return debugEntries;
-
-  if (shouldBlockSunsetLodgingToolCall(params.messages)) return debugEntries;
-
-  const lastUserMsg = [...params.messages].reverse().find((m) => m.role === "user" && m.content);
-  if (lastUserMsg?.content && messageDeclaresLodgingAmenityFaq(lastUserMsg.content)) {
-    return debugEntries;
-  }
-  if (lastUserMsg?.content && userMessageIsPhotoRequestOnly(lastUserMsg.content)) {
-    return debugEntries;
-  }
-
-  if (!shouldAutoInvokeSunsetLodgingTool(params.messages)) return debugEntries;
-
-  const lodgingTool = findLodgingConsultaTool(params.nameToTool);
-  if (!lodgingTool) return debugEntries;
-
-  const lodgingToolContents = params.conversationalMessages
-    .filter(
-      (m) =>
-        m.role === "tool" &&
-        typeof m.content === "string" &&
-        messageContentLooksLikeLodgingResult(m.content)
-    )
-    .map((m) => m.content as string);
-
-  const hasLodgingResult = lodgingToolContents.length > 0;
-  if (
-    hasLodgingResult &&
-    !shouldReinvokeSunsetLodging(params.messages, lodgingToolContents) &&
-    !lodgingQuoteNeedsFreshToolResult(params.messages)
-  ) {
-    return debugEntries;
-  }
-
-  const autoParams = extractSunsetLodgingParams(params.messages);
-  if (!autoParams) return debugEntries;
-
-  if (hasLodgingResult) {
-    for (let i = params.conversationalMessages.length - 1; i >= 0; i--) {
-      const m = params.conversationalMessages[i];
-      if (
-        m.role === "tool" &&
-        typeof m.content === "string" &&
-        messageContentLooksLikeLodgingResult(m.content)
-      ) {
-        params.conversationalMessages.splice(i, 1);
-      }
-    }
-  }
-
-  const source = hasLodgingResult ? "auto_sunset_requote" : "auto_sunset";
-  console.log(`[Chat-Local] Auto lodging_consulta (${source}):`, JSON.stringify(autoParams));
-  const result = await executeTool(lodgingTool, autoParams, params.agentId);
-  const content = buildOmnibeesGuardedContent(lodgingTool.name, result);
-  params.conversationalMessages.push({
-    role: "tool",
-    tool_call_id: "auto-lodging-consulta",
-    content,
-  });
-  debugEntries.push({
-    type: "tool_call",
-    tool: lodgingTool.name,
-    args: autoParams,
-    tool_type: "lodging_consulta",
-    source,
-  });
-  debugEntries.push({
-    type: "tool_result",
-    preview:
-      result.success && typeof result.result === "object"
-        ? result.result
-        : result.success
-          ? { value: String(result.result).slice(0, 500) }
-          : { error: result.error },
-  });
-
-  return debugEntries;
-}
-
-/** Sunset: consulta calendário do parque (ingresso/abertura) quando dispatcher omitir. */
-async function maybeAutoInvokeSunsetPark(params: {
-  tenantSlug: string | null;
-  messages: Array<{ role: string; content: string }>;
-  conversationalMessages: Array<{ role: string; content?: string; tool_call_id?: string }>;
-  nameToTool: Map<string, ToolDef>;
-  agentId: string;
-}): Promise<
-  Array<{ type: string; tool?: string; args?: Record<string, unknown>; tool_type?: string; preview?: unknown; source?: string }>
-> {
-  const debugEntries: Array<{
-    type: string;
-    tool?: string;
-    args?: Record<string, unknown>;
-    tool_type?: string;
-    preview?: unknown;
-    source?: string;
-  }> = [];
-
-  if (!isSunsetThermasTenantSlug(params.tenantSlug)) return debugEntries;
-
-  if (userAsksThermasCardPricing(params.messages)) return debugEntries;
-
-  const lastUserMsg = [...params.messages].reverse().find((m) => m.role === "user" && m.content);
-  if (lastUserMsg?.content && messageDeclaresGratitudeOrConversationClose(lastUserMsg.content)) {
-    return debugEntries;
-  }
-
-  const parkToolContents = params.conversationalMessages
-    .filter(
-      (m) =>
-        m.role === "tool" &&
-        typeof m.content === "string" &&
-        hasSunsetParkToolResult([m.content])
-    )
-    .map((m) => m.content as string);
-
-  if (parkToolContents.length > 0) return debugEntries;
-
-  const autoParams =
-    extractSunsetParkParams(params.messages) ??
-    extractSunsetParkParamsForThermasCard(params.messages);
-
-  if (!autoParams) return debugEntries;
-
-  const shouldRun =
-    userAsksSunsetParkConsultation(params.messages) ||
-    shouldAutoInvokeParkForThermasCard(params.messages);
-
-  if (!shouldRun) return debugEntries;
-
-  const parkTool = findParkConsultaTool(params.nameToTool);
-  if (!parkTool) return debugEntries;
-
-  const source = shouldAutoInvokeParkForThermasCard(params.messages)
-    ? "auto_sunset_park_thermas_card"
-    : "auto_sunset_park";
-  console.log(`[Chat-Local] Auto park_consulta (${source}):`, JSON.stringify(autoParams));
-  const result = await executeTool(parkTool, autoParams, params.agentId);
-  const thermasCardCompare = source === "auto_sunset_park_thermas_card";
-  let content: string;
-  if (result.success && typeof result.result === "object" && result.result !== null) {
-    const enriched = { ...(result.result as Record<string, unknown>) };
-    if (thermasCardCompare) enriched._thermas_card_compare = true;
-    const summary = formatParkDayConsultaForLlm(enriched);
-    content = summary ?? JSON.stringify(enriched);
-  } else {
-    content = buildOmnibeesGuardedContent(parkTool.name, result);
-  }
-  params.conversationalMessages.push({
-    role: "tool",
-    tool_call_id: "auto-park-consulta",
-    content,
-  });
-  debugEntries.push({
-    type: "tool_call",
-    tool: parkTool.name,
-    args: autoParams,
-    tool_type: "park_consulta",
-    source,
-  });
-  debugEntries.push({
-    type: "tool_result",
-    preview:
-      result.success && typeof result.result === "object"
-        ? result.result
-        : result.success
-          ? { value: String(result.result).slice(0, 500) }
-          : { error: result.error },
-  });
-
-  return debugEntries;
 }
 
 /** Sunset: transferência Chatwoot quando assunto exige setor humano. */
@@ -1540,20 +1290,9 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       const applySuiteGalleryRepairs = async (
         assistantText: string,
         toolResultStrings: string[],
-        lastUserMessage: string,
-        deferSunsetLodgingQuote = false,
-        blockSunsetLodgingQuote = false
+        lastUserMessage: string
       ): Promise<string> => {
         let text = assistantText;
-
-        if (
-          conversationNeedsChildrenConfirmation(messages) &&
-          (assistantMessageDeliversLodgingQuote(text) ||
-            (/\bR\$\s*[\d.,]+/.test(text) && /chal[eé]|su[ií]te|loft|apartamento/i.test(text)))
-        ) {
-          console.warn("[Chat-Local] Orçamento Sunset bloqueado — substituindo resposta por pergunta de crianças");
-          return buildSunsetChildrenConfirmationReply(messages);
-        }
 
         const skipSuiteGalleryBulkInject = isSunsetLodgingQuoteContext(text, toolResultStrings);
         if (!skipSuiteGalleryBulkInject) {
@@ -1581,22 +1320,18 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
           console.log("[Chat-Local] Injetando fotos cover Omnibees no orçamento (omissão do modelo)");
           text = omnibeesPhotoInject.fullText;
         }
-        if (!deferSunsetLodgingQuote && !blockSunsetLodgingQuote) {
-          const sunsetLodgingPhotoInject = injectSunsetLodgingQuotePhotosIfMissing(
-            text,
-            collectSunsetLodgingGalleryPhotosFromToolResults(toolResultStrings)
-          );
-          if (sunsetLodgingPhotoInject) {
-            console.log("[Chat-Local] Injetando fotos galeria Sunset no orçamento (omissão do modelo)");
-            text = sunsetLodgingPhotoInject.fullText;
-          }
+        const sunsetLodgingPhotoInject = injectSunsetLodgingQuotePhotosIfMissing(
+          text,
+          collectSunsetLodgingGalleryPhotosFromToolResults(toolResultStrings)
+        );
+        if (sunsetLodgingPhotoInject) {
+          console.log("[Chat-Local] Injetando fotos galeria Sunset no orçamento (omissão do modelo)");
+          text = sunsetLodgingPhotoInject.fullText;
         }
         text = formatOmnibeesQuoteForDelivery(text, toolResultStrings);
-        if (!deferSunsetLodgingQuote && !blockSunsetLodgingQuote) {
-          text = formatSunsetLodgingQuoteForDelivery(text, toolResultStrings, {
-            lastUserMessage,
-          });
-        }
+        text = formatSunsetLodgingQuoteForDelivery(text, toolResultStrings, {
+          lastUserMessage,
+        });
         const inventoryPhotoInject = injectInventoryPhotosIfMissing({
           assistantText: text,
           toolResultStrings,
@@ -1609,8 +1344,6 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         text = sanitizeInvalidInventoryPhotoAttempt(text);
 
         if (
-          !deferSunsetLodgingQuote &&
-          !blockSunsetLodgingQuote &&
           isSunsetThermasTenantSlug(tenantSlug) &&
           isSunsetLodgingQuoteContext(text, toolResultStrings)
         ) {
@@ -1622,11 +1355,6 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         }
         return text;
       };
-
-      const deferSunsetLodgingQuote =
-        isSunsetThermasTenantSlug(tenantSlug) && shouldDeferSunsetLodgingQuote(messages);
-      const blockSunsetLodgingQuote =
-        isSunsetThermasTenantSlug(tenantSlug) && shouldBlockSunsetLodgingToolCall(messages);
 
       // Dual-provider: OpenAI para tools (dispatcher), Gemini para conversacional
       if (useTools && dispatcherProviderId) {
@@ -1707,67 +1435,6 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           if (appraisalCtx) {
             entityHint += `\n\n[CONTEXTO DE FLUXO] A última mensagem do assistente pedia dados do veículo do CLIENTE (marca, modelo, ano, km). Isso é APPRAISAL (intent A). NÃO chame consultar_fipe — avaliação é feita presencialmente pelo time comercial. Se o cliente já forneceu marca+modelo+ano, chame consultar_agenda com action "check_availability" e date "${todayISO}" para oferecer horários reais ao sugerir visita na loja. NÃO chame consultar_estoque.`;
           }
-          let sunsetLodgingHint = "";
-          let sunsetParkHint = "";
-          let sunsetHandoffHint = "";
-          if (isSunsetThermasTenantSlug(tenantSlug)) {
-            const lastUserContent = lastUserMsg?.content ?? "";
-            const handoffReason = resolveSunsetHandoffReason(messages);
-            if (handoffReason) {
-              const reasonLabel = buildSunsetHandoffToolArgs(handoffReason).reason;
-              sunsetHandoffHint = `\n\n[HINT OBRIGATÓRIO — ENCAMINHAR SETOR RESPONSÁVEL]\nAssunto exige **atendimento humano** (§4-b). **Chame encaminhar_setor_responsavel** neste turno com reason="${reasonLabel}" — **proibido** NO_TOOLS_NEEDED antes da transferência.\nJulia (conversacional): 1–2 frases informando que **vai encaminhar** ao setor responsável; **proibido** dizer "reserva confirmada".`;
-              sunsetLodgingHint = `\n\n[BLOQUEIO — HANDOFF PENDENTE]\nTransferência ao setor humano tem prioridade — **não** chame consultar_hospedagem_sunset neste turno.`;
-              sunsetParkHint = `\n\n[BLOQUEIO — HANDOFF PENDENTE]\nTransferência ao setor humano tem prioridade — **não** chame consultar_parque_sunset neste turno.`;
-            } else if (messageDeclaresGratitudeOrConversationClose(lastUserContent)) {
-              sunsetParkHint = `\n\n[HINT OBRIGATÓRIO — AGRADECIMENTO / ENCERRAMENTO]\nO cliente **agradecu** ou encerrou. Responda **NO_TOOLS_NEEDED** — **proibido** consultar_parque_sunset, consultar_hospedagem_sunset ou reiniciar pitch. Uma frase curta de despedida basta.`;
-              sunsetLodgingHint = `\n\n[BLOQUEIO — AGRADECIMENTO]\nCliente agradeceu — **NO_TOOLS_NEEDED**. Não cotar hospedagem neste turno.`;
-            } else if (userAsksThermasCardPricing(messages)) {
-              sunsetParkHint = `\n\n[HINT OBRIGATÓRIO — THERMAS CARD / PREÇO]\nO cliente perguntou **valor/preço** no fio do **Thermas Card**. Responda **NO_TOOLS_NEEDED** para consultar_parque_sunset. **Proibido** citar ingresso avulso, data do parque ou link do site de ingressos — informe os valores oficiais do cartão §2 (R$ 135,90 crédito / R$ 145,90 boleto, taxa zero).`;
-            } else if (userConfirmsThermasCardCompositionOnly(messages)) {
-              sunsetParkHint = `\n\n[HINT OBRIGATÓRIO — THERMAS CARD / QUALIFICAÇÃO]\nO cliente **confirmou composição** (quantas pessoas no plano). Responda **NO_TOOLS_NEEDED** para consultar_parque_sunset. Reconheça o número, cite R$ 135,90/mês (até 5 pessoas) e pergunte **frequência de visitas**. **Proibido** "sem registro de ingressos", data do parque ou link do site de ingressos.`;
-            }
-            const parkParamsHint =
-              extractSunsetParkParams(messages) ??
-              extractSunsetParkParamsForThermasCard(messages);
-            if (!userAsksThermasCardPricing(messages) && parkParamsHint && userAsksSunsetParkConsultation(messages)) {
-              sunsetParkHint = `\n\n[HINT OBRIGATÓRIO — PARQUE SUNSET]\nO cliente perguntou sobre ingresso/valor/abertura do parque. NÃO responda NO_TOOLS_NEEDED para consultar_parque_sunset. Chame a tool agora com date="${parkParamsHint.date}" (YYYY-MM-DD)${parkParamsHint.date_to ? ` e date_to="${parkParamsHint.date_to}"` : ""}. Se o cliente citou intervalo (ex.: "01 a 03"), date_to é OBRIGATÓRIO — consulte TODOS os dias do período. Use day_kind/park_open/days[] retornados — PROIBIDO inventar abertura de dia não consultado.`;
-            } else if (
-              !userAsksThermasCardPricing(messages) &&
-              parkParamsHint &&
-              shouldAutoInvokeParkForThermasCard(messages) &&
-              !userAsksSunsetParkConsultation(messages)
-            ) {
-              sunsetParkHint = `\n\n[HINT OBRIGATÓRIO — THERMAS CARD × INGRESSO]\nComparação Thermas Card exige preço real de ingresso. Chame consultar_parque_sunset com date="${parkParamsHint.date}" (YYYY-MM-DD). PROIBIDO escrever "Chamada de ferramenta" ou JSON ao cliente — use só os valores retornados em INGRESSOS CADASTRADOS.`;
-            }
-            const lodgingParamsHint = extractSunsetLodgingParams(messages);
-            if (conversationNeedsChildAgesConfirmation(messages) && !userAsksSunsetParkConsultation(messages)) {
-              sunsetLodgingHint = `\n\n[BLOQUEIO — HOSPEDAGEM SUNSET / IDADES PENDENTES]\nO cliente confirmou **criança(s)** mas **não informou idade(s)**. Responda **NO_TOOLS_NEEDED** para consultar_hospedagem_sunset. Julia: reconheça o que ele disse + "Quantos anos tem a criança?" (ou idade de cada uma se forem 2+) — **proibido** cotar ou inventar idade.`;
-            } else if (conversationNeedsChildrenConfirmation(messages) && !userAsksSunsetParkConsultation(messages)) {
-              sunsetLodgingHint = `\n\n[BLOQUEIO — HOSPEDAGEM SUNSET / CRIANÇAS PENDENTES]\nO cliente informou quantidade de pessoas (ex.: "3 pessoas") mas **não confirmou crianças**. Responda **NO_TOOLS_NEEDED** para consultar_hospedagem_sunset. Julia: reconheça o nº + "Alguma criança vai junto? Se sim, quantas e com quantos anos?" — **proibido** frase redundante tipo "quantas crianças? se sim, quantas?".`;
-            } else if (lodgingParamsHint && !userAsksSunsetParkConsultation(messages)) {
-              if (shouldDeferSunsetLodgingQuote(messages)) {
-                sunsetLodgingHint = `\n\n[BLOQUEIO — QUALIFICAÇÃO §00d / TURNO 1-2]\nJulia está em qualificação (nome → promo → confirmação). NÃO chame consultar_hospedagem_sunset neste turno — responda **NO_TOOLS_NEEDED**. **Proibido** citar R$ ou listar categorias.`;
-              } else if (lastUserMsg && messageDeclaresLodgingAmenityFaq(lastUserMsg.content)) {
-                sunsetLodgingHint = `\n\n[BLOQUEIO — HOSPEDAGEM SUNSET / DÚVIDA AMENIDADE]\nO cliente perguntou sobre **amenidade** (SPA, hidromassagem, equipamento do quarto, etc.) — **NÃO** chame consultar_hospedagem_sunset. Responda **NO_TOOLS_NEEDED** com texto consultivo. **Proibido** repetir a lista de preços já enviada neste fio.`;
-              } else if (userNeedsSunsetLodgingToolCall(messages)) {
-                const interestPart = lodgingParamsHint.interest_keywords?.length
-                  ? `, interest_keywords=${JSON.stringify(lodgingParamsHint.interest_keywords)}`
-                  : "";
-                sunsetLodgingHint = `\n\n[HINT OBRIGATÓRIO — HOSPEDAGEM SUNSET]\nDatas e composição já constam no histórico. NÃO responda NO_TOOLS_NEEDED para consultar_hospedagem_sunset. Chame a tool agora com check_in="${lodgingParamsHint.check_in}", check_out="${lodgingParamsHint.check_out}", guests=${JSON.stringify(lodgingParamsHint.guests)}${interestPart}. **Obrigatório** interest_keywords ["loft","spa","hidromassagem"] quando o cliente NÃO escolheu categoria no formulário — força o Loft no orçamento. Se o cliente perguntou Loft/SPA/hidromassagem, use total_price retornado — PROIBIDO citar R$ 2.700 da tabela §2.`;
-              } else {
-                sunsetLodgingHint = `\n\n[BLOQUEIO — HOSPEDAGEM SUNSET / SEM NECESSIDADE DE TOOL]\nNeste turno **NÃO** chame consultar_hospedagem_sunset — responda **NO_TOOLS_NEEDED**. O pedido do cliente não exige nova consulta de tarifas (qualificação, nome, dúvida de amenidade ou conversa). **Proibido** chamar tool só porque datas/hóspedes constam no histórico — economia de tokens.`;
-              }
-            } else if (
-              conversationHasPendingLodgingQuote(messages) &&
-              !userAsksSunsetParkConsultation(messages) &&
-              !conversationNeedsChildAgesConfirmation(messages) &&
-              !conversationNeedsChildrenConfirmation(messages) &&
-              !conversationHasDeclaredLodgingDates(messages)
-            ) {
-              sunsetLodgingHint = `\n\n[BLOQUEIO — HOSPEDAGEM SUNSET / FALTAM DATAS]\nCliente pediu orçamento mas **ainda não informou período** (check-in/check-out). Responda **NO_TOOLS_NEEDED**. Julia (conversacional) deve **perguntar as datas** — **PROIBIDO** citar R$, listar categorias ou usar tabela §2 neste turno.`;
-            }
-          }
-
           if (tenantSlug === "referency" && lastUserMsg) {
             const normalizedUser = lastUserMsg.content.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
             const looksLikeOnlyName = /^\s*(me\s+chamo\s+)?([a-z]{2,})(\s+[a-z]{2,})?\s*$/i.test(normalizedUser);
@@ -1790,7 +1457,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
 
           const dispatcherMessages = toOpenAIMessages(
-            getDispatcherPrompt(tenantSlug) + dispatcherDateContext + entityHint + schedulingHint + referencyInventoryHint + sunsetHandoffHint + sunsetParkHint + sunsetLodgingHint,
+            getDispatcherPrompt(tenantSlug) + dispatcherDateContext + entityHint + schedulingHint + referencyInventoryHint,
             messages
           );
 
@@ -2042,23 +1709,6 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   }
                 }
 
-                if (
-                  isSunsetThermasTenantSlug(tenantSlug) &&
-                  isLodgingConsultaTool(tool) &&
-                  shouldBlockSunsetLodgingToolCall(messages)
-                ) {
-                  const blockInstruction = getSunsetLodgingToolBlockInstruction(messages);
-                  console.warn("[Chat-Local] consultar_hospedagem_sunset BLOQUEADO:", blockInstruction);
-                  debugEntries.push({ type: "tool_call", tool: tc.function.name, args, tool_type: tool.tool_type });
-                  debugEntries.push({ type: "tool_result", preview: { error: blockInstruction } });
-                  conversationalMessages.push({
-                    role: "tool",
-                    tool_call_id: tc.id,
-                    content: JSON.stringify({ error: blockInstruction }),
-                  });
-                  continue;
-                }
-
                 const argsForExec = injectChatwootToolContext(tool, args, responseConvId, chatwoot_conversation_id);
                 console.log("[Chat-Local] Executando tool:", tc.function.name, "| args:", JSON.stringify(argsForExec));
                 debugEntries.push({ type: "tool_call", tool: tc.function.name, args: argsForExec, tool_type: "function" });
@@ -2114,30 +1764,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             externalUserId: external_user_id,
             supabase,
           });
-          const autoParkDebugEntries = shouldAutoInvokeSunsetHandoff(messages)
-            ? []
-            : await maybeAutoInvokeSunsetPark({
-            tenantSlug,
-            messages,
-            conversationalMessages,
-            nameToTool: dispatcherNameToTool,
-            agentId: agent_id,
-          });
-          const autoLodgingDebugEntries =
-            userAsksSunsetParkConsultation(messages) || shouldAutoInvokeSunsetHandoff(messages)
-            ? []
-            : await maybeAutoInvokeSunsetLodging({
-                tenantSlug,
-                messages,
-                conversationalMessages,
-                nameToTool: dispatcherNameToTool,
-                agentId: agent_id,
-              });
-          const autoSunsetDebugEntries = [
-            ...autoHandoffDebugEntries,
-            ...autoParkDebugEntries,
-            ...autoLodgingDebugEntries,
-          ];
+          const autoSunsetDebugEntries = [...autoHandoffDebugEntries];
           if (autoSunsetDebugEntries.length > 0) {
             if (phase1ToolCalls.length > 0) {
               sendSse({ debug: autoSunsetDebugEntries });
@@ -2173,49 +1800,6 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             conversationalMessagesClean.push({
               role: "user",
               content: `Resultados obtidos:\n${naturalToolResultsText}\n\nCom base nesses resultados, responda ao cliente de forma natural e objetiva. NÃO inclua JSON, nomes de ferramentas ou artefatos técnicos.`,
-            });
-          }
-
-          if (
-            isSunsetThermasTenantSlug(tenantSlug) &&
-            conversationNeedsChildAgesConfirmation(messages)
-          ) {
-            conversationalMessagesClean.push({
-              role: "user",
-              content:
-                '[INSTRUÇÃO INTERNA — NÃO REPETIR AO CLIENTE] Cliente confirmou criança(s) mas **não informou idade(s)**. Pergunte: "Quantos anos tem a criança?" (ou idade de cada uma se forem 2+). PROIBIDO citar R$ ou listar categorias neste turno.',
-            });
-          } else if (
-            isSunsetThermasTenantSlug(tenantSlug) &&
-            conversationNeedsChildrenConfirmation(messages)
-          ) {
-            const datesAlreadyKnown = conversationHasDeclaredLodgingDates(messages);
-            conversationalMessagesClean.push({
-              role: "user",
-              content:
-                `[INSTRUÇÃO INTERNA — NÃO REPETIR AO CLIENTE] Cliente informou quantidade de pessoas${datesAlreadyKnown ? " e **já citou as datas** (check-in/check-out)" : ""}, mas **não confirmou crianças**. Pergunte: "Alguma criança vai junto? Se sim, quantas e com quantos anos?" **PROIBIDO** pedir período ou datas de novo neste turno. PROIBIDO citar R$ ou listar categorias neste turno — ignore qualquer resultado parcial de tool neste turno.`,
-            });
-          } else if (
-            isSunsetThermasTenantSlug(tenantSlug) &&
-            toolResults.length === 0 &&
-            conversationHasPendingLodgingQuote(messages) &&
-            !extractSunsetLodgingParams(messages) &&
-            !conversationHasDeclaredLodgingDates(messages)
-          ) {
-            conversationalMessagesClean.push({
-              role: "user",
-              content:
-                "[INSTRUÇÃO INTERNA — NÃO REPETIR AO CLIENTE] Orçamento de hospedagem pendente, mas faltam datas (check-in/check-out). Pergunte o período ao cliente. PROIBIDO citar qualquer valor em R$ ou listar categorias com preço neste turno.",
-            });
-          } else if (
-            isSunsetThermasTenantSlug(tenantSlug) &&
-            toolResults.length === 0 &&
-            shouldAutoInvokeSunsetLodgingTool(messages)
-          ) {
-            conversationalMessagesClean.push({
-              role: "user",
-              content:
-                "[INSTRUÇÃO INTERNA — NÃO REPETIR AO CLIENTE] Datas e hóspedes já estão no histórico, mas a consulta de tarifas não rodou neste turno. Não invente preços. Peça confirmação das datas ou aguarde — PROIBIDO citar R$ sem resultado da tool consultar_hospedagem_sunset.",
             });
           }
 
@@ -2398,9 +1982,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           convFullContent = await applySuiteGalleryRepairs(
             convFullContent,
             toolResults,
-            lastUserForGalleryInject,
-            deferSunsetLodgingQuote,
-            blockSunsetLodgingQuote
+            lastUserForGalleryInject
           );
 
           if (/HANDOFF_COMERCIAL/i.test(convFullContent)) {
@@ -2541,7 +2123,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
 
           if (phase1ToolCalls.length === 0) {
-            sendSse({ debug: [dualSandboxDebugConfig, ...autoLodgingDebugEntries] });
+            sendSse({ debug: [dualSandboxDebugConfig, ...autoHandoffDebugEntries] });
           }
 
           const rawConvAssist = prependWelcomeToAssistantText((convFullContent || "").trim());
@@ -2755,9 +2337,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           fullContent = await applySuiteGalleryRepairs(
             fullContent,
             toolStringsSP,
-            lastUserForGalleryInjectSP,
-            deferSunsetLodgingQuote,
-            blockSunsetLodgingQuote
+            lastUserForGalleryInjectSP
           );
           emitMediaCommandsSseIfNeeded(sendSse, fullContent);
           sendSingleProviderSandboxDebug();
@@ -2892,21 +2472,6 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             }
           }
 
-          if (
-            isSunsetThermasTenantSlug(tenantSlug) &&
-            isLodgingConsultaTool(tool) &&
-            shouldBlockSunsetLodgingToolCall(messages)
-          ) {
-            const blockInstruction = getSunsetLodgingToolBlockInstruction(messages);
-            console.warn("[Chat-Local] consultar_hospedagem_sunset BLOQUEADO (single-provider):", blockInstruction);
-            llmMessages.push({
-              role: "tool",
-              tool_call_id: tc.id,
-              content: JSON.stringify({ error: blockInstruction }),
-            });
-            continue;
-          }
-
           const argsForExecSp = injectChatwootToolContext(tool, args, responseConvId, chatwoot_conversation_id);
           console.log("[Chat-Local] Executando tool (single-provider):", tc.function.name, "| args:", JSON.stringify(argsForExecSp));
           const result = await executeTool(tool, argsForExecSp, agent_id);
@@ -2972,9 +2537,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
         let finalAssistantRaw = await applySuiteGalleryRepairs(
           fullContent,
           toolStrsLoop,
-          lastUserGI,
-          deferSunsetLodgingQuote,
-          blockSunsetLodgingQuote
+          lastUserGI
         );
         emitMediaCommandsSseIfNeeded(sendSse, finalAssistantRaw);
         const rawLoopAssist = prependWelcomeToAssistantText((finalAssistantRaw || "").trim());

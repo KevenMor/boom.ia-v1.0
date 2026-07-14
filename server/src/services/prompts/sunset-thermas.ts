@@ -1,32 +1,10 @@
-﻿import {
-  brasiliaTodayIso,
-  conversationHasCompleteGuestComposition,
-  conversationHasDeclaredGuestCount,
-  conversationNeedsChildrenConfirmation,
-  conversationNeedsChildAgesConfirmation,
-  conversationHasDeclaredLodgingDates,
-  extractSunsetClientNameFromMessages,
-  extractSunsetLodgingDateRange,
-  sliceActiveLodgingQuoteMessages,
-  messageDeclaresDateCorrection,
-  messageDeclaresLodgingQuoteReadiness,
-  messageDeclaresLodgingReservationInterest,
-  messageDeclaresRelativeLodgingStay,
-  messageDeclaresLodgingInfoWithoutFixedDates,
-  messageUsesVagueGuestCountOnly,
-  resolveGuestCountFromAnswer,
-} from "../../utils/sunset-lodging-params.js";
-import {
-  messageDeclaresParkTicketPriceQuestion,
-  messageDeclaresGratitudeOrConversationClose,
-  userAsksThermasCardPricing,
-  userConfirmsThermasCardCompositionOnly,
-} from "../../utils/sunset-park-params.js";
+﻿import { messageDeclaresParkTicketPriceQuestion } from "../../utils/sunset-park-params.js";
 
 // ============================================================
 // Nexus AI — Prompt: Sunset Thermas Park
 // Slug: sunset-thermas-park (variante: sunset-thermas)
-// Versão: v1.5.49 — anti-repetição composição: "2 pessoas"/casal já no histórico; info sem data sem loop.
+// Versão: v1.5.50 — remove runtime de adivinhação (hints/bloqueios/auto-invoke lodging+park); LLM lê histórico + prompt.
+// v1.5.49 — anti-repetição composição: "2 pessoas"/casal já no histórico; info sem data sem loop.
 // v1.5.48 — "sábado agora"/dias da semana resolvidos em Brasília (America/Sao_Paulo); mapa de 7 dias no CONTEXTO TEMPORAL.
 // v1.5.47 — cotação lista TODAS as acomodações no mesmo turno (fim do modo “uma por turno”).
 // v1.5.46 — localização do parque: Maps + endereço + Waze.
@@ -39,7 +17,7 @@ import {
 // v1.5.39 — Thermas Card: "qual valor?" no fio do cartão → preço §2, não ingresso avulso.
 // v1.5.38 — §3g Thermas Card: encerramento consultivo natural (frequência > cidade; proíbe "Para qual cidade").
 // v1.5.37 — §3a: pergunta de intenção enxuta (parque, hospedagem ou Thermas Card — sem 4ª opção redundante).
-// v1.5.36 — runtime bloqueia orçamento no Turno 1/2 (§00d): sem tool forçada nem rebuild de preços.
+// v1.5.36 — (legado) runtime bloqueava orçamento no Turno 1/2 — removido em v1.5.50.
 // v1.5.35 — Turno 1 §00d com NOME PRIMEIRO, promoção DEPOIS (corrige v1.5.34 que
 //   metia a promo no meio da primeira fala da consultora — abertura virou panfleto).
 // v1.5.34: uma categoria por turno SEM EXCEÇÃO (anti-despejo).
@@ -50,7 +28,7 @@ import {
 // Referência valores: https://sunsetthermaspark.com.br/hotel.php — calendário público parque (USO INTERNO/EQUIPE): https://sunsetthermaspark.com.br/index.php
 // ============================================================
 
-export const SYSTEM_PROMPT = `# Julia | Sunset Thermas Park — v1.5.49
+export const SYSTEM_PROMPT = `# Julia | Sunset Thermas Park — v1.5.50
 
 ---
 
@@ -158,7 +136,7 @@ O sistema injeta automaticamente, no system prompt, um bloco "[CONTEXTO TEMPORAL
 
 **Regra central:** no Turno 1, **pedir o nome do cliente proativamente** — uma vez, sem travar, combinando com a pergunta de intenção/dados em aberto (ex.: "Quer saber sobre hospedagem ou sobre o parque? E como posso te chamar?"). Quando o cliente veio completo do formulário do site, o nome entra na mesma bolha de confirmação dos dados.
 
-**Modo qualificação** (calculado automaticamente em \`computeSunsetQualificationMode\`, exposto em \`[MODO QUALIFICAÇÃO ATUAL]\` no contexto da conversa):
+**Modo qualificação** (você decide pelo **histórico completo** — não há bloco runtime injetando o modo):
 
 - \`first_open_qualification\` — cliente só mandou saudação → pedir nome + intenção (parque/hospedagem/Thermas Card). NÃO citar preço, NÃO mencionar promoção.
 - \`lodging_intent_seen_no_form\` — cliente falou de hospedagem sem ser formulário → Turno 1: pedir nome (sem promo, sem preço). Turno 2 (após nome): UMA frase sobre promo 25% OFF + confirmar datas/ocupação. NÃO citar preço até o cliente aceitar o convite.
@@ -1401,98 +1379,6 @@ export function detectSunsetSiteFormMessage(message: string): boolean {
   return signals >= 3;
 }
 
-/**
- * Modo de qualificação Sunset (v1.5.31):
- * Decide o que Julia deve fazer no Turno 1 antes de prosseguir.
- * Reutilizado por appendSunsetConversationContext e pelo prompt §00c-4.
- */
-export type SunsetQualificationMode =
-  | "first_open_qualification"
-  | "lodging_intent_seen_no_form"
-  | "structured_form"
-  | "mid_flow";
-
-export function computeSunsetQualificationMode(
-  firstUserMessage: string,
-  messages: ReadonlyArray<{ role: string }>
-): SunsetQualificationMode {
-  // 1. Conversa já tem alguma resposta da Julia → modo livre (§3a §3b etc.)
-  const hasAssistantTurn = messages.some((m) => m.role === "assistant");
-  if (hasAssistantTurn) return "mid_flow";
-
-  const text = firstUserMessage || "";
-
-  // 2. Formulário do site (3+ sinais) → modo "structured_form"
-  if (detectSunsetSiteFormMessage(text)) return "structured_form";
-
-  // 3. Cliente falou de hospedagem sem ser formulário → "lodging_intent_seen_no_form"
-  if (messageDeclaresLodgingIntent(text)) return "lodging_intent_seen_no_form";
-
-  // 4. Fallback: cliente só mandou saudação / nada qualificado
-  return "first_open_qualification";
-}
-
-const SUNSET_QUALIFICATION_MODE_INSTRUCTIONS: Record<SunsetQualificationMode, string> = {
-  first_open_qualification: [
-    "Saudação (bom dia/boa tarde/boa noite conforme hora Brasília) +",
-    "apresentar-se ('Aqui é a Julia, consultora no *Sunset Thermas Park*') +",
-    "perguntar pelo nome do cliente (1 vez, sem travar — combine com a pergunta de",
-    "intenção abaixo: 'Quer saber sobre o parque, hospedagem ou Thermas Card?') +",
-    "NÃO citar preço, NÃO mencionar promoção 25% OFF.",
-  ].join(" "),
-  lodging_intent_seen_no_form: [
-    "Turno 1: Saudação + apresentar-se + pedir nome (1 vez).",
-    "NÃO mencionar promoção 25% OFF neste turno (promo vem no turno seguinte, após o nome — §00d v1.5.35).",
-    "NÃO citar preço — orçamento só após confirmação do cliente.",
-  ].join(" "),
-  structured_form: [
-    "Turno 1: Saudação + apresentar-se + pedir nome (1 vez, sem travar).",
-    "NÃO mencionar promoção 25% OFF neste turno (promo vem no Turno 2, após o nome — §00d v1.5.35).",
-    "NÃO citar preço, NÃO listar categorias — orçamento fica no Turno 3 (após nome + confirmação).",
-  ].join(" "),
-  mid_flow: [
-    "Comportamento padrão (§3a, §3b, §3d) — sem mudança de qualificação.",
-  ].join(" "),
-};
-
-export function buildSunsetQualificationDirective(mode: SunsetQualificationMode): string {
-  return `\n[MODO QUALIFICAÇÃO ATUAL] = ${mode}\n**Comportamento esperado no Turno 1:** ${SUNSET_QUALIFICATION_MODE_INSTRUCTIONS[mode]}`;
-}
-
-/**
- * Turnos 1–2 do §00d (e primeira troca sem formulário): bloqueia tool forçada e rebuild de orçamento.
- * `messages` = histórico **antes** da resposta que está sendo gerada.
- */
-export function shouldDeferSunsetLodgingQuote(
-  messages: ReadonlyArray<{ role: string; content?: string }>
-): boolean {
-  const userMsgs = messages.filter((m) => m.role === "user" && m.content?.trim());
-  const assistantMsgs = messages.filter((m) => m.role === "assistant" && m.content?.trim());
-
-  if (userMsgs.length === 0) return false;
-
-  const firstUser = userMsgs[0].content ?? "";
-  const lastUser = userMsgs[userMsgs.length - 1].content ?? "";
-  const isForm = detectSunsetSiteFormMessage(firstUser);
-
-  if (messageDeclaresLodgingQuoteReadiness(lastUser)) return false;
-
-  if (isForm) {
-    if (assistantMsgs.length === 0) return true;
-    if (userMsgs.length === 1) return true;
-    if (assistantMsgs.length === 1 && userMsgs.length === 2) return true;
-    return false;
-  }
-
-  if (assistantMsgs.length === 0) return true;
-
-  if (messageDeclaresLodgingIntent(firstUser) && userMsgs.length <= 2 && assistantMsgs.length <= 1) {
-    return true;
-  }
-
-  return false;
-}
-
 type SunsetChatMessage = { role: string; content?: string };
 
 function sunsetNormalizeText(text: string): string {
@@ -1613,314 +1499,16 @@ export function conversationDeclaresLodgingIntent(messages: SunsetChatMessage[])
 }
 
 /**
- * Contexto dinâmico por conversa — evita que a LLM copie o exemplo §00d quando o cliente só mandou oi/nome.
- * Retorna string vazia se não houver mensagens (ex.: preview no painel).
+ * Contexto dinâmico por conversa — desativado: o LLM conduz qualificação/orçamento via
+ * system prompt + histórico completo, sem blocos runtime ([MODO QUALIFICAÇÃO], [BLOQUEIO ORÇAMENTO], etc.).
+ * Mantido exportado para compatibilidade com registry.ts.
  */
 export function appendSunsetConversationContext(
-  firstUserMessage?: string,
-  messages?: SunsetChatMessage[],
-  referenceDate: Date = new Date()
+  _firstUserMessage?: string,
+  _messages?: SunsetChatMessage[],
+  _referenceDate: Date = new Date()
 ): string {
-  const userMessages =
-    messages?.filter((m) => m.role === "user" && m.content) ??
-    (firstUserMessage !== undefined ? [{ role: "user", content: firstUserMessage }] : []);
-
-  if (userMessages.length === 0 && firstUserMessage === undefined) return "";
-
-  const joinedUserText = userMessages.map((m) => m.content ?? "").join("\n");
-  const allMessagesForMode = messages ?? (firstUserMessage !== undefined ? userMessages : []);
-  const qualificationMode = computeSunsetQualificationMode(
-    firstUserMessage ?? joinedUserText,
-    allMessagesForMode
-  );
-  const qualificationDirective = buildSunsetQualificationDirective(qualificationMode);
-
-  if (detectSunsetSiteFormMessage(joinedUserText)) {
-    const deferBlock = shouldDeferSunsetLodgingQuote(allMessagesForMode)
-      ? `\n\n[BLOQUEIO ORÇAMENTO — §00d QUALIFICAÇÃO ATIVA]
-**Neste turno é PROIBIDO** citar R$, listar categorias ou usar resultado de \`consultar_hospedagem_sunset\`.
-Siga **somente** o turno atual do §00d (Turno 1 = nome · Turno 2 = promo + confirmação · Turno 3 = orçamento).`
-      : "";
-    return `\n\n${SUNSET_FORM_DIALOGUE_EXAMPLE}${qualificationDirective}${deferBlock}`;
-  }
-
-  const lastUserText = userMessages[userMessages.length - 1]?.content ?? "";
-
-  if (messageDeclaresGratitudeOrConversationClose(lastUserText)) {
-    return `\n\n[CONTEXTO DESTA CONVERSA — AGRADECIMENTO / ENCERRAMENTO]
-O cliente **agradecu** ou encerrou o assunto neste turno (ex.: "obrigado", "valeu").
-**Responda em 1 frase curta e calorosa** — ex.: "Por nada! Qualquer coisa, estou por aqui." / "Imagina! Quando ativar o cartão, me chama que te ajudo com a hospedagem."
-**PROIBIDO** repetir pitch do Thermas Card, perguntar frequência de visitas, citar ingresso avulso, consultar parque ou mandar link do site neste turno.
-**PROIBIDO** reiniciar qualificação, objeção de venda ou comparar ingresso × cartão.${qualificationDirective}`;
-  }
-
-  if (messageDeclaresParkPhotoRequest(lastUserText)) {
-    return `\n\n[CONTEXTO DESTA CONVERSA — FOTOS DO PARQUE]
-O cliente pediu **fotos/imagens do parque** (§2-fotos-parque).
-**OBRIGATÓRIO:** recomendar acompanhar as redes sociais / postagens do parque e enviar **literalmente** o Instagram oficial: **https://www.instagram.com/sunsetthermasparkoficial/**
-**PROIBIDO** chamar \`suite_gallery_query\`, inventar URL de foto ou mandar galeria de suítes neste turno.
-Tom: 1–2 frases curtas, consultivo, zero emoji.${qualificationDirective}`;
-  }
-
-  if (messageDeclaresParkLocationRequest(lastUserText)) {
-    return `\n\n[CONTEXTO DESTA CONVERSA — LOCALIZAÇÃO]
-O cliente pediu **localização / como chegar** (§2-localizacao).
-**OBRIGATÓRIO:** enviar **literalmente** o Maps **https://maps.google.com/?q=-23.322983,-48.984127** e o endereço oficial: Paranapanema/SP, Rodovia Raposo Tavares, saída KM 266, sentido Riviera de Santa Cristina 13; placas indicativas na rodovia; no Waze digite **SUNSET THERMAS PARK**.
-**PROIBIDO** inventar outro endereço, CEP, coordenadas ou link de mapa.
-**NÃO** abra menu parque/hospedagem/Thermas Card se o pedido for só localização.
-Tom: 2–4 frases curtas, consultivo, zero emoji.${qualificationDirective}`;
-  }
-
-  if (messageDeclaresExcursionIntent(lastUserText) || conversationDeclaresExcursionIntent(userMessages)) {
-    const excursionFirst = userMessages.length === 1 && messageDeclaresExcursionIntent(lastUserText);
-    return `\n\n[CONTEXTO DESTA CONVERSA — EXCURSÃO]
-O cliente pediu **informações sobre excursão** (§2-excursão / §3h).
-**OBRIGATÓRIO:** informar que você **vai encaminhar** ao **setor responsável por excursões** **e** chamar **\`encaminhar_setor_responsavel\`** com \`reason: "Excursões"\` (§4-b).
-**Horário de atendimento:** segunda a sábado, das **08h às 18h**.
-**PROIBIDO** inventar valores, roteiros, datas ou vagas de excursão.
-**PROIBIDO** cotar hospedagem ou ingresso do parque neste turno.
-${excursionFirst ? "**NÃO** pergunte parque/hospedagem/Thermas Card — o assunto já é excursão." : "Responda somente ao pedido de excursão neste turno."}
-Tom: 1–2 frases curtas, consultivo, zero emoji.${qualificationDirective}`;
-  }
-
-  const clientNameKnown =
-    messages && messages.length > 0
-      ? extractSunsetClientNameFromMessages(
-          messages.filter((m) => m.content).map((m) => ({ role: m.role, content: m.content! }))
-        )
-      : undefined;
-  const nameGuard = clientNameKnown
-    ? `\n**NOME:** use **${clientNameKnown}** — o cliente declarou este nome no histórico.`
-    : `\n**NOME:** o cliente **ainda não informou** o nome neste histórico. **Continue o atendimento normalmente** — **proibido** travar ou insistir no nome. **Proibido** "Prazer, …", apelidos inventados ou copiar nomes dos exemplos fictícios (Keven, Maria, etc.). Pergunte o nome **somente** se fizer sentido (ex.: formulário §3f) — no máximo uma vez.`;
-
-  if (messageDeclaresThermasCardIntent(lastUserText) || conversationDeclaresThermasCardIntent(userMessages)) {
-    const cardFirst =
-      userMessages.length === 1 && messageDeclaresThermasCardIntent(lastUserText);
-    const priceFollowUp = userAsksThermasCardPricing(userMessages);
-    const compositionOnly = userConfirmsThermasCardCompositionOnly(userMessages);
-    const priceBlock = priceFollowUp
-      ? `\n**TURNO ATUAL — PREÇO DO THERMAS CARD:** o cliente perguntou **valor/preço** neste fio. Responda **somente** com os valores oficiais §2: taxa de adesão **zero**; **R$ 135,90/mês** no crédito recorrente ou **R$ 145,90/mês** no boleto (1ª parcela no ato); troca de dependente **R$ 100,00**; lote **1.000 títulos**. **PROIBIDO** responder com ingresso avulso, data do parque, link do site de ingressos ou consultar_parque_sunset neste turno — a pergunta é do **cartão**, não do day use.`
-      : compositionOnly
-        ? `\n**TURNO ATUAL — QUALIFICAÇÃO (composição):** o cliente **confirmou quantas pessoas** entram no plano (ex.: 5). **Reconheça** o número, cite **R$ 135,90/mês** para até 5 pessoas (§2) e pergunte **com que frequência** pretendem visitar o parque — **uma pergunta por bolha**. **PROIBIDO** responder com "sem registro de ingressos", data específica do parque ou link da área de ingressos do site — o assunto é **Thermas Card**, não ingresso avulso.`
-        : "";
-    return `\n\n[CONTEXTO DESTA CONVERSA — THERMAS CARD]
-O cliente perguntou sobre o **Thermas Card** (§2 / §3g).
-**Valores oficiais fixos:** taxa de adesão zero; R$ 135,90/mês crédito recorrente ou R$ 145,90/mês boleto (1ª no ato); troca de dependente R$ 100,00; lote 1.000 títulos.
-**PAPEL VENDEDOR CONSULTIVO:** qualifique com **frequência de visitas** (preferida) ou **região** — **uma pergunta por bolha**, com transição natural. **Proibido** "Para qual cidade vocês são?". Após explicar benefícios, **não** feche só com pergunta de cidade. **Comparação ingresso × cartão** (§3g-compare) **somente** quando o cliente demonstrar objeção de preço ou pedir conta — até lá, **não** consulte ingresso avulso. Quando comparar: some **sempre para 5 pessoas** (titular + 4 dependentes), use **INGRESSOS CADASTRADOS** dos Resultados obtidos. **Proibido** comparar só para 2; **proibido** inventar ingresso ou escrever "Chamada de ferramenta"/JSON ao cliente.
-**PROIBIDO** confundir com ingresso avulso. **NÃO** aplicar 20% de desconto automaticamente em cotação de hospedagem.
-${priceBlock}
-${cardFirst ? "**NÃO** pergunte parque/hospedagem/Thermas Card/ambos — a intenção já é Thermas Card." : "Responda ao pedido sobre o cartão neste turno."}
-Interesse em **aderir/contratar** → link **https://socio.grupothermas.com.br/cadastro** (§2-cadastro). Após pagamento, portal do sócio liberado.
-${nameGuard}
-Tom: vendedora consultiva entusiasmada, turnos curtos, zero emoji.`;
-  }
-
-  if (messageDeclaresParkTicketPriceQuestion(lastUserText) || messageDeclaresParkDayVisitQuestion(lastUserText)) {
-    const parkOnlyFirst =
-      userMessages.length === 1 && messageDeclaresParkTicketPriceQuestion(lastUserText);
-    return `\n\n[CONTEXTO DESTA CONVERSA — PARQUE / INGRESSO]
-O cliente perguntou sobre **ingresso**, **valor para ir ao parque** e/ou **horário/abertura** (§00f / §3e).
-**OBRIGATÓRIO:** usar resultado de **consultar_parque_sunset** (date em YYYY-MM-DD — "hoje" = [CONTEXTO TEMPORAL]) antes de falar em preço ou abertura.
-Cite \`ticket_lines\` da tool **literalmente** quando existirem. **PROIBIDO** mandar só link do site se a tool trouxe valores.
-**PROIBIDO** repetir cotação de hospedagem de turnos anteriores.
-${parkOnlyFirst ? "**NÃO** pergunte parque/hospedagem/ambos — a intenção já é parque. Pode cumprimentar e responder ao valor na mesma conversa." : "Responda SOMENTE ao pedido de parque neste turno."}
-${nameGuard}
-Tom: natural, 1–2 blocos curtos.`;
-  }
-
-  const hasLodging = conversationDeclaresLodgingIntent(userMessages);
-  const lodgingScope = messages?.length ? sliceActiveLodgingQuoteMessages(messages) : userMessages;
-  const hasPeriod = conversationHasDeclaredLodgingDates(lodgingScope, referenceDate);
-  const dateRange = extractSunsetLodgingDateRange(lodgingScope, referenceDate);
-  const hasGuests = conversationHasCompleteGuestComposition(lodgingScope);
-  const hasGuestCount = conversationHasDeclaredGuestCount(lodgingScope);
-  const needsChildren = conversationNeedsChildrenConfirmation(lodgingScope);
-  const hasParkOnly = userMessages.some((m) => messageDeclaresParkOnlyIntent(m.content ?? ""));
-
-  const guestCountLabel = (() => {
-    for (const m of [...lodgingScope].reverse()) {
-      if (m.role !== "user" || !m.content) continue;
-      const n = resolveGuestCountFromAnswer(m.content, lodgingScope);
-      if (n != null) return `${n}`;
-    }
-    return null;
-  })();
-
-  const formatDateBR = (iso: string) => {
-    const [y, m, d] = iso.split("-");
-    return d && m && y ? `${d}/${m}/${y}` : iso;
-  };
-
-  if (hasLodging && messageDeclaresLodgingInfoWithoutFixedDates(lastUserText)) {
-    return `\n\n[CONTEXTO DESTA CONVERSA — INFO SEM DATA]
-O cliente **não tem data fechada** e pediu **informações / valor / o que é incluso**.
-**Neste turno (OBRIGATÓRIO):**
-1. Explique em 2–4 frases o que o **pacote de hospedagem inclui** (ex.: jantar, café da manhã e acesso ao parque — conforme §2-promo).
-2. Mencione que há categorias (chalé, suítes, loft etc.) e que o **valor do pacote depende das datas**.
-3. Ofereça **uma** saída prática: cotar o **próximo fim de semana disponível** **ou** ele indicar uma janela — **sem** insistir duas vezes na mesma pergunta.
-**PROIBIDO:** repetir só "preciso das datas" / "qual final de semana?" sem entregar informação útil.
-**PROIBIDO:** inventar R$ sem tool — se for cotar referência, precisa de datas + composição + tool.
-${hasGuests || hasGuestCount ? `Composição já no histórico${guestCountLabel ? ` (${guestCountLabel} pessoa(s))` : ""} — **não** repergunte pessoas/crianças.` : ""}
-${nameGuard}`;
-  }
-
-  if (messageDeclaresDateCorrection(lastUserText)) {
-    const today = brasiliaTodayIso(referenceDate);
-    return `\n\n[CONTEXTO DESTA CONVERSA — CORREÇÃO DE DATA]
-O cliente **corrigiu** uma data errada que você ou o sistema assumiu.
-**Use SOMENTE [CONTEXTO TEMPORAL]:** hoje = ${today}.
-**PROIBIDO** repetir 12/06, Dia dos Namorados ou qualquer data que ele **negou**.
-Se ele pediu hospedagem **hoje até amanhã**, check-in = ${today}, check-out = dia seguinte.
-**Sem composição ainda → pergunte quantas pessoas. PROIBIDO citar R$ sem tool.**${nameGuard}`;
-  }
-
-  if (hasLodging && messageDeclaresLodgingReservationInterest(lastUserText)) {
-    const periodHint = dateRange
-      ? `${formatDateBR(dateRange.check_in)} → ${formatDateBR(dateRange.check_out)}`
-      : "período já discutido no histórico";
-    return `\n\n[CONTEXTO DESTA CONVERSA — INTERESSE / CONVERSÃO SDR]
-O cliente **demonstrou interesse** em reservar ou **escolheu categoria** (§3f).
-**OBRIGATÓRIO neste turno:**
-1. Reconhecer a escolha + **recapitular** período (${periodHint}), composição e categoria **conforme histórico**.
-2. Dizer que **vai encaminhar** ao **setor de reservas**, que **dará continuidade por aqui** (não "reserva confirmada").
-3. **Chamar \`encaminhar_setor_responsavel\`** com \`reason: "Setor de reservas"\` (§4-b).
-4. **PROIBIDO** citar site *Solicitar reserva*, hotel.php ou **(15) 99860-5662** — cliente já está no WhatsApp.
-5. Oferecer **formulário §3f-form** em **lista vertical** (uma linha por campo, linha em branco entre itens) — **proibido** amontoar campos na mesma linha.
-**PROIBIDO** repetir lista completa de preços — só valor de referência da categoria escolhida, se já citado.${nameGuard}`;
-  }
-
-  if (
-    hasLodging &&
-    hasPeriod &&
-    conversationNeedsChildAgesConfirmation(messages ?? userMessages)
-  ) {
-    const periodHint = dateRange
-      ? `Período inferido do histórico: ${formatDateBR(dateRange.check_in)} → ${formatDateBR(dateRange.check_out)}.`
-      : "Período já consta no histórico.";
-    return `\n\n[CONTEXTO DESTA CONVERSA — IDADES PENDENTES]
-O cliente **confirmou criança(s)** mas **não informou idade(s)** (§3-composição-idades).
-${periodHint}
-**Tom:** reconheça o que ele disse + **uma** pergunta: "Quantos anos tem a criança?" (ou "Me passa a idade de cada uma?" se forem 2+).
-**PROIBIDO** cotar, citar R$ ou chamar tool. **PROIBIDO** inventar idade.${nameGuard}`;
-  }
-
-  if (
-    hasLodging &&
-    hasPeriod &&
-    conversationNeedsChildrenConfirmation(messages ?? userMessages)
-  ) {
-    const countFromHistory = [...(messages ?? userMessages)]
-      .reverse()
-      .find((m) => m.role === "user" && m.content && resolveGuestCountFromAnswer(m.content, messages ?? userMessages));
-    const countLabel = countFromHistory?.content?.trim() ?? lastUserText.trim();
-    const periodHint = dateRange
-      ? `Período inferido do histórico: ${formatDateBR(dateRange.check_in)} → ${formatDateBR(dateRange.check_out)}.`
-      : "Período já consta no histórico.";
-    return `\n\n[CONTEXTO DESTA CONVERSA — CRIANÇAS PENDENTES]
-O cliente informou **${countLabel}** pessoa(s) mas **não confirmou crianças** (§3-composição).
-${periodHint}
-**Tom (§3-composição-tom):** reconheça o nº ("Perfeito, ${countLabel}.") + **uma** pergunta clara: "Alguma criança vai junto? Se sim, quantas e com quantos anos?"
-**PROIBIDO:** "quantas crianças vão junto? Se sim, quantas..." (redundante). **PROIBIDO** repetir "quantas pessoas vão". **PROIBIDO** cotar ou citar R$.${nameGuard}`;
-  }
-
-  if (
-    hasLodging &&
-    dateRange &&
-    userMessages.some((m) => messageDeclaresRelativeLodgingStay(m.content ?? ""))
-  ) {
-    const periodLabel = `${formatDateBR(dateRange.check_in)} → ${formatDateBR(dateRange.check_out)}`;
-    if (
-      !hasGuests &&
-      !conversationNeedsChildrenConfirmation(messages ?? userMessages) &&
-      !conversationNeedsChildAgesConfirmation(messages ?? userMessages)
-    ) {
-      return `\n\n[CONTEXTO DESTA CONVERSA — HOSPEDAGEM HOJE/AMANHÃ]
-O cliente pediu hospedagem **de hoje até amanhã** (período inferido internamente: ${periodLabel} — **não** repita essas datas ao cliente para "confirmar").
-**TOM (§3a-tom):** pergunte composição incluindo crianças — ex.: "Quantas pessoas vão? Me conta adultos e, se tiver, crianças e idades." **Sem** "O dia de hoje é … e amanhã será …, certo?".
-**PROIBIDO** mencionar Dia dos Namorados, 12/06 ou eventos que ele **não citou**.
-**NÃO** pergunte parque/hospedagem/ambos — intenção já é hospedagem.
-**PROIBIDO** citar valor antes da composição e antes da tool.${nameGuard}`;
-    }
-  }
-
-  if (hasLodging && hasPeriod && !hasGuests) {
-    const periodHint = dateRange
-      ? `Período inferido do histórico: ${formatDateBR(dateRange.check_in)} → ${formatDateBR(dateRange.check_out)}.`
-      : "Período já consta no histórico.";
-    if (needsChildren && guestCountLabel) {
-      return `\n\n[CONTEXTO DESTA CONVERSA — CRIANÇAS PENDENTES]
-O cliente **já declarou HOSPEDAGEM**, **período** e **${guestCountLabel} pessoa(s)**.
-${periodHint}
-**PROIBIDO** perguntar "Quantas pessoas vão na estadia?" — o número **já está no histórico**.
-**Próximo passo (uma pergunta só):** "Perfeito, ${guestCountLabel} pessoas. Alguma criança vai junto? Se sim, quantas e com quantos anos?"
-**PROIBIDO** cotar ou citar R$.${nameGuard}`;
-    }
-    return `\n\n[CONTEXTO DESTA CONVERSA]
-O cliente **já declarou HOSPEDAGEM** e **já trouxe período/data** no histórico.
-${periodHint}
-**NÃO** pergunte parque / hospedagem / ambos — a intenção **já está clara**.
-**NÃO** pergunte datas, check-in ou período de novo.
-**NÃO** invente eventos (ex.: Dia dos Namorados) se o cliente disse "hoje" ou deu outras datas.
-**Próximo passo (uma pergunta só):** composição — adultos e, se houver, crianças com idade (§3-composição).
-§00d **NÃO** se aplica. **PROIBIDO** citar valor ou categoria antes da composição e antes da tool.${nameGuard}`;
-  }
-
-  if (hasLodging && hasPeriod && hasGuests) {
-    const periodHint = dateRange
-      ? `${formatDateBR(dateRange.check_in)} → ${formatDateBR(dateRange.check_out)}`
-      : "período do histórico";
-    return `\n\n[CONTEXTO DESTA CONVERSA — PRONTO PARA TOOL]
-Hospedagem + período (${periodHint}) + composição **já informados**.
-**OBRIGATÓRIO** usar resultado de \`consultar_hospedagem_sunset\` neste turno antes de citar R$.
-**PROIBIDO** citar valores da tabela §2 sem tool. Liste **todas** as \`available_accommodations\`.
-Se vier \`promotion\` na tool: cite \`total_price\` (já com 25% OFF) e mencione a promo **uma vez** (§2-promo).
-Grupos >4 pessoas: **antes** da lista, explique em 1 frase por que são 2+ quartos (§3b-grupos-tom); depois cite \`total_price\` de **todas** as categorias — **não** só "(para 2 unidades)" sem contexto.
-Fechamento §3d: **consultivo** (o que achou? dúvidas? preferência?) — **PROIBIDO** "encaminho pro setor de reservas" após cotação.`;
-  }
-
-  if (hasLodging && !hasPeriod) {
-    if (hasGuests) {
-      return `\n\n[CONTEXTO DESTA CONVERSA]
-O cliente **já declarou HOSPEDAGEM** e **composição completa**${guestCountLabel ? ` (${guestCountLabel} pessoas — casal/adultos ok)` : ""}.
-**PROIBIDO** perguntar quantas pessoas ou se tem criança — **já resolvido**.
-**Próximo passo (uma pergunta só):** período da estadia (datas ou janela).
-§00d **NÃO** se aplica.${nameGuard}`;
-    }
-    if (needsChildren && guestCountLabel) {
-      return `\n\n[CONTEXTO DESTA CONVERSA]
-O cliente **já declarou HOSPEDAGEM** e **${guestCountLabel} pessoa(s)** no histórico.
-**PROIBIDO** perguntar "Quantas pessoas vão na estadia?" de novo.
-**Próximo passo (uma pergunta só):** confirme crianças — "Perfeito, ${guestCountLabel} pessoas. Alguma criança vai junto? Se sim, quantas e com quantos anos?"
-(Período pode vir no turno seguinte.)
-§00d **NÃO** se aplica.${nameGuard}`;
-    }
-    if (hasGuestCount && guestCountLabel) {
-      return `\n\n[CONTEXTO DESTA CONVERSA]
-O cliente **já declarou HOSPEDAGEM** e **já informou ${guestCountLabel} pessoa(s)**.
-**PROIBIDO** perguntar quantas pessoas de novo.
-**Próximo passo (uma pergunta só):** período da estadia **ou** crianças (se ainda não confirmou) — **não** os dois na mesma bolha.
-§00d **NÃO** se aplica.${nameGuard}`;
-    }
-    return `\n\n[CONTEXTO DESTA CONVERSA]
-O cliente **já declarou interesse em HOSPEDAGEM** no histórico.
-**NÃO** pergunte parque / hospedagem / ambos de novo.
-**Próximo passo (uma pergunta só):** período da estadia (datas ou janela) — **ou**, se ele já trouxe nº de pessoas na mesma mensagem, reconheça e peça só o que falta.
-§00d **NÃO** se aplica.`;
-  }
-
-  if (hasParkOnly) {
-    return `\n\n[CONTEXTO DESTA CONVERSA]
-O cliente **já declarou interesse só no PARQUE / ingressos**.
-**NÃO** pergunte parque / hospedagem / ambos. Use **consultar_parque_sunset** (§00f) para valor/abertura quando houver data.
-§00d **NÃO** se aplica.${nameGuard}`;
-  }
-
-  return `\n\n[CONTEXTO DESTA CONVERSA]
-O cliente **NÃO** enviou a mensagem padrão do formulário do site — §00d **NÃO se aplica** nesta conversa.
-Se o cliente **ainda não** disse se quer parque, hospedagem, Thermas Card ou ambos, pergunte a **intenção** (§3a) — **uma pergunta por bolha**. **Não** abra com "curtir o parque".
-Se **já** disse hospedagem, parque ou Thermas Card no histórico, **não** repita essa pergunta — peça só o próximo dado em aberto (§3a tabela).
-**PROIBIDO** citar datas, noites, nº de pessoas, categoria ou valor que o cliente **não disse explicitamente** no histórico desta conversa.
-**NÃO** copie exemplos fictícios (16/05/2026, Chalé Aconchegante, 2 adultos e 1 criança) — esses valores são modelo §00d apenas para leads do formulário do site.${nameGuard}`;
+  return "";
 }
 
 export const COMMUNICATION_RULES = `
