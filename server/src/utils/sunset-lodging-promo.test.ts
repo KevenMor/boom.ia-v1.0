@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applySunsetLodgingPromoPrice,
+  formatSunsetLodgingPromoQuoteLine,
   isSunsetLodgingPromoEligibleForStay,
   isSunsetLodgingPromoReservationOpen,
 } from "./sunset-lodging-promo.js";
@@ -23,5 +24,13 @@ describe("sunset-lodging-promo", () => {
     expect(applySunsetLodgingPromoPrice(1104)).toBe(828);
     expect(applySunsetLodgingPromoPrice(552)).toBe(414);
     expect(applySunsetLodgingPromoPrice(782)).toBe(586.5);
+  });
+
+  it("frase do orçamento cita 25% OFF e validade de reserva até 31/07", () => {
+    const line = formatSunsetLodgingPromoQuoteLine();
+    expect(line).toMatch(/25% OFF/);
+    expect(line).toMatch(/qualquer data de hospedagem/);
+    expect(line).toMatch(/31\/07\/2026/);
+    expect(line).toMatch(/v[aá]lida somente at[eé] essa data/i);
   });
 });

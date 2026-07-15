@@ -17,6 +17,7 @@ import {
   messageDeclaresPostLodgingQuoteClarification,
   userMessageIsPhotoRequestOnly,
 } from "./sunset-lodging-params.js";
+import { formatSunsetLodgingPromoQuoteLine } from "./sunset-lodging-promo.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 const IMAGE_MD_RE = /^!\[[^\]]*\]\(https?:\/\/[^)\s]+\)\s*$/i;
@@ -146,7 +147,7 @@ function buildSunsetLodgingQuoteIntroFromTool(payload: LodgingToolPayload): stri
   if (groupSize == null) return "";
 
   const promoLine = payload.hasPromotion
-    ? " Os valores já incluem 25% OFF e o pacote fechado (pernoite + jantar + café + acesso ao parque)."
+    ? formatSunsetLodgingPromoQuoteLine()
     : " Cada valor abaixo é o total do pacote para o grupo.";
 
   if (rooms > 1) {

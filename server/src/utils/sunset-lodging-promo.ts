@@ -56,3 +56,12 @@ export function buildSunsetLodgingPromotionInfo(): SunsetLodgingPromotionInfo {
     benefits: [...SUNSET_LODGING_PROMO.benefits],
   };
 }
+
+/** Frase obrigatória no orçamento: 25% OFF + prazo de reserva até 31/07. */
+export function formatSunsetLodgingPromoQuoteLine(): string {
+  return (
+    " Estamos com 25% OFF em qualquer data de hospedagem, com reservas realizadas até 31/07/2026 " +
+    "(válida somente até essa data). Os valores abaixo já incluem o desconto e o pacote fechado " +
+    "(pernoite + jantar + café + acesso ao parque)."
+  );
+}

@@ -32,7 +32,7 @@ import { buildSystemPrompt } from "./registry.js";
 
 describe("Sunset Thermas Park — SYSTEM_PROMPT (contratos de negócio)", () => {
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.55/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.57/);
   });
 
   it("mantém regra suprema de valores e vaga (tolerância zero)", () => {
@@ -580,6 +580,8 @@ describe("Sunset Thermas Park — §2-promo 25% OFF hospedagem (v1.5.19)", () =>
     expect(SYSTEM_PROMPT).toMatch(/25% OFF/);
     expect(SYSTEM_PROMPT).toMatch(/31\/07\/2026/);
     expect(SYSTEM_PROMPT).toMatch(/31\/12\/2026/);
+    expect(SYSTEM_PROMPT).toMatch(/qualquer data de hospedagem/);
+    expect(SYSTEM_PROMPT).toMatch(/v[aá]lida somente at[eé] essa data/i);
   });
 
   it("documenta benefícios da promoção", () => {
@@ -1317,8 +1319,11 @@ describe("Sunset Thermas Park — v1.5.35 cotação 'pacote de N noites'", () =>
     expect(SYSTEM_PROMPT).toMatch(/price_per_night.*refer[êe]ncia interna|Proibido.*R\$[^\n]*\/ di[áa]ria/i);
   });
 
-  it("§2-promo v1.5.35: frase do orçamento deixa claro que R$ já é pacote fechado com desconto", () => {
-    expect(SYSTEM_PROMPT).toMatch(/pacote fechado.*desconto aplicado|R\$ mostrado ao lado.*j[áa] [eé] o pacote fechado/i);
+  it("§2-promo v1.5.56: orçamento cita 25% OFF + reserva até 31/07 + pacote fechado", () => {
+    expect(SYSTEM_PROMPT).toMatch(/25% OFF em qualquer data de hospedagem/);
+    expect(SYSTEM_PROMPT).toMatch(/reservas realizadas at[eé] 31\/07\/2026|reservas at[eé] 31\/07\/2026/i);
+    expect(SYSTEM_PROMPT).toMatch(/v[aá]lida somente at[eé] essa data/i);
+    expect(SYSTEM_PROMPT).toMatch(/pacote fechado/i);
   });
 
   it("§3b-formato v1.5.35: exemplo interativo cita categoria no formato 'R$ X o pacote de N noites'", () => {
@@ -1535,6 +1540,27 @@ describe("Sunset Thermas Park — v1.5.55 ingresso sem pedir data", () => {
     expect(SYSTEM_PROMPT).toMatch(/Eu queria saber o valor dos ingressos/i);
     expect(DISPATCHER_PROMPT).toMatch(/ticket price.*store link|NO_TOOLS_NEEDED/i);
     expect(COMMUNICATION_RULES).toMatch(/PROIBIDO.*perguntar a data/i);
+  });
+});
+
+describe("Sunset Thermas Park — v1.5.57 opções antes da preferência", () => {
+  it("documenta §3-opções: como funciona + cotar antes de perguntar preferência", () => {
+    expect(SYSTEM_PROMPT).toMatch(/3-opções\)/);
+    expect(SYSTEM_PROMPT).toMatch(/COMO FUNCIONA \+ OPÇÕES ANTES DE PERGUNTAR PREFERÊNCIA/i);
+    expect(SYSTEM_PROMPT).toMatch(/Explique em 1–2 frases|Explique em 1-2 frases/i);
+    expect(SYSTEM_PROMPT).toMatch(/Apresente as opções com valor/i);
+  });
+
+  it("proíbe 'qual tipo de acomodação você tem em mente?' antes de explicar opções", () => {
+    expect(SYSTEM_PROMPT).toMatch(
+      /PROIBIDO[\s\S]*qual tipo de acomoda[cç][aã]o voc[eê] tem em mente|nunca.*tem em mente.*sem antes apresentar/i
+    );
+    expect(COMMUNICATION_RULES).toMatch(/15b\.|§3-opções.*v1\.5\.57/);
+    expect(COMMUNICATION_RULES).toMatch(/qual acomoda[cç][aã]o voc[eê] tem em mente/i);
+  });
+
+  it("fluxo composição passo 4 aponta para §3-opções", () => {
+    expect(SYSTEM_PROMPT).toMatch(/§3-opções.*explicar como funciona|explica.*opções.*§3-opções/i);
   });
 });
 
