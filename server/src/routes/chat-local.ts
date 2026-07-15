@@ -27,7 +27,11 @@ import { getWelcomeConversationImageMarkdown } from "../utils/suite-gallery-welc
 import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification, buildHandoffNotification, extractClientNameFromMessages, toBrasiliaISO } from "../utils/agendaNotification.js";
 import { formatLodgingConsultaForLlm } from "../utils/lodging-consulta-summary.js";
 import { formatParkDayConsultaForLlm } from "../utils/park-day-consulta-summary.js";
-import { isSunsetThermasTenantSlug } from "../utils/sunset-lodging-params.js";
+import {
+  isSunsetThermasTenantSlug,
+  shouldBlockSunsetLodgingToolCall,
+  getSunsetLodgingToolBlockInstruction,
+} from "../utils/sunset-lodging-params.js";
 import {
   assistantAnnouncesSunsetHandoff,
   buildSunsetHandoffToolArgs,
@@ -1709,6 +1713,29 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
                   }
                 }
 
+                if (
+                  isSunsetThermasTenantSlug(tenantSlug) &&
+                  tool.tool_type === "lodging_consulta" &&
+                  shouldBlockSunsetLodgingToolCall(messages)
+                ) {
+                  const blockMsg = getSunsetLodgingToolBlockInstruction(messages);
+                  console.warn("[Chat-Local] lodging_consulta BLOQUEADO (composição):", blockMsg);
+                  debugEntries.push({ type: "tool_call", tool: tc.function.name, args, tool_type: "function" });
+                  debugEntries.push({
+                    type: "tool_result",
+                    preview: { error: "composicao_incompleta", message: blockMsg },
+                  });
+                  conversationalMessages.push({
+                    role: "tool",
+                    tool_call_id: tc.id,
+                    content: JSON.stringify({
+                      error: "composicao_incompleta",
+                      message: blockMsg,
+                    }),
+                  });
+                  continue;
+                }
+
                 const argsForExec = injectChatwootToolContext(tool, args, responseConvId, chatwoot_conversation_id);
                 console.log("[Chat-Local] Executando tool:", tc.function.name, "| args:", JSON.stringify(argsForExec));
                 debugEntries.push({ type: "tool_call", tool: tc.function.name, args: argsForExec, tool_type: "function" });
@@ -2470,6 +2497,24 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
               });
               continue;
             }
+          }
+
+          if (
+            isSunsetThermasTenantSlug(tenantSlug) &&
+            tool.tool_type === "lodging_consulta" &&
+            shouldBlockSunsetLodgingToolCall(messages)
+          ) {
+            const blockMsg = getSunsetLodgingToolBlockInstruction(messages);
+            console.warn("[Chat-Local] lodging_consulta BLOQUEADO (single/composição):", blockMsg);
+            llmMessages.push({
+              role: "tool",
+              tool_call_id: tc.id,
+              content: JSON.stringify({
+                error: "composicao_incompleta",
+                message: blockMsg,
+              }),
+            });
+            continue;
           }
 
           const argsForExecSp = injectChatwootToolContext(tool, args, responseConvId, chatwoot_conversation_id);

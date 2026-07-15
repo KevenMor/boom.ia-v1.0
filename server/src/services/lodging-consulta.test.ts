@@ -5,8 +5,55 @@ import {
   accommodationListNeedsLoftSupplement,
   computeLodgingGroupPrice,
   computeSunsetLodgingGuestPricing,
+  evaluateLodgingStayParkGate,
+  formatLodgingParkClosedMessage,
   formatSunsetChildrenCourtesyMessage,
+  listParkDaysDuringLodgingStay,
 } from "./lodging-consulta.js";
+
+describe("evaluateLodgingStayParkGate — fail-closed", () => {
+  it("regressão Rafael: 17–21/08 sem calendário → bloqueia (não assume aberto)", () => {
+    const gate = evaluateLodgingStayParkGate("2026-08-17", "2026-08-21", []);
+    expect(gate.blocked).toBe(true);
+    expect(gate.missingDates).toEqual([
+      "2026-08-17",
+      "2026-08-18",
+      "2026-08-19",
+      "2026-08-20",
+    ]);
+    expect(gate.closedDates).toEqual([]);
+    expect(formatLodgingParkClosedMessage(gate)).toMatch(/calendário do parque cadastrado/);
+  });
+
+  it("dia fechado explícito bloqueia", () => {
+    const gate = evaluateLodgingStayParkGate("2026-08-17", "2026-08-19", [
+      { calendar_date: "2026-08-17", day_kind: "aberto" },
+      { calendar_date: "2026-08-18", day_kind: "fechado" },
+    ]);
+    expect(gate.blocked).toBe(true);
+    expect(gate.closedDates).toEqual(["2026-08-18"]);
+    expect(gate.missingDates).toEqual([]);
+  });
+
+  it("buraco no meio (só 1 dia cadastrado) bloqueia o resto", () => {
+    const gate = evaluateLodgingStayParkGate("2026-08-17", "2026-08-21", [
+      { calendar_date: "2026-08-17", day_kind: "aberto" },
+    ]);
+    expect(gate.blocked).toBe(true);
+    expect(gate.missingDates).toEqual(["2026-08-18", "2026-08-19", "2026-08-20"]);
+  });
+
+  it("todos aberto libera cotação", () => {
+    const days = listParkDaysDuringLodgingStay("2026-08-17", "2026-08-21");
+    const gate = evaluateLodgingStayParkGate(
+      "2026-08-17",
+      "2026-08-21",
+      days.map((calendar_date) => ({ calendar_date, day_kind: "aberto" })),
+    );
+    expect(gate.blocked).toBe(false);
+    expect(gate.blockedDates).toEqual([]);
+  });
+});
 
 describe("findNearestOpenLodgingWindowFromRows", () => {
   const rows = [
@@ -134,6 +181,44 @@ describe("computeSunsetLodgingGuestPricing — cortesia crianças", () => {
     expect(p.guestsForPricing).toBe(2);
     expect(p.allChildrenCourtesy).toBe(true);
     expect(p.childrenCourtesyCount).toBe(2);
+  });
+
+  it("regressão Diego: casal + criança 14 + criança 7 → 3 pagantes (14 paga; 7 cortesia)", () => {
+    const p = computeSunsetLodgingGuestPricing([
+      { type: "adult" },
+      { type: "adult" },
+      { type: "child", age: 14 },
+      { type: "child", age: 7 },
+    ]);
+    expect(p.guestsFamilyTotal).toBe(4);
+    expect(p.guestsForPricing).toBe(3);
+    expect(p.allChildrenCourtesy).toBe(true);
+    expect(p.childrenCourtesyCount).toBe(1);
+    expect(p.childrenUnder12).toEqual([{ age: 7 }]);
+  });
+
+  it("adolescente 13+ sempre conta como pagante (spec: 2 adultos + 3y + 13y = 3)", () => {
+    const p = computeSunsetLodgingGuestPricing([
+      { type: "adult" },
+      { type: "adult" },
+      { type: "child", age: 3 },
+      { type: "child", age: 13 },
+    ]);
+    expect(p.guestsFamilyTotal).toBe(4);
+    expect(p.guestsForPricing).toBe(3);
+  });
+
+  it("3 crianças ≤12 com soma >12: 1 cortesia + 2 pagam (+ adultos)", () => {
+    const p = computeSunsetLodgingGuestPricing([
+      { type: "adult" },
+      { type: "adult" },
+      { type: "child", age: 5 },
+      { type: "child", age: 5 },
+      { type: "child", age: 5 },
+    ]);
+    expect(p.guestsForPricing).toBe(4);
+    expect(p.childrenCourtesyCount).toBe(1);
+    expect(p.allChildrenCourtesy).toBe(false);
   });
 
   it("mensagem de cortesia parcial quando soma > 12", () => {

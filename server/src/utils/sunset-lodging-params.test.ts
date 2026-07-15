@@ -29,6 +29,7 @@ import {
   shouldAutoInvokeSunsetLodgingTool,
   shouldBlockSunsetLodgingToolCall,
   getSunsetLodgingToolBlockInstruction,
+  conversationRequiresLodgingCompositionGate,
   buildSunsetChildrenConfirmationReply,
   messageDeclaresExplicitLodgingDates,
   messageDeclaresNewLodgingQuoteIntent,
@@ -535,6 +536,18 @@ describe("orçamento 10 pessoas + data única (18/7)", () => {
     expect(shouldBlockSunsetLodgingToolCall(msgs)).toBe(true);
     expect(getSunsetLodgingToolBlockInstruction(msgs)).toMatch(/Alguma criança vai junto/i);
     expect(shouldAutoInvokeSunsetLodgingTool(msgs)).toBe(false);
+  });
+
+  it("regressão Diego: 'Os chalés sai que valores' sem composição → gate + bloqueio de tool", () => {
+    const msgs = [
+      { role: "user", content: "quero saber de hospedagem em setembro" },
+      { role: "assistant", content: "Para cada data, me confirma quantas pessoas vão (adultos e crianças com idades)?" },
+      { role: "user", content: "Os chalés sai que valores" },
+    ];
+    expect(conversationRequiresLodgingCompositionGate(msgs)).toBe(true);
+    expect(shouldBlockSunsetLodgingToolCall(msgs)).toBe(true);
+    expect(conversationHasCompleteGuestComposition(msgs)).toBe(false);
+    expect(getSunsetLodgingToolBlockInstruction(msgs)).toMatch(/crian[cç]a|COMPOSI[CÇ][AÃ]O|PROIBIDO citar preços/i);
   });
 
   it("extrai check-in 18/07, check-out +1 noite e 10 hóspedes após confirmar adultos", () => {

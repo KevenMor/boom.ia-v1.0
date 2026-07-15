@@ -17,19 +17,22 @@ import {
 } from "./sunset-thermas.js";
 
 
-describe("appendSunsetConversationContext — runtime desativado", () => {
-  it("retorna string vazia (contexto fica a cargo do LLM + histórico)", () => {
+describe("appendSunsetConversationContext — gate composição v1.5.54", () => {
+  it("sem mensagens → vazio", () => {
     expect(appendSunsetConversationContext("ola")).toBe("");
+  });
+
+  it("quero hospedagem sem composição → injeta GATE", () => {
     expect(
       appendSunsetConversationContext(undefined, [{ role: "user", content: "quero hospedagem" }])
-    ).toBe("");
+    ).toMatch(/GATE COMPOSIÇÃO HOSPEDAGEM/);
   });
 });
 import { buildSystemPrompt } from "./registry.js";
 
 describe("Sunset Thermas Park — SYSTEM_PROMPT (contratos de negócio)", () => {
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.49/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.55/);
   });
 
   it("mantém regra suprema de valores e vaga (tolerância zero)", () => {
@@ -990,10 +993,11 @@ describe("Sunset Thermas Park — §3f conversão SDR (v1.5.8+)", () => {
     const ctx = appendSunsetConversationContext(undefined, [
       { role: "user", content: "quero hospedagem de hoje ate amanha" },
       { role: "assistant", content: "Quantas pessoas?" },
-      { role: "user", content: "8 pessoas" },
+      { role: "user", content: "8 pessoas, sem criancas" },
       { role: "assistant", content: "Valores..." },
       { role: "user", content: "gostei do Standart, quero reservar" },
     ], ref);
+    // Composição completa → gate não bloqueia fluxo de reserva/SDR
     expect(ctx).toBe("");
   });
 
@@ -1020,7 +1024,8 @@ describe("Sunset Thermas Park — §3f conversão SDR (v1.5.8+)", () => {
       { role: "assistant", content: "Como prefere ser chamado(a)?" },
       { role: "user", content: "hospedagem para o dia de hoje ate amanha" },
     ]);
-    expect(ctx).toBe("");
+    // v1.5.54: gate de composição prevalece (sem crianças/idades ainda)
+    expect(ctx).toMatch(/GATE COMPOSIÇÃO HOSPEDAGEM/);
   });
 
   it("§3-composição-idades exige idade quando há criança", () => {
@@ -1038,7 +1043,7 @@ describe("Sunset Thermas Park — §3f conversão SDR (v1.5.8+)", () => {
       { role: "assistant", content: "Alguma criança vai junto?" },
       { role: "user", content: "sim, 1 criança" },
     ], ref);
-    expect(ctx).toBe("");
+    expect(ctx).toMatch(/GATE COMPOSIÇÃO|idade das crianças|Quantos anos/i);
   });
 
   it("injeta contexto crianças pendentes quando cliente disse só número", () => {
@@ -1048,7 +1053,7 @@ describe("Sunset Thermas Park — §3f conversão SDR (v1.5.8+)", () => {
       { role: "assistant", content: "Quantas pessoas vão na estadia?" },
       { role: "user", content: "3" },
     ], ref);
-    expect(ctx).toBe("");
+    expect(ctx).toMatch(/GATE COMPOSIÇÃO|Alguma criança vai junto/i);
   });
 });
 
@@ -1099,11 +1104,11 @@ describe("Sunset Thermas Park — mudança de assunto parque (v1.5.4)", () => {
     expect(messageDeclaresParkDayVisitQuestion("quero hospedagem para duas pessoas")).toBe(false);
   });
 
-  it("§00f documenta consultar_parque_sunset e exemplo sem nome inventado", () => {
+  it("§00f documenta abrir tool só para abertura; ingresso → loja", () => {
     expect(SYSTEM_PROMPT).toMatch(/00f\)/);
     expect(SYSTEM_PROMPT).toMatch(/consultar_parque_sunset/);
-    expect(SYSTEM_PROMPT).toMatch(/qual valor hoje para ir ao park/);
-    expect(SYSTEM_PROMPT).toMatch(/PROIBIDO.*Keven|sem o cliente ter dito o nome/i);
+    expect(SYSTEM_PROMPT).toMatch(/valor dos ingressos/i);
+    expect(SYSTEM_PROMPT).toMatch(/PROIBIDO.*para qual data|loja virtual/i);
   });
 
   it("injeta contexto de ingresso na 1ª mensagem sem pedir intenção", () => {
@@ -1153,7 +1158,7 @@ describe("Sunset Thermas Park — mudança de assunto parque (v1.5.4)", () => {
       [{ role: "user", content: "Maria, quero hospedagem para o dia de hoje ate amanha" }],
       ref
     );
-    expect(ctx).toBe("");
+    expect(ctx).toMatch(/GATE COMPOSIÇÃO HOSPEDAGEM/);
   });
 
   it("§3a-tom proíbe confirmar hoje/amanhã roboticamente", () => {
@@ -1187,7 +1192,7 @@ describe("Sunset Thermas Park — intenção já declarada (v1.5.3)", () => {
       { role: "user", content: "Maria, quero hospedagem para o dia dos namorados" },
     ];
     const ctx = appendSunsetConversationContext(undefined, msgs);
-    expect(ctx).toBe("");
+    expect(ctx).toMatch(/GATE COMPOSIÇÃO HOSPEDAGEM|Alguma criança|PROIBIDO citar preços/i);
     expect(conversationDeclaresLodgingIntent(msgs)).toBe(true);
   });
 });
@@ -1488,6 +1493,26 @@ describe("Sunset Thermas Park — v1.5.52 anti-reenvio orçamento / famílias �
   });
 });
 
+describe("Sunset Thermas Park — v1.5.53 adolescente >12 paga", () => {
+  it("documenta casal + 14 + 7 = 3 pagantes (não coluna 02)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/adolescente.*>.?12|idade >12 sempre paga/i);
+    expect(SYSTEM_PROMPT).toMatch(/casal \+ 14.*\+ 7|14 anos \+ 7 anos/i);
+    expect(SYSTEM_PROMPT).toMatch(/3 pagantes/);
+  });
+});
+
+describe("Sunset Thermas Park — v1.5.54 gate crianças/idades antes de R$", () => {
+  it("checklist (0) exige composição antes de qualquer valor de hospedagem", () => {
+    expect(SYSTEM_PROMPT).toMatch(/COMPOSI[CÇ][AÃ]O OBRIGAT[OÓ]RIA|gate absoluto/i);
+    expect(SYSTEM_PROMPT).toMatch(/idade de cada uma/i);
+    expect(SYSTEM_PROMPT).toMatch(/zero R\$|PROIBIDO.*tabela §2|chalés sai que valores/i);
+  });
+
+  it("dispatcher: preço de chalé sem crianças = NO_TOOLS_NEEDED", () => {
+    expect(DISPATCHER_PROMPT).toMatch(/quanto fica o chal[eé]|without confirming children/i);
+  });
+});
+
 describe("Sunset Thermas Park — v1.5.51 loja online de ingressos", () => {
   it("documenta §2-loja-ingressos com URL da loja oficial", () => {
     expect(SYSTEM_PROMPT).toMatch(/§2-loja-ingressos/);
@@ -1504,6 +1529,15 @@ describe("Sunset Thermas Park — v1.5.51 loja online de ingressos", () => {
   });
 });
 
+describe("Sunset Thermas Park — v1.5.55 ingresso sem pedir data", () => {
+  it("proíbe perguntar data só para valor/info de ingresso", () => {
+    expect(SYSTEM_PROMPT).toMatch(/PROIBIDO.*perguntar a data|sem perguntar data/i);
+    expect(SYSTEM_PROMPT).toMatch(/Eu queria saber o valor dos ingressos/i);
+    expect(DISPATCHER_PROMPT).toMatch(/ticket price.*store link|NO_TOOLS_NEEDED/i);
+    expect(COMMUNICATION_RULES).toMatch(/PROIBIDO.*perguntar a data/i);
+  });
+});
+
 describe("Sunset Thermas Park — v1.5.49 anti-repetição composição / info sem data", () => {
   it("§3-composição trata casal como 2 adultos sem criança", () => {
     expect(SYSTEM_PROMPT).toMatch(/casal.*2 adultos|apenas um casal|s[oó] n[oó]s dois/i);
@@ -1514,7 +1548,8 @@ describe("Sunset Thermas Park — v1.5.49 anti-repetição composição / info s
     const ctx = appendSunsetConversationContext(undefined, [
       { role: "user", content: "gostaria de saber sobre a hospedagem Para 2 pessoas" },
     ]);
-    expect(ctx).toBe("");
+    // Ainda falta confirmar crianças — gate impede cotar
+    expect(ctx).toMatch(/GATE COMPOSIÇÃO|Alguma criança vai junto/i);
   });
 
   it("contexto: casal → composição completa, pede período", () => {
@@ -1532,6 +1567,7 @@ describe("Sunset Thermas Park — v1.5.49 anti-repetição composição / info s
       { role: "assistant", content: "Tem data em mente?" },
       { role: "user", content: "Não tem data. Só quero informações por enquanto. De qual o valor, o que é incluso" },
     ]);
-    expect(ctx).toBe("");
+    // Sem confirmação de crianças → não liberar R$
+    expect(ctx).toMatch(/GATE COMPOSIÇÃO|Alguma criança|PROIBIDO citar preços/i);
   });
 });

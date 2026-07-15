@@ -888,17 +888,80 @@ export function shouldAutoInvokeSunsetLodgingTool(messages: ChatMessage[]): bool
 export function shouldBlockSunsetLodgingToolCall(messages: ChatMessage[]): boolean {
   if (conversationNeedsChildAgesConfirmation(messages)) return true;
   if (conversationNeedsChildrenConfirmation(messages)) return true;
+  // Sem composição completa (nº + crianças/idades ou casal/sem criança) → nunca dispara tool
+  if (!conversationHasCompleteGuestComposition(messages)) return true;
   return extractSunsetLodgingParams(messages) == null;
+}
+
+/**
+ * Gate de qualificação: turno atual é de **hospedagem** e falta composição
+ * (crianças confirmadas + idades se houver). Não ativa em Thermas Card / só parque.
+ */
+export function conversationRequiresLodgingCompositionGate(messages: ChatMessage[]): boolean {
+  if (conversationHasCompleteGuestComposition(messages)) return false;
+
+  const lastUser = [...messages].reverse().find((m) => m.role === "user" && m.content);
+  if (!lastUser?.content) return false;
+  const lastT = normalizeText(lastUser.content);
+
+  const recentUsers = messages
+    .filter((m) => m.role === "user" && m.content)
+    .slice(-4)
+    .map((m) => m.content!);
+  const recentThermasCard = recentUsers.some((t) =>
+    /thermas\s*card|cartao\s*thermas|clube\s*thermas|assinatura\s*thermas/.test(normalizeText(t)),
+  );
+  const recentLodgingAsk = recentUsers.some((t) =>
+    /hosped|hotel|chal[eé]|suite|loft|pernoite|acomoda|estadia|quarto/.test(normalizeText(t)),
+  );
+  // Fio Thermas Card sem pedido de hotel → não bloquear preço do cartão
+  if (recentThermasCard && !recentLodgingAsk) return false;
+
+  // Última mensagem só parque/ingresso → não gate de hospedagem
+  if (
+    (/ingresso|parque|\bpark\b|passar.*dia|ir ao park|entrar no parque/.test(lastT) &&
+      !/hosped|chal[eé]|suite|hotel|pernoite|acomoda|estadia/.test(lastT)) ||
+    /thermas\s*card|cartao\s*thermas|qual valor\??$/.test(lastT) && recentThermasCard
+  ) {
+    return false;
+  }
+
+  if (conversationNeedsChildAgesConfirmation(messages) && recentLodgingAsk) return true;
+  if (conversationNeedsChildrenConfirmation(messages) && recentLodgingAsk) return true;
+
+  // Pedido explícito de valor/acomodação sem composição completa
+  if (
+    messageDeclaresLodgingPriceOrAvailabilityInquiry(lastUser.content) ||
+    messageDeclaresNewLodgingQuoteIntent(lastUser.content) ||
+    (/chal[eé]|suite|loft|hosped|hotel|pernoite|acomoda/.test(lastT) &&
+      /valor|preco|quanto|orcamento|sai/.test(lastT))
+  ) {
+    return true;
+  }
+
+  // Intenção de hospedagem neste turno ainda sem composição
+  if (/hosped|hotel|pernoite|estadia|chal[eé]|suite|loft|acomoda/.test(lastT)) {
+    return true;
+  }
+
+  // Resposta de composição incompleta ("3", "4 pessoas") no fio de hospedagem
+  if (recentLodgingAsk && conversationNeedsChildrenConfirmation(messages)) return true;
+  if (recentLodgingAsk && conversationNeedsChildAgesConfirmation(messages)) return true;
+
+  return false;
 }
 
 export function getSunsetLodgingToolBlockInstruction(messages: ChatMessage[]): string {
   if (conversationNeedsChildAgesConfirmation(messages)) {
-    return "Composição incompleta: falta idade das crianças. Pergunte quantos anos tem cada criança. PROIBIDO citar preços ou listar categorias neste turno.";
+    return "Composição incompleta: falta idade das crianças. Pergunte quantos anos tem cada criança. PROIBIDO citar preços ou listar categorias com R$ neste turno.";
   }
   if (conversationNeedsChildrenConfirmation(messages)) {
-    return 'Composição incompleta: falta confirmar crianças. Pergunte: "Alguma criança vai junto? Se sim, quantas e com quantos anos?" PROIBIDO citar preços ou listar categorias neste turno.';
+    return 'Composição incompleta: falta confirmar crianças. Pergunte: "Alguma criança vai junto? Se sim, quantas e com quantos anos?" PROIBIDO citar preços ou listar categorias com R$ neste turno.';
   }
-  return "Faltam datas ou composição completa para cotar hospedagem. PROIBIDO citar preços ou listar categorias neste turno.";
+  if (!conversationHasCompleteGuestComposition(messages)) {
+    return 'Composição incompleta: antes de qualquer valor de hospedagem, saiba quantas pessoas VÃO e se há criança (se sim, idade de cada uma). Ex.: "Alguma criança vai junto? Se sim, quantas e com quantos anos?" PROIBIDO citar preços, lista da tabela §2 ou chutar ocupação neste turno.';
+  }
+  return "Faltam datas fechadas (check-in/check-out) para cotar hospedagem. PROIBIDO citar preços ou listar categorias com R$ neste turno.";
 }
 
 /** Pedido só de fotos/galeria — não re-cotar hospedagem nem tratar como pergunta de preço. */

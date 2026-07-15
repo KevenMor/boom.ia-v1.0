@@ -18,13 +18,23 @@ describe("Sunset — detectSunsetSiteFormMessage (helper base)", () => {
   });
 });
 
-describe("Sunset — appendSunsetConversationContext (v1.5.50 sem runtime)", () => {
-  it("não injeta mais blocos de modo/bloqueio — LLM usa histórico + prompt", () => {
+describe("Sunset — appendSunsetConversationContext (v1.5.54 gate composição)", () => {
+  it("injeta GATE quando hospedagem sem composição de crianças", () => {
+    const ctx = appendSunsetConversationContext(
+      undefined,
+      [
+        { role: "user", content: "quero hospedagem" },
+        { role: "assistant", content: "Quantas pessoas vão na estadia?" },
+        { role: "user", content: "Os chalés sai que valores" },
+      ]
+    );
+    expect(ctx).toMatch(/GATE COMPOSIÇÃO HOSPEDAGEM/);
+    expect(ctx).toMatch(/PROIBIDO citar preços|Não chame consultar_hospedagem/i);
+  });
+
+  it("não injeta gate em oi sem pedido de hospedagem", () => {
     expect(
-      appendSunsetConversationContext(
-        "Olá! Gostaria de verificar disponibilidade para hospedagem. Check-in: 18/07/2026",
-        [{ role: "user", content: "oi" }]
-      )
+      appendSunsetConversationContext("ola", [{ role: "user", content: "oi" }])
     ).toBe("");
   });
 });

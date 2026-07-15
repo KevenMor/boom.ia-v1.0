@@ -48,6 +48,8 @@ export type LodgingConsultaOk =
       closed_dates: string[];
       message: string;
       suggestions: string[];
+      /** Dias sem linha no calendário (tratados como bloqueio, fail-closed). */
+      missing_calendar_dates?: string[];
       /** Primeira janela com parque aberto em todos os dias da estadia (mesmo nº de noites). */
       nearest_open_window?: { check_in: string; check_out: string; nights: number };
     };
@@ -74,7 +76,11 @@ export type SunsetLodgingGuestPricing = {
   roomsInQuote: number;
 };
 
-/** Regra oficial: soma das idades ≤12 → todas cortesia; senão 1 criança cortesia + demais pagantes. */
+/**
+ * Regra oficial de pagantes:
+ * - Criança/adolescente com idade **> 12** sempre paga (conta como pagante).
+ * - Crianças ≤12: se soma das idades ≤12 → todas cortesia; senão 1 cortesia + demais pagam.
+ */
 export function computeSunsetLodgingGuestPricing(
   guests: LodgingGuestInput[],
   maxGuestsPerRoom: number = MAX_GUESTS_PER_STANDARD_ROOM,
@@ -83,6 +89,9 @@ export function computeSunsetLodgingGuestPricing(
   const childrenUnder12 = guests
     .filter((g) => g.type === "child" && (g.age ?? 0) <= 12)
     .map((g) => ({ age: g.age! }));
+  const childrenOver12Count = guests.filter(
+    (g) => g.type === "child" && (g.age ?? 0) > 12,
+  ).length;
 
   const childrenAgesSum = childrenUnder12.reduce((sum, c) => sum + c.age, 0);
   const allChildrenCourtesy = childrenAgesSum <= 12 && childrenUnder12.length > 0;
@@ -92,9 +101,10 @@ export function computeSunsetLodgingGuestPricing(
       ? 1
       : 0;
 
-  let guestsForPricing = adults;
-  if (!allChildrenCourtesy && childrenUnder12.length > 0) {
-    guestsForPricing += 1;
+  // Adolescentes (>12) sempre pagam; cortesia só vale para ≤12.
+  let guestsForPricing = adults + childrenOver12Count;
+  if (childrenUnder12.length > 0 && !allChildrenCourtesy) {
+    guestsForPricing += childrenUnder12.length - childrenCourtesyCount;
   }
 
   const guestsFamilyTotal = guests.length;
@@ -178,6 +188,64 @@ export function listParkDaysDuringLodgingStay(checkIn: string, checkOut: string)
     cursor = addDaysIso(cursor, 1);
   }
   return days;
+}
+
+/**
+ * Gate fail-closed: cotação só se **todos** os dias [check_in, check_out) tiverem
+ * `day_kind === "aberto"` no calendário. Dia ausente no cadastro = bloqueio (não assumir aberto).
+ */
+export type LodgingStayParkGate = {
+  blocked: boolean;
+  /** Dias com day_kind explícito ≠ aberto */
+  closedDates: string[];
+  /** Dias sem linha em lodging_park_days */
+  missingDates: string[];
+  /** União ordenada de closed + missing (para `closed_dates` da resposta) */
+  blockedDates: string[];
+};
+
+export function evaluateLodgingStayParkGate(
+  checkIn: string,
+  checkOut: string,
+  parkDays: Array<{ calendar_date: string; day_kind: string }>,
+): LodgingStayParkGate {
+  const needed = listParkDaysDuringLodgingStay(checkIn, checkOut);
+  const byDate = new Map(parkDays.map((d) => [d.calendar_date, d.day_kind]));
+  const closedDates: string[] = [];
+  const missingDates: string[] = [];
+  for (const day of needed) {
+    const kind = byDate.get(day);
+    if (kind == null) missingDates.push(day);
+    else if (kind !== "aberto") closedDates.push(day);
+  }
+  const blockedDates = [...closedDates, ...missingDates].sort();
+  return {
+    blocked: blockedDates.length > 0,
+    closedDates,
+    missingDates,
+    blockedDates,
+  };
+}
+
+export function formatLodgingParkClosedMessage(gate: LodgingStayParkGate): string {
+  const closedBR = gate.closedDates.map(formatDateIsoBR);
+  const missingBR = gate.missingDates.map(formatDateIsoBR);
+  if (closedBR.length > 0 && missingBR.length > 0) {
+    return (
+      `O parque estará fechado em ${closedBR.join(", ")} e não há calendário cadastrado para ` +
+      `${missingBR.join(", ")}. Não é possível cotar hospedagem para essas datas.`
+    );
+  }
+  if (missingBR.length > 0) {
+    return (
+      `Não há calendário do parque cadastrado para ${missingBR.join(", ")}. ` +
+      `Não é possível cotar hospedagem até a equipe confirmar abertura nessas datas.`
+    );
+  }
+  return (
+    `O parque estará fechado em ${closedBR.join(", ")}. ` +
+    `Não é possível cotar hospedagem para essas datas.`
+  );
 }
 
 function formatParkDaysListBR(dates: string[]): string {
@@ -394,11 +462,9 @@ export async function runLodgingConsulta(
 
     if (parkError) throw parkError;
 
-    const closedDates = (parkDays ?? [])
-      .filter((d: { day_kind: string }) => d.day_kind !== "aberto")
-      .map((d: { calendar_date: string }) => d.calendar_date);
+    const parkGate = evaluateLodgingStayParkGate(check_in, check_out, parkDays ?? []);
 
-    if (closedDates.length > 0) {
+    if (parkGate.blocked) {
       const suggestions: string[] = [];
       const nearestOpenWindow = await fetchNearestOpenLodgingWindow(
         supabase,
@@ -431,16 +497,18 @@ export async function runLodgingConsulta(
         suggestions.push(...buildOpenParkRangeSuggestions(allDays));
       }
 
-      const closedBR = closedDates.map(formatDateIsoBR).join(", ");
       const data: LodgingConsultaOk = {
         status: "park_closed",
         check_in,
         check_out,
         nights,
-        closed_dates: closedDates,
-        message: `O parque estará fechado em ${closedBR}. Não é possível cotar hospedagem para essas datas.`,
+        closed_dates: parkGate.blockedDates,
+        message: formatLodgingParkClosedMessage(parkGate),
         suggestions,
         ...(nearestOpenWindow ? { nearest_open_window: nearestOpenWindow } : {}),
+        ...(parkGate.missingDates.length > 0
+          ? { missing_calendar_dates: parkGate.missingDates }
+          : {}),
       };
       return { ok: true, data };
     }
