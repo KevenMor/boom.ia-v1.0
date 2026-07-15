@@ -532,6 +532,74 @@ export function messageDeclaresLodgingAmenityFaq(text: string): boolean {
   }
   if (/(como\s+(e|é)|como\s+funciona).*(spa|hidro|hidromassagem)/.test(t)) return true;
   if (/(spa|hidro|hidromassagem)\s+(e|é|eh)\s+/.test(t)) return true;
+  if (/vista\s+(para|pra|da|do)\s+(represa|piscina|parque)|ver a represa|da\s+pra\s+ver\s+(a\s+)?represa/.test(t)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Grupo de várias famílias em contexto de hotel/hospedagem — NÃO é excursão.
+ * Ex.: "destino para umas 6 ou 7 famílias".
+ */
+export function messageDeclaresMultiFamilyLodgingGroup(text: string): boolean {
+  const t = normalizeText(text);
+  if (/excurs[aã]o|excurs[oõ]es|grupo escolar|visita escolar|pacote de excurs/.test(t)) {
+    return false;
+  }
+  return (
+    /\d+\s*(ou\s*)?\d*\s*famil/.test(t) ||
+    /umas?\s+\d+\s*(ou\s+\d+)?\s*famil/.test(t) ||
+    /varias\s+famil|grupo\s+de\s+famil|familias\s+(quero|vamos|hosped|reserv|destino)/.test(t) ||
+    /destino\s+para\s+(umas?\s+)?\d+/.test(t) && /famil/.test(t)
+  );
+}
+
+/**
+ * Após orçamento já enviado: dúvidas curtas que NÃO pedem nova lista de preços nem nova tool.
+ * Cobre regressões dos chats Mariana / Felipe (jul/2026).
+ */
+export function messageDeclaresPostLodgingQuoteClarification(text: string): boolean {
+  const t = normalizeText(text.trim());
+  if (!t) return false;
+
+  // Pedido explícito de repetir / nova cotação — NÃO é só esclarecimento
+  if (
+    /manda\s+(o\s+)?or[cç]amento\s+de\s+novo|repete\s+(os\s+)?valores|pode\s+repetir\s+(os\s+)?valores|outra\s+data|muda(r)?\s+(a\s+)?data|e\s+para\s+o\s+dia|quanto\s+fica\s+(de\s+novo|agora)/.test(
+      t
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    /horario\s+de\s+(entrada|saida)|check[\s-]?in|check[\s-]?out|entra(da)?\s+(as|às|e)\s*\d|sai(da)?\s+(as|às|e)\s*\d|permanecer\s+no\s+parque|ate\s+(as|às)\s*18/.test(
+      t
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    /nao\s+entendi\s+(os\s+)?valores|os\s+primeiros\s+valores|valores?\s+mencionad|refere[\s-]?se\s+a\s+que|referem[\s-]?se\s+a\s+que|ja\s+(com\s+)?(o\s+)?desconto|ja\s+inclui|incluem\s+(o\s+)?25|esse\s+valor\s+divide|pode\s+parcel|parcelad|formas?\s+de\s+pagamento/.test(
+      t
+    )
+  ) {
+    return true;
+  }
+
+  if (/valor\s+(e|é|eh)\s+o\s+mesmo|e\s+o\s+mesmo(\s+valor)?\??$|fica\s+o\s+mesmo/.test(t)) {
+    return true;
+  }
+
+  if (/^(ok|obrigad[oa]|valeu|perfeito|show|👍|👍🏼|👍🏿)+[!?.]*$/i.test(text.trim())) {
+    return true;
+  }
+
+  if (/pode\s+enviar\s+fotos|manda\s+(as\s+)?fotos|quero\s+ver\s+(fotos|foto)/.test(t)) {
+    return true;
+  }
+
   return false;
 }
 
@@ -756,6 +824,20 @@ export function userNeedsSunsetLodgingToolCall(messages: ChatMessage[]): boolean
   if (!lastUser?.content) return false;
 
   if (messageDeclaresLodgingAmenityFaq(lastUser.content)) return false;
+  if (userMessageIsPhotoRequestOnly(lastUser.content)) return false;
+
+  // Orçamento já foi enviado: dúvida de horário / "não entendi" / pagamento ≠ nova cotação
+  if (
+    conversationAlreadyDeliveredLodgingQuote(messages) &&
+    messageDeclaresPostLodgingQuoteClarification(lastUser.content)
+  ) {
+    return false;
+  }
+
+  // "N famílias" ainda sem total de pessoas — não dispara tool
+  if (messageDeclaresMultiFamilyLodgingGroup(lastUser.content)) {
+    return false;
+  }
 
   if (conversationHasPendingLodgingQuote(messages) && extractSunsetLodgingParams(messages) != null) {
     return true;

@@ -13,7 +13,10 @@ import {
   extractLodgingQuoteClosingQuestion,
   polishSunsetLodgingQuoteReadableText,
 } from "./sunset-lodging-quote-layout.js";
-import { userMessageIsPhotoRequestOnly } from "./sunset-lodging-params.js";
+import {
+  messageDeclaresPostLodgingQuoteClarification,
+  userMessageIsPhotoRequestOnly,
+} from "./sunset-lodging-params.js";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
 const IMAGE_MD_RE = /^!\[[^\]]*\]\(https?:\/\/[^)\s]+\)\s*$/i;
@@ -58,6 +61,12 @@ export function shouldRebuildSunsetQuoteFromTool(
 ): boolean {
   if (!toolPayload) return false;
   if (opts?.lastUserMessage && userMessageIsPhotoRequestOnly(opts.lastUserMessage)) {
+    return false;
+  }
+  if (
+    opts?.lastUserMessage &&
+    messageDeclaresPostLodgingQuoteClarification(opts.lastUserMessage)
+  ) {
     return false;
   }
   const base = (assistantText ?? "").trim();

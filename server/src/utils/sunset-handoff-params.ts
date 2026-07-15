@@ -1,5 +1,6 @@
 import {
   messageDeclaresLodgingReservationInterest,
+  messageDeclaresMultiFamilyLodgingGroup,
 } from "./sunset-lodging-params.js";
 import { messageDeclaresGratitudeOrConversationClose } from "./sunset-park-params.js";
 
@@ -63,7 +64,10 @@ export function resolveSunsetHandoffReason(messages: ChatMessage[]): SunsetHando
 
   if (messageDeclaresGratitudeOrConversationClose(text)) return null;
 
-  if (messageDeclaresExcursionIntent(text) || conversationDeclaresExcursionIntent(messages)) {
+  // "6 ou 7 famílias" em hospedagem ≠ excursão (regressão Ariane jul/2026)
+  if (messageDeclaresMultiFamilyLodgingGroup(text)) {
+    // segue: pode cair em reservas só se houver interesse explícito depois
+  } else if (messageDeclaresExcursionIntent(text) || conversationDeclaresExcursionIntent(messages)) {
     return "excursao";
   }
 
