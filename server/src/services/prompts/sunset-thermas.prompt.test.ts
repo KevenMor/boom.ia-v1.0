@@ -32,7 +32,7 @@ import { buildSystemPrompt } from "./registry.js";
 
 describe("Sunset Thermas Park — SYSTEM_PROMPT (contratos de negócio)", () => {
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.57/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.58/);
   });
 
   it("mantém regra suprema de valores e vaga (tolerância zero)", () => {
@@ -1595,5 +1595,36 @@ describe("Sunset Thermas Park — v1.5.49 anti-repetição composição / info s
     ]);
     // Sem confirmação de crianças → não liberar R$
     expect(ctx).toMatch(/GATE COMPOSIÇÃO|Alguma criança|PROIBIDO citar preços/i);
+  });
+});
+
+describe("Sunset Thermas Park — v1.5.58 anti-loop (Taci)", () => {
+  it("documenta §3d-anti-loop e proíbe 'mesma acomodação'", () => {
+    expect(SYSTEM_PROMPT).toMatch(/3d-anti-loop/);
+    expect(SYSTEM_PROMPT).toMatch(/mesma acomodação/i);
+    expect(SYSTEM_PROMPT).toMatch(/Entrada dia \*\*N\*\* e saída dia \*\*N\+1\*\*|entrada dia N e saída/i);
+    expect(COMMUNICATION_RULES).toMatch(/34\.|Anti-loop.*v1\.5\.58/);
+  });
+
+  it("após orçamento + 'sim na mesma acomodação' injeta ANTI-LOOP (não reabre composição)", () => {
+    const ctx = appendSunsetConversationContext(undefined, [
+      { role: "user", content: "quero orçamento hospedagem" },
+      { role: "user", content: "2 adultos 3 crianças 5 anos 8 anos e 14 anos" },
+      { role: "user", content: "Entrada dia 18 e saída dia 19" },
+      {
+        role: "assistant",
+        content:
+          "Segue o orçamento para 5 pessoas. Chalé — R$ 759,00 o pacote de 1 noite. Suíte Luxo — R$ 931,50 o pacote de 1 noite.",
+      },
+      {
+        role: "assistant",
+        content:
+          "Poderia me confirmar se todos estarão hospedados na mesma acomodação?",
+      },
+      { role: "user", content: "Sim, na mesma acomodação" },
+    ]);
+    expect(ctx).toMatch(/ANTI-LOOP ORÇAMENTO/i);
+    expect(ctx).toMatch(/PROIBIDO repetir pergunta|mesma acomodação/i);
+    expect(ctx).not.toMatch(/GATE COMPOSIÇÃO/);
   });
 });

@@ -253,13 +253,46 @@ function parseDayAndSlashDateRangeIso(
   return { check_in, check_out };
 }
 
+/**
+ * "Entrada dia 18 e saída dia 19" / "entrada 18 saída 19" (mês implícito = ref Brasília).
+ * Dias consecutivos no mesmo mês ⇒ 1 noite.
+ */
+function parseEntradaSaidaDayRangeIso(
+  text: string,
+  ref: Date,
+): { check_in: string; check_out: string } | null {
+  const m = text.match(
+    /\bentrada\s+(?:dia\s+)?(\d{1,2})(?:\s*[\/.]\s*(\d{1,2})(?:\s*[\/.]\s*(20\d{2}))?)?.{0,48}\bsa[ií]da\s+(?:dia\s+)?(\d{1,2})(?:\s*[\/.]\s*(\d{1,2})(?:\s*[\/.]\s*(20\d{2}))?)?/i,
+  );
+  if (!m) return null;
+
+  const dayIn = parseInt(m[1], 10);
+  const dayOut = parseInt(m[4], 10);
+  const monthExplicit = m[5] ? parseInt(m[5], 10) : m[2] ? parseInt(m[2], 10) : null;
+  const yearExplicit = m[6] ?? m[3] ?? null;
+
+  const br = brasiliaTodayIso(ref);
+  const refM = parseInt(br.slice(5, 7), 10);
+  const mmNum = monthExplicit ?? refM;
+  const mm = String(mmNum).padStart(2, "0");
+  const y = yearExplicit ?? String(yearForFixedEvent(mmNum, Math.max(dayIn, dayOut), ref));
+  const check_in = `${y}-${mm}-${String(dayIn).padStart(2, "0")}`;
+  let check_out = `${y}-${mm}-${String(dayOut).padStart(2, "0")}`;
+  if (check_out <= check_in) {
+    check_out = isoAddDays(check_in, dayOut > dayIn ? dayOut - dayIn : 1);
+  }
+  if (check_out <= check_in) return null;
+  return { check_in, check_out };
+}
+
 function findDayAndSlashDateRangeInMessages(
   messages: ChatMessage[],
   ref: Date,
 ): { check_in: string; check_out: string } | null {
   for (const m of [...messages].reverse()) {
     if (m.role !== "user" || !m.content) continue;
-    const range = parseDayAndSlashDateRangeIso(m.content, ref);
+    const range =
+      parseDayAndSlashDateRangeIso(m.content, ref) ?? parseEntradaSaidaDayRangeIso(m.content, ref);
     if (range) return range;
   }
   return null;
@@ -299,7 +332,8 @@ function extractCheckInFromMessages(messages: ChatMessage[], ref: Date): string 
 
   for (const m of [...userMessages].reverse()) {
     if (m.role !== "user" || !m.content) continue;
-    const range = parseDayAndSlashDateRangeIso(m.content, ref);
+    const range =
+      parseDayAndSlashDateRangeIso(m.content, ref) ?? parseEntradaSaidaDayRangeIso(m.content, ref);
     if (range) return range.check_in;
     const relative = parseRelativeCheckIn(m.content, ref);
     if (relative) return relative;
@@ -557,7 +591,7 @@ export function messageDeclaresMultiFamilyLodgingGroup(text: string): boolean {
 
 /**
  * Após orçamento já enviado: dúvidas curtas que NÃO pedem nova lista de preços nem nova tool.
- * Cobre regressões dos chats Mariana / Felipe (jul/2026).
+ * Cobre regressões Mariana / Felipe / Taci (jul/2026).
  */
 export function messageDeclaresPostLodgingQuoteClarification(text: string): boolean {
   const t = normalizeText(text.trim());
@@ -573,7 +607,7 @@ export function messageDeclaresPostLodgingQuoteClarification(text: string): bool
   }
 
   if (
-    /horario\s+de\s+(entrada|saida)|check[\s-]?in|check[\s-]?out|entra(da)?\s+(as|às|e)\s*\d|sai(da)?\s+(as|às|e)\s*\d|permanecer\s+no\s+parque|ate\s+(as|às)\s*18/.test(
+    /horario\s+de\s+(entrada|saida)|check[\s-]?in|check[\s-]?out|entra(da)?\s+(as|às|e)\s*\d|sai(da)?\s+(as|às|e)\s*\d|permanecer\s+no\s+parque|ate\s+(as|às)\s*18|que\s+horas|quais?\s+horarios?|entra\b.*\bsai\b.*hora|sabado.*domingo.*hora/.test(
       t
     )
   ) {
@@ -581,7 +615,25 @@ export function messageDeclaresPostLodgingQuoteClarification(text: string): bool
   }
 
   if (
-    /nao\s+entendi\s+(os\s+)?valores|os\s+primeiros\s+valores|valores?\s+mencionad|refere[\s-]?se\s+a\s+que|referem[\s-]?se\s+a\s+que|ja\s+(com\s+)?(o\s+)?desconto|ja\s+inclui|incluem\s+(o\s+)?25|esse\s+valor\s+divide|pode\s+parcel|parcelad|formas?\s+de\s+pagamento/.test(
+    /nao\s+entendi\s+(os\s+)?valores|os\s+primeiros\s+valores|valores?\s+mencionad|refere[\s-]?se\s+a\s+que|referem[\s-]?se\s+a\s+que|ja\s+(com\s+)?(o\s+)?desconto|ja\s+inclui|incluem\s+(o\s+)?25|esse\s+valor\s+divide|pode\s+parcel|parcelad|formas?\s+de\s+pagamento|esse\s+valor\s+(esta|ta|e)\s+com\s+(o\s+)?desconto|esta\s+com\s+(o\s+)?desconto|valor\s+com\s+desconto/.test(
+      t
+    )
+  ) {
+    return true;
+  }
+
+  // Comparação com valor de amiga/outra reserva — responde em texto, sem reenviar lista
+  if (
+    /minha\s+amig[ao]|amigo\s+fez|ficou\s+(em\s+|por\s+)?r?\$?\s*\d|pagou\s+r?\$?\s*\d|saiu\s+(por\s+)?r?\$?\s*\d|reserva.*(ficou|saiu|pagou)\s+\d/.test(
+      t
+    )
+  ) {
+    return true;
+  }
+
+  // Confirma “mesma acomodação” / todos juntos — NÃO reabre cotação nem repergunta
+  if (
+    /mesma\s+acomod|na\s+mesma\s+(acomod|unidade|suite|quarto)|todos?\s+(na|em)\s+mesma|mesmo\s+quarto/.test(
       t
     )
   ) {
@@ -601,6 +653,36 @@ export function messageDeclaresPostLodgingQuoteClarification(text: string): bool
   }
 
   return false;
+}
+
+/**
+ * Cliente respondeu "sim"/confirmação a uma pergunta que a Julia já fez
+ * (ex.: loop "mesma acomodação?" — Taci jul/2026).
+ */
+export function messageAffirmsPriorAssistantQuestion(messages: ChatMessage[]): boolean {
+  const chronological = messages.filter((m) => m.content);
+  const lastUser = [...chronological].reverse().find((m) => m.role === "user" && m.content);
+  if (!lastUser?.content) return false;
+
+  const t = normalizeText(lastUser.content.trim());
+  const isAffirm =
+    /^(sim|isso|certo|correto|exato|ok|pode|confirmo|uhum|isso mesmo)\b/.test(t) ||
+    /mesma acomod|na mesma/.test(t);
+  if (!isAffirm) return false;
+
+  const lastUserIndex = chronological.indexOf(lastUser);
+  const lastAssistant = [...chronological.slice(0, lastUserIndex)]
+    .reverse()
+    .find((m) => m.role === "assistant" && m.content);
+  if (!lastAssistant?.content) return false;
+
+  const a = normalizeText(lastAssistant.content);
+  return (
+    /\?/.test(lastAssistant.content) ||
+    /poderia me confirmar|confirma se|mesma acomod|todas? estar|idade de cada|quantas? pessoas|quantos? anos/.test(
+      a
+    )
+  );
 }
 
 export function conversationAlreadyDeliveredLodgingQuote(messages: ChatMessage[]): boolean {
@@ -734,12 +816,14 @@ export function lodgingQuoteNeedsFreshToolResult(messages: ChatMessage[]): boole
 /** Cliente informou data ou intervalo de estadia na mensagem. */
 export function messageDeclaresExplicitLodgingDates(text: string, ref: Date = new Date()): boolean {
   if (parseDayAndSlashDateRangeIso(text, ref)) return true;
+  if (parseEntradaSaidaDayRangeIso(text, ref)) return true;
   if (parseExplicitDateIso(text, ref)) return true;
   const t = normalizeText(text);
   return (
     /\b(?:de|do|dia)\s+\d{1,2}\/\d{1,2}\s+(?:a|ao|ate)\s+\d{1,2}\/\d{1,2}\b/.test(t) ||
     /\b\d{1,2}\/\d{1,2}\s+(?:a|ao|ate)\s+\d{1,2}\/\d{1,2}\b/.test(t) ||
-    /\b(?:para\s+o\s+)?(?:dia\s+)?\d{1,2}\s+e\s+\d{1,2}\/\d{1,2}\b/.test(t)
+    /\b(?:para\s+o\s+)?(?:dia\s+)?\d{1,2}\s+e\s+\d{1,2}\/\d{1,2}\b/.test(t) ||
+    /\bentrada\s+(?:dia\s+)?\d{1,2}.{0,48}\bsaida\s+(?:dia\s+)?\d{1,2}\b/.test(t)
   );
 }
 
@@ -826,10 +910,11 @@ export function userNeedsSunsetLodgingToolCall(messages: ChatMessage[]): boolean
   if (messageDeclaresLodgingAmenityFaq(lastUser.content)) return false;
   if (userMessageIsPhotoRequestOnly(lastUser.content)) return false;
 
-  // Orçamento já foi enviado: dúvida de horário / "não entendi" / pagamento ≠ nova cotação
+  // Orçamento já foi enviado: dúvida / "sim" a pergunta já feita ≠ nova cotação
   if (
     conversationAlreadyDeliveredLodgingQuote(messages) &&
-    messageDeclaresPostLodgingQuoteClarification(lastUser.content)
+    (messageDeclaresPostLodgingQuoteClarification(lastUser.content) ||
+      messageAffirmsPriorAssistantQuestion(messages))
   ) {
     return false;
   }

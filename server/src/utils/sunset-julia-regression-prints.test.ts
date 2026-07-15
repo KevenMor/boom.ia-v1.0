@@ -15,6 +15,8 @@ import {
 } from "./sunset-handoff-params.js";
 import {
   conversationAlreadyDeliveredLodgingQuote,
+  extractSunsetLodgingParams,
+  messageAffirmsPriorAssistantQuestion,
   messageDeclaresMultiFamilyLodgingGroup,
   messageDeclaresPostLodgingQuoteClarification,
   userNeedsSunsetLodgingToolCall,
@@ -201,5 +203,52 @@ describe("Regressão prints Sunset — prompt §3d-anti-repetição / §3b-grupo
     expect(DISPATCHER_PROMPT).toMatch(/6 ou 7 fam[ií]lias|N fam[ií]lias/i);
     expect(DISPATCHER_PROMPT).toMatch(/NO.*handoff Excurs|NOT.*Excurs/i);
     expect(COMMUNICATION_RULES).toMatch(/Anti-reenvio de or[cç]amento|3d-anti-repeti/i);
+  });
+});
+
+describe("Regressão prints Sunset (Taci) — anti-loop mesma acomodação / horários", () => {
+  const taciClarifications = [
+    "Entra sábado e sai domingo que horas?",
+    "Esse valor esta com desconto",
+    "Minha amiga fez uma reserva e ficou 845",
+    "Sim, na mesma acomodação",
+  ];
+
+  it.each(taciClarifications)(
+    "após orçamento, '%s' NÃO dispara tool nem vira nova cotação",
+    (msg) => {
+      expect(messageDeclaresPostLodgingQuoteClarification(msg)).toBe(true);
+      expect(userNeedsSunsetLodgingToolCall(threadAfterQuote(msg))).toBe(false);
+    }
+  );
+
+  it("'Sim, na mesma acomodação' após pergunta da Julia = afirmação (anti-loop tool)", () => {
+    const thread = [
+      { role: "user" as const, content: "quero orçamento" },
+      {
+        role: "assistant" as const,
+        content: "Segue o orçamento. Chalé — R$ 414,00. Luxo — R$ 586,50.",
+      },
+      {
+        role: "assistant" as const,
+        content: "Poderia me confirmar se todos estarão hospedados na mesma acomodação?",
+      },
+      { role: "user" as const, content: "Sim, na mesma acomodação" },
+    ];
+    expect(messageAffirmsPriorAssistantQuestion(thread)).toBe(true);
+    expect(userNeedsSunsetLodgingToolCall(thread)).toBe(false);
+  });
+
+  it("entrada dia 18 e saída dia 19 = 1 noite (não 2)", () => {
+    const ref = new Date("2026-07-15T18:00:00-03:00");
+    const msgs = [
+      { role: "user" as const, content: "Gostaria de um orçamento para hospedagem" },
+      { role: "user" as const, content: "2 adultos 3 crianças 5 anos 8 anos e 14 anos" },
+      { role: "user" as const, content: "Entrada dia 18 e saída dia 19" },
+    ];
+    const params = extractSunsetLodgingParams(msgs, ref);
+    expect(params).not.toBeNull();
+    expect(params!.check_in).toBe("2026-07-18");
+    expect(params!.check_out).toBe("2026-07-19");
   });
 });
