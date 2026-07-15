@@ -1468,6 +1468,26 @@ describe("Sunset Thermas Park — §3g-objeções Thermas Card (v1.5.40)", () =>
   });
 });
 
+describe("Sunset Thermas Park — v1.5.52 anti-reenvio orçamento / famílias ≠ excursão", () => {
+  it("documenta §3d-anti-repetição contra reenviar lista de preços", () => {
+    expect(SYSTEM_PROMPT).toMatch(/3d-anti-repeti[cç][aã]o/);
+    expect(SYSTEM_PROMPT).toMatch(/PROIBIDO.*Segue o or[cç]amento|n[aã]o repetir/i);
+    expect(COMMUNICATION_RULES).toMatch(/Anti-reenvio de or[cç]amento|3d-anti-repeti/i);
+  });
+
+  it("dispatcher: após orçamento, FAQ/não entendi = NO_TOOLS_NEEDED", () => {
+    expect(DISPATCHER_PROMPT).toMatch(/n[aã]o entendi os valores/i);
+    expect(DISPATCHER_PROMPT).toMatch(/After quote was already sent/i);
+  });
+
+  it("N famílias no fio de hospedagem não é excursão", () => {
+    expect(SYSTEM_PROMPT).toMatch(/6 ou 7 fam[ií]lias/i);
+    expect(SYSTEM_PROMPT).toMatch(/N[AÃ]O [eé] excurs[aã]o|≠ excurs|n[aã]o [eé] excurs/i);
+    expect(DISPATCHER_PROMPT).toMatch(/N fam[ií]lias|6 ou 7 fam[ií]lias/i);
+    expect(COMMUNICATION_RULES).toMatch(/fam[ií]lias.*≠.*excurs|fam[ií]lias.*excurs[aã]o/i);
+  });
+});
+
 describe("Sunset Thermas Park — v1.5.51 loja online de ingressos", () => {
   it("documenta §2-loja-ingressos com URL da loja oficial", () => {
     expect(SYSTEM_PROMPT).toMatch(/§2-loja-ingressos/);

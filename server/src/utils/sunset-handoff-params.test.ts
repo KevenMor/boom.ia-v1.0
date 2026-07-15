@@ -63,6 +63,15 @@ describe("sunset-handoff-params", () => {
     expect(buildSunsetHandoffToolArgs("excursao")).toEqual({ reason: "Excursões" });
   });
 
+  it("não trata 'N famílias' em hospedagem como excursão", () => {
+    const messages = [
+      { role: "user", content: "quero hospedagem" },
+      { role: "assistant", content: "Quantas pessoas?" },
+      { role: "user", content: "Então estamos procurando um destino para umas 6 ou 7 famílias" },
+    ];
+    expect(resolveSunsetHandoffReason(messages)).toBeNull();
+  });
+
   it("não dispara handoff em agradecimento", () => {
     const messages = [{ role: "user", content: "obrigadoo" }];
     expect(shouldAutoInvokeSunsetHandoff(messages)).toBe(false);
