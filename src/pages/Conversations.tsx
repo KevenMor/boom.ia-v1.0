@@ -62,6 +62,10 @@ import { cn, relationName } from "@/lib/utils";
 import { normalizeBrazilPhoneDigits, crmPhoneMatchesConversation } from "@/lib/crm-phone-match";
 import { dedupeAndSortConversationMessages, shouldShowChatMessage } from "@/lib/chatMessageDisplay";
 
+/** Botões da toolbar do thread — light + dark consistentes */
+const THREAD_TOOLBAR_BTN =
+  "h-9 w-9 shrink-0 touch-manipulation rounded-xl border border-slate-200/60 bg-white text-slate-600 shadow-sm hover:bg-slate-50 hover:text-primary dark:border-border dark:bg-card dark:text-muted-foreground dark:hover:bg-muted dark:hover:text-foreground sm:h-10 sm:w-10";
+
 function normalizeDigits(value: unknown): string {
   return String(value ?? "").replace(/\D/g, "");
 }
@@ -1392,7 +1396,7 @@ export default function Conversations() {
                       type="button"
                       variant="outline"
                       size="icon"
-                      className="touch-manipulation h-9 w-9 shrink-0 rounded-xl border-slate-200/60 bg-white shadow-sm hover:text-primary sm:h-10 sm:w-10 xl:hidden"
+                      className={cn(THREAD_TOOLBAR_BTN, "xl:hidden")}
                       title="Detalhes do contato"
                       aria-label="Abrir detalhes do contato"
                       onClick={() => setContactSheetOpen(true)}
@@ -1404,8 +1408,9 @@ export default function Conversations() {
                       variant="outline"
                       size="icon"
                       className={cn(
-                        "hidden h-9 w-9 shrink-0 rounded-xl border-slate-200/60 bg-white text-slate-500 shadow-sm hover:text-primary sm:h-10 sm:w-10 xl:inline-flex",
-                        contactPanelCollapsed && "border-primary/80 text-primary",
+                        THREAD_TOOLBAR_BTN,
+                        "hidden xl:inline-flex",
+                        contactPanelCollapsed && "border-primary/80 text-primary dark:border-primary dark:text-primary",
                       )}
                       title={
                         contactPanelCollapsed
@@ -1433,8 +1438,9 @@ export default function Conversations() {
                           variant="outline"
                           size="icon"
                           className={cn(
-                            "h-9 w-9 shrink-0 touch-manipulation rounded-xl border-slate-200/60 bg-white shadow-sm hover:text-primary sm:h-10 sm:w-10",
-                            threadMessageSearch.trim().length > 0 && "border-primary text-primary",
+                            THREAD_TOOLBAR_BTN,
+                            threadMessageSearch.trim().length > 0 &&
+                              "border-primary text-primary dark:border-primary dark:text-primary",
                           )}
                           type="button"
                           title={threadMessageSearch.trim() ? "Busca ativa — clique para editar" : "Buscar no histórico da conversa"}
@@ -1521,7 +1527,7 @@ export default function Conversations() {
                         <Button
                           variant="outline"
                           size="icon"
-                          className="h-9 w-9 shrink-0 rounded-xl border-slate-200/60 bg-white text-slate-500 shadow-sm hover:text-primary sm:h-10 sm:w-10"
+                          className={THREAD_TOOLBAR_BTN}
                           title="Etiquetas"
                           aria-label="Etiquetas"
                         >
@@ -1561,18 +1567,24 @@ export default function Conversations() {
                     </Popover>
                     <div className="hidden items-center gap-0.5 md:flex sm:gap-1">
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="icon"
-                        className={cn("h-9 w-9 rounded-xl", showDebug ? "text-primary" : "text-slate-500")}
+                        className={cn(
+                          THREAD_TOOLBAR_BTN,
+                          showDebug && "border-primary text-primary dark:border-primary dark:text-primary",
+                        )}
                         onClick={() => setShowDebug(!showDebug)}
                         title={showDebug ? "Ocultar debug" : "Mostrar debug"}
                       >
                         <Bug className="h-4 w-4" />
                       </Button>
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="icon"
-                        className="h-9 w-9 rounded-xl text-slate-500 hover:text-red-600"
+                        className={cn(
+                          THREAD_TOOLBAR_BTN,
+                          "hover:border-red-200 hover:text-red-600 dark:hover:border-red-500/40 dark:hover:text-red-400",
+                        )}
                         onClick={handleClearConversation}
                         disabled={clearing}
                         title="Limpar histórico"
@@ -1582,7 +1594,7 @@ export default function Conversations() {
                       <Button
                         variant="outline"
                         size="icon"
-                        className="h-10 w-10 rounded-xl border-slate-200/60 bg-white text-slate-500 shadow-sm hover:text-primary"
+                        className={THREAD_TOOLBAR_BTN}
                         type="button"
                         disabled
                         title="Brevemente"
@@ -1596,7 +1608,7 @@ export default function Conversations() {
                           type="button"
                           variant="outline"
                           size="icon"
-                          className="inline-flex h-9 w-9 shrink-0 touch-manipulation rounded-xl border-slate-200/60 bg-white text-slate-600 shadow-sm md:hidden"
+                          className={cn(THREAD_TOOLBAR_BTN, "inline-flex md:hidden")}
                           aria-label="Mais opções"
                           title="Mais opções"
                         >
