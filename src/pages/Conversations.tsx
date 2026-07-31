@@ -28,6 +28,9 @@ import {
   Loader2,
 } from "lucide-react";
 import { ConversationMessagesView } from "@/components/chat/ConversationMessagesView";
+import {
+  ContactConversationAvatar,
+} from "@/components/chat/ContactConversationAvatar";
 import { callAPI } from "@/lib/api-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -58,14 +61,6 @@ import { format, isToday, isYesterday } from "date-fns";
 import { cn, relationName } from "@/lib/utils";
 import { normalizeBrazilPhoneDigits, crmPhoneMatchesConversation } from "@/lib/crm-phone-match";
 import { dedupeAndSortConversationMessages, shouldShowChatMessage } from "@/lib/chatMessageDisplay";
-
-const AVATAR_COLORS = ["#019FA2", "#0d9488", "#0ea5e9", "#64748b", "#14b8a6", "#475569"];
-
-function getAvatarColor(name: string): string {
-  let h = 0;
-  for (let i = 0; i < (name || "").length; i++) h = (h << 5) - h + name.charCodeAt(i);
-  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
-}
 
 function normalizeDigits(value: unknown): string {
   return String(value ?? "").replace(/\D/g, "");
@@ -196,18 +191,16 @@ function ConversationContactPanel(props: {
     onRequestAddLabel,
     profileCta,
   } = props;
-  const bg = `linear-gradient(135deg, ${getAvatarColor(name)}dd, ${getAvatarColor(name)})`;
-
   return (
     <>
       <div className="relative flex flex-col items-center border-b border-slate-100 p-6 text-center dark:border-border sm:p-8">
         <div className="relative mb-4 sm:mb-5">
-          <div
-            className="relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-full text-lg font-bold text-white shadow-md ring-1 ring-slate-100 dark:ring-border sm:h-24 sm:w-24 sm:text-xl"
-            style={{ background: bg }}
-          >
-            {avatarUrl ? <img src={avatarUrl} alt="" className="h-full w-full object-cover" /> : avatarInitials}
-          </div>
+          <ContactConversationAvatar
+            url={avatarUrl}
+            name={name}
+            initials={avatarInitials}
+            className="h-20 w-20 text-lg shadow-md ring-1 ring-slate-100 dark:ring-border sm:h-24 sm:w-24 sm:text-xl"
+          />
           {statusOpen && (
             <span className="absolute bottom-1 right-1 h-4 w-4 rounded-full border-[3px] border-white bg-emerald-500 dark:border-card sm:h-5 sm:w-5" />
           )}
@@ -1276,7 +1269,6 @@ export default function Conversations() {
                   const timestamp = getListTimestamp(conv);
                   const name = displayName(conv);
 
-                  const avatarColor = getAvatarColor(name);
                   return (
                     <button
                       key={conv.id}
@@ -1289,19 +1281,12 @@ export default function Conversations() {
                     >
                       {/* Avatar */}
                       <div className="relative shrink-0">
-                        <div
-                          className="h-10 w-10 rounded-full flex items-center justify-center text-white font-bold text-[13px] shadow-sm"
-                          style={{
-                            background: `linear-gradient(135deg, ${avatarColor}dd, ${avatarColor})`,
-                            boxShadow: `0 2px 8px ${avatarColor}44`,
-                          }}
-                        >
-                          {conv.contact_avatar_url ? (
-                            <img src={conv.contact_avatar_url} alt="" className="h-full w-full rounded-full object-cover" />
-                          ) : (
-                            initials(conv)
-                          )}
-                        </div>
+                        <ContactConversationAvatar
+                          url={conv.contact_avatar_url}
+                          name={name}
+                          initials={initials(conv)}
+                          className="h-10 w-10 text-[13px]"
+                        />
                         {conv.status === "open" && (
                           <span className="absolute bottom-0.5 right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-success" />
                         )}
@@ -1379,18 +1364,12 @@ export default function Conversations() {
                       <ArrowLeft className="h-5 w-5" />
                     </Button>
                     <div className="relative shrink-0">
-                      <div
-                        className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-full text-xs font-bold text-white shadow-sm ring-2 ring-white dark:ring-border sm:h-12 sm:w-12 sm:text-sm"
-                        style={{
-                          background: `linear-gradient(135deg, ${getAvatarColor(displayName(selectedConv))}dd, ${getAvatarColor(displayName(selectedConv))})`,
-                        }}
-                      >
-                        {selectedConv?.contact_avatar_url ? (
-                          <img src={selectedConv.contact_avatar_url} alt="" className="h-full w-full object-cover" />
-                        ) : (
-                          initials(selectedConv)
-                        )}
-                      </div>
+                      <ContactConversationAvatar
+                        url={selectedConv?.contact_avatar_url}
+                        name={displayName(selectedConv)}
+                        initials={initials(selectedConv)}
+                        className="h-10 w-10 text-xs ring-2 ring-white dark:ring-border sm:h-12 sm:w-12 sm:text-sm"
+                      />
                       {selectedConv?.status === "open" && (
                         <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-[3px] border-white bg-emerald-500 dark:border-card" />
                       )}
@@ -1658,6 +1637,7 @@ export default function Conversations() {
                     isLoading={msgsLoading}
                     contactAvatarUrl={selectedConv?.contact_avatar_url}
                     contactInitials={initials(selectedConv)}
+                    contactName={displayName(selectedConv)}
                     agentName={selectedAgent?.name}
                     agentAvatarUrl={selectedAgent?.avatar_url}
                     showDebug={showDebug}

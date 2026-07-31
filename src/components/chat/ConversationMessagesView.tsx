@@ -19,6 +19,7 @@ import {
   dedupeAndSortConversationMessages,
 } from "@/lib/chatMessageDisplay";
 import { VideoPlayer, AudioPlayer, extractVideos } from "@/components/sandbox/MediaBubble";
+import { ContactConversationAvatar } from "@/components/chat/ContactConversationAvatar";
 import { nexusDb } from "@/integrations/supabase/nexus-client";
 
 const MSG_SPLIT = "<<MSG_SPLIT>>";
@@ -46,6 +47,8 @@ export interface ConversationMessagesViewProps {
   /** Avatar do contato (primeira bolha do usuário) */
   contactAvatarUrl?: string | null;
   contactInitials: string;
+  /** Nome do contato (cor do fallback de avatar) */
+  contactName?: string | null;
   /** Nome do agente IA que responde (exibido nas mensagens do assistente) */
   agentName?: string | null;
   /** Avatar URL do agente IA */
@@ -67,19 +70,12 @@ function getAgentInitials(name: string | null | undefined): string {
   return name.slice(0, 2).toUpperCase();
 }
 
-const CONTACT_AVATAR_COLORS = ["#019FA2", "#0d9488", "#0ea5e9", "#64748b", "#14b8a6", "#475569"];
-
-function getContactAvatarColor(initials: string): string {
-  let h = 0;
-  for (let i = 0; i < (initials || "").length; i++) h = (h << 5) - h + initials.charCodeAt(i);
-  return CONTACT_AVATAR_COLORS[Math.abs(h) % CONTACT_AVATAR_COLORS.length];
-}
-
 export function ConversationMessagesView({
   messages,
   isLoading,
   contactAvatarUrl,
   contactInitials,
+  contactName,
   agentName,
   agentAvatarUrl,
   showDebug = false,
@@ -427,41 +423,17 @@ export function ConversationMessagesView({
                         !isBoomLive && (isUser ? "justify-start" : "justify-end")
                       )}
                     >
-                      {isUser && bIdx === 0 && (() => {
-                        const avatarColor = getContactAvatarColor(contactInitials);
-                        return (
-                          <div
-                            className={cn(
-                              "relative mt-1 flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br font-bold text-white shadow-sm",
-                              isBoomLive ? "h-8 w-8 text-[11px]" : "h-10 w-10 text-[13px]"
-                            )}
-                            style={{
-                              background: contactAvatarUrl
-                                ? "transparent"
-                                : `linear-gradient(135deg, ${avatarColor}dd, ${avatarColor})`,
-                              boxShadow: contactAvatarUrl ? undefined : `0 2px 8px ${avatarColor}44`,
-                            }}
-                          >
-                            {contactAvatarUrl ? (
-                              <img
-                                src={contactAvatarUrl}
-                                alt=""
-                                className="h-full w-full object-cover"
-                                onError={(e) => {
-                                  const parent = (e.target as HTMLImageElement).parentElement;
-                                  if (parent) {
-                                    parent.style.background = `linear-gradient(135deg, ${avatarColor}dd, ${avatarColor})`;
-                                    parent.style.boxShadow = `0 2px 8px ${avatarColor}44`;
-                                  }
-                                  (e.target as HTMLImageElement).style.display = "none";
-                                }}
-                              />
-                            ) : (
-                              contactInitials
-                            )}
-                          </div>
-                        );
-                      })()}
+                      {isUser && bIdx === 0 && (
+                        <ContactConversationAvatar
+                          url={contactAvatarUrl}
+                          name={contactName || contactInitials}
+                          initials={contactInitials}
+                          className={cn(
+                            "mt-1",
+                            isBoomLive ? "h-8 w-8 text-[11px]" : "h-10 w-10 text-[13px]",
+                          )}
+                        />
+                      )}
                       <div className={cn(isBoomLive ? "max-w-[min(92%,20rem)] sm:max-w-[85%]" : "max-w-[75%]", isUser && bIdx === 0 && !isBoomLive && "flex gap-2.5")}>
                         <div
                           className={cn(

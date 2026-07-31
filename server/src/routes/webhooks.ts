@@ -772,7 +772,8 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           }
         }
         const cwBaseOut = (cfg.chatwoot_url as string | undefined)?.replace(/\/+$/, "");
-        let outgoingAvatar = resolveChatwootAvatarUrl(parsed.contactAvatarUrl, cwBaseOut) ?? parsed.contactAvatarUrl;
+        // Só grava URL absoluta (path relativo do ActiveStorage quebra no painel Boom).
+        let outgoingAvatar = resolveChatwootAvatarUrl(parsed.contactAvatarUrl, cwBaseOut);
         if (!outgoingAvatar && parsed.chatwootContactId && cfg.chatwoot_url && cfg.chatwoot_account_id && cfg.chatwoot_api_token) {
           outgoingAvatar = await fetchChatwootContactAvatarUrl(cfg, parsed.chatwootContactId, agentId);
         }
