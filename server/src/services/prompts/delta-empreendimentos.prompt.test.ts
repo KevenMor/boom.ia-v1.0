@@ -12,13 +12,29 @@ import {
 
 describe("Delta Empreendimentos — SYSTEM_PROMPT", () => {
   it("versão do prompt", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.5/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.7/);
   });
 
   it("funil SDR pede cidade de origem depois da intenção", () => {
     expect(SYSTEM_PROMPT).toMatch(/Cidade de origem/);
     expect(SYSTEM_PROMPT).toMatch(/Inten[cç][aã]o de uso/);
     expect(SYSTEM_PROMPT).toMatch(/funil do cliente/i);
+  });
+
+  it("anti-loop: não repetir intenção já respondida ao falar de valor", () => {
+    expect(SYSTEM_PROMPT).toMatch(/NUNCA REPETIR PERGUNTA JÁ RESPONDIDA/i);
+    expect(SYSTEM_PROMPT).toMatch(/loop de intenção/i);
+    expect(SYSTEM_PROMPT).toMatch(/intenção \*\*já\*\* foi respondida|intenção \*\*já\*\* foi|já foi respondida/i);
+    expect(SYSTEM_PROMPT).toMatch(/Quando NÃO transferir ainda/i);
+    expect(COMMUNICATION_RULES).toMatch(/nunca.*reenvie.*morar, investir/i);
+  });
+
+  it("apresentação progressiva do empreendimento", () => {
+    expect(SYSTEM_PROMPT).toMatch(/COMO APRESENTAR O EMPREENDIMENTO/i);
+    expect(SYSTEM_PROMPT).toMatch(/Camadas/i);
+    expect(SYSTEM_PROMPT).toMatch(/Adapte à intenção/i);
+    expect(SYSTEM_PROMPT).toMatch(/Gostaria de saber mais/i);
+    expect(COMMUNICATION_RULES).toMatch(/Apresente o empreendimento/i);
   });
 
   it("Reservas do Brasil com dados InstaCasa", () => {
@@ -101,14 +117,14 @@ describe("Delta Empreendimentos — registry", () => {
   it("resolve slug delta-empreendimentos", () => {
     const cfg = getPromptConfig("delta-empreendimentos");
     expect(cfg).not.toBeNull();
-    expect(cfg!.version).toBe("v1.5.5");
+    expect(cfg!.version).toBe("v1.5.7");
     expect(cfg!.description).toMatch(/Manu/i);
   });
 
   it("buildSystemPrompt ignora prompt do banco e injeta Manu", () => {
     const prompt = buildSystemPrompt("PROMPT_BANCO_IGNORAR", "delta-empreendimentos", false);
     expect(prompt).toContain("Manu");
-    expect(prompt).toContain("v1.5.5");
+    expect(prompt).toContain("v1.5.7");
     expect(prompt).not.toContain("Sara");
     expect(prompt).not.toContain("PROMPT_BANCO_IGNORAR");
     expect(prompt).not.toContain("COMPORTAMENTO DE SAUDAÇÃO:");
