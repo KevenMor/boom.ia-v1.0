@@ -355,13 +355,9 @@ export function ContactAgendaTab({ contactId, tenantId }: Props) {
           </div>
           <div className="rounded-lg border border-border bg-card p-4 overflow-hidden">
             <style>{`
-              .fc { font-family: inherit; }
-              .fc .fc-button-primary { background-color: hsl(var(--primary)); border-color: hsl(var(--primary)); }
-              .fc .fc-button-primary:not(:disabled).fc-button-active { background-color: hsl(var(--primary)); }
-              .fc .fc-daygrid-day.fc-day-today { background-color: hsl(var(--primary) / 0.05); }
-              .fc-theme-standard .fc-col-header-cell { background-color: hsl(var(--muted) / 0.5); }
-              .fc .fc-event-main { padding: 2px 4px; font-size: 0.75rem; }
+              .contact-agenda-fc .fc-event-main { padding: 2px 4px; font-size: 0.75rem; }
             `}</style>
+            <div className="contact-agenda-fc">
             <FullCalendar
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
             initialView="dayGridMonth"
@@ -377,6 +373,7 @@ export function ContactAgendaTab({ contactId, tenantId }: Props) {
             height="auto"
             contentHeight="auto"
           />
+            </div>
           </div>
         </div>
       )}
