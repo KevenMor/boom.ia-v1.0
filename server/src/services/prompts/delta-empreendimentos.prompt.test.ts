@@ -12,7 +12,7 @@ import {
 
 describe("Delta Empreendimentos — SYSTEM_PROMPT", () => {
   it("versão do prompt", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.10/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.11/);
   });
 
   it("anti-loop nome: proíbe 'Prazer, Keven' + 'Como posso te chamar' na mesma bolha", () => {
@@ -20,6 +20,17 @@ describe("Delta Empreendimentos — SYSTEM_PROMPT", () => {
     expect(SYSTEM_PROMPT).toMatch(/Prazer, Keven! Vi que você tem interesse/);
     expect(SYSTEM_PROMPT).toMatch(/PROIBIDO ABSOLUTO.*Como posso te chamar/i);
     expect(COMMUNICATION_RULES).toMatch(/v1\.5\.10|somente.*ainda n[aã]o.*disse o nome/i);
+  });
+
+  it("handoff via tool encaminhar_atendente", () => {
+    expect(SYSTEM_PROMPT).toMatch(/encaminhar_atendente/);
+    expect(SYSTEM_PROMPT).toMatch(/Equipe comercial/);
+    expect(SYSTEM_PROMPT).toMatch(/TOOL OBRIGATÓRIA|chame a tool no mesmo turno/i);
+    expect(COMMUNICATION_RULES).toMatch(/encaminhar_atendente/);
+    expect(DISPATCHER_PROMPT).toMatch(/encaminhar_atendente/);
+    expect(DISPATCHER_PROMPT).toMatch(/Equipe comercial/);
+    expect(DISPATCHER_PROMPT).toMatch(/Financeiro/);
+    expect(DISPATCHER_PROMPT).toMatch(/Setor responsável/);
   });
 
   it("funil SDR pede cidade de origem depois da intenção", () => {
@@ -136,14 +147,14 @@ describe("Delta Empreendimentos — registry", () => {
   it("resolve slug delta-empreendimentos", () => {
     const cfg = getPromptConfig("delta-empreendimentos");
     expect(cfg).not.toBeNull();
-    expect(cfg!.version).toBe("v1.5.10");
+    expect(cfg!.version).toBe("v1.5.11");
     expect(cfg!.description).toMatch(/Manu/i);
   });
 
   it("buildSystemPrompt ignora prompt do banco e injeta Manu", () => {
     const prompt = buildSystemPrompt("PROMPT_BANCO_IGNORAR", "delta-empreendimentos", false);
     expect(prompt).toContain("Manu");
-    expect(prompt).toContain("v1.5.10");
+    expect(prompt).toContain("v1.5.11");
     expect(prompt).not.toContain("Sara");
     expect(prompt).not.toContain("PROMPT_BANCO_IGNORAR");
     expect(prompt).not.toContain("COMPORTAMENTO DE SAUDAÇÃO:");
