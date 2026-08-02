@@ -49,32 +49,125 @@ export function formatDateBR(isoDate: string): string {
 
 /**
  * Extrai veiculo de interesse do historico de mensagens.
- * Procura por nomes de veiculos conhecidos (carros e motos) nas ultimas mensagens.
+ * Prefere mensagens do cliente e modelos citados; evita fragmentos da fala da IA
+ * (bug clássico: `moto` casava dentro de "Motors" e virava "rs de Sorocaba…").
  */
-function extractVeiculoFromMessages(messages: Array<{ role: string; content: string }>): string | undefined {
-  const recent = messages.slice(-20);
+const VEHICLE_MODEL_HINTS = [
+  "camaro", "maverick", "corolla", "civic", "hilux", "s10", "onix", "tracker",
+  "compass", "renegade", "toro", "strada", "argo", "mobi", "polo", "virtus",
+  "jetta", "golf", "t-cross", "tcross", "nivus", "hr-v", "hrv", "creta", "hb20",
+  "kwid", "kicks", "versa", "sentra", "frontier", "ranger", "amarok", "sw4",
+  "sw-4", "pajero", "l200", "saveiro", "gol", "voyage", "a3", "a4", "q3", "q5",
+  "x1", "x3", "320i", "glc", "gla", "c180", "lander", "xtz", "fazer", "factor",
+  "bros", "cg ", "pop ", "nmax", "pcx", "biz ", "mt-03", "mt03", "cb 500", "cb500",
+  "r1250", "gsx", "ninja", "z400", "duke",
+];
 
+const INTEREST_JUNK =
+  /\b(lgpd|prote[cç][aã]o de dados|processo [eé] bem|normas da|vou cuidar|como posso te chamar|sou a ana|ppl motors|atendimento por aqui|outra op[cç][aã]o pra voc[eê]|falar com (um )?atendente|quero falar|humano|atendente)\b/i;
+
+function cleanInterestCandidate(raw: string): string | undefined {
+  let s = raw
+    .replace(/\s+/g, " ")
+    .replace(/^[\s:.\-–—]+/, "")
+    .replace(/[.!?,;:]+$/g, "")
+    .trim();
+
+  // Corta prosa longa da IA após o modelo (primeira sentença curta)
+  const sentenceBreak = s.search(/[.!?](?:\s|$)/);
+  if (sentenceBreak > 8 && sentenceBreak < 70) {
+    s = s.slice(0, sentenceBreak).trim();
+  }
+  if (s.length > 72) s = s.slice(0, 72).replace(/\s+\S*$/, "").trim();
+
+  if (s.length < 3 || s.length > 80) return undefined;
+  if (INTEREST_JUNK.test(s)) return undefined;
+  // Fragmentos que começam com conector / resto de palavra ("rs de Sorocaba", "ou se temos")
+  if (/^(rs|ou|e|de|da|do|na|no|em|pra|para|aqui|segue|com|sem|falar)\b/i.test(s)) return undefined;
+  if (/^(já|ja)\s+vi\b/i.test(s)) return undefined;
+  return s;
+}
+
+function extractModelMention(text: string): string | undefined {
+  for (const hint of VEHICLE_MODEL_HINTS) {
+    const escaped = hint.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // Boundary: evita "versa" dentro de "conversa", "gol" dentro de palavras, etc.
+    const re = new RegExp(`(?:^|[^A-Za-z0-9À-ÿ])(${escaped}[A-Za-z0-9À-ÿ\\s\\-.]{0,28})`, "i");
+    const orig = text.match(re);
+    if (!orig?.[1]) continue;
+    let chunk = orig[1].trim();
+    // Inclui token anterior se parecer marca (Ford, Chevrolet…)
+    const before = text.slice(Math.max(0, (orig.index ?? 0) - 16), orig.index ?? 0);
+    const brand = before.match(/\b([A-Za-zÀ-ÿ]{2,12})\s*$/);
+    if (brand && !/^(seu|uma|um|o|a|na|no|em|de|da|do|e|já|ja|vi|meu|minha)$/i.test(brand[1])) {
+      chunk = `${brand[1]} ${chunk}`.trim();
+    }
+    const cleaned = cleanInterestCandidate(
+      chunk.replace(/\s+(e|e vou|vou|já|ja|como|qual|você|voce|pra|para|fica|segue)\b[\s\S]*$/i, "").trim(),
+    );
+    if (cleaned && /[A-Za-zÀ-ÿ]/.test(cleaned)) return cleaned;
+  }
+  return undefined;
+}
+
+export function extractVeiculoFromMessages(
+  messages: Array<{ role: string; content: string }>
+): string | undefined {
+  const recent = messages.slice(-24);
+
+  // 1) Mensagens do cliente — menção explícita a modelo
   for (let i = recent.length - 1; i >= 0; i--) {
     const m = recent[i];
-    const text = (m?.content || "").trim();
-    if (!text) continue;
+    if (m?.role !== "user") continue;
+    const text = (m.content || "").trim();
+    if (!text || text.length < 2) continue;
+    const fromModel = extractModelMention(text);
+    if (fromModel) return fromModel;
 
-    const vehiclePattern = /(?:interesse|veículo|veiculo|carro|moto|modelo|procurando|quer ver|olhar)[:\s]*(.{3,80})/i;
-    const match = text.match(vehiclePattern);
-    if (match) {
-      return match[1].replace(/[.!?,;]+$/, "").trim();
+    const userInterest = text.match(
+      /\b(?:interesse|interessado|procurando|olhando|buscando)\b(?:\s+(?:n[oa]|em|por|um[a]?|o|a))?\s+(.{2,60})/i,
+    );
+    if (userInterest) {
+      const cleaned = cleanInterestCandidate(userInterest[1]);
+      if (cleaned) return cleaned;
+    }
+    const queroVeiculo = text.match(
+      /\bquero\s+(?:ver|conhecer|olhar)?\s*(?:um[a]?\s+)?([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9\s\-.]{1,40})/i,
+    );
+    if (queroVeiculo && !/\batendente\b|\bhumano\b/i.test(queroVeiculo[1])) {
+      const cleaned = cleanInterestCandidate(queroVeiculo[1]);
+      if (cleaned && extractModelMention(cleaned)) return cleaned;
     }
   }
 
+  // 2) Assistente — só padrões explícitos de interesse/apresentação de estoque
   for (let i = recent.length - 1; i >= 0; i--) {
     const m = recent[i];
     if (m?.role !== "assistant") continue;
     const text = (m.content || "").trim();
+    if (!text) continue;
+    // Ignora mensagens institucionais (LGPD, processo, etc.)
+    if (INTEREST_JUNK.test(text) && !/\binteresse\s+(?:n[oa]|em|pelo?|pela)\s+/i.test(text)) {
+      continue;
+    }
 
-    const stockMatch = text.match(/(?:Temos uma|Encontrei|temos o|temos a|Confira)[:\s]*(.{5,100})/i);
+    const interestIn = text.match(
+      /\b(?:seu\s+)?interesse\s+(?:n[oa]|em|pelo?|pela)\s+(.{3,55})/i,
+    );
+    if (interestIn) {
+      const cleaned = cleanInterestCandidate(interestIn[1]);
+      if (cleaned) return cleaned;
+    }
+
+    const fromModel = extractModelMention(text);
+    if (fromModel) return fromModel;
+
+    const stockMatch = text.match(
+      /\b(?:Temos uma|Encontrei|temos o|temos a|Confira)\s+(.{5,55})/i,
+    );
     if (stockMatch) {
-      const cleaned = stockMatch[1].split("\n")[0].replace(/[.!?,;]+$/, "").trim();
-      if (cleaned.length > 3) return cleaned;
+      const cleaned = cleanInterestCandidate(stockMatch[1].split("\n")[0]);
+      if (cleaned) return cleaned;
     }
   }
 

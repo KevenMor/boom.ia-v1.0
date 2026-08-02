@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { formatDateBR, toBrasiliaISO, buildFallbackAgendaNotification, buildCancelNotification, buildHandoffNotification, extractClientNameFromMessages } from "./agendaNotification.js";
+import {
+  formatDateBR,
+  toBrasiliaISO,
+  buildFallbackAgendaNotification,
+  buildCancelNotification,
+  buildHandoffNotification,
+  extractClientNameFromMessages,
+  extractVeiculoFromMessages,
+} from "./agendaNotification.js";
 
 describe("formatDateBR", () => {
   it("formata ISO com offset para dia_semana DD/MM/AAAA, HH:MM", () => {
@@ -113,6 +121,57 @@ describe("buildHandoffNotification", () => {
     expect(result).toContain("📞");
     expect(result).toContain("Interesse: Chevrolet Onix Joy");
     expect(result).toContain("Encaminhado automaticamente pela IA");
+  });
+
+  it("extrai Camaro do histórico sem fragmentar 'Motors'", () => {
+    const messages = [
+      {
+        role: "assistant",
+        content:
+          "Olá! Sou a Ana Júlia, da PPL Motors de Sorocaba. Já vi seu interesse no Camaro SS V8 e vou cuidar do seu atendimento por aqui. Como posso te chamar?",
+      },
+      { role: "user", content: "Sim" },
+    ];
+    const result = buildHandoffNotification("Cliente", "5515999999999", undefined, messages);
+    expect(result).toContain("Interesse:");
+    expect(result).toMatch(/Camaro/i);
+    expect(result).not.toMatch(/rs de Sorocaba/i);
+    expect(result).not.toMatch(/vou cuidar/i);
+  });
+
+  it("não usa trecho de LGPD / processo como interesse", () => {
+    const messages = [
+      {
+        role: "assistant",
+        content:
+          "Aqui na PPL Motors, o processo é bem simples e a gente segue todas as normas da LGPD (Lei Geral de Proteção de Dados) e esta conversa fica registrada.",
+      },
+      { role: "user", content: "quero falar com atendente" },
+    ];
+    const result = buildHandoffNotification("Cliente", "5515999999999", undefined, messages);
+    expect(result).not.toContain("Interesse:");
+  });
+});
+
+describe("extractVeiculoFromMessages", () => {
+  it("prioriza modelo citado pelo cliente", () => {
+    const messages = [
+      { role: "user", content: "Tenho interesse na Ford Maverick" },
+      { role: "assistant", content: "Ótimo! Vou te passar os detalhes da Maverick." },
+    ];
+    expect(extractVeiculoFromMessages(messages)).toMatch(/Maverick/i);
+  });
+
+  it("não casa 'moto' dentro de Motors", () => {
+    const messages = [
+      {
+        role: "assistant",
+        content: "Sou a Ana Júlia, da PPL Motors de Sorocaba. Já vi seu interesse na S10.",
+      },
+    ];
+    const v = extractVeiculoFromMessages(messages);
+    expect(v).toMatch(/S10/i);
+    expect(v).not.toMatch(/^rs\b/i);
   });
 });
 

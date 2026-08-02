@@ -22,6 +22,10 @@ import {
   reorderInventoryPhotosBeforeText,
   sanitizeInvalidInventoryPhotoAttempt,
 } from "../utils/inventory-photo-inject.js";
+import {
+  formatInventoryQuoteForDelivery,
+  shouldForceInventoryAfterNameCapture,
+} from "../utils/inventory-quote-format.js";
 import { formatOmnibeesQuoteForDelivery } from "../utils/omnibees-quote-format.js";
 import { getWelcomeConversationImageMarkdown } from "../utils/suite-gallery-welcome-image.js";
 import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification, buildHandoffNotification, extractClientNameFromMessages, toBrasiliaISO } from "../utils/agendaNotification.js";
@@ -1336,6 +1340,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         text = formatSunsetLodgingQuoteForDelivery(text, toolResultStrings, {
           lastUserMessage,
         });
+        text = formatInventoryQuoteForDelivery(text, toolResultStrings);
         const inventoryPhotoInject = injectInventoryPhotosIfMissing({
           assistantText: text,
           toolResultStrings,
@@ -1410,7 +1415,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           const lastAssistantMsg = [...messages].reverse().find((m) => m.role === "assistant");
           const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
           let schedulingHint = "";
-          let referencyInventoryHint = "";
+          let inventoryNameFollowUpHint = "";
           if (lastAssistantMsg && lastUserMsg) {
             const offeredTimes = /\b\d{1,2}[h:]\d{0,2}\b/.test(lastAssistantMsg.content);
             const offeredTomorrow = /amanh[aã]|dia seguinte|depois de amanhã/i.test(lastAssistantMsg.content);
@@ -1439,29 +1444,19 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           if (appraisalCtx) {
             entityHint += `\n\n[CONTEXTO DE FLUXO] A última mensagem do assistente pedia dados do veículo do CLIENTE (marca, modelo, ano, km). Isso é APPRAISAL (intent A). NÃO chame consultar_fipe — avaliação é feita presencialmente pelo time comercial. Se o cliente já forneceu marca+modelo+ano, chame consultar_agenda com action "check_availability" e date "${todayISO}" para oferecer horários reais ao sugerir visita na loja. NÃO chame consultar_estoque.`;
           }
-          if (tenantSlug === "referency" && lastUserMsg) {
-            const normalizedUser = lastUserMsg.content.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-            const looksLikeOnlyName = /^\s*(me\s+chamo\s+)?([a-z]{2,})(\s+[a-z]{2,})?\s*$/i.test(normalizedUser);
-            const priorUserWithVehicle = messages
-              .filter((m) => m.role === "user")
-              .slice(0, -1)
-              .reverse()
-              .find((m) => {
-                const extracted = extractVehicleEntities(m.content || "");
-                return !!(extracted.marca || extracted.modelo);
-              });
-            if (looksLikeOnlyName && priorUserWithVehicle) {
-              const extracted = extractVehicleEntities(priorUserWithVehicle.content || "");
+          if (hasInventoryTool) {
+            const forceInv = shouldForceInventoryAfterNameCapture(messages);
+            if (forceInv.force) {
               const parts: string[] = [];
-              if (extracted.marca) parts.push(`marca="${extracted.marca}"`);
-              if (extracted.modelo) parts.push(`modelo="${extracted.modelo}"`);
-              if (extracted.ano) parts.push(`ano=${extracted.ano}`);
-              referencyInventoryHint = `\n\n[HINT OBRIGATÓRIO — REFERENCY]\nO cliente acabou de responder apenas com o NOME, mas na mensagem anterior já tinha citado um veículo. Neste segundo turno, NÃO responda NO_TOOLS_NEEDED. Você DEVE chamar consultar_estoque para o veículo já citado anteriormente antes da resposta conversacional. Use os filtros: ${parts.join(", ")}.`;
+              if (forceInv.marca) parts.push(`marca="${forceInv.marca}"`);
+              if (forceInv.modelo) parts.push(`modelo="${forceInv.modelo}"`);
+              if (forceInv.ano) parts.push(`ano=${forceInv.ano}`);
+              inventoryNameFollowUpHint = `\n\n[HINT OBRIGATÓRIO — ESTOQUE APÓS NOME]\nO cliente acabou de responder apenas com o NOME, mas na mensagem anterior já tinha citado um veículo. Neste segundo turno, NÃO responda NO_TOOLS_NEEDED. Você DEVE chamar consultar_estoque para o veículo já citado antes da resposta conversacional. Use os filtros: ${parts.join(", ") || "marca/modelo do histórico"}. NUNCA invente preço, km, cor, versão ou câmbio — só dados do retorno da tool.`;
             }
           }
 
           const dispatcherMessages = toOpenAIMessages(
-            getDispatcherPrompt(tenantSlug) + dispatcherDateContext + entityHint + schedulingHint + referencyInventoryHint,
+            getDispatcherPrompt(tenantSlug) + dispatcherDateContext + entityHint + schedulingHint + inventoryNameFollowUpHint,
             messages
           );
 
@@ -2184,7 +2179,21 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
         });
       };
 
-      let llmMessages = toOpenAIMessages(systemPrompt, messages);
+      let llmMessages = toOpenAIMessages(
+        systemPrompt +
+          (hasInventoryTool
+            ? (() => {
+                const forceInv = shouldForceInventoryAfterNameCapture(messages);
+                if (!forceInv.force) return "";
+                const parts: string[] = [];
+                if (forceInv.marca) parts.push(`marca="${forceInv.marca}"`);
+                if (forceInv.modelo) parts.push(`modelo="${forceInv.modelo}"`);
+                if (forceInv.ano) parts.push(`ano=${forceInv.ano}`);
+                return `\n\n[HINT OBRIGATÓRIO — ESTOQUE APÓS NOME]\nO cliente acabou de responder apenas com o NOME, mas na mensagem anterior já tinha citado um veículo. Neste segundo turno você DEVE chamar consultar_estoque (${parts.join(", ") || "marca/modelo do histórico"}) antes de passar preço/km/versão. NUNCA invente dados de estoque.`;
+              })()
+            : ""),
+        messages
+      );
       let fullContent = "";
       let iteration = 0;
       let singleProviderUsageAccum: LlmStreamUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };

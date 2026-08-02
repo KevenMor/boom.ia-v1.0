@@ -6,7 +6,6 @@ import listPlugin from "@fullcalendar/list";
 import interactionPlugin from "@fullcalendar/interaction";
 import ptBrLocale from "@fullcalendar/core/locales/pt-br";
 import type { EventInput, DateSelectArg, EventClickArg } from "@fullcalendar/core";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -553,17 +552,16 @@ export default function CalendarPage() {
   }, [startDate, startTime, endDate, endTime, allDay]);
 
   return (
-    <div className="grid grid-cols-12 gap-6">
+    <div className="grid grid-cols-12 gap-5 xl:gap-6">
       {/* Calendar */}
-      <div className="xl:col-span-9 col-span-12 space-y-4">
-        {/* Tenant & Calendar filters */}
-        <Card>
-          <CardContent className="flex flex-wrap items-end gap-4 py-4">
+      <div className="col-span-12 space-y-4 xl:col-span-9">
+        {/* Filtros — barra leve estilo Google */}
+        <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border/80 bg-card/80 px-4 py-3">
             {!globalTenantId && (
-              <div className="space-y-1 min-w-[200px]">
-                <Label className="text-xs">Tenant</Label>
+              <div className="min-w-[180px] space-y-1">
+                <Label className="text-[12px] font-medium text-muted-foreground">Tenant</Label>
                 <Select value={localTenantId} onValueChange={(v) => { setLocalTenantId(v); setSelectedCalendarId("all"); }}>
-                  <SelectTrigger><SelectValue placeholder="Selecione o tenant" /></SelectTrigger>
+                  <SelectTrigger className="h-9"><SelectValue placeholder="Selecione o tenant" /></SelectTrigger>
                   <SelectContent>
                     {tenants?.map((t) => (
                       <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
@@ -573,15 +571,15 @@ export default function CalendarPage() {
               </div>
             )}
             {globalTenantId && (
-              <div className="space-y-1 min-w-[200px]">
-                <Label className="text-xs">Tenant</Label>
-                <p className="text-sm font-medium py-2">{tenants?.find(t => t.id === globalTenantId)?.name || "—"}</p>
+              <div className="min-w-[180px] space-y-1">
+                <Label className="text-[12px] font-medium text-muted-foreground">Tenant</Label>
+                <p className="py-1.5 text-sm font-medium tracking-[-0.01em]">{tenants?.find(t => t.id === globalTenantId)?.name || "—"}</p>
               </div>
             )}
-            <div className="space-y-1 min-w-[200px]">
-              <Label className="text-xs">Agenda</Label>
+            <div className="min-w-[180px] space-y-1">
+              <Label className="text-[12px] font-medium text-muted-foreground">Agenda</Label>
               <Select value={selectedCalendarId} onValueChange={setSelectedCalendarId} disabled={!selectedTenantId}>
-                <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Todas" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas as agendas</SelectItem>
                   {calendars?.map((c) => (
@@ -595,38 +593,34 @@ export default function CalendarPage() {
                 </SelectContent>
               </Select>
             </div>
-            <Button size="sm" variant="outline" disabled={!selectedTenantId} onClick={() => setNewCalDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-1" /> Nova Agenda
+            <Button size="sm" variant="outline" className="h-9 rounded-full" disabled={!selectedTenantId} onClick={() => setNewCalDialogOpen(true)}>
+              <Plus className="mr-1 h-4 w-4" /> Nova agenda
             </Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2 flex-row items-center justify-between gap-2">
-            <CardTitle className="text-base">Agenda</CardTitle>
             {isMobile && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setSidebarSheetOpen(true)}
-                className="shrink-0"
+                className="ml-auto h-9 shrink-0 rounded-full"
               >
-                <Menu className="h-4 w-4 mr-1" />
-                Agendas
+                <Menu className="mr-1 h-4 w-4" />
+                Mais
               </Button>
             )}
-          </CardHeader>
+        </div>
+
+        <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
           {isMobile && (
-            <div className="px-4 pb-2 flex gap-1.5 overflow-x-auto">
+            <div className="flex gap-1.5 overflow-x-auto border-b border-border/70 px-3 py-2.5">
               {VIEW_OPTIONS.map((opt) => (
                 <button
                   key={opt.id}
                   onClick={() => calendarRef.current?.getApi().changeView(opt.id)}
                   className={cn(
-                    "shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
+                    "shrink-0 rounded-full px-3 py-1.5 text-[12.5px] font-medium transition-colors",
                     currentView === opt.id
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                      ? "bg-primary/12 text-primary"
+                      : "text-muted-foreground hover:bg-muted/80"
                   )}
                 >
                   {opt.label}
@@ -634,7 +628,7 @@ export default function CalendarPage() {
               ))}
             </div>
           )}
-          <CardContent className="calendar-wrapper">
+          <div className="calendar-wrapper p-3 sm:p-4 md:p-5">
             <FullCalendar
               ref={calendarRef}
               plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
@@ -650,116 +644,127 @@ export default function CalendarPage() {
               selectable={!!selectedTenantId}
               selectMirror
               editable
-              dayMaxEvents
+              dayMaxEvents={3}
+              fixedWeekCount={false}
               events={events}
               select={handleDateSelect}
               eventClick={handleEventClick}
               height="auto"
+              aspectRatio={1.45}
               slotMinTime="06:00:00"
               slotMaxTime="23:00:00"
               slotDuration="00:30:00"
               slotLabelFormat={{ hour: "2-digit", minute: "2-digit", hour12: false }}
               eventTimeFormat={{ hour: "2-digit", minute: "2-digit", hour12: false }}
+              dayHeaderFormat={{ weekday: "short" }}
+              titleFormat={{ year: "numeric", month: "long" }}
               nowIndicator
               allDayText="Dia todo"
               buttonText={{ today: "Hoje", month: "Mês", week: "Semana", day: "Dia", list: "Lista" }}
+              moreLinkText={(n) => `+${n}`}
             />
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
 
       {/* Sidebar - desktop */}
-      <div className={cn("xl:col-span-3 col-span-12 space-y-6", isMobile && "hidden")}>
-        <Card>
-          <CardHeader className="flex-row items-center justify-between pb-2">
-            <CardTitle className="text-base">Agendas</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1.5">
+      <div className={cn("col-span-12 space-y-4 xl:col-span-3", isMobile && "hidden")}>
+        <div className="rounded-xl border border-border/80 bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+          <h3 className="mb-3 text-[13px] font-medium tracking-[-0.01em] text-foreground">Minhas agendas</h3>
+          <div className="space-y-0.5">
             {!selectedTenantId && (
-              <p className="text-xs text-muted-foreground">Selecione um tenant para ver as agendas.</p>
+              <p className="text-[12.5px] text-muted-foreground">Selecione um tenant para ver as agendas.</p>
             )}
-            {calendarsLoading && <p className="text-xs text-muted-foreground">Carregando...</p>}
+            {calendarsLoading && <p className="text-[12.5px] text-muted-foreground">Carregando...</p>}
             {calendars?.map((cal) => {
               const c = EVENT_COLORS[cal.color] || EVENT_COLORS.primary;
+              const active = selectedCalendarId === cal.id;
               return (
-                <div
+                <button
+                  type="button"
                   key={cal.id}
-                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm cursor-pointer transition-colors ${selectedCalendarId === cal.id ? "bg-muted" : "hover:bg-muted/50"}`}
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors",
+                    active ? "bg-muted/80" : "hover:bg-muted/50",
+                  )}
                   onClick={() => setSelectedCalendarId(cal.id === selectedCalendarId ? "all" : cal.id)}
                 >
-                  <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: c.bg }} />
-                  <span className="text-foreground flex-1">{cal.name}</span>
-                  <CalendarDays className="h-3 w-3 text-muted-foreground" />
-                </div>
+                  <span
+                    className={cn(
+                      "flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] border",
+                      active ? "border-transparent" : "border-border/80 bg-transparent",
+                    )}
+                    style={active ? { backgroundColor: c.bg, borderColor: c.bg } : undefined}
+                  >
+                    {active ? (
+                      <span className="block h-2 w-2 rounded-[1px] bg-white/95" />
+                    ) : (
+                      <span className="block h-2 w-2 rounded-[1px]" style={{ backgroundColor: c.bg }} />
+                    )}
+                  </span>
+                  <span className="flex-1 truncate font-medium tracking-[-0.01em] text-foreground">{cal.name}</span>
+                </button>
               );
             })}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Serviços</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <CalendarServicesTab tenantId={selectedTenantId || null} />
-          </CardContent>
-        </Card>
+        <div className="rounded-xl border border-border/80 bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+          <h3 className="mb-3 text-[13px] font-medium tracking-[-0.01em] text-foreground">Serviços</h3>
+          <CalendarServicesTab tenantId={selectedTenantId || null} />
+        </div>
 
-        <Card>
-          <CardHeader className="flex-row items-center justify-between pb-2">
-            <CardTitle className="text-base flex items-center gap-1.5">
-              <Bell className="h-4 w-4 text-primary" />
-              Lembretes agendados
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 max-h-[280px] overflow-y-auto">
+        <div className="rounded-xl border border-border/80 bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+          <h3 className="mb-3 flex items-center gap-1.5 text-[13px] font-medium tracking-[-0.01em] text-foreground">
+            <Bell className="h-3.5 w-3.5 text-muted-foreground" />
+            Lembretes
+          </h3>
+          <div className="max-h-[280px] space-y-2 overflow-y-auto">
             {!selectedTenantId && (
-              <p className="text-xs text-muted-foreground">Selecione um tenant.</p>
+              <p className="text-[12.5px] text-muted-foreground">Selecione um tenant.</p>
             )}
-            {selectedTenantId && pendingReminders === undefined && <p className="text-xs text-muted-foreground">Carregando...</p>}
+            {selectedTenantId && pendingReminders === undefined && <p className="text-[12.5px] text-muted-foreground">Carregando...</p>}
             {selectedTenantId && pendingReminders !== undefined && validReminders.length === 0 && (
-              <p className="text-xs text-muted-foreground">Nenhum lembrete pendente.</p>
+              <p className="text-[12.5px] text-muted-foreground">Nenhum lembrete pendente.</p>
             )}
             {validReminders.map((r) => (
-              <div key={r.id} className="rounded-lg border border-border p-2.5 text-sm">
+              <div key={r.id} className="rounded-lg border border-border/70 p-2.5 text-sm">
                 <div className="flex items-start justify-between gap-2">
-                  <p className="font-medium text-foreground line-clamp-1">{r.event_title}</p>
-                  <Badge variant={r.status === "sent" ? "secondary" : "default"} className="text-[10px] shrink-0">
+                  <p className="line-clamp-1 font-medium tracking-[-0.01em] text-foreground">{r.event_title}</p>
+                  <Badge variant={r.status === "sent" ? "secondary" : "default"} className="shrink-0 text-[10px]">
                     {r.status === "sent" ? "Enviado" : "Pendente"}
                   </Badge>
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
+                <p className="mt-0.5 text-[12px] text-muted-foreground">
                   Envio: {formatRemindAtBR(r.remind_at)}
                 </p>
               </div>
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Próximos Eventos</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 max-h-[400px] overflow-y-auto">
-            {eventsLoading && <p className="text-xs text-muted-foreground">Carregando...</p>}
+        <div className="rounded-xl border border-border/80 bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+          <h3 className="mb-3 text-[13px] font-medium tracking-[-0.01em] text-foreground">Próximos eventos</h3>
+          <div className="max-h-[400px] space-y-3 overflow-y-auto">
+            {eventsLoading && <p className="text-[12.5px] text-muted-foreground">Carregando...</p>}
             {upcomingEvents.slice(0, 5).map((ev) => (
               <div key={String(ev.id)} className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium text-foreground">{ev.title}</p>
-                  <Badge variant="secondary" className="text-[10px]">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[13px] font-medium tracking-[-0.01em] text-foreground">{ev.title}</p>
+                  <Badge variant="secondary" className="shrink-0 text-[10px]">
                     {typeof ev.start === "string" ? formatDateTimeBR(ev.start) : ev.start instanceof Date ? formatDateTimeBR(ev.start.toISOString()) : ""}
                   </Badge>
                 </div>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-[12px] text-muted-foreground">
                   {calendars?.find(c => c.id === ev.extendedProps?.calendarId)?.name || "Agenda"}
                 </p>
               </div>
             ))}
             {!eventsLoading && upcomingEvents.length === 0 && (
-              <p className="text-xs text-muted-foreground">Nenhum evento futuro.</p>
+              <p className="text-[12.5px] text-muted-foreground">Nenhum evento futuro.</p>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
 
       {/* Sidebar Sheet - mobile */}
