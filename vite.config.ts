@@ -1,39 +1,46 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 
-/**
- * Frontend chama `/api/*` e `/api/supabase-proxy/*` (nexus-client).
- * Isso só funciona se o processo Fastify existir na porta 3001 (ex.: `cd server && npm run dev`).
- * Em `vite preview` não havia proxy — todas as chamadas `/api` viravam 404 até adicionarmos preview.proxy igual ao dev.
- */
-const apiDevProxy = {
-  "/api": {
-    target: "http://127.0.0.1:3001",
-    changeOrigin: true,
-  },
-} as const;
-
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
-  server: {
-    host: "::",
-    port: 8080,
-    proxy: { ...apiDevProxy },
-    hmr: {
-      overlay: false,
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), "");
+  const frontPort = Number(env.VITE_DEV_PORT || "8080");
+  const apiPort = env.VITE_DEV_API_PORT || "3001";
+
+  /**
+   * Frontend chama `/api/*` e `/api/supabase-proxy/*` (nexus-client).
+   * Proxy aponta para o Fastify local (`server/.env` → PORT; alinhar com VITE_DEV_API_PORT).
+   */
+  const apiDevProxy = {
+    "/api": {
+      target: `http://127.0.0.1:${apiPort}`,
+      changeOrigin: true,
     },
-  },
-  preview: {
-    host: "::",
-    port: 8080,
-    proxy: { ...apiDevProxy },
-  },
-  plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
+  } as const;
+
+  return {
+    server: {
+      host: "::",
+      port: frontPort,
+      strictPort: true,
+      proxy: { ...apiDevProxy },
+      hmr: {
+        overlay: false,
+      },
     },
-  },
-}));
+    preview: {
+      host: "::",
+      port: frontPort,
+      strictPort: true,
+      proxy: { ...apiDevProxy },
+    },
+    plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+    resolve: {
+      alias: {
+        "@": path.resolve(__dirname, "./src"),
+      },
+    },
+  };
+});

@@ -24,6 +24,7 @@ export default {
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],
+        plex: ["IBM Plex Sans", "Inter", "system-ui", "sans-serif"],
         mono: ["JetBrains Mono", "Menlo", "monospace"],
       },
       colors: {

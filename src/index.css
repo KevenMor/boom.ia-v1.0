@@ -166,6 +166,170 @@
   }
 }
 
+/* TypeUI dashboard shell — escopo isolado (claro + escuro) */
+.ds-typeui {
+  --tu-primary: 207 87% 36%;
+  --tu-primary-fg: 0 0% 100%;
+  --tu-success: 160 84% 39%;
+  --tu-warning: 38 92% 50%;
+  --tu-danger: 0 84% 60%;
+  --tu-surface: 210 25% 97%;
+  --tu-elevated: 0 0% 100%;
+  --tu-text: 222 47% 11%;
+  --tu-muted: 215 16% 42%;
+  --tu-border: 214 24% 88%;
+  --tu-grid: 214 20% 92%;
+  --tu-glow: 207 87% 36%;
+
+  /* Remapeia tokens semânticos para widgets existentes herdarem o visual */
+  --background: var(--tu-surface);
+  --foreground: var(--tu-text);
+  --card: var(--tu-elevated);
+  --card-foreground: var(--tu-text);
+  --popover: var(--tu-elevated);
+  --popover-foreground: var(--tu-text);
+  --primary: var(--tu-primary);
+  --primary-foreground: var(--tu-primary-fg);
+  --secondary: 210 18% 94%;
+  --secondary-foreground: 222 30% 20%;
+  --muted: 210 18% 94%;
+  --muted-foreground: var(--tu-muted);
+  --accent: var(--tu-primary);
+  --accent-foreground: var(--tu-primary-fg);
+  --destructive: var(--tu-danger);
+  --success: var(--tu-success);
+  --warning: var(--tu-warning);
+  --info: var(--tu-primary);
+  --border: var(--tu-border);
+  --input: var(--tu-border);
+  --ring: var(--tu-primary);
+
+  font-family: "IBM Plex Sans", Inter, system-ui, sans-serif;
+  color: hsl(var(--tu-text));
+  background:
+    radial-gradient(1200px 480px at 12% -8%, hsl(var(--tu-glow) / 0.07), transparent 55%),
+    radial-gradient(900px 420px at 92% 0%, hsl(210 40% 70% / 0.12), transparent 50%),
+    hsl(var(--tu-surface));
+}
+
+.dark .ds-typeui {
+  --tu-primary: 207 80% 52%;
+  --tu-primary-fg: 0 0% 100%;
+  --tu-success: 160 72% 42%;
+  --tu-warning: 38 92% 55%;
+  --tu-danger: 0 72% 55%;
+  --tu-surface: 240 6% 4%;
+  --tu-elevated: 240 5% 7%;
+  --tu-text: 0 0% 98%;
+  --tu-muted: 220 9% 58%;
+  --tu-border: 240 4% 16%;
+  --tu-grid: 240 4% 14%;
+  --tu-glow: 207 80% 52%;
+
+  --background: var(--tu-surface);
+  --foreground: var(--tu-text);
+  --card: var(--tu-elevated);
+  --card-foreground: var(--tu-text);
+  --popover: var(--tu-elevated);
+  --popover-foreground: var(--tu-text);
+  --primary: var(--tu-primary);
+  --primary-foreground: var(--tu-primary-fg);
+  --secondary: 240 4% 12%;
+  --secondary-foreground: 210 20% 90%;
+  --muted: 240 4% 12%;
+  --muted-foreground: var(--tu-muted);
+  --accent: var(--tu-primary);
+  --accent-foreground: var(--tu-primary-fg);
+  --destructive: var(--tu-danger);
+  --success: var(--tu-success);
+  --warning: var(--tu-warning);
+  --info: var(--tu-primary);
+  --border: var(--tu-border);
+  --input: var(--tu-border);
+  --ring: var(--tu-primary);
+
+  background:
+    radial-gradient(1100px 520px at 8% -12%, hsl(var(--tu-glow) / 0.14), transparent 55%),
+    radial-gradient(800px 400px at 100% 0%, hsl(220 40% 40% / 0.08), transparent 45%),
+    hsl(var(--tu-surface));
+}
+
+.ds-typeui .tu-panel {
+  border: 1px solid hsl(var(--tu-border) / 0.9);
+  background: hsl(var(--tu-elevated) / 0.92);
+  border-radius: 12px;
+  box-shadow:
+    0 1px 2px hsl(222 47% 11% / 0.04),
+    0 8px 24px hsl(222 47% 11% / 0.04);
+  backdrop-filter: blur(8px);
+}
+
+.dark .ds-typeui .tu-panel {
+  background: hsl(var(--tu-elevated) / 0.85);
+  box-shadow:
+    0 1px 0 hsl(0 0% 100% / 0.04) inset,
+    0 8px 28px hsl(0 0% 0% / 0.35);
+}
+
+.ds-typeui .tu-kpi {
+  border: 1px solid hsl(var(--tu-border) / 0.9);
+  background: hsl(var(--tu-elevated) / 0.92);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px hsl(222 47% 11% / 0.04);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.ds-typeui .tu-kpi:hover {
+  border-color: hsl(var(--tu-primary) / 0.35);
+  box-shadow: 0 4px 16px hsl(var(--tu-primary) / 0.08);
+}
+
+.dark .ds-typeui .tu-kpi {
+  background: hsl(var(--tu-elevated) / 0.85);
+  box-shadow: 0 1px 0 hsl(0 0% 100% / 0.03) inset;
+}
+
+.ds-typeui .tu-label {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  color: hsl(var(--tu-muted));
+  line-height: 1.3;
+}
+
+.ds-typeui .tu-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  color: hsl(var(--tu-text));
+  line-height: 1.15;
+}
+
+.ds-typeui .tu-hint {
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+  line-height: 1.35;
+  color: hsl(var(--tu-muted));
+}
+
+.ds-typeui .tu-hint-up {
+  color: hsl(160 45% 32%);
+}
+
+.ds-typeui .tu-hint-down {
+  color: hsl(0 45% 42%);
+}
+
+.dark .ds-typeui .tu-hint-up {
+  color: hsl(160 40% 55%);
+}
+
+.dark .ds-typeui .tu-hint-down {
+  color: hsl(0 55% 68%);
+}
+
 /* FullCalendar — tema alinhado ao design system (esp. dark mode) */
 .fc {
   --fc-border-color: hsl(var(--border));

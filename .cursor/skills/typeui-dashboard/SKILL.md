@@ -95,5 +95,6 @@ When generating design-system guidance, use this structure:
 
 Conteúdo **local** (não sobrescrito pelo `typeui.sh pull`).
 
-- **Painel:** apenas **`/dashboard`** (`src/pages/Dashboard.tsx`). **`/dashboard/v2`** redireciona para **`/dashboard`** (sem UI dedicada).
-- Use o bloco **TypeUI** acima como guia ao evoluir métricas ou futuros dashboards; preview de referência: [TypeUI Dashboard](https://www.typeui.sh/design-skills/dashboard).
+- **Painel:** apenas **`/dashboard`** (`src/pages/Dashboard.tsx`) com shell TypeUI (claro + escuro via `.ds-typeui`). `/dashboard/v2` redireciona para `/dashboard`.
+- Use o bloco **TypeUI** acima como guia ao evoluir métricas; preview de referência: [TypeUI Dashboard](https://www.typeui.sh/design-skills/dashboard).
+- Tokens locais: `src/index.css` (`.ds-typeui`), tipografia IBM Plex Sans, componentes em `src/components/dashboard/v2/`.

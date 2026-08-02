@@ -16,6 +16,7 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 const routeTitles: Record<string, string> = {
   "/dashboard": "Painel",
+  "/kanban": "Kanban",
   "/tenants": "Tenants",
   "/agents": "Agentes",
   "/conversations": "Conversas",

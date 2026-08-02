@@ -28,6 +28,7 @@ import Providers from "@/pages/Providers";
 import EditProvider from "@/pages/EditProvider";
 import Monitoring from "@/pages/Monitoring";
 import Conversations from "@/pages/Conversations";
+import KanbanPage from "@/pages/KanbanPage";
 import Audit from "@/pages/Audit";
 import SettingsPage from "@/pages/SettingsPage";
 import PromptsPage from "@/pages/PromptsPage";
@@ -201,6 +202,14 @@ const App = () => (
                 element={
                   <ModuleRoute moduleKey="conversations">
                     <Conversations />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/kanban"
+                element={
+                  <ModuleRoute moduleKey="conversations">
+                    <KanbanPage />
                   </ModuleRoute>
                 }
               />

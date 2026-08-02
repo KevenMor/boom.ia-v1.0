@@ -11,11 +11,13 @@ function LayoutInner() {
   const location = useLocation();
   const isSandbox = location.pathname.includes("/sandbox");
   const isConversations = location.pathname === "/conversations";
+  const isKanban = location.pathname === "/kanban";
+  const isImmersive = isConversations || isKanban;
 
   const mainChrome =
     isSandbox
       ? "flex min-h-0 flex-1 flex-col overflow-hidden"
-      : isConversations
+      : isImmersive
         ? "flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
         : "min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-6 md:p-8";
 

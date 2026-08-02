@@ -1,6 +1,7 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
+  Columns3,
   MessageSquare,
   Bot,
   Calendar,
@@ -68,11 +69,20 @@ interface NavGroup {
   groupIcon?: LucideIcon;
 }
 
+/** Prefixo mais longo vence — evita /kanban ativo em rotas irmãs com prefixo comum. */
+function isNavItemActive(pathname: string, itemTo: string, allTos: string[]): boolean {
+  const matches = allTos.filter((to) => pathname === to || pathname.startsWith(`${to}/`));
+  if (matches.length === 0) return false;
+  const best = matches.reduce((a, b) => (a.length >= b.length ? a : b));
+  return best === itemTo;
+}
+
 export const navGroups: NavGroup[] = [
   {
     items: [
       { to: "/dashboard", icon: LayoutDashboard, label: "Painel", moduleKey: "dashboard" },
       { to: "/conversations", icon: MessageSquare, label: "Chat ao Vivo", moduleKey: "conversations" },
+      { to: "/kanban", icon: Columns3, label: "Kanban", moduleKey: "conversations" },
       { to: "/agents", icon: Bot, label: "Agentes", moduleKey: "agents" },
       { to: "/calendar", icon: Calendar, label: "Agenda", moduleKey: "calendar" },
       { to: "/followups", icon: RefreshCw, label: "Follow-ups", moduleKey: "followups" },
@@ -135,13 +145,15 @@ export const SIDEBAR_COLLAPSED_WIDTH = 56;
 function CollapsibleSection({
   group,
   currentPath,
+  allTos,
   onLinkClick,
 }: {
   group: NavGroup;
   currentPath: string;
+  allTos: string[];
   onLinkClick?: () => void;
 }) {
-  const hasActive = group.items.some((i) => currentPath.startsWith(i.to));
+  const hasActive = group.items.some((i) => isNavItemActive(currentPath, i.to, allTos));
   const [open, setOpen] = useState(group.defaultOpen ?? hasActive);
   const GroupIcon = group.groupIcon;
 
@@ -165,7 +177,7 @@ function CollapsibleSection({
       {open && (
         <div className="mt-0.5 space-y-0.5">
           {group.items.map((item) => {
-            const isActive = currentPath.startsWith(item.to);
+            const isActive = isNavItemActive(currentPath, item.to, allTos);
             const Icon = item.icon;
             return (
               <NavLink
@@ -227,6 +239,7 @@ function SidebarContent({ collapsed = false, onDropdownOpenChange }: { collapsed
     }))
     .filter((group) => group.items.length > 0);
 
+  const allNavTos = filteredNavGroups.flatMap((g) => g.items.map((i) => i.to));
   const footerInitials = (
     profile?.full_name?.trim()?.slice(0, 2) || user?.email?.slice(0, 2) || "?"
   ).toUpperCase();
@@ -261,7 +274,7 @@ function SidebarContent({ collapsed = false, onDropdownOpenChange }: { collapsed
         ) : collapsed ? (
           <div className="flex flex-col items-center gap-0.5">
             {filteredNavGroups.flatMap((g) => g.items).map((item) => {
-              const isActive = location.pathname.startsWith(item.to);
+              const isActive = isNavItemActive(location.pathname, item.to, allNavTos);
               const Icon = item.icon;
               return (
                 <NavLink
@@ -289,12 +302,13 @@ function SidebarContent({ collapsed = false, onDropdownOpenChange }: { collapsed
                 <CollapsibleSection
                   group={group}
                   currentPath={location.pathname}
+                  allTos={allNavTos}
                   onLinkClick={onLinkClick}
                 />
               ) : (
                 <div className="space-y-0.5">
                   {group.items.map((item) => {
-                    const isActive = location.pathname.startsWith(item.to);
+                    const isActive = isNavItemActive(location.pathname, item.to, allNavTos);
                     const Icon = item.icon;
                     return (
                       <NavLink
