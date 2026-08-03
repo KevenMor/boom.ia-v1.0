@@ -25,7 +25,7 @@ export function BoomIaLogo({ collapsed, className, onNavigate }: Props) {
         alt="Boom IA"
         className={cn(
           "hidden dark:block object-contain",
-          collapsed ? "h-9 w-9" : "h-12 w-auto max-w-[160px]",
+          collapsed ? "h-7 w-7" : "h-8 w-auto max-w-[140px]",
         )}
       />
       <img
@@ -33,7 +33,7 @@ export function BoomIaLogo({ collapsed, className, onNavigate }: Props) {
         alt="Boom IA"
         className={cn(
           "block dark:hidden object-contain",
-          collapsed ? "h-9 w-9" : "h-12 w-auto max-w-[160px]",
+          collapsed ? "h-7 w-7" : "h-8 w-auto max-w-[140px]",
         )}
       />
     </NavLink>

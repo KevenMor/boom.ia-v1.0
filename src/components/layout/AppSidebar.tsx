@@ -34,7 +34,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   LogOut,
-  Menu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ModuleKey } from "@/lib/tenant-modules";
@@ -79,6 +78,7 @@ function isNavItemActive(pathname: string, itemTo: string, allTos: string[]): bo
 
 export const navGroups: NavGroup[] = [
   {
+    groupLabel: "Operação",
     items: [
       { to: "/dashboard", icon: LayoutDashboard, label: "Painel", moduleKey: "dashboard" },
       { to: "/conversations", icon: MessageSquare, label: "Chat ao Vivo", moduleKey: "conversations" },
@@ -86,6 +86,11 @@ export const navGroups: NavGroup[] = [
       { to: "/agents", icon: Bot, label: "Agentes", moduleKey: "agents" },
       { to: "/calendar", icon: Calendar, label: "Agenda", moduleKey: "calendar" },
       { to: "/followups", icon: RefreshCw, label: "Follow-ups", moduleKey: "followups" },
+    ],
+  },
+  {
+    groupLabel: "Comercial",
+    items: [
       { to: "/inventory", icon: Package, label: "Inventário", moduleKey: "inventory" },
       { to: "/occurrences", icon: AlertTriangle, label: "Ocorrências", moduleKey: "occurrences" },
       { to: "/galeria", icon: Image, label: "Galeria", moduleKey: "suite_galleries" },
@@ -116,6 +121,7 @@ export const navGroups: NavGroup[] = [
     ],
   },
   {
+    groupLabel: "Admin",
     items: [
       { to: "/tenants", icon: Globe, label: "Tenants", moduleKey: "tenants" },
       { to: "/users", icon: UserCircle, label: "Usuários", moduleKey: "tenants" },
@@ -139,33 +145,77 @@ export const navGroups: NavGroup[] = [
   },
 ];
 
-export const SIDEBAR_WIDTH = 220;
-export const SIDEBAR_COLLAPSED_WIDTH = 56;
+export const SIDEBAR_WIDTH = 240;
+export const SIDEBAR_COLLAPSED_WIDTH = 64;
+
+const navItemClass = (active: boolean, collapsed: boolean) =>
+  cn(
+    "flex items-center rounded-lg text-[13px] transition-colors duration-150",
+    collapsed ? "h-9 w-9 justify-center" : "gap-2.5 px-2.5 py-2",
+    active
+      ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+      : "text-sidebar-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground",
+  );
+
+function SectionLabel({ label, collapsed }: { label: string; collapsed?: boolean }) {
+  if (collapsed || !label) return null;
+  return (
+    <div className="mb-1 px-2.5">
+      <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-sidebar-foreground/55">
+        {label}
+      </span>
+    </div>
+  );
+}
 
 function CollapsibleSection({
   group,
   currentPath,
   allTos,
   onLinkClick,
+  collapsed,
 }: {
   group: NavGroup;
   currentPath: string;
   allTos: string[];
   onLinkClick?: () => void;
+  collapsed?: boolean;
 }) {
   const hasActive = group.items.some((i) => isNavItemActive(currentPath, i.to, allTos));
   const [open, setOpen] = useState(group.defaultOpen ?? hasActive);
   const GroupIcon = group.groupIcon;
+
+  if (collapsed) {
+    return (
+      <div className="flex flex-col items-center gap-0.5">
+        {group.items.map((item) => {
+          const isActive = isNavItemActive(currentPath, item.to, allTos);
+          const Icon = item.icon;
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              onClick={onLinkClick}
+              title={item.label}
+              className={navItemClass(isActive, true)}
+            >
+              <Icon className="h-4 w-4" strokeWidth={1.5} />
+            </NavLink>
+          );
+        })}
+      </div>
+    );
+  }
 
   return (
     <div>
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between px-3 py-2 text-xs font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground"
+        className="mb-1 flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-sidebar-foreground/55 transition-colors duration-150 hover:text-sidebar-accent-foreground"
       >
         <div className="flex items-center gap-2">
-          {GroupIcon && <GroupIcon className="h-4 w-4" strokeWidth={1.5} />}
+          {GroupIcon && <GroupIcon className="h-3.5 w-3.5" strokeWidth={1.5} />}
           <span>{group.groupLabel}</span>
         </div>
         {open ? (
@@ -175,7 +225,7 @@ function CollapsibleSection({
         )}
       </button>
       {open && (
-        <div className="mt-0.5 space-y-0.5">
+        <div className="space-y-0.5">
           {group.items.map((item) => {
             const isActive = isNavItemActive(currentPath, item.to, allTos);
             const Icon = item.icon;
@@ -184,15 +234,10 @@ function CollapsibleSection({
                 key={item.to}
                 to={item.to}
                 onClick={onLinkClick}
-                className={cn(
-                  "relative flex items-center gap-2.5 px-3 py-2 text-sm transition-colors duration-150",
-                  isActive
-                    ? "font-medium text-primary before:absolute before:left-0 before:top-1 before:bottom-1 before:w-0.5 before:rounded-full before:bg-primary"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
+                className={navItemClass(isActive, false)}
               >
-                <Icon className="h-4 w-4" strokeWidth={1.5} />
-                <span>{item.label}</span>
+                <Icon className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+                <span className="truncate">{item.label}</span>
               </NavLink>
             );
           })}
@@ -210,7 +255,7 @@ function SidebarNavSkeleton({ collapsed }: { collapsed: boolean }) {
         <Skeleton
           key={i}
           className={cn(
-            "rounded-md bg-muted/60",
+            "rounded-lg bg-sidebar-accent/60",
             collapsed ? "h-9 w-9" : "h-9 w-full",
           )}
         />
@@ -240,35 +285,33 @@ function SidebarContent({ collapsed = false, onDropdownOpenChange }: { collapsed
     .filter((group) => group.items.length > 0);
 
   const allNavTos = filteredNavGroups.flatMap((g) => g.items.map((i) => i.to));
+  const footerName = profile?.full_name?.trim() || null;
   const footerInitials = (
-    profile?.full_name?.trim()?.slice(0, 2) || user?.email?.slice(0, 2) || "?"
+    footerName?.slice(0, 2) || user?.email?.slice(0, 2) || "?"
   ).toUpperCase();
   const footerEmail = user?.email ?? "—";
 
   return (
     <div
       className={cn(
-        "flex h-full min-h-0 flex-col border-r border-border bg-card/50 backdrop-blur-sm",
-        collapsed ? "px-1.5 py-3" : "px-3 py-4",
+        "flex h-full min-h-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
+        collapsed ? "px-2 py-3" : "px-3 py-4",
       )}
     >
-      {/* Logo */}
       <BoomIaLogo collapsed={collapsed} onNavigate={onLinkClick} className="mb-4 shrink-0" />
 
-      {/* Workspace switcher */}
       {!collapsed && (
-        <div className="mb-3 px-1">
+        <div className="mb-4 shrink-0">
           <TenantSwitcher collapsed={false} onDropdownOpenChange={onDropdownOpenChange} />
         </div>
       )}
       {collapsed && (
-        <div className="mb-3 flex justify-center">
+        <div className="mb-4 flex justify-center shrink-0">
           <TenantSwitcher collapsed onDropdownOpenChange={onDropdownOpenChange} />
         </div>
       )}
 
-      {/* Navigation */}
-      <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto scrollbar-none">
+      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto scrollbar-none">
         {navLoading ? (
           <SidebarNavSkeleton collapsed={collapsed} />
         ) : collapsed ? (
@@ -282,12 +325,7 @@ function SidebarContent({ collapsed = false, onDropdownOpenChange }: { collapsed
                   to={item.to}
                   onClick={onLinkClick}
                   title={item.label}
-                  className={cn(
-                    "relative flex h-9 w-9 items-center justify-center rounded-md transition-colors duration-150",
-                    isActive
-                      ? "text-primary before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-0.5 before:rounded-full before:bg-primary"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                  )}
+                  className={navItemClass(isActive, true)}
                 >
                   <Icon className="h-4 w-4" strokeWidth={1.5} />
                 </NavLink>
@@ -296,78 +334,111 @@ function SidebarContent({ collapsed = false, onDropdownOpenChange }: { collapsed
           </div>
         ) : (
           filteredNavGroups.map((group, idx) => (
-            <div key={idx}>
-              {idx > 0 && <div className="my-2 mx-3 border-t border-border" />}
+            <div key={group.groupLabel ?? idx} className={cn(idx > 0 && "pt-3")}>
               {group.collapsible ? (
                 <CollapsibleSection
                   group={group}
                   currentPath={location.pathname}
                   allTos={allNavTos}
                   onLinkClick={onLinkClick}
+                  collapsed={false}
                 />
               ) : (
-                <div className="space-y-0.5">
-                  {group.items.map((item) => {
-                    const isActive = isNavItemActive(location.pathname, item.to, allNavTos);
-                    const Icon = item.icon;
-                    return (
-                      <NavLink
-                        key={item.to}
-                        to={item.to}
-                        onClick={onLinkClick}
-                        className={cn(
-                          "relative flex items-center gap-2.5 px-3 py-2 text-sm transition-colors duration-150",
-                          isActive
-                            ? "font-medium text-primary before:absolute before:left-0 before:top-1 before:bottom-1 before:w-0.5 before:rounded-full before:bg-primary"
-                            : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                        )}
-                      >
-                        <Icon className="h-4 w-4" strokeWidth={1.5} />
-                        <span>{item.label}</span>
-                      </NavLink>
-                    );
-                  })}
-                </div>
+                <>
+                  <SectionLabel label={group.groupLabel ?? ""} />
+                  <div className="space-y-0.5">
+                    {group.items.map((item) => {
+                      const isActive = isNavItemActive(location.pathname, item.to, allNavTos);
+                      const Icon = item.icon;
+                      return (
+                        <NavLink
+                          key={item.to}
+                          to={item.to}
+                          onClick={onLinkClick}
+                          className={navItemClass(isActive, false)}
+                        >
+                          <Icon className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+                          <span className="truncate">{item.label}</span>
+                        </NavLink>
+                      );
+                    })}
+                  </div>
+                </>
               )}
             </div>
           ))
         )}
       </nav>
 
-      {/* Collapse toggle */}
       {!isMobile && (
         <button
           type="button"
           onClick={toggle}
-          className="mt-2 flex shrink-0 items-center justify-center rounded-md p-2 text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
+          className={cn(
+            "mt-2 flex shrink-0 items-center rounded-lg text-sidebar-foreground transition-colors duration-150 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+            collapsed ? "h-9 w-9 justify-center" : "gap-2 px-2.5 py-2 text-[13px]",
+          )}
           title={collapsed ? "Expandir" : "Recolher"}
         >
           {collapsed ? (
             <PanelLeftOpen className="h-4 w-4" strokeWidth={1.5} />
           ) : (
-            <PanelLeftClose className="h-4 w-4" strokeWidth={1.5} />
+            <>
+              <PanelLeftClose className="h-4 w-4" strokeWidth={1.5} />
+              <span>Recolher</span>
+            </>
           )}
         </button>
       )}
 
-      {/* User footer */}
       {!collapsed && (
-        <div className="mt-2 shrink-0 border-t border-border pt-3 px-2">
+        <div className="mt-2 shrink-0 border-t border-sidebar-border pt-3">
           <DropdownMenu onOpenChange={onDropdownOpenChange}>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="flex w-full items-center gap-2.5 rounded-md p-1.5 text-left transition-colors duration-150 hover:bg-muted"
+                className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors duration-150 hover:bg-sidebar-accent"
               >
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-[10px] font-bold text-foreground">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-[11px] font-semibold text-sidebar-accent-foreground">
                   {footerInitials}
                 </div>
-                <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                  {footerEmail}
-                </span>
+                <div className="min-w-0 flex-1">
+                  {footerName && (
+                    <p className="truncate text-[13px] font-medium text-sidebar-accent-foreground">
+                      {footerName}
+                    </p>
+                  )}
+                  <p className="truncate text-[11px] text-sidebar-foreground/70">{footerEmail}</p>
+                </div>
+                <ChevronUp className="h-3.5 w-3.5 shrink-0 text-sidebar-foreground/50" strokeWidth={1.5} />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent side="top" align="start" className="w-48">
+            <DropdownMenuContent side="top" align="start" className="w-52">
+              <DropdownMenuItem onClick={() => navigate("/profile")}>
+                Meu Perfil
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => signOut()}>
+                <LogOut className="mr-2 h-3.5 w-3.5" />
+                Sair
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
+
+      {collapsed && (
+        <div className="mt-2 flex shrink-0 justify-center border-t border-sidebar-border pt-3">
+          <DropdownMenu onOpenChange={onDropdownOpenChange}>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                title={footerEmail}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-sidebar-accent text-[11px] font-semibold text-sidebar-accent-foreground transition-colors duration-150 hover:opacity-90"
+              >
+                {footerInitials}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="right" align="end" className="w-52">
               <DropdownMenuItem onClick={() => navigate("/profile")}>
                 Meu Perfil
               </DropdownMenuItem>
@@ -417,13 +488,14 @@ export function AppSidebar() {
       <>
         {isMobileOpen && (
           <div
-            className="fixed inset-0 z-40 bg-background/80"
+            className="fixed inset-0 z-40 bg-black/40"
             onClick={() => setMobileOpen(false)}
+            aria-hidden
           />
         )}
         <aside
           className={cn(
-            "fixed inset-y-0 left-0 z-50 w-[220px] transition-transform duration-200 ease-out",
+            "fixed inset-y-0 left-0 z-50 w-[240px] transition-transform duration-200 ease-out",
             isMobileOpen ? "translate-x-0" : "-translate-x-full",
           )}
         >

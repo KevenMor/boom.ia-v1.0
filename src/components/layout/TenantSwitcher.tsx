@@ -11,6 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
 export function TenantSwitcher({ collapsed = false, onDropdownOpenChange }: { collapsed?: boolean; onDropdownOpenChange?: (open: boolean) => void }) {
   const { data: tenants, isLoading, isError, error } = useTenants();
@@ -49,16 +50,18 @@ export function TenantSwitcher({ collapsed = false, onDropdownOpenChange }: { co
       scopedTenantDisplayName ??
       (isLoading ? "Carregando..." : visibleTenants[0]?.name ?? "Empresa");
 
+  const initial = displayName.slice(0, 1).toUpperCase();
+
   if (collapsed) {
     return (
       <DropdownMenu onOpenChange={onDropdownOpenChange}>
         <DropdownMenuTrigger asChild>
           <button
-            className="flex h-8 w-8 items-center justify-center rounded-md bg-muted text-[10px] font-bold text-foreground transition-colors duration-150 hover:bg-muted/80"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-sidebar-border bg-sidebar-accent/50 text-[11px] font-semibold text-sidebar-accent-foreground transition-colors duration-150 hover:bg-sidebar-accent"
             title={displayName}
             type="button"
           >
-            {displayName.slice(0, 1).toUpperCase()}
+            {initial}
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent side="right" align="start" className="w-56">
@@ -68,20 +71,20 @@ export function TenantSwitcher({ collapsed = false, onDropdownOpenChange }: { co
             <>
               <DropdownMenuItem onClick={() => setSelectedTenantId(null)} className="gap-2 py-2">
                 <span className="flex-1 truncate font-medium">Todos os tenants</span>
-                {!selectedTenantId && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
+                {!selectedTenantId && <Check className="h-3.5 w-3.5 shrink-0 text-foreground" />}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
             </>
           )}
           {isError && isSuperAdmin && (
-            <DropdownMenuItem disabled className="whitespace-normal text-xs text-destructive py-2">
+            <DropdownMenuItem disabled className="whitespace-normal py-2 text-xs text-destructive">
               /admin/tenants: {error?.message ?? "erro"}
             </DropdownMenuItem>
           )}
           {visibleTenants.map((t) => (
             <DropdownMenuItem key={t.id} onClick={() => setSelectedTenantId(t.id)} className="gap-2 py-2">
               <span className="flex-1 truncate">{t.name}</span>
-              {selectedTenantId === t.id && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
+              {selectedTenantId === t.id && <Check className="h-3.5 w-3.5 shrink-0 text-foreground" />}
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>
@@ -94,10 +97,18 @@ export function TenantSwitcher({ collapsed = false, onDropdownOpenChange }: { co
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left transition-colors duration-150 hover:bg-muted"
+          className={cn(
+            "flex w-full items-center gap-2.5 rounded-lg border border-sidebar-border bg-sidebar-accent/40 px-2.5 py-2 text-left",
+            "transition-colors duration-150 hover:bg-sidebar-accent",
+          )}
         >
-          <span className="min-w-0 flex-1 truncate text-sm text-foreground">{displayName}</span>
-          <ChevronDown className="ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" strokeWidth={1.5} />
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-sidebar-accent text-[11px] font-semibold text-sidebar-accent-foreground">
+            {initial}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-sidebar-accent-foreground">
+            {displayName}
+          </span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-sidebar-foreground/50" strokeWidth={1.5} />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent side="bottom" align="start" className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[200px] max-w-[260px]">
@@ -107,7 +118,7 @@ export function TenantSwitcher({ collapsed = false, onDropdownOpenChange }: { co
           <>
             <DropdownMenuItem onClick={() => setSelectedTenantId(null)} className="gap-2 py-2">
               <span className="flex-1 truncate text-sm font-medium">Todos os tenants</span>
-              {!selectedTenantId && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
+              {!selectedTenantId && <Check className="h-3.5 w-3.5 shrink-0 text-foreground" />}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
           </>
@@ -125,7 +136,7 @@ export function TenantSwitcher({ collapsed = false, onDropdownOpenChange }: { co
         {visibleTenants.map((t) => (
           <DropdownMenuItem key={t.id} onClick={() => setSelectedTenantId(t.id)} className="gap-2 py-2">
             <span className="flex-1 truncate text-sm">{t.name}</span>
-            {selectedTenantId === t.id && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
+            {selectedTenantId === t.id && <Check className="h-3.5 w-3.5 shrink-0 text-foreground" />}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
