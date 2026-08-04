@@ -163,16 +163,57 @@ describe("buildHandoffPrivateNote", () => {
       motivo: "pediu proposta comercial",
       messages: [
         { role: "user", content: "Quero valores e uma proposta personalizada" },
-        { role: "assistant", content: "Claro! Vou te ajudar." },
+        { role: "assistant", content: "Claro! Vou te ajudar com os valores e a proposta." },
       ],
       agentName: "Manu",
     });
     expect(note).toContain("Resumo do atendimento");
     expect(note).toContain("Nome: Gabriella Lustosa");
-    expect(note).toContain("Interesse: gestão de redes sociais");
+    expect(note).toContain("gestão de redes sociais");
     expect(note).toContain("Urgência:");
     expect(note).toContain("Gerado automaticamente por Manu");
+    expect(note).toContain("Contexto para continuar");
     expect(note).toMatch(/proposta|valores/i);
+  });
+
+  it("extrai Keven e contexto — não usa 'reservas do brasil' como nome", () => {
+    const messages = [
+      { role: "user", content: "Olá, quero saber sobre Reservas do Brasil" },
+      {
+        role: "assistant",
+        content:
+          "Oi! Sou a Manu da Delta Empreendimentos. Posso te ajudar com o empreendimento Reservas do Brasil. Como posso te chamar?",
+      },
+      { role: "user", content: "Me chamo Keven" },
+      {
+        role: "assistant",
+        content: "Prazer, Keven! O Reservas do Brasil tem lotes disponíveis. Quer que eu te mostre opções?",
+      },
+      { role: "user", content: "pode por favor me transferir para a equipe?" },
+    ];
+    const note = buildHandoffPrivateNote({
+      messages,
+      motivo: "Setor responsável",
+      agentName: "Manu",
+      telefoneCliente: "5511999990000",
+    });
+    expect(note).toMatch(/Nome: Keven/i);
+    expect(note).not.toMatch(/Nome: reservas do brasil/i);
+    expect(note).toMatch(/Interesse \/ assunto:.*Reservas do Brasil/i);
+    expect(note).toContain("Contexto para continuar");
+    expect(note).toContain("Linha do tempo:");
+    expect(note).not.toMatch(/Pedidos recentes:.*Me chamo Keven/i);
+    expect(note).not.toMatch(/O que o cliente pediu:.*transferir/i);
+  });
+});
+
+describe("extractClientNameFromMessages", () => {
+  it("reconhece 'Me chamo Keven'", () => {
+    const name = extractClientNameFromMessages([
+      { role: "assistant", content: "Como posso te chamar?" },
+      { role: "user", content: "Me chamo Keven" },
+    ]);
+    expect(name).toBe("Keven");
   });
 });
 

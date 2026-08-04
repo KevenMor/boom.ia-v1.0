@@ -248,7 +248,31 @@ export function containsInstitutionNameToken(candidate: string): boolean {
  * Extrai nome do cliente das ultimas mensagens (ex.: apos pergunta "Como posso te chamar?" ou junto com CPF/dados).
  */
 export function extractClientNameFromMessages(messages: Array<{ role: string; content: string }>): string | undefined {
-  const recent = messages.slice(-15);
+  const recent = messages.slice(-20);
+
+  // 1) Padrões explícitos: "Me chamo X", "Sou o/a X", "Pode me chamar de X"
+  const explicitRe =
+    /(?:me\s+chamo|meu\s+nome\s+(?:[eé]|eh)|sou\s+(?:o|a)\s+|pode\s+me\s+chamar\s+de|chama\s+(?:de\s+)?|aqui\s+[eé]\s+)\s*([A-Za-zÀ-ÿ]{2,}(?:\s+[A-Za-zÀ-ÿ]{2,}){0,3})/i;
+
+  for (let i = recent.length - 1; i >= 0; i--) {
+    const m = recent[i];
+    if (m?.role !== "user") continue;
+    const text = (m.content || "").replace(/\s+/g, " ").trim();
+    if (!text) continue;
+    const ex = text.match(explicitRe);
+    if (ex?.[1]) {
+      const candidate = ex[1].replace(/[,.!?].*$/, "").trim();
+      if (
+        candidate.length >= 2 &&
+        !isBlockedAsName(candidate) &&
+        !containsInstitutionNameToken(candidate) &&
+        !isLikelyTopicNotName(candidate)
+      ) {
+        return candidate;
+      }
+    }
+  }
+
   const cpfPattern = /\d{3}\s*\.?\s*\d{3}\s*\.?\s*\d{3}\s*[-.]?\s*\d{2}/;
   for (let i = recent.length - 1; i >= 0; i--) {
     const m = recent[i];
@@ -257,19 +281,46 @@ export function extractClientNameFromMessages(messages: Array<{ role: string; co
     if (!text || text.length < 3) continue;
     const line = text.split(/\n/)[0];
     if (cpfPattern.test(line)) {
-    const beforeCpf = line.split(cpfPattern)[0].trim();
-    const words = beforeCpf.split(/\s+/).filter((w) => w.length > 1 && !/^\d+$/.test(w));
-    if (words.length >= 2 && words.length <= 4) {
-      const name = words.length >= 3 ? words.slice(-2).join(" ") : words.join(" ");
-      return name.replace(/[,.]/g, "").trim();
+      const beforeCpf = line.split(cpfPattern)[0].trim();
+      const words = beforeCpf.split(/\s+/).filter((w) => w.length > 1 && !/^\d+$/.test(w));
+      if (words.length >= 2 && words.length <= 4) {
+        const name = words.length >= 3 ? words.slice(-2).join(" ") : words.join(" ");
+        const cleaned = name.replace(/[,.]/g, "").trim();
+        if (!isBlockedAsName(cleaned) && !containsInstitutionNameToken(cleaned) && !isLikelyTopicNotName(cleaned)) {
+          return cleaned;
+        }
+      }
     }
-    }
-    if (line.length >= 2 && line.length <= 60 && !cpfPattern.test(line) && !/^\d+$/.test(line)) {
+    // Só nome sozinho na linha (ex.: "Antonio Carlos") — não frases longas nem tópicos
+    if (line.length >= 2 && line.length <= 40 && !cpfPattern.test(line) && !/^\d+$/.test(line)) {
       const words = line.split(/\s+/).filter((w) => w.length > 0);
-      if (words.length >= 1 && words.length <= 4 && words.every((w) => /^[A-Za-zÀ-ÿ]+$/.test(w))) return line.trim();
+      if (
+        words.length >= 1 &&
+        words.length <= 4 &&
+        words.every((w) => /^[A-Za-zÀ-ÿ]+$/.test(w)) &&
+        !isBlockedAsName(line.trim()) &&
+        !containsInstitutionNameToken(line.trim()) &&
+        !isLikelyTopicNotName(line.trim())
+      ) {
+        return line.trim();
+      }
     }
   }
   return undefined;
+}
+
+/** Temas / empresas / assuntos — não confundir com nome da pessoa. */
+function isLikelyTopicNotName(candidate: string): boolean {
+  const n = candidate
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+  if (/\b(reservas?|brasil|empreendimento|loteamento|lote|quadra|parque|resort|hotel|pousada|thermas|motors|autoescola|clinica|odont)\b/.test(n)) {
+    return true;
+  }
+  if (/\b(transfer|atendente|equipe|humano|falar com)\b/.test(n)) return true;
+  return false;
 }
 
 /**
@@ -374,26 +425,145 @@ export function buildHandoffNotification(
   return lines.join("\n");
 }
 
-/** Pedidos / intenções recentes do cliente (heurística, sem LLM). */
+/** Pedidos / intenções do cliente — ignora transferência e saudações. */
 export function extractClientRequestsFromMessages(
   messages: Array<{ role: string; content: string }>,
 ): string | undefined {
+  const transferRe =
+    /\b(transfer|transfira|transferir|atendente|humano|equipe|falar com (algu[eé]m|um|uma|a equipe|o time)|passar (para|pro|pra))\b/i;
+  const nameOnlyRe =
+    /^(me\s+chamo|meu\s+nome|sou\s+(o|a)|pode\s+me\s+chamar)\b/i;
+  const intentRe =
+    /\b(valor|pre[cç]o|or[cç]amento|proposta|financi|parcela|visita|agendar|agendamento|fotos?|dispon|quero|gostaria|preciso|informa[cç][oõ]es?|detalhe|condi[cç][oõ]es|lote|quadra|reserva|empreendimento|hospedagem)\b/i;
+
   const userTexts = messages
     .filter((m) => m.role === "user")
     .map((m) => (m.content || "").replace(/\s+/g, " ").trim())
-    .filter((t) => t.length >= 8 && t.length <= 220)
-    .slice(-6);
+    .filter((t) => {
+      if (t.length < 4 || t.length > 220) return false;
+      if (transferRe.test(t)) return false;
+      if (nameOnlyRe.test(t) && t.split(/\s+/).length <= 5) return false;
+      return true;
+    })
+    .slice(-8);
 
   if (userTexts.length === 0) return undefined;
-
-  const intentRe =
-    /\b(valor|pre[cç]o|or[cç]amento|proposta|financi|parcela|visita|agendar|agendamento|fotos?|dispon|quero|gostaria|preciso|informa[cç][oõ]es?|detalhe|condi[cç][oõ]es)\b/i;
 
   const hits = userTexts.filter((t) => intentRe.test(t));
   const picks = (hits.length > 0 ? hits : userTexts).slice(-3);
   const joined = picks.join(" · ");
   if (joined.length > 280) return `${joined.slice(0, 277).trim()}…`;
   return joined;
+}
+
+/** Assunto / interesse além de veículo (lote, reserva, serviço…). */
+export function extractTopicInterestFromMessages(
+  messages: Array<{ role: string; content: string }>,
+): string | undefined {
+  const vehicle = extractVeiculoFromMessages(messages);
+  if (vehicle) return vehicle;
+
+  const blob = messages
+    .slice(-20)
+    .map((m) => (m.content || "").replace(/\s+/g, " ").trim())
+    .join("\n");
+
+  const topicPatterns: Array<{ re: RegExp; label: (m: RegExpMatchArray) => string }> = [
+    {
+      re: /\b(reservas?\s+do\s+brasil|delta\s+empreendimentos?|loteamento|empreendimento|lote\s+[a-z0-9\-]+|quadra\s+[a-z0-9\-]+)\b/i,
+      label: (m) => m[1],
+    },
+    {
+      re: /\b(gest[aã]o\s+de\s+redes\s+sociais|marketing\s+digital|tr[aá]fego\s+pago)\b/i,
+      label: (m) => m[1],
+    },
+    {
+      re: /\b(hospedagem|di[aá]ria|suite|su[ií]te|chal[eé]|loft)\b/i,
+      label: (m) => m[1],
+    },
+  ];
+
+  for (const { re, label } of topicPatterns) {
+    const m = blob.match(re);
+    if (m?.[1]) {
+      const t = label(m).replace(/\s+/g, " ").trim();
+      if (t.length >= 3 && t.length <= 80) return t;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Monta um parágrafo de contexto para o humano não ficar perdido.
+ * Resume o que o cliente pediu e o que a IA já fez/respondeu.
+ */
+export function buildHandoffConversationContext(
+  messages: Array<{ role: string; content: string }>,
+): string | undefined {
+  if (!messages.length) return undefined;
+
+  const clean = (t: string) =>
+    t
+      .replace(/\s+/g, " ")
+      .replace(/\[HINT[^\]]*\]/gi, "")
+      .replace(/HANDOFF_COMERCIAL/gi, "")
+      .trim();
+
+  const transferRe =
+    /\b(transfer|transfira|transferir|atendente humano|falar com (a )?equipe|passar (para|pro|pra) (o )?time)\b/i;
+
+  const userMsgs = messages
+    .filter((m) => m.role === "user")
+    .map((m) => clean(m.content || ""))
+    .filter((t) => t.length >= 3);
+
+  const assistantMsgs = messages
+    .filter((m) => m.role === "assistant")
+    .map((m) => clean(m.content || ""))
+    .filter((t) => t.length >= 12);
+
+  const substantiveUser = userMsgs.filter((t) => !transferRe.test(t)).slice(-4);
+  const lastAssistant = assistantMsgs[assistantMsgs.length - 1];
+
+  const parts: string[] = [];
+
+  if (substantiveUser.length > 0) {
+    const clientBits = substantiveUser
+      .map((t) => (t.length > 120 ? `${t.slice(0, 117).trim()}…` : t))
+      .join(" | ");
+    parts.push(`Cliente disse: ${clientBits}`);
+  }
+
+  if (lastAssistant) {
+    // Primeiras 2 frases úteis da última resposta da IA
+    const sentences = lastAssistant
+      .split(/(?<=[.!?])\s+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 15 && !/^muito prazer/i.test(s))
+      .slice(0, 2);
+    const aiBit = (sentences.length ? sentences.join(" ") : lastAssistant).slice(0, 220);
+    parts.push(`Última resposta da IA: ${aiBit}${aiBit.length >= 220 ? "…" : ""}`);
+  }
+
+  // Timeline curta (últimos turnos mistos)
+  const recent = messages.slice(-6);
+  if (recent.length >= 2) {
+    const timeline = recent
+      .map((m) => {
+        const role = m.role === "user" ? "Cliente" : "IA";
+        let t = clean(m.content || "");
+        if (transferRe.test(t) && m.role === "user") t = "(pediu transferência)";
+        if (t.length > 90) t = `${t.slice(0, 87).trim()}…`;
+        return `${role}: ${t}`;
+      })
+      .filter((line) => !/:\s*$/.test(line));
+    if (timeline.length >= 2) {
+      parts.push(`Linha do tempo:\n${timeline.map((l) => `• ${l}`).join("\n")}`);
+    }
+  }
+
+  if (parts.length === 0) return undefined;
+  return parts.join("\n\n");
 }
 
 export function inferHandoffUrgency(
@@ -414,12 +584,15 @@ export function inferHandoffUrgency(
   if (/\b(valor|pre[cç]o|or[cç]amento|financi)\b/.test(blob)) {
     return "Média — pediu valores / condições";
   }
+  if (/\b(transfer|atendente|equipe|humano)\b/.test(blob)) {
+    return "Normal — pediu falar com a equipe";
+  }
   return "Normal — aguardando continuidade humana";
 }
 
 /**
  * Nota privada no Chatwoot (só a equipe vê) após transferir o atendimento.
- * Estilo “resumo completo” para o agente humano assumir o contexto.
+ * Contexto completo para o agente humano não ficar perdido.
  */
 export function buildHandoffPrivateNote(opts: {
   nomeCliente?: string;
@@ -430,20 +603,32 @@ export function buildHandoffPrivateNote(opts: {
   agentName?: string;
 }): string {
   const messages = opts.messages ?? [];
+  const extractedName = messages.length ? extractClientNameFromMessages(messages) : undefined;
+  const rawNome = (opts.nomeCliente || "").trim();
   const nome =
-    (opts.nomeCliente || "").trim() ||
-    extractClientNameFromMessages(messages) ||
+    (rawNome &&
+    !isBlockedAsName(rawNome) &&
+    !containsInstitutionNameToken(rawNome) &&
+    !isLikelyTopicNotName(rawNome)
+      ? rawNome
+      : undefined) ||
+    extractedName ||
     "Cliente";
+
   const telefone = opts.telefoneCliente?.trim()
     ? formatPhone(opts.telefoneCliente.trim())
     : undefined;
+
   const interesse =
     opts.veiculoInteresse?.trim() ||
-    (messages.length ? extractVeiculoFromMessages(messages) : undefined);
+    (messages.length ? extractTopicInterestFromMessages(messages) : undefined);
+
   const pedidos = messages.length ? extractClientRequestsFromMessages(messages) : undefined;
+  const contexto = messages.length ? buildHandoffConversationContext(messages) : undefined;
   const urgencia = inferHandoffUrgency(messages, opts.motivo);
   const motivo = opts.motivo?.trim();
   const geradoPor = opts.agentName?.trim() || "Boom IA";
+  const turnos = messages.filter((m) => m.role === "user" || m.role === "assistant").length;
 
   const lines: string[] = [
     "📋 Resumo do atendimento (interno)",
@@ -451,11 +636,20 @@ export function buildHandoffPrivateNote(opts: {
     `Nome: ${nome}`,
   ];
   if (telefone) lines.push(`Telefone: ${telefone}`);
-  if (interesse) lines.push(`Interesse: ${interesse}`);
-  if (pedidos) lines.push(`Pedidos recentes: ${pedidos}`);
+  if (interesse) lines.push(`Interesse / assunto: ${interesse}`);
+  if (pedidos) lines.push(`O que o cliente pediu: ${pedidos}`);
   lines.push(`Urgência: ${urgencia}`);
   if (motivo) lines.push(`Motivo do handoff: ${motivo}`);
+  if (turnos > 0) lines.push(`Mensagens na conversa: ~${turnos}`);
+
+  if (contexto) {
+    lines.push("");
+    lines.push("—— Contexto para continuar ——");
+    lines.push(contexto);
+  }
+
   lines.push("");
   lines.push(`✨ Gerado automaticamente por ${geradoPor}`);
+  lines.push("O cliente já foi avisado do encaminhamento — continue a conversa a partir daqui.");
   return lines.join("\n");
 }
