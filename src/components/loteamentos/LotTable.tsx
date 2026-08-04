@@ -100,15 +100,15 @@ export function LotTable({ lots, tenantId, canManage, selectedLotId, onSelectLot
 
   return (
     <div className={cn("space-y-3", className)}>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         <Input
           placeholder="Buscar código, quadra ou contato…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="max-w-xs"
+          className="h-11 w-full text-base sm:h-9 sm:max-w-xs sm:text-sm"
         />
         <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as LotStatus | "all")}>
-          <SelectTrigger className="w-[160px]">
+          <SelectTrigger className="h-11 w-full sm:h-9 sm:w-[160px]">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -121,7 +121,126 @@ export function LotTable({ lots, tenantId, canManage, selectedLotId, onSelectLot
         </Select>
       </div>
 
-      <div className="max-h-[52vh] overflow-auto rounded-xl border border-slate-200 dark:border-border">
+      {/* Mobile: cards */}
+      <div className="max-h-[min(60dvh,520px)] space-y-2 overflow-y-auto overscroll-contain md:hidden">
+        {filtered.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
+            Nenhum lote encontrado.
+          </p>
+        ) : (
+          filtered.map((lot) => {
+            const contactName = lot.contacts?.name;
+            return (
+              <div
+                key={lot.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => onSelectLot(lot)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onSelectLot(lot);
+                  }
+                }}
+                className={cn(
+                  "rounded-xl border border-border bg-card p-3 shadow-sm transition-colors",
+                  "touch-manipulation active:bg-muted/40",
+                  selectedLotId === lot.id && "border-primary/40 bg-primary/5",
+                )}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-foreground">{lot.code}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Quadra {lot.block ?? "—"} · Nº {lot.lot_number ?? "—"}
+                      {lot.area_m2 != null ? ` · ${Number(lot.area_m2).toLocaleString("pt-BR")} m²` : ""}
+                    </p>
+                  </div>
+                  <Badge variant="outline" className={cn("shrink-0", statusBadgeClass(lot.status))}>
+                    {lotStatusLabel(lot.status)}
+                  </Badge>
+                </div>
+                {contactName ? (
+                  <p className="mt-2 truncate text-xs text-muted-foreground">Contato: {contactName}</p>
+                ) : null}
+                <div
+                  className="mt-3 flex flex-wrap gap-2"
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => e.stopPropagation()}
+                >
+                  {canManage && onQuickAction && lot.status === "available" && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="min-h-10 flex-1 border-amber-500/40 bg-amber-500/10 text-amber-900 hover:bg-amber-500/20 dark:text-amber-300"
+                      onClick={() => onQuickAction(lot, "reserve")}
+                    >
+                      Reservar
+                    </Button>
+                  )}
+                  {canManage && onQuickAction && lot.status === "reserved" && (
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="min-h-10 flex-1 bg-slate-700 text-white hover:bg-slate-800"
+                        onClick={() => onQuickAction(lot, "sell")}
+                      >
+                        Vender
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="min-h-10"
+                        onClick={() => setReleaseTarget(lot)}
+                      >
+                        Liberar
+                      </Button>
+                    </>
+                  )}
+                  {canManage && lot.status === "blocked" && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="min-h-10 flex-1"
+                      onClick={() => setReleaseTarget(lot)}
+                    >
+                      Liberar
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="min-h-10"
+                    onClick={() => onSelectLot(lot)}
+                  >
+                    Detalhes
+                  </Button>
+                  {canManage && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="min-h-10 w-10 p-0 text-destructive hover:text-destructive"
+                      onClick={() => setDeleteTarget(lot)}
+                      title="Excluir lote"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Desktop: tabela */}
+      <div className="hidden max-h-[52vh] overflow-auto rounded-xl border border-slate-200 dark:border-border md:block">
         <Table>
           <TableHeader>
             <TableRow>

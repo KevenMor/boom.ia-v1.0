@@ -144,6 +144,14 @@
     display: none;
   }
 
+  /** Safe area helpers (notch / home indicator) */
+  .pb-safe {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+  .pt-safe {
+    padding-top: max(0.5rem, env(safe-area-inset-top));
+  }
+
   .box {
     @apply rounded-xl border border-border bg-card transition-shadow duration-200 hover:shadow-md;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);

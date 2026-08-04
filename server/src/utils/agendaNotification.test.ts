@@ -5,6 +5,7 @@ import {
   buildFallbackAgendaNotification,
   buildCancelNotification,
   buildHandoffNotification,
+  buildHandoffPrivateNote,
   extractClientNameFromMessages,
   extractVeiculoFromMessages,
 } from "./agendaNotification.js";
@@ -150,6 +151,28 @@ describe("buildHandoffNotification", () => {
     ];
     const result = buildHandoffNotification("Cliente", "5515999999999", undefined, messages);
     expect(result).not.toContain("Interesse:");
+  });
+});
+
+describe("buildHandoffPrivateNote", () => {
+  it("monta resumo interno com nome, interesse, urgência e assinatura", () => {
+    const note = buildHandoffPrivateNote({
+      nomeCliente: "Gabriella Lustosa",
+      telefoneCliente: "5511999990000",
+      veiculoInteresse: "gestão de redes sociais",
+      motivo: "pediu proposta comercial",
+      messages: [
+        { role: "user", content: "Quero valores e uma proposta personalizada" },
+        { role: "assistant", content: "Claro! Vou te ajudar." },
+      ],
+      agentName: "Manu",
+    });
+    expect(note).toContain("Resumo do atendimento");
+    expect(note).toContain("Nome: Gabriella Lustosa");
+    expect(note).toContain("Interesse: gestão de redes sociais");
+    expect(note).toContain("Urgência:");
+    expect(note).toContain("Gerado automaticamente por Manu");
+    expect(note).toMatch(/proposta|valores/i);
   });
 });
 

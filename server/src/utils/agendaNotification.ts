@@ -373,3 +373,89 @@ export function buildHandoffNotification(
   lines.push("✅ Encaminhado automaticamente pela IA");
   return lines.join("\n");
 }
+
+/** Pedidos / intenções recentes do cliente (heurística, sem LLM). */
+export function extractClientRequestsFromMessages(
+  messages: Array<{ role: string; content: string }>,
+): string | undefined {
+  const userTexts = messages
+    .filter((m) => m.role === "user")
+    .map((m) => (m.content || "").replace(/\s+/g, " ").trim())
+    .filter((t) => t.length >= 8 && t.length <= 220)
+    .slice(-6);
+
+  if (userTexts.length === 0) return undefined;
+
+  const intentRe =
+    /\b(valor|pre[cç]o|or[cç]amento|proposta|financi|parcela|visita|agendar|agendamento|fotos?|dispon|quero|gostaria|preciso|informa[cç][oõ]es?|detalhe|condi[cç][oõ]es)\b/i;
+
+  const hits = userTexts.filter((t) => intentRe.test(t));
+  const picks = (hits.length > 0 ? hits : userTexts).slice(-3);
+  const joined = picks.join(" · ");
+  if (joined.length > 280) return `${joined.slice(0, 277).trim()}…`;
+  return joined;
+}
+
+export function inferHandoffUrgency(
+  messages: Array<{ role: string; content: string }>,
+  motivo?: string,
+): string {
+  const blob = `${motivo || ""}\n${messages
+    .slice(-12)
+    .map((m) => m.content || "")
+    .join("\n")}`.toLowerCase();
+
+  if (/\b(urg[eê]nte|hoje|agora|imediato|o mais r[aá]pido)\b/.test(blob)) {
+    return "Alta — pediu atendimento rápido / hoje";
+  }
+  if (/\b(proposta|fechar|fechar neg[oó]cio|comprar|fechar o neg[oó]cio|pronto para)\b/.test(blob)) {
+    return "Lead qualificado — pronto para conversa comercial";
+  }
+  if (/\b(valor|pre[cç]o|or[cç]amento|financi)\b/.test(blob)) {
+    return "Média — pediu valores / condições";
+  }
+  return "Normal — aguardando continuidade humana";
+}
+
+/**
+ * Nota privada no Chatwoot (só a equipe vê) após transferir o atendimento.
+ * Estilo “resumo completo” para o agente humano assumir o contexto.
+ */
+export function buildHandoffPrivateNote(opts: {
+  nomeCliente?: string;
+  telefoneCliente?: string;
+  veiculoInteresse?: string;
+  motivo?: string;
+  messages?: Array<{ role: string; content: string }>;
+  agentName?: string;
+}): string {
+  const messages = opts.messages ?? [];
+  const nome =
+    (opts.nomeCliente || "").trim() ||
+    extractClientNameFromMessages(messages) ||
+    "Cliente";
+  const telefone = opts.telefoneCliente?.trim()
+    ? formatPhone(opts.telefoneCliente.trim())
+    : undefined;
+  const interesse =
+    opts.veiculoInteresse?.trim() ||
+    (messages.length ? extractVeiculoFromMessages(messages) : undefined);
+  const pedidos = messages.length ? extractClientRequestsFromMessages(messages) : undefined;
+  const urgencia = inferHandoffUrgency(messages, opts.motivo);
+  const motivo = opts.motivo?.trim();
+  const geradoPor = opts.agentName?.trim() || "Boom IA";
+
+  const lines: string[] = [
+    "📋 Resumo do atendimento (interno)",
+    "",
+    `Nome: ${nome}`,
+  ];
+  if (telefone) lines.push(`Telefone: ${telefone}`);
+  if (interesse) lines.push(`Interesse: ${interesse}`);
+  if (pedidos) lines.push(`Pedidos recentes: ${pedidos}`);
+  lines.push(`Urgência: ${urgencia}`);
+  if (motivo) lines.push(`Motivo do handoff: ${motivo}`);
+  lines.push("");
+  lines.push(`✨ Gerado automaticamente por ${geradoPor}`);
+  return lines.join("\n");
+}

@@ -4,8 +4,9 @@ import { runFipeQuery } from "./fipe.js";
 import { runOmnibeesAvailabilityQuery } from "./omnibees-availability.js";
 import { runArtaxnetAvailabilityQuery } from "./artaxnet-availability.js";
 import { runFindNearestUnit } from "./find-nearest-unit.js";
-import { buildHandoffNotification, containsInstitutionNameToken, isBlockedAsName } from "../utils/agendaNotification.js";
+import { buildHandoffNotification, buildHandoffPrivateNote, containsInstitutionNameToken, isBlockedAsName, extractClientNameFromMessages } from "../utils/agendaNotification.js";
 import { sendNotificationToGroup } from "../utils/sendNotification.js";
+import { sendChatwootPrivateNote } from "./delivery.js";
 import { addLeadLabelToConversation } from "./chatwoot-labels.js";
 import { ensureSupabaseStoragePublicObjectPath, normalizeStorageUrlForExternalUse } from "../lib/supabase-storage-public-url.js";
 import {
@@ -1622,6 +1623,61 @@ async function executeChatwootAssign(
       };
     }
 
+    // Nota privada na conversa do cliente — resumo para o humano assumir o contexto
+    try {
+      let phone: string | undefined;
+      let history: Array<{ role: string; content: string }> = [];
+      let agentName: string | undefined;
+
+      if (args?.conversation_id) {
+        const { data: convRow } = await supabase
+          .from("conversations")
+          .select("external_user_id")
+          .eq("agent_id", agentId)
+          .eq("id", args.conversation_id)
+          .maybeSingle();
+        if (convRow?.external_user_id) phone = String(convRow.external_user_id);
+
+        const { data: msgRows } = await supabase.rpc("load_conversation_messages", {
+          p_agent_id: agentId,
+          p_conversation_id: args.conversation_id,
+        });
+        if (Array.isArray(msgRows)) {
+          history = msgRows
+            .map((m: { role?: string; content?: string }) => ({
+              role: String(m.role || "user"),
+              content: String(m.content || ""),
+            }))
+            .filter((m) => m.content.trim().length > 0)
+            .slice(-40);
+        }
+      }
+
+      const { data: agentRow } = await supabase
+        .from("agents")
+        .select("name")
+        .eq("id", agentId)
+        .maybeSingle();
+      agentName = typeof agentRow?.name === "string" ? agentRow.name : undefined;
+
+      const note = buildHandoffPrivateNote({
+        nomeCliente: extractClientNameFromMessages(history),
+        telefoneCliente: phone,
+        motivo: reason !== "escalation" ? reason : undefined,
+        messages: history,
+        agentName,
+      });
+
+      const ok = await sendChatwootPrivateNote(cwUrl, cwToken, cwAccountId, cwConvId, note);
+      if (!ok) {
+        console.warn("[chatwoot_assign] Nota privada não enviada (API Chatwoot).");
+      } else {
+        console.log("[chatwoot_assign] Nota privada de resumo enviada | cwConv=", cwConvId);
+      }
+    } catch (e) {
+      console.warn("[chatwoot_assign] Falha ao montar/enviar nota privada:", (e as Error)?.message);
+    }
+
     return {
       success: true,
       result: {
@@ -1630,6 +1686,7 @@ async function executeChatwootAssign(
         assignee_id: assigneeId ?? null,
         team_id: teamId ?? null,
         matched_rule: matchedRule || null,
+        private_note: true,
       },
     };
   } catch (e: unknown) {

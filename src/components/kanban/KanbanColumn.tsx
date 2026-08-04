@@ -1,17 +1,17 @@
 import { cn } from "@/lib/utils";
 import { KanbanCard, type KanbanCardData } from "./KanbanCard";
-import { Inbox, UserRound } from "lucide-react";
+import { Bot, Inbox, UserRound } from "lucide-react";
 
 interface Props {
   title: string;
   subtitle?: string;
   cards: KanbanCardData[];
-  variant: "unassigned" | "assigned";
+  variant: "unassigned" | "ai" | "assigned";
   onOpen: (card: KanbanCardData) => void;
 }
 
 export function KanbanColumn({ title, subtitle, cards, variant, onOpen }: Props) {
-  const Icon = variant === "unassigned" ? Inbox : UserRound;
+  const Icon = variant === "unassigned" ? Inbox : variant === "ai" ? Bot : UserRound;
 
   return (
     <div className="flex h-full w-[300px] shrink-0 flex-col rounded-2xl border border-border/80 bg-muted/25 dark:bg-muted/15">
@@ -19,9 +19,11 @@ export function KanbanColumn({ title, subtitle, cards, variant, onOpen }: Props)
         <span
           className={cn(
             "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border",
-            variant === "unassigned"
-              ? "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-400"
-              : "border-border bg-card text-muted-foreground",
+            variant === "unassigned" &&
+              "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+            variant === "ai" &&
+              "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-400",
+            variant === "assigned" && "border-border bg-card text-muted-foreground",
           )}
         >
           <Icon className="h-4 w-4" strokeWidth={2} />

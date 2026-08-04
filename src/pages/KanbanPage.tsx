@@ -59,7 +59,13 @@ export default function KanbanPage() {
     if (!selectedAgentId) return;
     sessionStorage.setItem("conv_selectedAgentId", selectedAgentId);
     sessionStorage.setItem("conv_selectedContactKey", card.contactKey);
-    navigate("/conversations");
+    navigate("/conversations", {
+      state: {
+        selectedAgentId,
+        selectedContactKey: card.contactKey,
+        fromKanban: true,
+      },
+    });
   };
 
   if (!selectedAgentId) {
@@ -193,6 +199,7 @@ export default function KanbanPage() {
         ) : (
           <KanbanBoard
             conversations={conversations ?? []}
+            agentName={selectedAgent?.name}
             searchTerm={searchTerm}
             onlyOpen={onlyOpen}
             onOpen={openCard}

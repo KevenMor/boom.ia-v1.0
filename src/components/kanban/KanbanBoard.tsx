@@ -8,16 +8,26 @@ import {
 } from "@/lib/conversation-display";
 
 const UNASSIGNED_KEY = "__unassigned__";
+const AI_KEY = "__ai_agent__";
 
 export interface KanbanColumnModel {
   key: string;
   title: string;
   subtitle?: string;
-  variant: "unassigned" | "assigned";
+  variant: "unassigned" | "ai" | "assigned";
   cards: KanbanCardData[];
 }
 
-function toCard(conv: Conversation, contactKey: string): KanbanCardData {
+export interface BuildKanbanColumnsOptions {
+  /** Nome do agente Boom (IA) selecionado no Kanban. */
+  agentName?: string | null;
+}
+
+function toCard(
+  conv: Conversation,
+  contactKey: string,
+  assigneeDisplay: string | null,
+): KanbanCardData {
   return {
     id: conv.id,
     contactKey,
@@ -27,13 +37,39 @@ function toCard(conv: Conversation, contactKey: string): KanbanCardData {
     status: conv.status,
     messageCount: conv.message_count ?? 0,
     startedAt: conv.started_at,
-    assigneeName: conv.chatwoot_assignee_name?.trim() || null,
+    assigneeName: assigneeDisplay,
     labels: conv.labels ?? [],
   };
 }
 
-/** Deduplica por contato (mesma lógica do Chat ao Vivo) e agrupa por assignee. */
-export function buildKanbanColumns(conversations: Conversation[]): KanbanColumnModel[] {
+function namesMatch(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+/**
+ * Sem assignee humano → atendimento com a agente IA (mesma convenção do Chat ao Vivo:
+ * `chatwoot_assignee_name ?? agent.name`).
+ * Assignee cujo nome coincide com o da agente Boom também conta como IA.
+ * Sem mensagens e sem assignee → ainda na fila ("Sem atendimento").
+ */
+export function classifyKanbanBucket(
+  conv: Conversation,
+  agentName?: string | null,
+): "unassigned" | "ai" | "human" {
+  const assignee = conv.chatwoot_assignee_name?.trim() || null;
+  if (!assignee) {
+    return (conv.message_count ?? 0) > 0 ? "ai" : "unassigned";
+  }
+  if (agentName && namesMatch(assignee, agentName)) return "ai";
+  return "human";
+}
+
+/** Deduplica por contato (mesma lógica do Chat ao Vivo) e agrupa por fila / IA / humano. */
+export function buildKanbanColumns(
+  conversations: Conversation[],
+  options: BuildKanbanColumnsOptions = {},
+): KanbanColumnModel[] {
+  const agentName = options.agentName?.trim() || null;
   const byContact = new Map<string, Conversation>();
   const cwKeyMap = new Map<number, string>();
 
@@ -76,30 +112,48 @@ export function buildKanbanColumns(conversations: Conversation[]): KanbanColumnM
 
   const buckets = new Map<string, KanbanCardData[]>();
   buckets.set(UNASSIGNED_KEY, []);
+  buckets.set(AI_KEY, []);
 
   for (const [contactKey, conv] of byContact) {
-    const assignee = conv.chatwoot_assignee_name?.trim() || null;
-    const key = assignee ? `assignee:${assignee.toLowerCase()}` : UNASSIGNED_KEY;
+    const bucket = classifyKanbanBucket(conv, agentName);
+    if (bucket === "unassigned") {
+      buckets.get(UNASSIGNED_KEY)!.push(toCard(conv, contactKey, null));
+      continue;
+    }
+    if (bucket === "ai") {
+      buckets.get(AI_KEY)!.push(toCard(conv, contactKey, agentName));
+      continue;
+    }
+    const assignee = conv.chatwoot_assignee_name!.trim();
+    const key = `assignee:${assignee.toLowerCase()}`;
     if (!buckets.has(key)) buckets.set(key, []);
-    buckets.get(key)!.push(toCard(conv, contactKey));
+    buckets.get(key)!.push(toCard(conv, contactKey, assignee));
   }
 
   for (const list of buckets.values()) {
     list.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
   }
 
+  const aiTitle = agentName || "Agente IA";
   const columns: KanbanColumnModel[] = [
     {
       key: UNASSIGNED_KEY,
       title: "Sem atendimento",
-      subtitle: "Aguardando responsável",
+      subtitle: "Aguardando início",
       variant: "unassigned",
       cards: buckets.get(UNASSIGNED_KEY) ?? [],
+    },
+    {
+      key: AI_KEY,
+      title: aiTitle,
+      subtitle: "Agente IA",
+      variant: "ai",
+      cards: buckets.get(AI_KEY) ?? [],
     },
   ];
 
   const assigneeKeys = Array.from(buckets.keys())
-    .filter((k) => k !== UNASSIGNED_KEY)
+    .filter((k) => k !== UNASSIGNED_KEY && k !== AI_KEY)
     .sort((a, b) => {
       const an = buckets.get(a)?.[0]?.assigneeName ?? a;
       const bn = buckets.get(b)?.[0]?.assigneeName ?? b;
@@ -112,7 +166,7 @@ export function buildKanbanColumns(conversations: Conversation[]): KanbanColumnM
     columns.push({
       key,
       title: name,
-      subtitle: "Com atendimento",
+      subtitle: "Atendimento humano",
       variant: "assigned",
       cards,
     });
@@ -123,12 +177,19 @@ export function buildKanbanColumns(conversations: Conversation[]): KanbanColumnM
 
 interface BoardProps {
   conversations: Conversation[];
+  agentName?: string | null;
   searchTerm?: string;
   onlyOpen?: boolean;
   onOpen: (card: KanbanCardData) => void;
 }
 
-export function KanbanBoard({ conversations, searchTerm = "", onlyOpen = false, onOpen }: BoardProps) {
+export function KanbanBoard({
+  conversations,
+  agentName = null,
+  searchTerm = "",
+  onlyOpen = false,
+  onOpen,
+}: BoardProps) {
   const columns = useMemo(() => {
     let rows = conversations;
     if (onlyOpen) rows = rows.filter((c) => c.status === "open");
@@ -142,15 +203,18 @@ export function KanbanBoard({ conversations, searchTerm = "", onlyOpen = false, 
           c.contact_name?.toLowerCase().includes(term) ||
           c.external_user_id?.toLowerCase().includes(term) ||
           c.chatwoot_assignee_name?.toLowerCase().includes(term) ||
+          agentName?.toLowerCase().includes(term) ||
           c.channel?.toLowerCase().includes(term)
         );
       });
     }
-    return buildKanbanColumns(rows);
-  }, [conversations, searchTerm, onlyOpen]);
+    return buildKanbanColumns(rows, { agentName });
+  }, [conversations, searchTerm, onlyOpen, agentName]);
 
   const total = columns.reduce((s, c) => s + c.cards.length, 0);
-  const unassigned = columns[0]?.cards.length ?? 0;
+  const unassigned = columns.find((c) => c.key === UNASSIGNED_KEY)?.cards.length ?? 0;
+  const withAi = columns.find((c) => c.key === AI_KEY)?.cards.length ?? 0;
+  const humanCols = columns.filter((c) => c.variant === "assigned").length;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -165,7 +229,12 @@ export function KanbanBoard({ conversations, searchTerm = "", onlyOpen = false, 
         </span>
         <span className="text-border">·</span>
         <span>
-          <strong className="font-semibold tabular-nums text-foreground">{Math.max(0, columns.length - 1)}</strong>{" "}
+          <strong className="font-semibold tabular-nums text-sky-700 dark:text-sky-400">{withAi}</strong> com
+          IA
+        </span>
+        <span className="text-border">·</span>
+        <span>
+          <strong className="font-semibold tabular-nums text-foreground">{humanCols}</strong>{" "}
           responsáveis
         </span>
       </div>

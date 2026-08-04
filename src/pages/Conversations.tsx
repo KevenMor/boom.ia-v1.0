@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   MessageSquare,
   Bot,
@@ -56,7 +57,6 @@ import { useTenantContext } from "@/contexts/TenantContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useConversations, useMultiConversationMessages } from "@/hooks/useConversations";
 import { useContacts, useCreateContact, useUpdateContact } from "@/hooks/useContacts";
-import { useNavigate } from "react-router-dom";
 import { format, isToday, isYesterday } from "date-fns";
 import { cn, relationName } from "@/lib/utils";
 import { normalizeBrazilPhoneDigits, crmPhoneMatchesConversation } from "@/lib/crm-phone-match";
@@ -313,6 +313,8 @@ function ConversationContactPanel(props: {
 const CONTACT_PANEL_COLLAPSED_KEY = "boom_conv_contact_panel_collapsed";
 
 export default function Conversations() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { selectedTenantId, scopedTenantDisplayName } = useTenantContext();
   const { data: agents, isLoading: agentsLoading } = useAgents(selectedTenantId ?? undefined);
   const { data: tenants } = useTenants();
@@ -320,11 +322,18 @@ export default function Conversations() {
     () => new Map((tenants ?? []).map((t) => [t.id, t.name])),
     [tenants]
   );
+
+  const kanbanNav = (location.state as {
+    selectedAgentId?: string;
+    selectedContactKey?: string;
+    fromKanban?: boolean;
+  } | null) ?? null;
+
   const [selectedAgentId, setSelectedAgentIdState] = useState<string | null>(
-    () => sessionStorage.getItem("conv_selectedAgentId") ?? null
+    () => kanbanNav?.selectedAgentId ?? sessionStorage.getItem("conv_selectedAgentId") ?? null
   );
   const [selectedContactKey, setSelectedContactKeyState] = useState<string | null>(
-    () => sessionStorage.getItem("conv_selectedContactKey") ?? null
+    () => kanbanNav?.selectedContactKey ?? sessionStorage.getItem("conv_selectedContactKey") ?? null
   );
 
   const setSelectedAgentId = (id: string | null) => {
@@ -337,6 +346,19 @@ export default function Conversations() {
     if (key) sessionStorage.setItem("conv_selectedContactKey", key);
     else sessionStorage.removeItem("conv_selectedContactKey");
   };
+
+  // Deep-link do Kanban: aplica seleção mesmo se a página já estava montada
+  useEffect(() => {
+    const st = location.state as {
+      selectedAgentId?: string;
+      selectedContactKey?: string;
+      fromKanban?: boolean;
+    } | null;
+    if (!st?.fromKanban) return;
+    if (st.selectedAgentId) setSelectedAgentId(st.selectedAgentId);
+    if (st.selectedContactKey) setSelectedContactKey(st.selectedContactKey);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.state, location.pathname, navigate]);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [labelFilter, setLabelFilter] = useState<string | null>(null);
@@ -361,9 +383,12 @@ export default function Conversations() {
   const queryClient = useQueryClient();
   const { profile } = useAuth();
   const [inboxScope, setInboxScope] = useState<"all" | "mine" | "unassigned">("all");
+  const prevTenantRef = useRef(selectedTenantId);
 
-  // Ao trocar de tenant, limpar seleção e busca (termo de outra empresa deixava a lista vazia)
+  // Ao trocar de tenant, limpar seleção e busca (só quando o tenant muda de fato — não no mount)
   useEffect(() => {
+    if (prevTenantRef.current === selectedTenantId) return;
+    prevTenantRef.current = selectedTenantId;
     setSelectedAgentId(null);
     setSelectedContactKey(null);
     setLabelFilter(null);
@@ -480,22 +505,42 @@ export default function Conversations() {
     () => selectedContactKey ? (contactConvIds.get(selectedContactKey) ?? []) : [],
     [selectedContactKey, contactConvIds]
   );
-  const selectedConv = deduplicatedConversations.find((c) => {
-    const key = c.contact_name || c.external_user_id || c.id;
-    return selectedContactKey && (contactConvIds.get(selectedContactKey) ?? []).includes(c.id);
-  }) ?? (selectedContactKey ? deduplicatedConversations.find((c) => {
-    let k = c.contact_name || c.external_user_id || c.id;
-    if (k.startsWith("{") || k.startsWith("[")) {
-      try { const p = JSON.parse(k); k = p?.name || p?.phone || p?.email || c.id; } catch { k = c.id; }
+  const selectedConv = useMemo(() => {
+    if (!selectedContactKey) return undefined;
+    const ids = contactConvIds.get(selectedContactKey) ?? [];
+    if (ids.length > 0) {
+      return deduplicatedConversations.find((c) => ids.includes(c.id));
     }
-    return k === selectedContactKey;
-  }) : undefined);
+    // Fallback: chave legada / mismatch leve
+    return deduplicatedConversations.find((c) => {
+      const phoneKey = (() => {
+        const digits = String(c.external_user_id ?? "").replace(/\D/g, "");
+        if (digits.length < 10) return null;
+        const normalized = digits.startsWith("55") && digits.length >= 12 ? digits.slice(-11) : digits;
+        return `phone:${normalized}`;
+      })();
+      if (phoneKey && phoneKey === selectedContactKey) return true;
+      let k = c.contact_name || c.external_user_id || c.id;
+      if (k.startsWith("{") || k.startsWith("[")) {
+        try {
+          const p = JSON.parse(k);
+          k = p?.name || p?.phone || p?.email || c.id;
+        } catch {
+          k = c.id;
+        }
+      }
+      return k === selectedContactKey;
+    });
+  }, [selectedContactKey, contactConvIds, deduplicatedConversations]);
 
   // sessionStorage / troca de tenant pode deixar selectedContactKey sem conversa correspondente → evita crash e ecrã branco
   useEffect(() => {
     if (!selectedContactKey || !selectedAgentId || convsLoading) return;
+    if (!conversations) return;
+    // Só limpa depois que a lista carregou de fato (evita race do Kanban → Chat)
+    if (conversations.length === 0) return;
     if (selectedConv === undefined) setSelectedContactKey(null);
-  }, [selectedContactKey, selectedAgentId, convsLoading, selectedConv]);
+  }, [selectedContactKey, selectedAgentId, convsLoading, selectedConv, conversations]);
 
   const { data: messages, isLoading: msgsLoading } = useMultiConversationMessages(selectedAgentId, selectedConvIds);
 
@@ -719,7 +764,6 @@ export default function Conversations() {
   };
 
   const selectedAgent = agents?.find((a) => a.id === selectedAgentId);
-  const navigate = useNavigate();
   const updateContact = useUpdateContact();
   const createContact = useCreateContact();
   const selectedCrmTenantId = selectedAgent?.tenant_id ?? selectedTenantId ?? null;
