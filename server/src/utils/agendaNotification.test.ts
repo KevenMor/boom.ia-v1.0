@@ -205,6 +205,22 @@ describe("buildHandoffPrivateNote", () => {
     expect(note).not.toMatch(/Pedidos recentes:.*Me chamo Keven/i);
     expect(note).not.toMatch(/O que o cliente pediu:.*transferir/i);
   });
+
+  it("usa contactName do WhatsApp quando o chat só tem assunto/transferência", () => {
+    const note = buildHandoffPrivateNote({
+      contactName: "Keven Moreira",
+      motivo: "Equipe comercial",
+      agentName: "Manu",
+      messages: [
+        { role: "user", content: "reservas do brasil" },
+        { role: "assistant", content: "Perfeito! Vou te passar agora mesmo para a equipe." },
+        { role: "user", content: "pode me transferir para equipe?" },
+      ],
+    });
+    expect(note).toMatch(/Nome: Keven Moreira/i);
+    expect(note).not.toMatch(/Nome: reservas do brasil/i);
+    expect(note).toMatch(/Urgência: Normal/i);
+  });
 });
 
 describe("extractClientNameFromMessages", () => {

@@ -570,7 +570,9 @@ export function inferHandoffUrgency(
   messages: Array<{ role: string; content: string }>,
   motivo?: string,
 ): string {
+  // Só mensagens do cliente + motivo — a IA diz "agora mesmo" no handoff e não deve inflar urgência.
   const blob = `${motivo || ""}\n${messages
+    .filter((m) => m.role === "user")
     .slice(-12)
     .map((m) => m.content || "")
     .join("\n")}`.toLowerCase();
@@ -590,12 +592,22 @@ export function inferHandoffUrgency(
   return "Normal — aguardando continuidade humana";
 }
 
+/** Nome usable em nota/notificação — rejeita tópicos e instituições. */
+export function sanitizeClientDisplayName(raw: string | undefined | null): string | undefined {
+  const t = (raw || "").trim();
+  if (!t || t.length < 2) return undefined;
+  if (isBlockedAsName(t) || containsInstitutionNameToken(t) || isLikelyTopicNotName(t)) return undefined;
+  return t;
+}
+
 /**
  * Nota privada no Chatwoot (só a equipe vê) após transferir o atendimento.
  * Contexto completo para o agente humano não ficar perdido.
  */
 export function buildHandoffPrivateNote(opts: {
   nomeCliente?: string;
+  /** Nome do WhatsApp/CRM na conversa (ex.: "Keven Moreira") — fallback quando o chat não tem "me chamo". */
+  contactName?: string;
   telefoneCliente?: string;
   veiculoInteresse?: string;
   motivo?: string;
@@ -604,15 +616,10 @@ export function buildHandoffPrivateNote(opts: {
 }): string {
   const messages = opts.messages ?? [];
   const extractedName = messages.length ? extractClientNameFromMessages(messages) : undefined;
-  const rawNome = (opts.nomeCliente || "").trim();
   const nome =
-    (rawNome &&
-    !isBlockedAsName(rawNome) &&
-    !containsInstitutionNameToken(rawNome) &&
-    !isLikelyTopicNotName(rawNome)
-      ? rawNome
-      : undefined) ||
+    sanitizeClientDisplayName(opts.nomeCliente) ||
     extractedName ||
+    sanitizeClientDisplayName(opts.contactName) ||
     "Cliente";
 
   const telefone = opts.telefoneCliente?.trim()

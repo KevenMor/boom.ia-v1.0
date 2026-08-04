@@ -5,6 +5,10 @@ import { msgLog } from "../utils/flow-logger.js";
 import { upsertCrmContact } from "../services/crm-contact-sync.js";
 import { getChatwootAuthHeaders } from "../services/delivery.js";
 import { isTenantAiGloballyDisabled } from "../services/tenant-ai-global.js";
+import {
+  isLikelyEchoAgainstHistory,
+  normalizeWebhookContent,
+} from "../utils/webhook-echo.js";
 
 const API_BASE = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
 
@@ -574,10 +578,6 @@ function markOrCheckProcessedEvent(eventKey: string): boolean {
   return false;
 }
 
-function normalizeContent(value: string): string {
-  return (value || "").trim().replace(/\s+/g, " ").toLowerCase();
-}
-
 async function hasRecentDuplicateIncoming(
   supabase: any,
   agentId: string,
@@ -592,13 +592,13 @@ async function hasRecentDuplicateIncoming(
     });
     if (!history || !Array.isArray(history) || history.length === 0) return false;
     const now = Date.now();
-    const normalizedIncoming = normalizeContent(incomingText);
+    const normalizedIncoming = normalizeWebhookContent(incomingText);
     if (!normalizedIncoming) return false;
     return history.slice(-20).some((m: any) => {
       if (m.role !== "user") return false;
       const createdAt = m.created_at ? new Date(m.created_at).getTime() : 0;
       if (!createdAt || now - createdAt > windowSeconds * 1000) return false;
-      return normalizeContent(String(m.content || "")) === normalizedIncoming;
+      return normalizeWebhookContent(String(m.content || "")) === normalizedIncoming;
     });
   } catch {
     return false;
@@ -606,27 +606,10 @@ async function hasRecentDuplicateIncoming(
 }
 
 /**
- * Verifica se a mensagem "incoming" é provável eco de alguma mensagem do bot
- * (WhatsApp/Chatwoot às vezes repete). Compara com as últimas N mensagens do assistente.
- *
- * Eco real acontece quando WhatsApp/Chatwoot devolve a mesma mensagem do bot como incoming —
- * nesse caso as duas strings são quase idênticas em tamanho e conteúdo. Uma mensagem do cliente
- * que apenas cita um trecho curto da fala do bot (ex.: bot pergunta "Você já conhece o Vale
- * Suíço ou seria a primeira vez por aqui?" e cliente responde "seria a primeira vez") NÃO é eco
- * e precisa passar. Por isso exigimos proporção de tamanho próxima de 1, além do substring.
+ * Eco do bot (WhatsApp/Chatwoot às vezes devolve a fala da IA como incoming).
+ * Mensagens de atendente humano (`metadata.source = chatwoot_human`) NÃO contam —
+ * senão o cliente que manda o mesmo texto após handoff/sync humano fica bloqueado.
  */
-function isLikelyEchoContent(incoming: string, assistant: string): boolean {
-  if (incoming === assistant) return true;
-  const a = incoming.length;
-  const b = assistant.length;
-  if (a < 10 || b < 10) return false;
-  const ratio = Math.min(a, b) / Math.max(a, b);
-  if (ratio < 0.85) return false;
-  const shorter = a <= b ? incoming : assistant;
-  const longer = a <= b ? assistant : incoming;
-  return longer.includes(shorter);
-}
-
 async function isLikelyEchoOfBotMessage(
   supabase: any,
   agentId: string,
@@ -640,20 +623,7 @@ async function isLikelyEchoOfBotMessage(
       p_conversation_id: convId,
     });
     if (!history || !Array.isArray(history) || history.length === 0) return false;
-    const normalizedIncoming = normalizeContent(incomingText);
-    if (!normalizedIncoming) return false;
-    const now = Date.now();
-    let checked = 0;
-    for (let i = history.length - 1; i >= 0 && checked < 10; i--) {
-      const m = history[i];
-      if (m.role !== "assistant") continue;
-      checked++;
-      const createdAt = m.created_at ? new Date(m.created_at).getTime() : 0;
-      if (!createdAt || now - createdAt > windowSeconds * 1000) continue;
-      const norm = normalizeContent(String(m.content || ""));
-      if (norm === normalizedIncoming || isLikelyEchoContent(normalizedIncoming, norm)) return true;
-    }
-    return false;
+    return isLikelyEchoAgainstHistory(incomingText, history, windowSeconds);
   } catch {
     return false;
   }

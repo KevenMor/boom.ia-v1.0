@@ -25,6 +25,29 @@ import { buildInventoryPhotosMarkdown, filterValidInventoryPhotoUrls } from "../
 import { decodeHtmlEntities } from "../lib/html-entities.js";
 import { fetchSunsetLodgingGalleryPhotos, shouldIncludeSunsetLodgingPhotoInQuote } from "../utils/sunset-lodging-gallery-photos.js";
 
+/**
+ * Impede handoff “para a própria IA”: se assignee_id for o bot (agent_assignee_id / test_assignee_id),
+ * zera o assignee. Sem team_id humano restante, o caller deve falhar.
+ */
+export function stripBotSelfAssignment(opts: {
+  assigneeId: number | null;
+  teamId: number | null;
+  botAssigneeIds: Array<number | null | undefined>;
+}): { assigneeId: number | null; teamId: number | null; blockedBotAssignee: boolean } {
+  const bots = new Set(
+    opts.botAssigneeIds
+      .map((id) => (id == null || Number.isNaN(Number(id)) ? null : Number(id)))
+      .filter((id): id is number => id != null && id > 0)
+  );
+  let assigneeId = opts.assigneeId != null && !Number.isNaN(Number(opts.assigneeId)) ? Number(opts.assigneeId) : null;
+  const teamId = opts.teamId != null && !Number.isNaN(Number(opts.teamId)) ? Number(opts.teamId) : null;
+  let blockedBotAssignee = false;
+  if (assigneeId != null && bots.has(assigneeId)) {
+    blockedBotAssignee = true;
+    assigneeId = null;
+  }
+  return { assigneeId, teamId, blockedBotAssignee };
+}
 export interface ToolExecutionResult {
   success: boolean;
   result: unknown;
@@ -1551,13 +1574,13 @@ async function executeChatwootAssign(
       }
     }
 
-    // Quando não h├í assignee_id, team_id ├® essencial para atribuir ao time (Chatwoot aceita s├│ team_id)
+    // Quando não há assignee_id, team_id é essencial para atribuir ao time (Chatwoot aceita só team_id)
     if (assigneeId == null && teamId == null) {
       return {
         success: false,
         result: null,
         error:
-          "Configure assignee_id ou team_id na ferramenta (Padr├úo ou Regras). Sem assignee, o team_id ├® obrigat├│rio para atribuir ao time.",
+          "Configure assignee_id ou team_id na ferramenta (Padrão ou Regras). Sem assignee, o team_id é obrigatório para atribuir ao time.",
       };
     }
 
@@ -1570,6 +1593,28 @@ async function executeChatwootAssign(
     const cwUrl = agCfg.chatwoot_url as string | undefined;
     const cwToken = agCfg.chatwoot_api_token as string | undefined;
     const cwAccountId = agCfg.chatwoot_account_id as string | number | undefined;
+
+    // Nunca atribuir de volta ao próprio bot (agent_assignee_id / test) — isso “transfere” e a conversa continua na IA.
+    const stripped = stripBotSelfAssignment({
+      assigneeId,
+      teamId,
+      botAssigneeIds: [agCfg.agent_assignee_id as number | undefined, agCfg.test_assignee_id as number | undefined],
+    });
+    assigneeId = stripped.assigneeId;
+    teamId = stripped.teamId;
+    if (stripped.blockedBotAssignee) {
+      console.warn(
+        `[chatwoot_assign] assignee_id apontava para o agente IA (bot) — removido. Configure um humano ou team_id na tool. reason=${reason}`
+      );
+    }
+    if (assigneeId == null && teamId == null) {
+      return {
+        success: false,
+        result: null,
+        error:
+          "Handoff configurado com o próprio agente de IA (agent_assignee_id) como destino. Em Chatwoot → ferramenta encaminhar_atendente, defina team_id do time humano ou assignee_id de um atendente (não o bot).",
+      };
+    }
 
     if (!cwUrl || !cwToken || !cwAccountId) {
       return {
@@ -1608,6 +1653,10 @@ async function executeChatwootAssign(
     if (assigneeId) assignBody.assignee_id = Number(assigneeId);
     if (teamId) assignBody.team_id = Number(teamId);
 
+    console.log(
+      `[chatwoot_assign] POST assignments cwConv=${cwConvId} body=${JSON.stringify(assignBody)} matched=${matchedRule || "-"} reason=${reason}`
+    );
+
     const assignResp = await fetch(assignUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", api_access_token: cwToken },
@@ -1626,17 +1675,21 @@ async function executeChatwootAssign(
     // Nota privada na conversa do cliente — resumo para o humano assumir o contexto
     try {
       let phone: string | undefined;
+      let contactName: string | undefined;
       let history: Array<{ role: string; content: string }> = [];
       let agentName: string | undefined;
 
       if (args?.conversation_id) {
-        const { data: convRow } = await supabase
-          .from("conversations")
-          .select("external_user_id")
-          .eq("agent_id", agentId)
-          .eq("id", args.conversation_id)
-          .maybeSingle();
-        if (convRow?.external_user_id) phone = String(convRow.external_user_id);
+        // conversations vive no schema do tenant — use RPC (public.conversations não existe).
+        const { data: convList } = await supabase.rpc("list_agent_conversations", {
+          p_agent_id: agentId,
+          p_limit: 80,
+        });
+        const found = Array.isArray(convList)
+          ? convList.find((c: { id?: string }) => c.id === args.conversation_id)
+          : null;
+        if (found?.external_user_id) phone = String(found.external_user_id);
+        if (found?.contact_name) contactName = String(found.contact_name);
 
         const { data: msgRows } = await supabase.rpc("load_conversation_messages", {
           p_agent_id: agentId,
@@ -1662,6 +1715,7 @@ async function executeChatwootAssign(
 
       const note = buildHandoffPrivateNote({
         nomeCliente: extractClientNameFromMessages(history),
+        contactName,
         telefoneCliente: phone,
         motivo: reason !== "escalation" ? reason : undefined,
         messages: history,
