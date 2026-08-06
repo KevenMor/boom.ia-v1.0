@@ -12,7 +12,7 @@ import {
 
 describe("Delta Empreendimentos — SYSTEM_PROMPT", () => {
   it("versão do prompt", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.13/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.14/);
   });
 
   it("anti-loop nome: proíbe 'Prazer, Keven' + 'Como posso te chamar' na mesma bolha", () => {
@@ -140,12 +140,14 @@ describe("Delta Empreendimentos — DISPATCHER, COMM e FOLLOWUP", () => {
   it("dispatcher sem tools obrigatórias", () => {
     expect(DISPATCHER_PROMPT).toMatch(/NO_TOOLS_NEEDED/);
     expect(DISPATCHER_PROMPT).toMatch(/Manu/);
+    expect(DISPATCHER_PROMPT).toMatch(/qualification funnel.*is completed/i);
   });
 
   it("communication rules proíbem emoji, inventar nome e várias perguntas", () => {
     expect(COMMUNICATION_RULES).toMatch(/Zero emoji/i);
     expect(COMMUNICATION_RULES).toMatch(/Nunca inventar nome/i);
     expect(COMMUNICATION_RULES).toMatch(/Máximo 1 "\?"/);
+    expect(COMMUNICATION_RULES).toMatch(/Proibido exibir instruções de comando/i);
     expect(COMMUNICATION_RULES).toMatch(/Manu/);
   });
 
@@ -160,14 +162,14 @@ describe("Delta Empreendimentos — registry", () => {
   it("resolve slug delta-empreendimentos", () => {
     const cfg = getPromptConfig("delta-empreendimentos");
     expect(cfg).not.toBeNull();
-    expect(cfg!.version).toBe("v1.5.13");
+    expect(cfg!.version).toBe("v1.5.14");
     expect(cfg!.description).toMatch(/Manu/i);
   });
 
   it("buildSystemPrompt ignora prompt do banco e injeta Manu", () => {
     const prompt = buildSystemPrompt("PROMPT_BANCO_IGNORAR", "delta-empreendimentos", false);
     expect(prompt).toContain("Manu");
-    expect(prompt).toContain("v1.5.13");
+    expect(prompt).toContain("v1.5.14");
     expect(prompt).not.toContain("Sara");
     expect(prompt).not.toContain("PROMPT_BANCO_IGNORAR");
     expect(prompt).not.toContain("COMPORTAMENTO DE SAUDAÇÃO:");
