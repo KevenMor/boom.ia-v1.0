@@ -425,9 +425,13 @@ export default function UsersManagementPage() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [membershipRows, setMembershipRows] = useState<MembershipDraft[]>([]);
+  const [ensurePersonalCalendar, setEnsurePersonalCalendar] = useState(true);
 
   const [editFullName, setEditFullName] = useState("");
   const [editRows, setEditRows] = useState<MembershipDraft[]>([]);
+  const [editEnsureCalendar, setEditEnsureCalendar] = useState(true);
+  const [editPassword, setEditPassword] = useState("");
+  const [editPasswordConfirm, setEditPasswordConfirm] = useState("");
 
   const activeTenants = useMemo(
     () => (tenants ?? []).filter((t) => t.status === "active"),
@@ -449,12 +453,15 @@ export default function UsersManagementPage() {
     setPassword("");
     setFullName("");
     setMembershipRows(activeTenants.length ? [emptyRow(activeTenants)] : []);
+    setEnsurePersonalCalendar(true);
     setCreateOpen(true);
   };
 
   const openEdit = (u: AdminUser) => {
     setEditUser(u);
     setEditFullName(u.full_name ?? "");
+    setEditPassword("");
+    setEditPasswordConfirm("");
     const rows = u.memberships.length > 0
       ? u.memberships.map((m) => ({
           tenant_id: m.tenant_id,
@@ -465,6 +472,7 @@ export default function UsersManagementPage() {
         : [];
     setEditRows(rows);
     setEditAclTenant(rows[0]?.tenant_id ?? null);
+    setEditEnsureCalendar(true);
   };
 
   const submitCreate = async () => {
@@ -475,8 +483,13 @@ export default function UsersManagementPage() {
         password,
         full_name: fullName.trim() || null,
         memberships: rows,
+        ensure_personal_calendars: ensurePersonalCalendar,
       });
-      toast.success("Usuário criado e vinculado às empresas.");
+      toast.success(
+        ensurePersonalCalendar
+          ? "Usuário criado, vinculado e com agenda pessoal."
+          : "Usuário criado e vinculado às empresas."
+      );
       setCreateOpen(false);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Erro ao criar usuário");
@@ -486,14 +499,35 @@ export default function UsersManagementPage() {
   const submitEdit = async () => {
     if (!editUser) return;
     const rows = editRows.filter((r) => r.tenant_id);
+    const nextPassword = editPassword.trim();
+    if (nextPassword || editPasswordConfirm) {
+      if (nextPassword.length < 8) {
+        toast.error("A nova senha deve ter pelo menos 8 caracteres.");
+        return;
+      }
+      if (nextPassword !== editPasswordConfirm) {
+        toast.error("A confirmação da senha não confere.");
+        return;
+      }
+    }
     try {
       await updateUser.mutateAsync({
         id: editUser.id,
         full_name: editFullName.trim() || null,
         memberships: rows,
+        ensure_personal_calendars: editEnsureCalendar,
+        ...(nextPassword ? { password: nextPassword } : {}),
       });
-      toast.success("Usuário atualizado.");
+      toast.success(
+        nextPassword
+          ? "Usuário atualizado e senha alterada."
+          : editEnsureCalendar
+            ? "Usuário atualizado (agenda pessoal garantida)."
+            : "Usuário atualizado."
+      );
       setEditUser(null);
+      setEditPassword("");
+      setEditPasswordConfirm("");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Erro ao atualizar");
     }
@@ -732,6 +766,20 @@ export default function UsersManagementPage() {
                 onAdd={() => setMembershipRows((r) => [...r, emptyRow(activeTenants, r.map((x) => x.tenant_id))])}
               />
             </div>
+            <label className="flex items-start gap-2 rounded-lg border border-border p-3 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 rounded border-border accent-primary"
+                checked={ensurePersonalCalendar}
+                onChange={(e) => setEnsurePersonalCalendar(e.target.checked)}
+              />
+              <span className="text-sm leading-snug">
+                <span className="font-medium">Criar agenda pessoal</span>
+                <span className="block text-muted-foreground text-xs mt-0.5">
+                  Para cada empresa com perfil &quot;Visualização&quot; (tenant_user), cria uma agenda vinculada a este usuário (ex.: corretor).
+                </span>
+              </span>
+            </label>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
@@ -764,8 +812,42 @@ export default function UsersManagementPage() {
               {/* Aba Dados */}
               <TabsContent value="dados" className="space-y-4 pt-2">
                 <div>
+                  <Label>E-mail</Label>
+                  <Input value={editUser.email ?? ""} disabled className="bg-muted/40" />
+                </div>
+                <div>
                   <Label>Nome</Label>
                   <Input value={editFullName} onChange={(e) => setEditFullName(e.target.value)} />
+                </div>
+                <div className="rounded-lg border border-border p-3 space-y-3">
+                  <div>
+                    <p className="text-sm font-medium">Alterar senha</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Deixe em branco para manter a senha atual. Mínimo de 8 caracteres.
+                    </p>
+                  </div>
+                  <div>
+                    <Label htmlFor="eu-pass">Nova senha</Label>
+                    <Input
+                      id="eu-pass"
+                      type="password"
+                      autoComplete="new-password"
+                      value={editPassword}
+                      onChange={(e) => setEditPassword(e.target.value)}
+                      placeholder="••••••••"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="eu-pass2">Confirmar nova senha</Label>
+                    <Input
+                      id="eu-pass2"
+                      type="password"
+                      autoComplete="new-password"
+                      value={editPasswordConfirm}
+                      onChange={(e) => setEditPasswordConfirm(e.target.value)}
+                      placeholder="••••••••"
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Empresas</Label>
@@ -786,6 +868,20 @@ export default function UsersManagementPage() {
                     onAdd={() => setEditRows((r) => [...r, emptyRow(activeTenants, r.map((x) => x.tenant_id))])}
                   />
                 </div>
+                <label className="flex items-start gap-2 rounded-lg border border-border p-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 rounded border-border accent-primary"
+                    checked={editEnsureCalendar}
+                    onChange={(e) => setEditEnsureCalendar(e.target.checked)}
+                  />
+                  <span className="text-sm leading-snug">
+                    <span className="font-medium">Garantir agenda pessoal</span>
+                    <span className="block text-muted-foreground text-xs mt-0.5">
+                      Cria a agenda do corretor se ainda não existir nas empresas com perfil tenant_user.
+                    </span>
+                  </span>
+                </label>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setEditUser(null)}>Cancelar</Button>
                   <Button onClick={() => void submitEdit()} disabled={updateUser.isPending}>

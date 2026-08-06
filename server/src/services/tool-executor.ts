@@ -1574,6 +1574,31 @@ async function executeChatwootAssign(
       }
     }
 
+    // Lógica de Rodízio (Round-Robin) de Corretores
+    const isRoundRobin = execCfg.round_robin === true || execCfg.round_robin === "true";
+    const assigneesList = Array.isArray(execCfg.assignees)
+      ? execCfg.assignees.map(Number).filter((n) => !isNaN(n) && n > 0)
+      : [];
+
+    if (isRoundRobin && assigneesList.length > 0 && !matchedRule) {
+      const lastIndex = execCfg.last_assigned_index != null ? Number(execCfg.last_assigned_index) : -1;
+      const nextIndex = (lastIndex + 1) % assigneesList.length;
+      assigneeId = assigneesList[nextIndex];
+
+      // Salva o novo índice de rodízio no banco para a ferramenta
+      const updatedExecCfg = {
+        ...execCfg,
+        last_assigned_index: nextIndex,
+      };
+
+      await supabase
+        .from("tools")
+        .update({ execution_config: updatedExecCfg })
+        .eq("id", tool.id);
+
+      console.log(`[chatwoot_assign] Round-Robin active: assignees=${assigneesList} lastIndex=${lastIndex} nextIndex=${nextIndex} assigned=${assigneeId}`);
+    }
+
     // Quando não há assignee_id, team_id é essencial para atribuir ao time (Chatwoot aceita só team_id)
     if (assigneeId == null && teamId == null) {
       return {

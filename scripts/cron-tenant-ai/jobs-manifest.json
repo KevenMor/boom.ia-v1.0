@@ -1,0 +1,293 @@
+{
+  "timezone": "America/Sao_Paulo",
+  "jobs": [
+    {
+      "title": "Boom IA — LIGAR — auto-escola-ideal",
+      "url": "https://ia.agboom.com.br/api/tenant-ai/toggle",
+      "method": "POST",
+      "timezone": "America/Sao_Paulo",
+      "cron": "0 8 * * 1-5",
+      "schedule_label": "08:00 seg–sex",
+      "headers": {
+        "Content-Type": "application/json",
+        "x-tenant-ai-toggle-secret": "${TENANT_AI_TOGGLE_SECRET}"
+      },
+      "body": {
+        "tenant_id": "a67d9e3c-cab6-4d13-938d-78300ebfb66d",
+        "enabled": true
+      },
+      "slug": "auto-escola-ideal",
+      "tenant_id": "a67d9e3c-cab6-4d13-938d-78300ebfb66d"
+    },
+    {
+      "title": "Boom IA — DESLIGAR — auto-escola-ideal",
+      "url": "https://ia.agboom.com.br/api/tenant-ai/toggle",
+      "method": "POST",
+      "timezone": "America/Sao_Paulo",
+      "cron": "0 22 * * 1-5",
+      "schedule_label": "22:00 seg–sex",
+      "headers": {
+        "Content-Type": "application/json",
+        "x-tenant-ai-toggle-secret": "${TENANT_AI_TOGGLE_SECRET}"
+      },
+      "body": {
+        "tenant_id": "a67d9e3c-cab6-4d13-938d-78300ebfb66d",
+        "enabled": false
+      },
+      "slug": "auto-escola-ideal",
+      "tenant_id": "a67d9e3c-cab6-4d13-938d-78300ebfb66d"
+    },
+    {
+      "title": "Boom IA — LIGAR — biazini",
+      "url": "https://ia.agboom.com.br/api/tenant-ai/toggle",
+      "method": "POST",
+      "timezone": "America/Sao_Paulo",
+      "cron": "0 8 * * 1-5",
+      "schedule_label": "08:00 seg–sex",
+      "headers": {
+        "Content-Type": "application/json",
+        "x-tenant-ai-toggle-secret": "${TENANT_AI_TOGGLE_SECRET}"
+      },
+      "body": {
+        "tenant_id": "1d5342fe-299b-40e6-8d22-218b6096aad4",
+        "enabled": true
+      },
+      "slug": "biazini",
+      "tenant_id": "1d5342fe-299b-40e6-8d22-218b6096aad4"
+    },
+    {
+      "title": "Boom IA — DESLIGAR — biazini",
+      "url": "https://ia.agboom.com.br/api/tenant-ai/toggle",
+      "method": "POST",
+      "timezone": "America/Sao_Paulo",
+      "cron": "0 22 * * 1-5",
+      "schedule_label": "22:00 seg–sex",
+      "headers": {
+        "Content-Type": "application/json",
+        "x-tenant-ai-toggle-secret": "${TENANT_AI_TOGGLE_SECRET}"
+      },
+      "body": {
+        "tenant_id": "1d5342fe-299b-40e6-8d22-218b6096aad4",
+        "enabled": false
+      },
+      "slug": "biazini",
+      "tenant_id": "1d5342fe-299b-40e6-8d22-218b6096aad4"
+    },
+    {
+      "title": "Boom IA — LIGAR — delta-empreendimentos",
+      "url": "https://ia.agboom.com.br/api/tenant-ai/toggle",
+      "method": "POST",
+      "timezone": "America/Sao_Paulo",
+      "cron": "0 8 * * 1-5",
+      "schedule_label": "08:00 seg–sex",
+      "headers": {
+        "Content-Type": "application/json",
+        "x-tenant-ai-toggle-secret": "${TENANT_AI_TOGGLE_SECRET}"
+      },
+      "body": {
+        "tenant_id": "8686a7d0-5e16-4e52-8291-02c996f4b9e5",
+        "enabled": true
+      },
+      "slug": "delta-empreendimentos",
+      "tenant_id": "8686a7d0-5e16-4e52-8291-02c996f4b9e5"
+    },
+    {
+      "title": "Boom IA — DESLIGAR — delta-empreendimentos",
+      "url": "https://ia.agboom.com.br/api/tenant-ai/toggle",
+      "method": "POST",
+      "timezone": "America/Sao_Paulo",
+      "cron": "0 22 * * 1-5",
+      "schedule_label": "22:00 seg–sex",
+      "headers": {
+        "Content-Type": "application/json",
+        "x-tenant-ai-toggle-secret": "${TENANT_AI_TOGGLE_SECRET}"
+      },
+      "body": {
+        "tenant_id": "8686a7d0-5e16-4e52-8291-02c996f4b9e5",
+        "enabled": false
+      },
+      "slug": "delta-empreendimentos",
+      "tenant_id": "8686a7d0-5e16-4e52-8291-02c996f4b9e5"
+    },
+    {
+      "title": "Boom IA — LIGAR — durce-vitta",
+      "url": "https://ia.agboom.com.br/api/tenant-ai/toggle",
+      "method": "POST",
+      "timezone": "America/Sao_Paulo",
+      "cron": "0 8 * * 1-5",
+      "schedule_label": "08:00 seg–sex",
+      "headers": {
+        "Content-Type": "application/json",
+        "x-tenant-ai-toggle-secret": "${TENANT_AI_TOGGLE_SECRET}"
+      },
+      "body": {
+        "tenant_id": "76fdafe8-c15e-427b-acb6-9494fedd4430",
+        "enabled": true
+      },
+      "slug": "durce-vitta",
+      "tenant_id": "76fdafe8-c15e-427b-acb6-9494fedd4430"
+    },
+    {
+      "title": "Boom IA — DESLIGAR — durce-vitta",
+      "url": "https://ia.agboom.com.br/api/tenant-ai/toggle",
+      "method": "POST",
+      "timezone": "America/Sao_Paulo",
+      "cron": "0 22 * * 1-5",
+      "schedule_label": "22:00 seg–sex",
+      "headers": {
+        "Content-Type": "application/json",
+        "x-tenant-ai-toggle-secret": "${TENANT_AI_TOGGLE_SECRET}"
+      },
+      "body": {
+        "tenant_id": "76fdafe8-c15e-427b-acb6-9494fedd4430",
+        "enabled": false
+      },
+      "slug": "durce-vitta",
+      "tenant_id": "76fdafe8-c15e-427b-acb6-9494fedd4430"
+    },
+    {
+      "title": "Boom IA — LIGAR — insituto-vicentim-maekawa",
+      "url": "https://ia.agboom.com.br/api/tenant-ai/toggle",
+      "method": "POST",
+      "timezone": "America/Sao_Paulo",
+      "cron": "0 8 * * 1-5",
+      "schedule_label": "08:00 seg–sex",
+      "headers": {
+        "Content-Type": "application/json",
+        "x-tenant-ai-toggle-secret": "${TENANT_AI_TOGGLE_SECRET}"
+      },
+      "body": {
+        "tenant_id": "ae605c08-e72c-48c1-a063-826afdb1c278",
+        "enabled": true
+      },
+      "slug": "insituto-vicentim-maekawa",
+      "tenant_id": "ae605c08-e72c-48c1-a063-826afdb1c278"
+    },
+    {
+      "title": "Boom IA — DESLIGAR — insituto-vicentim-maekawa",
+      "url": "https://ia.agboom.com.br/api/tenant-ai/toggle",
+      "method": "POST",
+      "timezone": "America/Sao_Paulo",
+      "cron": "0 22 * * 1-5",
+      "schedule_label": "22:00 seg–sex",
+      "headers": {
+        "Content-Type": "application/json",
+        "x-tenant-ai-toggle-secret": "${TENANT_AI_TOGGLE_SECRET}"
+      },
+      "body": {
+        "tenant_id": "ae605c08-e72c-48c1-a063-826afdb1c278",
+        "enabled": false
+      },
+      "slug": "insituto-vicentim-maekawa",
+      "tenant_id": "ae605c08-e72c-48c1-a063-826afdb1c278"
+    },
+    {
+      "title": "Boom IA — LIGAR — pet-home-tia-erica",
+      "url": "https://ia.agboom.com.br/api/tenant-ai/toggle",
+      "method": "POST",
+      "timezone": "America/Sao_Paulo",
+      "cron": "0 8 * * 1-5",
+      "schedule_label": "08:00 seg–sex",
+      "headers": {
+        "Content-Type": "application/json",
+        "x-tenant-ai-toggle-secret": "${TENANT_AI_TOGGLE_SECRET}"
+      },
+      "body": {
+        "tenant_id": "e6657fae-c7d7-4b1c-92cb-f6419428d202",
+        "enabled": true
+      },
+      "slug": "pet-home-tia-erica",
+      "tenant_id": "e6657fae-c7d7-4b1c-92cb-f6419428d202"
+    },
+    {
+      "title": "Boom IA — DESLIGAR — pet-home-tia-erica",
+      "url": "https://ia.agboom.com.br/api/tenant-ai/toggle",
+      "method": "POST",
+      "timezone": "America/Sao_Paulo",
+      "cron": "0 22 * * 1-5",
+      "schedule_label": "22:00 seg–sex",
+      "headers": {
+        "Content-Type": "application/json",
+        "x-tenant-ai-toggle-secret": "${TENANT_AI_TOGGLE_SECRET}"
+      },
+      "body": {
+        "tenant_id": "e6657fae-c7d7-4b1c-92cb-f6419428d202",
+        "enabled": false
+      },
+      "slug": "pet-home-tia-erica",
+      "tenant_id": "e6657fae-c7d7-4b1c-92cb-f6419428d202"
+    },
+    {
+      "title": "Boom IA — LIGAR — pousada-flores-do-lazaro",
+      "url": "https://ia.agboom.com.br/api/tenant-ai/toggle",
+      "method": "POST",
+      "timezone": "America/Sao_Paulo",
+      "cron": "0 8 * * 1-5",
+      "schedule_label": "08:00 seg–sex",
+      "headers": {
+        "Content-Type": "application/json",
+        "x-tenant-ai-toggle-secret": "${TENANT_AI_TOGGLE_SECRET}"
+      },
+      "body": {
+        "tenant_id": "c916d885-df05-4d0d-a37a-7c4101ef5467",
+        "enabled": true
+      },
+      "slug": "pousada-flores-do-lazaro",
+      "tenant_id": "c916d885-df05-4d0d-a37a-7c4101ef5467"
+    },
+    {
+      "title": "Boom IA — DESLIGAR — pousada-flores-do-lazaro",
+      "url": "https://ia.agboom.com.br/api/tenant-ai/toggle",
+      "method": "POST",
+      "timezone": "America/Sao_Paulo",
+      "cron": "0 22 * * 1-5",
+      "schedule_label": "22:00 seg–sex",
+      "headers": {
+        "Content-Type": "application/json",
+        "x-tenant-ai-toggle-secret": "${TENANT_AI_TOGGLE_SECRET}"
+      },
+      "body": {
+        "tenant_id": "c916d885-df05-4d0d-a37a-7c4101ef5467",
+        "enabled": false
+      },
+      "slug": "pousada-flores-do-lazaro",
+      "tenant_id": "c916d885-df05-4d0d-a37a-7c4101ef5467"
+    },
+    {
+      "title": "Boom IA — LIGAR — sunset-thermas-park",
+      "url": "https://ia.agboom.com.br/api/tenant-ai/toggle",
+      "method": "POST",
+      "timezone": "America/Sao_Paulo",
+      "cron": "0 8 * * 1-5",
+      "schedule_label": "08:00 seg–sex",
+      "headers": {
+        "Content-Type": "application/json",
+        "x-tenant-ai-toggle-secret": "${TENANT_AI_TOGGLE_SECRET}"
+      },
+      "body": {
+        "tenant_id": "10f7cc6b-5394-4e40-ac3f-abf8debb3586",
+        "enabled": true
+      },
+      "slug": "sunset-thermas-park",
+      "tenant_id": "10f7cc6b-5394-4e40-ac3f-abf8debb3586"
+    },
+    {
+      "title": "Boom IA — DESLIGAR — sunset-thermas-park",
+      "url": "https://ia.agboom.com.br/api/tenant-ai/toggle",
+      "method": "POST",
+      "timezone": "America/Sao_Paulo",
+      "cron": "0 22 * * 1-5",
+      "schedule_label": "22:00 seg–sex",
+      "headers": {
+        "Content-Type": "application/json",
+        "x-tenant-ai-toggle-secret": "${TENANT_AI_TOGGLE_SECRET}"
+      },
+      "body": {
+        "tenant_id": "10f7cc6b-5394-4e40-ac3f-abf8debb3586",
+        "enabled": false
+      },
+      "slug": "sunset-thermas-park",
+      "tenant_id": "10f7cc6b-5394-4e40-ac3f-abf8debb3586"
+    }
+  ]
+}

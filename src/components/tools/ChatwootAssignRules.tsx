@@ -14,29 +14,59 @@ interface Props {
   initialRules?: AssignRule[];
   defaultAssigneeId?: number | null;
   defaultTeamId?: number | null;
-  onChange: (rules: AssignRule[], defaultAssigneeId: number | null, defaultTeamId: number | null) => void;
+  roundRobin?: boolean;
+  assignees?: number[];
+  onChange: (
+    rules: AssignRule[],
+    defaultAssigneeId: number | null,
+    defaultTeamId: number | null,
+    roundRobin?: boolean,
+    assignees?: number[]
+  ) => void;
   compact?: boolean;
 }
 
-export function ChatwootAssignRules({ initialRules = [], defaultAssigneeId = null, defaultTeamId = null, onChange, compact = false }: Props) {
+export function ChatwootAssignRules({
+  initialRules = [],
+  defaultAssigneeId = null,
+  defaultTeamId = null,
+  roundRobin = false,
+  assignees = [],
+  onChange,
+  compact = false,
+}: Props) {
   const [rules, setRules] = useState<AssignRule[]>(initialRules);
   const [defAssignee, setDefAssignee] = useState<number | null>(defaultAssigneeId);
   const [defTeam, setDefTeam] = useState<number | null>(defaultTeamId);
+  const [rrActive, setRrActive] = useState<boolean>(roundRobin);
+  const [rrAssigneesText, setRrAssigneesText] = useState<string>(
+    Array.isArray(assignees) ? assignees.join(", ") : ""
+  );
 
-  const emit = (newRules: AssignRule[], da: number | null, dt: number | null) => {
-    onChange(newRules, da, dt);
+  const emit = (
+    newRules: AssignRule[],
+    da: number | null,
+    dt: number | null,
+    rr: boolean,
+    arrText: string
+  ) => {
+    const arr = arrText
+      .split(",")
+      .map((s) => parseInt(s.trim(), 10))
+      .filter((n) => !isNaN(n));
+    onChange(newRules, da, dt, rr, arr);
   };
 
   const addRule = () => {
     const updated = [...rules, { label: "", assignee_id: null, team_id: null }];
     setRules(updated);
-    emit(updated, defAssignee, defTeam);
+    emit(updated, defAssignee, defTeam, rrActive, rrAssigneesText);
   };
 
   const removeRule = (idx: number) => {
     const updated = rules.filter((_, i) => i !== idx);
     setRules(updated);
-    emit(updated, defAssignee, defTeam);
+    emit(updated, defAssignee, defTeam, rrActive, rrAssigneesText);
   };
 
   const updateRule = (idx: number, field: keyof AssignRule, value: string) => {
@@ -47,7 +77,7 @@ export function ChatwootAssignRules({ initialRules = [], defaultAssigneeId = nul
       updated[idx] = { ...updated[idx], [field]: value ? Number(value) : null };
     }
     setRules(updated);
-    emit(updated, defAssignee, defTeam);
+    emit(updated, defAssignee, defTeam, rrActive, rrAssigneesText);
   };
 
   const h = compact ? "h-9" : "h-11 rounded-lg";
@@ -79,7 +109,7 @@ export function ChatwootAssignRules({ initialRules = [], defaultAssigneeId = nul
               onChange={(e) => {
                 const v = e.target.value ? Number(e.target.value) : null;
                 setDefAssignee(v);
-                emit(rules, v, defTeam);
+                emit(rules, v, defTeam, rrActive, rrAssigneesText);
               }}
             />
           </div>
@@ -93,11 +123,49 @@ export function ChatwootAssignRules({ initialRules = [], defaultAssigneeId = nul
               onChange={(e) => {
                 const v = e.target.value ? Number(e.target.value) : null;
                 setDefTeam(v);
-                emit(rules, defAssignee, v);
+                emit(rules, defAssignee, v, rrActive, rrAssigneesText);
               }}
             />
           </div>
         </div>
+      </div>
+
+      {/* Rodízio / Round-Robin */}
+      <div className="border-t border-border pt-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label className={labelCls}>Ativar Rodízio (Round-Robin)</Label>
+            <p className={hintCls}>Distribui os leads entre uma lista de corretores alternadamente</p>
+          </div>
+          <input
+            type="checkbox"
+            checked={rrActive}
+            className="h-4 w-4 rounded border-border text-primary focus:ring-primary bg-background"
+            onChange={(e) => {
+              const active = e.target.checked;
+              setRrActive(active);
+              emit(rules, defAssignee, defTeam, active, rrAssigneesText);
+            }}
+          />
+        </div>
+
+        {rrActive && (
+          <div className="space-y-1">
+            <Label className={labelCls}>IDs dos Corretores para Rodízio (separados por vírgula)</Label>
+            <Input
+              type="text"
+              placeholder="Ex: 101, 102, 103"
+              value={rrAssigneesText}
+              className={`${h} bg-background font-mono text-sm border-border`}
+              onChange={(e) => {
+                const text = e.target.value;
+                setRrAssigneesText(text);
+                emit(rules, defAssignee, defTeam, rrActive, text);
+              }}
+            />
+            <p className={hintCls}>Insira os IDs de atendente do Chatwoot separados por vírgula</p>
+          </div>
+        )}
       </div>
 
       {/* Rules list */}

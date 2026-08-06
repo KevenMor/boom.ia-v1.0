@@ -175,8 +175,16 @@ export default function EditTool() {
               initialRules={((tool.execution_config as any)?.rules || []) as AssignRule[]}
               defaultAssigneeId={(tool.execution_config as any)?.assignee_id ?? null}
               defaultTeamId={(tool.execution_config as any)?.team_id ?? null}
-              onChange={(rules, defAssignee, defTeam) => {
-                const config: Record<string, any> = { assignee_id: defAssignee, team_id: defTeam, rules };
+              roundRobin={(tool.execution_config as any)?.round_robin ?? false}
+              assignees={(tool.execution_config as any)?.assignees || []}
+              onChange={(rules, defAssignee, defTeam, rr, arr) => {
+                const config: Record<string, any> = {
+                  assignee_id: defAssignee,
+                  team_id: defTeam,
+                  rules,
+                  round_robin: rr,
+                  assignees: arr,
+                };
                 setValue("execution_json", JSON.stringify(config, null, 2));
               }}
             />

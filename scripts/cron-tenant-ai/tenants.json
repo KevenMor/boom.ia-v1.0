@@ -1,0 +1,97 @@
+{
+  "api_base_url": "https://ia.agboom.com.br",
+  "timezone": "America/Sao_Paulo",
+  "schedule": {
+    "enable_cron": "0 8 * * 1-5",
+    "disable_cron": "0 22 * * 1-5",
+    "enable_label": "08:00 seg–sex",
+    "disable_label": "22:00 seg–sex"
+  },
+  "note": "Marque schedule_enabled=true só nas tenants que devem ligar/desligar no horário. Tenants já inativas de propósito ficam false para o cron não reativá-las às 08:00.",
+  "tenants": [
+    {
+      "slug": "auto-escola-ideal",
+      "tenant_id": "a67d9e3c-cab6-4d13-938d-78300ebfb66d",
+      "name": "Auto Escola Ideal",
+      "schedule_enabled": true
+    },
+    {
+      "slug": "biazini",
+      "tenant_id": "1d5342fe-299b-40e6-8d22-218b6096aad4",
+      "name": "Biazini",
+      "schedule_enabled": true
+    },
+    {
+      "slug": "contabilidade-ideal",
+      "tenant_id": "193c918f-b449-453f-b103-e6901c3c85db",
+      "name": "Contabilidade Ideal",
+      "schedule_enabled": false
+    },
+    {
+      "slug": "delta-empreendimentos",
+      "tenant_id": "8686a7d0-5e16-4e52-8291-02c996f4b9e5",
+      "name": "Delta Empreendimentos",
+      "schedule_enabled": true
+    },
+    {
+      "slug": "dr-iuri",
+      "tenant_id": "0bb9c32d-2499-4755-88fa-11464caf76f6",
+      "name": "Dr. Iuri",
+      "schedule_enabled": false
+    },
+    {
+      "slug": "durce-vitta",
+      "tenant_id": "76fdafe8-c15e-427b-acb6-9494fedd4430",
+      "name": "Durce Vitta",
+      "schedule_enabled": true
+    },
+    {
+      "slug": "insituto-vicentim-maekawa",
+      "tenant_id": "ae605c08-e72c-48c1-a063-826afdb1c278",
+      "name": "Insituto Vicentim Maekawa",
+      "schedule_enabled": true
+    },
+    {
+      "slug": "monte-verde-ranch",
+      "tenant_id": "428120cb-2244-47fa-86de-7e47d154d98d",
+      "name": "Monte Verde Ranch",
+      "schedule_enabled": false
+    },
+    {
+      "slug": "pet-home-tia-erica",
+      "tenant_id": "e6657fae-c7d7-4b1c-92cb-f6419428d202",
+      "name": "Pet Home Tia Erica",
+      "schedule_enabled": true
+    },
+    {
+      "slug": "pousada-flores-do-lazaro",
+      "tenant_id": "c916d885-df05-4d0d-a37a-7c4101ef5467",
+      "name": "Pousada Flores do lázaro",
+      "schedule_enabled": true
+    },
+    {
+      "slug": "ppl-mortors",
+      "tenant_id": "bc4a1dc9-a205-4b4b-9b6c-47bf677a2728",
+      "name": "Ppl mortors",
+      "schedule_enabled": false
+    },
+    {
+      "slug": "referency",
+      "tenant_id": "38713f84-5c76-4428-b96a-14d9802c589d",
+      "name": "Referency",
+      "schedule_enabled": false
+    },
+    {
+      "slug": "sunset-thermas-park",
+      "tenant_id": "10f7cc6b-5394-4e40-ac3f-abf8debb3586",
+      "name": "Sunset Thermas Park",
+      "schedule_enabled": true
+    },
+    {
+      "slug": "vale-suico",
+      "tenant_id": "a0a818f4-af11-49fa-b3e1-9c898b9e3578",
+      "name": "Vale Suiço",
+      "schedule_enabled": false
+    }
+  ]
+}

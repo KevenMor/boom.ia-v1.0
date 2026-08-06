@@ -1,10 +1,23 @@
+import { useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
+import { useAuth } from "@/contexts/AuthContext";
+import { filterCalendarsForUser, isCalendarScopedUser } from "@/lib/calendar-ownership";
 import type { Calendar } from "@/types/calendar";
 
 export function useCalendars(tenantId: string | undefined) {
-  return useQuery({
-    queryKey: ["calendars", tenantId],
+  const { user, isSuperAdmin, isTenantAdmin, loading: authLoading } = useAuth();
+  // Enquanto perfil/memberships carregam, todo usuário parece tenant_user —
+  // aplicar o escopo aqui esconderia as agendas de admins durante o bootstrap.
+  const scoped =
+    !authLoading &&
+    isCalendarScopedUser({
+      isSuperAdmin,
+      isTenantAdmin: isTenantAdmin(tenantId),
+    });
+
+  const query = useQuery({
+    queryKey: ["calendars", tenantId, scoped ? user?.id ?? "scoped" : "all"],
     enabled: !!tenantId,
     queryFn: async () => {
       const { data, error } = await supabase
@@ -16,6 +29,13 @@ export function useCalendars(tenantId: string | undefined) {
       return data as Calendar[];
     },
   });
+
+  const data = useMemo(() => {
+    if (!query.data) return query.data;
+    return filterCalendarsForUser(query.data, { userId: user?.id, scoped });
+  }, [query.data, user?.id, scoped]);
+
+  return { ...query, data };
 }
 
 export function useCreateCalendar() {

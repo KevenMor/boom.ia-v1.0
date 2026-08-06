@@ -15,6 +15,8 @@ export interface Calendar {
   description: string | null;
   color: string;
   is_active: boolean;
+  /** Dono da agenda (corretor). NULL = compartilhada do tenant. */
+  owner_user_id?: string | null;
   working_hours?: CalendarWorkingHours | null;
   created_at: string;
   updated_at: string;

@@ -37,6 +37,7 @@ export function useCreateAdminUser() {
       password: string;
       full_name?: string | null;
       memberships: Array<{ tenant_id: string; role: TenantMembershipRole }>;
+      ensure_personal_calendars?: boolean;
     }) => {
       return callAPI<unknown>("/admin/users", { method: "POST", body });
     },
@@ -50,9 +51,14 @@ export function useUpdateAdminUser() {
     mutationFn: async (params: {
       id: string;
       full_name?: string | null;
+      /** Nova senha (opcional). Só envia se preenchida. */
+      password?: string;
       memberships?: Array<{ tenant_id: string; role: TenantMembershipRole }>;
+      ensure_personal_calendars?: boolean;
     }) => {
-      const { id, ...body } = params;
+      const { id, ...raw } = params;
+      const body = { ...raw };
+      if (!body.password) delete body.password;
       return callAPI<unknown>(`/admin/users/${id}`, { method: "PATCH", body });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-users"] }),

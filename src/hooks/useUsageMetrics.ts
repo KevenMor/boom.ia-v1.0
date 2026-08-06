@@ -34,21 +34,24 @@ export interface UsageEvent {
 }
 
 interface AgentTokenUsageRow {
-  id: string;
+  id?: string;
   created_at: string;
   agent_id: string;
-  conversation_id: string | null;
+  conversation_id?: string | null;
   message_role: string;
   model: string;
   provider: string;
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
-  metadata: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 const USAGE_SELECT_FULL =
   "id, created_at, agent_id, conversation_id, message_role, model, provider, prompt_tokens, completion_tokens, total_tokens, metadata";
+
+const USAGE_SELECT_SUMMARY =
+  "created_at, agent_id, message_role, model, provider, prompt_tokens, completion_tokens, total_tokens";
 
 /**
  * Extrai a contagem de tool calls do metadata.
@@ -112,7 +115,7 @@ export function useUsageDailySummary(tenantId?: string | null) {
       since.setDate(since.getDate() - 30);
 
       const raw = await fetchAgentTokenUsageInRange(since, tenantId, {
-        columns: USAGE_SELECT_FULL,
+        columns: USAGE_SELECT_SUMMARY,
         globalLimit: 80_000,
       });
       const usage = raw as AgentTokenUsageRow[];
@@ -153,7 +156,7 @@ export function useUsageDailySummary(tenantId?: string | null) {
         cur.sum_prompt += row.prompt_tokens || 0;
         cur.sum_completion += row.completion_tokens || 0;
         cur.sum_tokens += row.total_tokens || (row.prompt_tokens || 0) + (row.completion_tokens || 0);
-        cur.sum_tool_calls += extractToolCallsCount(row.metadata, row.message_role ?? "");
+        cur.sum_tool_calls += extractToolCallsCount(row.metadata ?? null, row.message_role ?? "");
         byKey.set(key, cur);
       }
 
@@ -173,6 +176,7 @@ export function useRecentUsageEvents(limit = 4000, tenantId?: string | null) {
 
       const raw = await fetchAgentTokenUsageInRange(since, tenantId, {
         columns: USAGE_SELECT_FULL,
+        limit,
         globalLimit: 80_000,
       });
       let usage = raw as AgentTokenUsageRow[];

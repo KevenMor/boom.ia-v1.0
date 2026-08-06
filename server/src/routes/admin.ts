@@ -35,6 +35,42 @@ async function decrypt(encoded: string, secret: string): Promise<string> {
   return new TextDecoder().decode(decrypted);
 }
 
+type NexusClient = ReturnType<typeof createNexusClient>;
+
+/** Garante 1 agenda pessoal por usuário/tenant (idempotente). */
+export async function ensurePersonalCalendar(
+  supabase: NexusClient,
+  opts: { tenantId: string; userId: string; fullName?: string | null }
+): Promise<{ id: string; created: boolean }> {
+  const { data: existing, error: findErr } = await supabase
+    .from("calendars")
+    .select("id")
+    .eq("tenant_id", opts.tenantId)
+    .eq("owner_user_id", opts.userId)
+    .limit(1)
+    .maybeSingle();
+  if (findErr) throw new Error(findErr.message);
+  if (existing?.id) return { id: existing.id as string, created: false };
+
+  const name = opts.fullName?.trim()
+    ? `Agenda — ${opts.fullName.trim()}`
+    : "Minha agenda";
+
+  const { data: created, error: insErr } = await supabase
+    .from("calendars")
+    .insert({
+      tenant_id: opts.tenantId,
+      name,
+      color: "primary",
+      is_active: true,
+      owner_user_id: opts.userId,
+    })
+    .select("id")
+    .single();
+  if (insErr) throw new Error(insErr.message);
+  return { id: created.id as string, created: true };
+}
+
 export async function adminRoutes(fastify: FastifyInstance) {
   fastify.addHook("preHandler", async (req, reply) => {
     const ctx = await requireSuperadmin(req, reply);
@@ -304,6 +340,8 @@ export async function adminRoutes(fastify: FastifyInstance) {
           password?: string;
           full_name?: string | null;
           memberships?: Array<{ tenant_id: string; role: TenantMembershipRole }>;
+          /** Default true: cria agenda pessoal para memberships tenant_user. */
+          ensure_personal_calendars?: boolean;
         };
       }>,
       reply: FastifyReply
@@ -315,6 +353,10 @@ export async function adminRoutes(fastify: FastifyInstance) {
       const email = String(req.body?.email ?? "").trim().toLowerCase();
       const password = String(req.body?.password ?? "");
       const full_name = req.body?.full_name != null ? String(req.body.full_name).trim() || null : null;
+      const ensurePersonal =
+        req.body?.ensure_personal_calendars === undefined
+          ? true
+          : Boolean(req.body.ensure_personal_calendars);
       const rawMemberships = Array.isArray(req.body?.memberships) ? req.body.memberships : [];
 
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -382,6 +424,23 @@ export async function adminRoutes(fastify: FastifyInstance) {
         }
       }
 
+      const personalCalendars: Array<{ tenant_id: string; calendar_id: string }> = [];
+      if (ensurePersonal) {
+        for (const m of memberships) {
+          if (m.role !== "tenant_user") continue;
+          try {
+            const cal = await ensurePersonalCalendar(supabase, {
+              tenantId: m.tenant_id,
+              userId,
+              fullName: full_name,
+            });
+            personalCalendars.push({ tenant_id: m.tenant_id, calendar_id: cal.id });
+          } catch (calErr) {
+            console.warn("[admin] ensurePersonalCalendar failed:", calErr);
+          }
+        }
+      }
+
       const actor = await resolveAccessContext(req);
       if (actor) {
         void writeAuditLog({
@@ -391,7 +450,11 @@ export async function adminRoutes(fastify: FastifyInstance) {
           resourceId: userId,
           resourceLabel: full_name ?? email,
           action: "create",
-          metadata: { email, tenants: memberships.map((m) => m.tenant_id) },
+          metadata: {
+            email,
+            tenants: memberships.map((m) => m.tenant_id),
+            personal_calendars: personalCalendars,
+          },
         });
       }
       return reply.status(201).send({
@@ -400,6 +463,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
         full_name,
         role: "tenant_user",
         memberships,
+        personal_calendars: personalCalendars,
       });
     }
   );
@@ -411,7 +475,10 @@ export async function adminRoutes(fastify: FastifyInstance) {
         Params: { id: string };
         Body: {
           full_name?: string | null;
+          /** Nova senha (opcional). Mín. 8 caracteres. */
+          password?: string;
           memberships?: Array<{ tenant_id: string; role: TenantMembershipRole }>;
+          ensure_personal_calendars?: boolean;
         };
       }>,
       reply: FastifyReply
@@ -423,9 +490,30 @@ export async function adminRoutes(fastify: FastifyInstance) {
       const userId = req.params.id;
       if (!userId) return reply.status(400).send({ error: "id obrigatório" });
 
-      const { data: existing, error: fetchErr } = await supabase.from("profiles").select("id, role").eq("id", userId).maybeSingle();
+      const { data: existing, error: fetchErr } = await supabase
+        .from("profiles")
+        .select("id, role, full_name")
+        .eq("id", userId)
+        .maybeSingle();
       if (fetchErr) return reply.status(500).send({ error: fetchErr.message });
       if (!existing) return reply.status(404).send({ error: "usuário não encontrado" });
+
+      let resolvedFullName =
+        existing.full_name != null ? String(existing.full_name) : null;
+      let passwordChanged = false;
+
+      if (req.body?.password !== undefined) {
+        const password = String(req.body.password ?? "");
+        if (!password) {
+          return reply.status(400).send({ error: "senha não pode ser vazia" });
+        }
+        if (password.length < 8) {
+          return reply.status(400).send({ error: "senha deve ter pelo menos 8 caracteres" });
+        }
+        const { error: pwdErr } = await supabase.auth.admin.updateUserById(userId, { password });
+        if (pwdErr) return reply.status(400).send({ error: pwdErr.message });
+        passwordChanged = true;
+      }
 
       if (req.body?.full_name !== undefined) {
         const full_name = req.body.full_name === null ? null : String(req.body.full_name).trim() || null;
@@ -434,7 +522,10 @@ export async function adminRoutes(fastify: FastifyInstance) {
           .update({ full_name, updated_at: new Date().toISOString() })
           .eq("id", userId);
         if (upErr) return reply.status(500).send({ error: upErr.message });
+        resolvedFullName = full_name;
       }
+
+      let membershipsForCalendar: Array<{ tenant_id: string; role: TenantMembershipRole }> = [];
 
       if (req.body?.memberships !== undefined) {
         const rawMemberships = Array.isArray(req.body.memberships) ? req.body.memberships : [];
@@ -447,6 +538,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
           seenTenants.add(m.tenant_id);
           memberships.push({ tenant_id: m.tenant_id, role });
         }
+        membershipsForCalendar = memberships;
 
         const { error: delErr } = await supabase.from("tenant_memberships").delete().eq("user_id", userId);
         if (delErr) return reply.status(500).send({ error: delErr.message });
@@ -462,21 +554,58 @@ export async function adminRoutes(fastify: FastifyInstance) {
           );
           if (insErr) return reply.status(400).send({ error: insErr.message });
         }
+      } else if (req.body?.ensure_personal_calendars) {
+        const { data: mems } = await supabase
+          .from("tenant_memberships")
+          .select("tenant_id, role")
+          .eq("user_id", userId);
+        membershipsForCalendar = (mems ?? []).map((m) => ({
+          tenant_id: m.tenant_id as string,
+          role: (m.role === "tenant_admin" ? "tenant_admin" : "tenant_user") as TenantMembershipRole,
+        }));
+      }
+
+      const ensurePersonal =
+        Boolean(req.body?.ensure_personal_calendars) || req.body?.memberships !== undefined;
+      const personalCalendars: Array<{ tenant_id: string; calendar_id: string }> = [];
+      if (ensurePersonal) {
+        for (const m of membershipsForCalendar) {
+          if (m.role !== "tenant_user") continue;
+          try {
+            const cal = await ensurePersonalCalendar(supabase, {
+              tenantId: m.tenant_id,
+              userId,
+              fullName: resolvedFullName,
+            });
+            personalCalendars.push({ tenant_id: m.tenant_id, calendar_id: cal.id });
+          } catch (calErr) {
+            console.warn("[admin] ensurePersonalCalendar (patch) failed:", calErr);
+          }
+        }
       }
 
       const actor = await resolveAccessContext(req);
       if (actor) {
         void writeAuditLog({
-          tenantId: req.body?.memberships?.[0]?.tenant_id ?? null,
+          tenantId:
+            req.body?.memberships?.[0]?.tenant_id ?? membershipsForCalendar[0]?.tenant_id ?? null,
           auth: actor,
           resource: "user",
           resourceId: userId,
           resourceLabel: req.body?.full_name ?? userId,
           action: "update",
-          metadata: { fields: Object.keys(req.body ?? {}) },
+          metadata: {
+            fields: Object.keys(req.body ?? {}).filter((k) => k !== "password"),
+            password_changed: passwordChanged,
+            personal_calendars: personalCalendars,
+          },
         });
       }
-      return reply.send({ success: true });
+      return reply.send({
+        success: true,
+        password_changed: passwordChanged,
+        personal_calendars: personalCalendars,
+      });
     }
   );
 
@@ -541,7 +670,29 @@ export async function adminRoutes(fastify: FastifyInstance) {
         if (insErr) return reply.status(500).send({ error: insErr.message });
       }
 
-      return reply.send({ success: true });
+      const calendarEnabled = Array.isArray(modules)
+        ? modules.some((m) => String(m.module_key) === "calendar" && m.enabled !== false)
+        : false;
+      let personalCalendarId: string | null = null;
+      if (calendarEnabled) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("id", userId)
+          .maybeSingle();
+        try {
+          const cal = await ensurePersonalCalendar(supabase, {
+            tenantId: tenant_id,
+            userId,
+            fullName: profile?.full_name != null ? String(profile.full_name) : null,
+          });
+          personalCalendarId = cal.id;
+        } catch (calErr) {
+          console.warn("[admin] ensurePersonalCalendar (acl) failed:", calErr);
+        }
+      }
+
+      return reply.send({ success: true, personal_calendar_id: personalCalendarId });
     }
   );
 

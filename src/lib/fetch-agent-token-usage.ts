@@ -35,6 +35,7 @@ export type FetchTokenUsageOpts = {
   columns: string;
   /** Somente modo “todos os tenants”: teto nas linhas mais recentes. */
   globalLimit?: number;
+  limit?: number;
 };
 
 /**
@@ -52,20 +53,25 @@ export async function fetchAgentTokenUsageInRange(
     const ids = await fetchAgentIdsForTenant(tenantId);
     if (ids.length === 0) return [];
     const merged: Record<string, unknown>[] = [];
+    const chunkLimit = opts.limit;
     for (const chunk of chunkIds(ids, AGENT_ID_CHUNK_SIZE)) {
-      const { data, error } = await nexusDb
+      let query = nexusDb
         .from("agent_token_usage")
         .select(opts.columns)
         .in("agent_id", chunk)
         .gte("created_at", sinceIso)
         .order("created_at", { ascending: false });
+      if (chunkLimit !== undefined) {
+        query = query.limit(chunkLimit);
+      }
+      const { data, error } = await query;
       if (error) throw error;
       merged.push(...(data ?? []));
     }
     return merged;
   }
 
-  const limit = opts.globalLimit ?? 80_000;
+  const limit = opts.limit ?? opts.globalLimit ?? 80_000;
   const { data, error } = await nexusDb
     .from("agent_token_usage")
     .select(opts.columns)
