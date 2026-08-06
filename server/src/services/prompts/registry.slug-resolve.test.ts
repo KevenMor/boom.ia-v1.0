@@ -15,7 +15,7 @@ describe("registry — slug aliases (hífen / underscore)", () => {
 
   it("resolve Auto Escola Ideal com slug do banco (variantes com hífen)", () => {
     const prompt = buildSystemPrompt("PROMPT_DO_BANCO_QUE_NAO_DEVE_APARECER", "auto-escola-ideal", false);
-    expect(prompt).toContain("v8.14");
+    expect(prompt).toContain("v8.15");
     expect(prompt).not.toContain("PROMPT_DO_BANCO_QUE_NAO_DEVE_APARECER");
     expect(prompt).toMatch(/R\$ 90,00/);
   });
@@ -23,8 +23,8 @@ describe("registry — slug aliases (hífen / underscore)", () => {
   it("getPromptConfig resolve alias", () => {
     const cfg = getPromptConfig("auto-escola-ideal");
     expect(cfg).not.toBeNull();
-    expect(cfg!.version).toBe("v8.14");
-    expect(cfg!.slug).toBe("autoescola-ideal");
+    expect(cfg!.version).toBe("v8.15");
+    expect(cfg!.slug).toBe("auto-escola-ideal");
   });
 
   it("getDispatcherPrompt usa o mesmo resolve", () => {
@@ -36,7 +36,7 @@ describe("registry — slug aliases (hífen / underscore)", () => {
   it("slug canônico ideal ignora prompt do banco", () => {
     const prompt = buildSystemPrompt("TEXTO_SOMENTE_BANCO_NAO_USAR", "ideal", false);
     expect(prompt).not.toContain("TEXTO_SOMENTE_BANCO_NAO_USAR");
-    expect(prompt).toContain("v8.14");
+    expect(prompt).toContain("v8.15");
   });
 
   it("tenant fora do registry usa system prompt do banco", () => {

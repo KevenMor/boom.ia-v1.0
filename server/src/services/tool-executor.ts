@@ -1580,7 +1580,14 @@ async function executeChatwootAssign(
       ? execCfg.assignees.map(Number).filter((n) => !isNaN(n) && n > 0)
       : [];
 
-    if (isRoundRobin && assigneesList.length > 0 && !matchedRule) {
+    const shouldTriggerRoundRobin =
+      isRoundRobin &&
+      assigneesList.length > 0 &&
+      (!matchedRule ||
+        matchedRule.toLowerCase().includes("comercial") ||
+        matchedRule.toLowerCase().includes("venda"));
+
+    if (shouldTriggerRoundRobin) {
       const lastIndex = execCfg.last_assigned_index != null ? Number(execCfg.last_assigned_index) : -1;
       const nextIndex = (lastIndex + 1) % assigneesList.length;
       assigneeId = assigneesList[nextIndex];
