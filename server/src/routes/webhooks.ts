@@ -881,7 +881,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       // Agente inativo OU IA desligada globalmente na tenant: sincronizar mensagens no banco (Chat ao Vivo),
       // mas nunca acionar a IA.
       const tenantAiOff = await isTenantAiGloballyDisabled(supabase, agent.tenant_id);
-      if (chatwoot.isChatwoot && (agent.status !== "active" || tenantAiOff)) {
+      if (chatwoot.isChatwoot && (agent.status !== "active" && agent.status !== "test" || tenantAiOff)) {
         try {
           const { data: convData } = await supabase.rpc("find_or_create_webhook_conversation", {
             p_agent_id: agentId,
