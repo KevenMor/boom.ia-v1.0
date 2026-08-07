@@ -121,18 +121,19 @@ describe("Delta Empreendimentos — SYSTEM_PROMPT", () => {
 
   it("conhecimento do Vale dos Cervos 5", () => {
     expect(SYSTEM_PROMPT).toContain("Vale dos Cervos 5");
+    expect(SYSTEM_PROMPT).toContain("150.000,00");
     expect(SYSTEM_PROMPT).toContain("50.000,00");
-    expect(SYSTEM_PROMPT).toContain("80x");
     expect(SYSTEM_PROMPT).toContain("matrícula individual");
-    expect(SYSTEM_PROMPT).toContain("guia, sarjeta e cascalho compactado");
+    expect(SYSTEM_PROMPT).toContain("guias e sarjetas");
+    expect(SYSTEM_PROMPT).toContain("ruas cascalhadas");
     expect(SYSTEM_PROMPT).toContain("permuta");
     expect(SYSTEM_PROMPT).toMatch(/APENAS SOB DEMANDA EXPLÍCITA|Valores sob Demanda/i);
-    expect(SYSTEM_PROMPT).toMatch(/qual cidade reside/i);
-    expect(SYSTEM_PROMPT).toMatch(/busca para morar ou investimento/i);
-    expect(SYSTEM_PROMPT).toMatch(/Evite termos técnicos burocráticos.*muro/i);
-    expect(SYSTEM_PROMPT).toContain("Araçoiaba da Serra/SP");
-    expect(SYSTEM_PROMPT).toContain("km 123");
-    expect(SYSTEM_PROMPT).toContain("Raposo Tavares");
+    expect(SYSTEM_PROMPT).toMatch(/qual cidade reside|de qual cidade/i);
+    expect(SYSTEM_PROMPT).toMatch(/busca para morar.*ou investimento|busca para morar\/lazer ou investimento/i);
+    expect(SYSTEM_PROMPT).toMatch(/muro frontal/i);
+    expect(SYSTEM_PROMPT).toContain("Araçoiaba da Serra-SP");
+    expect(SYSTEM_PROMPT).toContain("Shopping Iguatemi Esplanada");
+    expect(SYSTEM_PROMPT).toContain("800 metros do asfalto");
   });
 
   it("sem telefone hardcoded no prompt", () => {
