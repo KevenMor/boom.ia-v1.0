@@ -169,7 +169,8 @@ describe("buildHandoffPrivateNote", () => {
     });
     expect(note).toContain("Resumo do atendimento");
     expect(note).toContain("Nome do cliente: Gabriella Lustosa");
-    expect(note).toContain("Resumo da conversa: Quero valores e uma proposta personalizada");
+    expect(note).toContain("Resumo da conversa: Cliente se interessou pelo empreendimento Gestão de redes sociais");
+    expect(note).toContain("Pediu informações sobre valores e condições de pagamento.");
     expect(note).toContain("Urgência:");
     expect(note).not.toContain("Gerado automaticamente");
     expect(note).not.toContain("Contexto para continuar");
@@ -198,7 +199,7 @@ describe("buildHandoffPrivateNote", () => {
     });
     expect(note).toContain("Nome do cliente: Keven");
     expect(note).not.toContain("Nome do cliente: reservas do brasil");
-    expect(note).toContain("Resumo da conversa: Olá, quero saber sobre Reservas do Brasil | Me chamo Keven");
+    expect(note).toContain("Resumo da conversa: Cliente se interessou pelo empreendimento Reservas do Brasil");
     expect(note).not.toContain("Contexto para continuar");
     expect(note).not.toContain("Linha do tempo:");
   });
@@ -215,7 +216,7 @@ describe("buildHandoffPrivateNote", () => {
       ],
     });
     expect(note).toContain("Nome do cliente: Keven Moreira");
-    expect(note).toContain("Resumo da conversa: reservas do brasil");
+    expect(note).toContain("Resumo da conversa: Cliente se interessou pelo empreendimento Reservas do Brasil");
     expect(note).toContain("Urgência: Normal");
   });
 });

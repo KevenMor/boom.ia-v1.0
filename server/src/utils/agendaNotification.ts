@@ -604,6 +604,64 @@ export function sanitizeClientDisplayName(raw: string | undefined | null): strin
  * Nota privada no Chatwoot (só a equipe vê) após transferir o atendimento.
  * Contexto completo para o agente humano não ficar perdido.
  */
+function capitalizeTopic(topic: string | undefined): string | undefined {
+  if (!topic) return undefined;
+  const t = topic.trim();
+  if (/reservas?\s+do\s+brasil/i.test(t)) return "Reservas do Brasil";
+  if (/vale\s+dos\s+cervos/i.test(t)) return "Vale dos Cervos";
+  if (/dallas/i.test(t)) return "Dallas";
+  if (/vista\s+alegre/i.test(t)) return "Vista Alegre";
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+export function extractCityFromMessages(messages: Array<{ role: string; content: string }>): string | undefined {
+  const clean = (t: string) => t.replace(/\s+/g, " ").trim();
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    if (
+      m.role === "assistant" &&
+      /\b(cidade|mora|de onde|você é de|reside|qual região|localidade|bairro)\b/i.test(m.content)
+    ) {
+      const nextUser = messages.slice(i + 1).find((um) => um.role === "user");
+      if (nextUser) {
+        const txt = clean(nextUser.content);
+        const match = txt.match(/\b(?:sou\s+de\s+|moro\s+em\s+|falo\s+de\s+|resido\s+em\s+)?([A-ZÀ-ÿ][a-zÀ-ÿ]+(?:\s+[A-ZÀ-ÿ][a-zÀ-ÿ]+)*)\b/);
+        if (match?.[1] && match[1].length > 2 && !/\b(sim|nao|não|quero|atendente|equipe|tabela|fotos|videos)\b/i.test(match[1])) {
+          return match[1];
+        }
+        const words = txt.split(/\s+/);
+        if (words.length <= 4 && words.every(w => /^[a-zA-ZÀ-ÿ]/.test(w))) {
+          const possible = txt.replace(/^(sou de|moro em|falo de|resido em)\s+/i, "").trim();
+          if (possible.length > 2 && !/\b(sim|nao|não|quero|atendente|equipe)\b/i.test(possible)) {
+            return possible;
+          }
+        }
+      }
+    }
+  }
+  const userMsgs = messages.filter((m) => m.role === "user");
+  for (const um of [...userMsgs].reverse()) {
+    const txt = clean(um.content);
+    const match = txt.match(/\b(?:sou\s+de\s+|moro\s+em\s+|falo\s+de\s+|resido\s+em\s+)([A-ZÀ-ÿa-zÀ-ÿ]+(?:\s+[A-ZÀ-ÿa-zÀ-ÿ]+)*)\b/i);
+    if (match?.[1] && match[1].length > 2 && !/\b(sim|nao|não|quero|atendente|equipe)\b/i.test(match[1])) {
+      return match[1];
+    }
+  }
+  return undefined;
+}
+
+export function extractIntentFromMessages(messages: Array<{ role: string; content: string }>): string | undefined {
+  const blob = messages
+    .filter((m) => m.role === "user")
+    .map((m) => (m.content || "").toLowerCase())
+    .join(" ");
+
+  if (/\b(morar|moradia|casa\s+propria|residir|construir\s+casa)\b/i.test(blob)) return "moradia";
+  if (/\b(investir|investimento|rentabilidade|aplicar|lucro|capital)\b/i.test(blob)) return "investimento";
+  if (/\b(lazer|chacara|chácara|fim\s+de\s+semana|veraneio|refugio|refúgio|descanso|passar\s+fim)\b/i.test(blob)) return "lazer / refúgio";
+  return undefined;
+}
+
 export function buildHandoffPrivateNote(opts: {
   nomeCliente?: string;
   /** Nome do WhatsApp/CRM na conversa (ex.: "Keven Moreira") — fallback quando o chat não tem "me chamo". */
@@ -622,6 +680,10 @@ export function buildHandoffPrivateNote(opts: {
     sanitizeClientDisplayName(opts.contactName) ||
     "Cliente";
 
+  const interesse =
+    opts.veiculoInteresse?.trim() ||
+    (messages.length ? extractTopicInterestFromMessages(messages) : undefined);
+
   const urgencia = inferHandoffUrgency(messages, opts.motivo);
 
   const clean = (t: string) =>
@@ -634,20 +696,38 @@ export function buildHandoffPrivateNote(opts: {
   const transferRe =
     /\b(transfer|transfira|transferir|atendente humano|falar com (a )?equipe|passar (para|pro|pra) (o )?time)\b/i;
 
-  const userMsgs = messages
-    .filter((m) => m.role === "user")
-    .map((m) => clean(m.content || ""))
-    .filter((t) => t.length >= 3 && !transferRe.test(t));
+  const cidade = extractCityFromMessages(messages);
+  const intencao = extractIntentFromMessages(messages);
+  const interesseStr = capitalizeTopic(interesse) || "um empreendimento";
 
-  const clientSummary = userMsgs.length > 0
-    ? userMsgs.map((t) => (t.length > 120 ? `${t.slice(0, 117).trim()}…` : t)).join(" | ")
-    : "Iniciou o contato.";
+  let resumo = `Cliente se interessou pelo empreendimento ${interesseStr}`;
+  if (cidade) {
+    resumo += `, reside hoje em ${cidade}`;
+  }
+  if (intencao) {
+    resumo += ` e demonstrou interesse em adquirir para ${intencao}`;
+  } else {
+    resumo += ` e demonstrou interesse em receber mais informações`;
+  }
+  resumo += ".";
+
+  const lastUserMsg = [...messages].reverse().find((m) => m.role === "user")?.content || "";
+  const cleanLast = clean(lastUserMsg);
+  if (cleanLast.length > 5 && !transferRe.test(cleanLast)) {
+    if (/\b(valores|valor|pre[cç]os?|or[cç]amentos?|tabelas?|quanto\s+custa|condi[cç][oõ]es|entrada|proposta)\b/i.test(cleanLast)) {
+      resumo += ` Pediu informações sobre valores e condições de pagamento.`;
+    } else if (/\b(visita|plantao|conhecer|agendar|ir la)\b/i.test(cleanLast)) {
+      resumo += ` Demonstrou interesse em agendar uma visita ao local.`;
+    } else if (/\b(fotos?|videos?|galeria|imagens?|midias?)\b/i.test(cleanLast)) {
+      resumo += ` Solicitou fotos ou vídeos do empreendimento.`;
+    }
+  }
 
   const lines: string[] = [
     "📋 Resumo do atendimento (interno)",
     "",
     `Nome do cliente: ${nome}`,
-    `Resumo da conversa: ${clientSummary}`,
+    `Resumo da conversa: ${resumo}`,
     `Urgência: ${urgencia}`,
   ];
 
