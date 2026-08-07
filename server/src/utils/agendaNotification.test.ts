@@ -155,7 +155,7 @@ describe("buildHandoffNotification", () => {
 });
 
 describe("buildHandoffPrivateNote", () => {
-  it("monta resumo interno com nome, interesse, urgência e assinatura", () => {
+  it("monta resumo interno simplificado com nome, resumo da conversa e urgência", () => {
     const note = buildHandoffPrivateNote({
       nomeCliente: "Gabriella Lustosa",
       telefoneCliente: "5511999990000",
@@ -165,24 +165,23 @@ describe("buildHandoffPrivateNote", () => {
         { role: "user", content: "Quero valores e uma proposta personalizada" },
         { role: "assistant", content: "Claro! Vou te ajudar com os valores e a proposta." },
       ],
-      agentName: "Manu",
+      agentName: "Paula",
     });
     expect(note).toContain("Resumo do atendimento");
-    expect(note).toContain("Nome: Gabriella Lustosa");
-    expect(note).toContain("gestão de redes sociais");
+    expect(note).toContain("Nome do cliente: Gabriella Lustosa");
+    expect(note).toContain("Resumo da conversa: Quero valores e uma proposta personalizada");
     expect(note).toContain("Urgência:");
-    expect(note).toContain("Gerado automaticamente por Manu");
-    expect(note).toContain("Contexto para continuar");
-    expect(note).toMatch(/proposta|valores/i);
+    expect(note).not.toContain("Gerado automaticamente");
+    expect(note).not.toContain("Contexto para continuar");
   });
 
-  it("extrai Keven e contexto — não usa 'reservas do brasil' como nome", () => {
+  it("extrai Keven e resumo — não usa 'reservas do brasil' como nome", () => {
     const messages = [
       { role: "user", content: "Olá, quero saber sobre Reservas do Brasil" },
       {
         role: "assistant",
         content:
-          "Oi! Sou a Manu da Delta Empreendimentos. Posso te ajudar com o empreendimento Reservas do Brasil. Como posso te chamar?",
+          "Oi! Sou a Paula da Delta Empreendimentos. Posso te ajudar com o empreendimento Reservas do Brasil. Como posso te chamar?",
       },
       { role: "user", content: "Me chamo Keven" },
       {
@@ -194,32 +193,30 @@ describe("buildHandoffPrivateNote", () => {
     const note = buildHandoffPrivateNote({
       messages,
       motivo: "Setor responsável",
-      agentName: "Manu",
+      agentName: "Paula",
       telefoneCliente: "5511999990000",
     });
-    expect(note).toMatch(/Nome: Keven/i);
-    expect(note).not.toMatch(/Nome: reservas do brasil/i);
-    expect(note).toMatch(/Interesse \/ assunto:.*Reservas do Brasil/i);
-    expect(note).toContain("Contexto para continuar");
-    expect(note).toContain("Linha do tempo:");
-    expect(note).not.toMatch(/Pedidos recentes:.*Me chamo Keven/i);
-    expect(note).not.toMatch(/O que o cliente pediu:.*transferir/i);
+    expect(note).toContain("Nome do cliente: Keven");
+    expect(note).not.toContain("Nome do cliente: reservas do brasil");
+    expect(note).toContain("Resumo da conversa: Olá, quero saber sobre Reservas do Brasil | Me chamo Keven");
+    expect(note).not.toContain("Contexto para continuar");
+    expect(note).not.toContain("Linha do tempo:");
   });
 
   it("usa contactName do WhatsApp quando o chat só tem assunto/transferência", () => {
     const note = buildHandoffPrivateNote({
       contactName: "Keven Moreira",
       motivo: "Equipe comercial",
-      agentName: "Manu",
+      agentName: "Paula",
       messages: [
         { role: "user", content: "reservas do brasil" },
         { role: "assistant", content: "Perfeito! Vou te passar agora mesmo para a equipe." },
         { role: "user", content: "pode me transferir para equipe?" },
       ],
     });
-    expect(note).toMatch(/Nome: Keven Moreira/i);
-    expect(note).not.toMatch(/Nome: reservas do brasil/i);
-    expect(note).toMatch(/Urgência: Normal/i);
+    expect(note).toContain("Nome do cliente: Keven Moreira");
+    expect(note).toContain("Resumo da conversa: reservas do brasil");
+    expect(note).toContain("Urgência: Normal");
   });
 });
 

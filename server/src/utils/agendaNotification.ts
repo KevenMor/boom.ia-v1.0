@@ -622,41 +622,34 @@ export function buildHandoffPrivateNote(opts: {
     sanitizeClientDisplayName(opts.contactName) ||
     "Cliente";
 
-  const telefone = opts.telefoneCliente?.trim()
-    ? formatPhone(opts.telefoneCliente.trim())
-    : undefined;
-
-  const interesse =
-    opts.veiculoInteresse?.trim() ||
-    (messages.length ? extractTopicInterestFromMessages(messages) : undefined);
-
-  const pedidos = messages.length ? extractClientRequestsFromMessages(messages) : undefined;
-  const contexto = messages.length ? buildHandoffConversationContext(messages) : undefined;
   const urgencia = inferHandoffUrgency(messages, opts.motivo);
-  const motivo = opts.motivo?.trim();
-  const geradoPor = opts.agentName?.trim() || "Boom IA";
-  const turnos = messages.filter((m) => m.role === "user" || m.role === "assistant").length;
+
+  const clean = (t: string) =>
+    t
+      .replace(/\s+/g, " ")
+      .replace(/\[HINT[^\]]*\]/gi, "")
+      .replace(/HANDOFF_COMERCIAL/gi, "")
+      .trim();
+
+  const transferRe =
+    /\b(transfer|transfira|transferir|atendente humano|falar com (a )?equipe|passar (para|pro|pra) (o )?time)\b/i;
+
+  const userMsgs = messages
+    .filter((m) => m.role === "user")
+    .map((m) => clean(m.content || ""))
+    .filter((t) => t.length >= 3 && !transferRe.test(t));
+
+  const clientSummary = userMsgs.length > 0
+    ? userMsgs.map((t) => (t.length > 120 ? `${t.slice(0, 117).trim()}…` : t)).join(" | ")
+    : "Iniciou o contato.";
 
   const lines: string[] = [
     "📋 Resumo do atendimento (interno)",
     "",
-    `Nome: ${nome}`,
+    `Nome do cliente: ${nome}`,
+    `Resumo da conversa: ${clientSummary}`,
+    `Urgência: ${urgencia}`,
   ];
-  if (telefone) lines.push(`Telefone: ${telefone}`);
-  if (interesse) lines.push(`Interesse / assunto: ${interesse}`);
-  if (pedidos) lines.push(`O que o cliente pediu: ${pedidos}`);
-  lines.push(`Urgência: ${urgencia}`);
-  if (motivo) lines.push(`Motivo do handoff: ${motivo}`);
-  if (turnos > 0) lines.push(`Mensagens na conversa: ~${turnos}`);
 
-  if (contexto) {
-    lines.push("");
-    lines.push("—— Contexto para continuar ——");
-    lines.push(contexto);
-  }
-
-  lines.push("");
-  lines.push(`✨ Gerado automaticamente por ${geradoPor}`);
-  lines.push("O cliente já foi avisado do encaminhamento — continue a conversa a partir daqui.");
   return lines.join("\n");
 }
