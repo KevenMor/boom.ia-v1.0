@@ -96,22 +96,49 @@ export function SuiteGalleryMediaUpload({
     if (!tenantId) { toast.error("Tenant não identificado."); return; }
     const gId = galleryId || "new";
 
-    for (let i = 0; i < Math.min(files.length, remaining); i++) {
-      const file = files[i];
-      if (!isImageFileByMimeOrExtension(file)) { toast.error(`Ignorado (não é imagem): ${file.name}`); continue; }
-      if (file.size > MAX_PHOTO_BYTES) { toast.error(`${file.name}: máximo 20 MB.`); continue; }
+    const toUpload = files.slice(0, remaining);
+    const newItems: SuiteGalleryMedia[] = [];
+    const tmpIds: number[] = [];
 
-      const tmpId = Date.now() + i;
-      setUploadingSet((s) => new Set(s).add(tmpId));
-      try {
-        const url = await uploadFile(tenantId, gId, file, "photo");
-        addItem({ url, type: "photo" });
-        toast.success("Foto carregada.");
-      } catch (err: unknown) {
-        toast.error("Erro no upload: " + formatStorageUploadError(err));
-      } finally {
-        setUploadingSet((s) => { const n = new Set(s); n.delete(tmpId); return n; });
+    toUpload.forEach((file, i) => {
+      if (isImageFileByMimeOrExtension(file) && file.size <= MAX_PHOTO_BYTES) {
+        const tmpId = Date.now() + i;
+        tmpIds.push(tmpId);
+        setUploadingSet((s) => new Set(s).add(tmpId));
       }
+    });
+
+    try {
+      await Promise.all(
+        toUpload.map(async (file) => {
+          if (!isImageFileByMimeOrExtension(file)) {
+            toast.error(`Ignorado (não é imagem): ${file.name}`);
+            return;
+          }
+          if (file.size > MAX_PHOTO_BYTES) {
+            toast.error(`${file.name}: máximo 20 MB.`);
+            return;
+          }
+
+          try {
+            const url = await uploadFile(tenantId, gId, file, "photo");
+            newItems.push({ url, type: "photo" });
+          } catch (err: unknown) {
+            toast.error(`Erro no upload de ${file.name}: ` + formatStorageUploadError(err));
+          }
+        })
+      );
+
+      if (newItems.length > 0) {
+        onChange([...value, ...newItems]);
+        toast.success(`${newItems.length} foto(s) carregada(s).`);
+      }
+    } finally {
+      setUploadingSet((s) => {
+        const n = new Set(s);
+        tmpIds.forEach((id) => n.delete(id));
+        return n;
+      });
     }
   };
 
@@ -122,22 +149,49 @@ export function SuiteGalleryMediaUpload({
     if (!tenantId) { toast.error("Tenant não identificado."); return; }
     const gId = galleryId || "new";
 
-    for (let i = 0; i < Math.min(files.length, remaining); i++) {
-      const file = files[i];
-      if (!file.type.startsWith("video/")) { toast.error(`Ignorado (não é vídeo): ${file.name}`); continue; }
-      if (file.size > MAX_VIDEO_BYTES) { toast.error(`${file.name}: máximo 200 MB.`); continue; }
+    const toUpload = files.slice(0, remaining);
+    const newItems: SuiteGalleryMedia[] = [];
+    const tmpIds: number[] = [];
 
-      const tmpId = Date.now() + i + 1000;
-      setUploadingSet((s) => new Set(s).add(tmpId));
-      try {
-        const url = await uploadFile(tenantId, gId, file, "video");
-        addItem({ url, type: "video" });
-        toast.success("Vídeo carregado.");
-      } catch (err: unknown) {
-        toast.error("Erro no upload: " + formatStorageUploadError(err));
-      } finally {
-        setUploadingSet((s) => { const n = new Set(s); n.delete(tmpId); return n; });
+    toUpload.forEach((file, i) => {
+      if (file.type.startsWith("video/") && file.size <= MAX_VIDEO_BYTES) {
+        const tmpId = Date.now() + i + 1000;
+        tmpIds.push(tmpId);
+        setUploadingSet((s) => new Set(s).add(tmpId));
       }
+    });
+
+    try {
+      await Promise.all(
+        toUpload.map(async (file) => {
+          if (!file.type.startsWith("video/")) {
+            toast.error(`Ignorado (não é vídeo): ${file.name}`);
+            return;
+          }
+          if (file.size > MAX_VIDEO_BYTES) {
+            toast.error(`${file.name}: máximo 200 MB.`);
+            return;
+          }
+
+          try {
+            const url = await uploadFile(tenantId, gId, file, "video");
+            newItems.push({ url, type: "video" });
+          } catch (err: unknown) {
+            toast.error(`Erro no upload de ${file.name}: ` + formatStorageUploadError(err));
+          }
+        })
+      );
+
+      if (newItems.length > 0) {
+        onChange([...value, ...newItems]);
+        toast.success(`${newItems.length} vídeo(s) carregado(s).`);
+      }
+    } finally {
+      setUploadingSet((s) => {
+        const n = new Set(s);
+        tmpIds.forEach((id) => n.delete(id));
+        return n;
+      });
     }
   };
 
