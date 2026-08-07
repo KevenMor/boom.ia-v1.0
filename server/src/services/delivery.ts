@@ -11,7 +11,7 @@ import { isLodgingQuoteImageWithPriceBlock } from "../utils/lodging-quote-image-
 const MEDIA_DELIVERY_FAILED_PT =
   "Não consegui enviar o arquivo de mídia agora. Quer que eu tente de novo em instantes?";
 
-const VIDEO_IN_URL_RE = /\.(mp4|webm|mov)(\?|#|$)/i;
+const VIDEO_IN_URL_RE = /(?:\.(?:mp4|webm|mov)|\/video-[a-f0-9-]+)(?:\?|#|$)/i;
 
 function stripOuterWrappers(url: string): string {
   let t = url.trim();
@@ -31,14 +31,14 @@ function extractVideoUrlsFromText(text: string): { textOnly: string; videoUrls: 
   let t = text;
 
   const mdVideo =
-    /!?\[([^\]]*)\]\((https?:\/\/[^)\s]+\.(?:mp4|webm|mov)(?:\?[^)\s]*)?)\)/gi;
+    /!?\[([^\]]*)\]\((https?:\/\/[^)\s]+(?:\.(?:mp4|webm|mov)|\/video-[a-f0-9-]+)(?:\?[^)\s]*)?)\)/gi;
   t = t.replace(mdVideo, (_full, _label, url: string) => {
     if (url) videoUrls.push(url.trim());
     return "";
   });
 
   const inlineVideoUrl =
-    /https?:\/\/[^\s<>"']+\.(?:mp4|webm|mov)(?:\?[^\s<>"']*)?(?:#[^\s<>"']*)?/gi;
+    /https?:\/\/[^\s<>"']+(?:\.(?:mp4|webm|mov)|\/video-[a-f0-9-]+)(?:\?[^\s<>"']*)?(?:#[^\s<>"']*)?/gi;
 
   const lines = t.split(/\r?\n/);
   const remainingLines: string[] = [];

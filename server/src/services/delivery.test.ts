@@ -90,6 +90,21 @@ describe("extractVideoUrlsFromText", () => {
     expect(videoUrls).toEqual(["https://a.com/1.mp4", "https://b.com/2.mp4"]);
     expect(textOnly).not.toMatch(/https?:\/\//);
   });
+
+  it("captura URL de vídeo sem extensão com padrão video-uuid", () => {
+    const raw =
+      "E um vídeo também: https://boomsolution-supabase.kgn6uc.easypanel.host/storage/v1/object/public/" +
+      "suite-galleries/8686a7d0-5e16-4e52-8291-02c996f4b9e5/63268b34-5e16-4e52-8291-02c996f4b9e5/" +
+      "video-f1bd050c-2e8d-41df-a09d-3dc69c3424b9?t=1786112399596";
+    const { textOnly, videoUrls } = extractVideoUrlsFromText(raw);
+    expect(videoUrls).toEqual([
+      "https://boomsolution-supabase.kgn6uc.easypanel.host/storage/v1/object/public/" +
+        "suite-galleries/8686a7d0-5e16-4e52-8291-02c996f4b9e5/63268b34-5e16-4e52-8291-02c996f4b9e5/" +
+        "video-f1bd050c-2e8d-41df-a09d-3dc69c3424b9?t=1786112399596",
+    ]);
+    expect(textOnly).toContain("E um vídeo também:");
+    expect(textOnly).not.toMatch(/https?:\/\//);
+  });
 });
 
 describe("consolidateImageParts — múltiplos vídeos", () => {
