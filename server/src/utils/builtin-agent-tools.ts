@@ -24,6 +24,9 @@ const TENANTS_WITH_GALLERY_BUILTIN = new Set([
   "sunset-thermas-park",
   "vale-suico",
   "vale-suico-resort",
+  "delta",
+  "delta-empreendimentos",
+  "delta_empreendimentos",
 ]);
 
 export function tenantUsesGalleryBuiltin(slug: string | null | undefined): boolean {

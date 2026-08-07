@@ -149,11 +149,19 @@ describe("Delta Empreendimentos — DISPATCHER, COMM e FOLLOWUP", () => {
     expect(DISPATCHER_PROMPT).toMatch(/qualification funnel is completed.*city/i);
   });
 
+  it("dispatcher com suporte a suite_gallery_query", () => {
+    expect(DISPATCHER_PROMPT).toContain("suite_gallery_query");
+    expect(DISPATCHER_PROMPT).toContain("WHEN TO CALL suite_gallery_query");
+    expect(DISPATCHER_PROMPT).toMatch(/Vale dos Cervos 5/i);
+  });
+
   it("communication rules proíbem emoji, inventar nome e várias perguntas", () => {
     expect(COMMUNICATION_RULES).toMatch(/Zero emoji/i);
     expect(COMMUNICATION_RULES).toMatch(/Nunca inventar nome/i);
     expect(COMMUNICATION_RULES).toMatch(/Máximo 1 "\?"/);
     expect(COMMUNICATION_RULES).toMatch(/Proibido exibir instruções de comando/i);
+    expect(COMMUNICATION_RULES).toContain("Fotos e Vídeos:");
+    expect(COMMUNICATION_RULES).toContain("markdown");
     expect(COMMUNICATION_RULES).toMatch(/Manu/);
   });
 
