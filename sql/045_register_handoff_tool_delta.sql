@@ -1,4 +1,4 @@
--- Boom IA — Tool de transferência para atendente humano (Chatwoot) — Delta Empreendimentos (Manu)
+-- Boom IA — Tool de transferência para atendente humano (Chatwoot) — Delta Empreendimentos (Paula)
 -- Pré-requisito: tool_type chatwoot_assign liberado (sql/014 ou migrations equivalentes)
 -- Após rodar: configure team_id ou assignee_id em execution_config no painel (Tools → regras).
 
@@ -48,7 +48,7 @@ BEGIN
       v_tenant,
       '{
         "name": "encaminhar_atendente",
-        "description": "Encaminha o atendimento a um atendente/time humano no Chatwoot. Use quando Manu deve transferir: tabela/condições/visita (Equipe comercial), boleto/pagamento pós-venda (Financeiro), reclamação/cancelamento/pedido de humano/assunto fora do escopo (Setor responsável). Cancela follow-ups automaticamente após atribuição.",
+        "description": "Encaminha o atendimento a um atendente/time humano no Chatwoot. Use quando Paula deve transferir: tabela/condições/visita (Equipe comercial), boleto/pagamento pós-venda (Financeiro), reclamação/cancelamento/pedido de humano/assunto fora do escopo (Setor responsável). Cancela follow-ups automaticamente após atribuição.",
         "parameters": {
           "type": "object",
           "properties": {
@@ -76,7 +76,7 @@ BEGIN
       description = 'Transfere a conversa no Chatwoot para a equipe humana (comercial, financeiro ou setor responsável).',
       function_def = '{
         "name": "encaminhar_atendente",
-        "description": "Encaminha o atendimento a um atendente/time humano no Chatwoot. Use quando Manu deve transferir: tabela/condições/visita (Equipe comercial), boleto/pagamento pós-venda (Financeiro), reclamação/cancelamento/pedido de humano/assunto fora do escopo (Setor responsável). Cancela follow-ups automaticamente após atribuição.",
+        "description": "Encaminha o atendimento a um atendente/time humano no Chatwoot. Use quando Paula deve transferir: tabela/condições/visita (Equipe comercial), boleto/pagamento pós-venda (Financeiro), reclamação/cancelamento/pedido de humano/assunto fora do escopo (Setor responsável). Cancela follow-ups automaticamente após atribuição.",
         "parameters": {
           "type": "object",
           "properties": {

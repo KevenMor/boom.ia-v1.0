@@ -77,8 +77,8 @@ describe("Delta Empreendimentos — SYSTEM_PROMPT", () => {
     expect(SYSTEM_PROMPT).toMatch(/30 meses/i);
   });
 
-  it("identidade Manu e empresa", () => {
-    expect(SYSTEM_PROMPT).toMatch(/Manu/i);
+  it("identidade Paula e empresa", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Paula/i);
     expect(SYSTEM_PROMPT).not.toMatch(/Sara/);
     expect(SYSTEM_PROMPT).toMatch(/Delta Empreendimentos/i);
     expect(SYSTEM_PROMPT).toMatch(/Araçoiaba da Serra/i);
@@ -145,7 +145,7 @@ describe("Delta Empreendimentos — SYSTEM_PROMPT", () => {
 describe("Delta Empreendimentos — DISPATCHER, COMM e FOLLOWUP", () => {
   it("dispatcher sem tools obrigatórias", () => {
     expect(DISPATCHER_PROMPT).toMatch(/NO_TOOLS_NEEDED/);
-    expect(DISPATCHER_PROMPT).toMatch(/Manu/);
+    expect(DISPATCHER_PROMPT).toMatch(/Paula/);
     expect(DISPATCHER_PROMPT).toMatch(/qualification funnel is completed.*city/i);
   });
 
@@ -162,12 +162,12 @@ describe("Delta Empreendimentos — DISPATCHER, COMM e FOLLOWUP", () => {
     expect(COMMUNICATION_RULES).toMatch(/Proibido exibir instruções de comando/i);
     expect(COMMUNICATION_RULES).toContain("Fotos e Vídeos:");
     expect(COMMUNICATION_RULES).toContain("markdown");
-    expect(COMMUNICATION_RULES).toMatch(/Manu/);
+    expect(COMMUNICATION_RULES).toMatch(/Paula/);
   });
 
-  it("follow-up sem preço inventado e com Manu", () => {
+  it("follow-up sem preço inventado e com Paula", () => {
     expect(FOLLOWUP_PROMPT).toMatch(/Proibido.*R\$|Sem preço inventado/i);
-    expect(FOLLOWUP_PROMPT).toMatch(/Manu/);
+    expect(FOLLOWUP_PROMPT).toMatch(/Paula/);
     expect(FOLLOWUP_PROMPT).not.toMatch(/Sara/);
   });
 });
@@ -177,12 +177,12 @@ describe("Delta Empreendimentos — registry", () => {
     const cfg = getPromptConfig("delta-empreendimentos");
     expect(cfg).not.toBeNull();
     expect(cfg!.version).toBe("v1.5.18");
-    expect(cfg!.description).toMatch(/Manu/i);
+    expect(cfg!.description).toMatch(/Paula/i);
   });
 
-  it("buildSystemPrompt ignora prompt do banco e injeta Manu", () => {
+  it("buildSystemPrompt ignora prompt do banco e injeta Paula", () => {
     const prompt = buildSystemPrompt("PROMPT_BANCO_IGNORAR", "delta-empreendimentos", false);
-    expect(prompt).toContain("Manu");
+    expect(prompt).toContain("Paula");
     expect(prompt).toContain("v1.5.18");
     expect(prompt).not.toContain("Sara");
     expect(prompt).not.toContain("PROMPT_BANCO_IGNORAR");
@@ -191,7 +191,7 @@ describe("Delta Empreendimentos — registry", () => {
 
   it("resolve alias delta_empreendimentos", () => {
     const prompt = buildSystemPrompt("BANCO", "delta_empreendimentos", false);
-    expect(prompt).toContain("Manu");
+    expect(prompt).toContain("Paula");
     expect(prompt).not.toContain("BANCO");
   });
 });

@@ -166,7 +166,11 @@ async function sendChatwootImagesBatch(
         continue;
       }
       const blob = await imgResp.blob();
-      const filename = parsedUrl.pathname.split("/").pop() || "image.jpg";
+      let filename = parsedUrl.pathname.split("/").pop() || "image.jpg";
+      if (!/\.(jpg|jpeg|png|webp|gif|avif|svg)$/i.test(filename)) {
+        const ext = contentType.split("/")[1]?.split(";")[0]?.trim() || "jpg";
+        filename = `${filename}.${ext === "jpeg" ? "jpg" : ext}`;
+      }
       const formData = new FormData();
       if (i === 0 && caption && caption.trim()) formData.append("content", caption.trim());
       formData.append("message_type", "outgoing");
@@ -215,7 +219,11 @@ async function sendChatwootMediaMessage(
     const mediaBlob = await mediaResp.blob();
     const headerCt = mediaResp.headers.get("content-type")?.split(";")[0]?.trim();
     const blobType = headerCt && headerCt !== "application/octet-stream" ? headerCt : contentType;
-    const filename = parsedUrl.pathname.split("/").pop()?.replace(/[?#].*$/, "") || "media.mp4";
+    let filename = parsedUrl.pathname.split("/").pop()?.replace(/[?#].*$/, "") || "media.mp4";
+    if (!/\.(mp4|webm|mov|avi|m4v)$/i.test(filename)) {
+      const ext = blobType.split("/")[1] || "mp4";
+      filename = `${filename}.${ext}`;
+    }
     const formData = new FormData();
     if (caption && caption.trim()) formData.append("content", caption.trim());
     formData.append("message_type", "outgoing");

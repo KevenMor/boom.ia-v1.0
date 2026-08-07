@@ -1,4 +1,4 @@
--- Boom IA — Vínculo da tool suite_gallery_query ao(s) agente(s) Manu do Delta Empreendimentos
+-- Boom IA — Vínculo da tool suite_gallery_query ao(s) agente(s) Paula do Delta Empreendimentos
 -- Pré-requisito: sql/047_register_suite_gallery_tool_delta.sql
 
 DO $link_gallery_tool$
