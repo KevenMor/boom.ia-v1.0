@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 // Detect video URLs in text
 export function extractVideos(content: string): { text: string; videoUrls: string[] } {
   const videoUrls: string[] = [];
-  const videoRegex = /(?:!\[.*?\]\()?(https?:\/\/[^\s)"]+\.(?:mp4|webm|mov|avi)[^\s)"]*)\)?/gi;
+  const videoRegex = /(?:!\[.*?\]\()?(https?:\/\/[^\s)"]+(?:\.(?:mp4|webm|mov|avi)|\/video-[a-f0-9-]+)[^\s)"]*)\)?/gi;
   let match;
 
   const normalizeVideoUrl = (raw: string): string => {
