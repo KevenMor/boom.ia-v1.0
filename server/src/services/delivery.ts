@@ -168,7 +168,7 @@ async function sendChatwootImagesBatch(
       const blob = await imgResp.blob();
       let filename = parsedUrl.pathname.split("/").pop() || "image.jpg";
       if (!/\.(jpg|jpeg|png|webp|gif|avif|svg)$/i.test(filename)) {
-        const ext = contentType.split("/")[1]?.split(";")[0]?.trim() || "jpg";
+        const ext = (contentType ?? "image/jpeg").split("/")[1]?.split(";")[0]?.trim() || "jpg";
         filename = `${filename}.${ext === "jpeg" ? "jpg" : ext}`;
       }
       const formData = new FormData();
