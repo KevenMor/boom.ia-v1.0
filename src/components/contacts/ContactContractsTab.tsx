@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, ScrollText, Pencil, Trash2, ExternalLink, Eye, Copy, Check } from "lucide-react";
+import { Plus, ScrollText, Pencil, Trash2, ExternalLink, Eye, Copy, Check, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -187,6 +187,7 @@ export function ContactContractsTab({ contactId }: Props) {
       />
 
       <ViewContractContentDialog
+        contactId={contactId}
         title={viewTitle}
         content={viewContent}
         open={!!viewContent}
@@ -553,17 +554,23 @@ function GenerateContractDialog({
 }
 
 function ViewContractContentDialog({
+  contactId,
   title,
   content,
   open,
   onOpenChange,
 }: {
+  contactId: string;
   title: string;
   content: string | null;
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
+  const { selectedTenant } = useTenantContext();
+  const { data: contact } = useContact(contactId);
   const [copied, setCopied] = useState(false);
+
+  const logoUrl = (selectedTenant?.settings as any)?.logo_url || null;
 
   const handleCopy = () => {
     if (!content) return;
@@ -573,22 +580,81 @@ function ViewContractContentDialog({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handlePrint = () => {
+    window.print();
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader className="flex flex-row items-center justify-between pr-6 border-b border-border/50 pb-3">
-          <DialogTitle className="text-sm font-semibold truncate max-w-[80%]">{title}</DialogTitle>
-          {content && (
-            <Button variant="outline" size="sm" className="h-7 text-xs px-2 gap-1.5" onClick={handleCopy}>
-              {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
-              {copied ? "Copiado!" : "Copiar"}
-            </Button>
-          )}
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-50 dark:bg-slate-900 border-none p-0 sm:p-6">
+        <DialogHeader className="flex flex-row items-center justify-between px-6 pt-6 sm:px-0 sm:pt-0 border-b border-border/50 pb-3 print-hide">
+          <DialogTitle className="text-sm font-semibold truncate max-w-[50%]">{title}</DialogTitle>
+          <div className="flex items-center gap-2">
+            {content && (
+              <>
+                <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handlePrint}>
+                  <Printer className="h-3.5 w-3.5" />
+                  Imprimir / PDF
+                </Button>
+                <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleCopy}>
+                  {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                  {copied ? "Copiado!" : "Copiar"}
+                </Button>
+              </>
+            )}
+          </div>
         </DialogHeader>
-        <div className="p-4 bg-muted/30 border border-border/50 rounded-lg text-xs leading-relaxed font-mono whitespace-pre-wrap overflow-y-auto max-h-[60vh] select-text">
-          {content || "Nenhum texto associado a este contrato."}
+        
+        {/* Folha Timbrada do Contrato */}
+        <div 
+          id="print-contract-document" 
+          className="my-4 mx-auto max-w-[800px] bg-white text-black p-8 sm:p-16 border border-gray-200 shadow-sm rounded-md font-sans"
+        >
+          {/* Cabeçalho */}
+          <div className="text-center mb-8 border-b border-gray-100 pb-6 flex flex-col items-center gap-3">
+            {logoUrl ? (
+              <img src={logoUrl} alt="Logo" className="max-h-16 w-auto object-contain" />
+            ) : (
+              <div className="h-10 w-10 rounded bg-primary/10 text-primary flex items-center justify-center font-bold text-lg">
+                {selectedTenant?.name?.substring(0, 2).toUpperCase() || "CN"}
+              </div>
+            )}
+            <div>
+              <p className="text-xs uppercase tracking-wider text-gray-500 font-semibold">{selectedTenant?.name}</p>
+              {(selectedTenant?.settings as any)?.cnpj && (
+                <p className="text-[10px] text-gray-400 mt-0.5">CNPJ: {(selectedTenant?.settings as any).cnpj}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Título */}
+          <h2 className="text-base font-bold uppercase text-center mb-8 tracking-wide text-gray-900 border-b border-gray-100 pb-2">
+            {title}
+          </h2>
+
+          {/* Corpo do Contrato */}
+          <div className="text-xs leading-relaxed text-gray-800 whitespace-pre-wrap text-justify font-serif px-2">
+            {content || "Nenhum texto associado a este contrato."}
+          </div>
+
+          {/* Bloco de Assinaturas */}
+          {content && (
+            <div className="mt-16 pt-12 border-t border-gray-100 grid grid-cols-2 gap-8 text-center text-[10px] print:mt-24">
+              <div className="flex flex-col items-center">
+                <div className="border-t border-gray-300 w-40 pt-1.5" />
+                <p className="font-bold text-gray-900 uppercase">{selectedTenant?.name || "CONTRATANTE"}</p>
+                <p className="text-[9px] text-gray-500">Contratante</p>
+              </div>
+              <div className="flex flex-col items-center">
+                <div className="border-t border-gray-300 w-40 pt-1.5" />
+                <p className="font-bold text-gray-900 uppercase">{contact?.name || "CONTRATADO"}</p>
+                <p className="text-[9px] text-gray-500">Contratado</p>
+              </div>
+            </div>
+          )}
         </div>
-        <DialogFooter className="pt-3 border-t border-border/50">
+
+        <DialogFooter className="px-6 pb-6 sm:px-0 sm:pb-0 pt-3 border-t border-border/50 print-hide">
           <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
             Fechar
           </Button>

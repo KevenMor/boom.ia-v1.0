@@ -682,3 +682,33 @@
     background: transparent;
   }
 }
+
+/* --- Impressão de Contratos --- */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  body * {
+    visibility: hidden;
+  }
+  #print-contract-document, #print-contract-document * {
+    visibility: visible;
+  }
+  #print-contract-document {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: white !important;
+    color: black !important;
+  }
+  .print-hide {
+    display: none !important;
+  }
+}
+
