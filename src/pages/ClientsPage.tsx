@@ -1,5 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import {
   Plus,
   Search,
@@ -14,12 +17,15 @@ import {
   Download,
   Upload,
   MessageSquare,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -35,19 +41,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useContacts } from "@/hooks/useContacts";
+import { useContacts, useCreateContact, useUpdateContact } from "@/hooks/useContacts";
 import { useTenantContext } from "@/contexts/TenantContext";
 import { useEmbedClientsOptional } from "@/contexts/EmbedClientsContext";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CreateContactDialog } from "@/components/contacts/CreateContactDialog";
-import { EditContactDialog } from "@/components/contacts/EditContactDialog";
 import { DeleteContactDialog } from "@/components/contacts/DeleteContactDialog";
 import { ContactConversationModal } from "@/components/contacts/ContactConversationModal";
 import { ImportClientsDialog } from "@/components/contacts/ImportClientsDialog";
 import { callAPI } from "@/lib/api-client";
 import { openContactMegaConversation } from "@/lib/open-contact-mega-conversation";
 import { exportContactsCsv } from "@/lib/exportCsv";
+import { fetchAddressByCep } from "@/lib/viacep";
+import { capitalizeName, capitalizeAsYouType } from "@/lib/capitalizeName";
 import type { Contact } from "@/types/database";
 
 const PAGE_SIZE = 10;
@@ -82,6 +88,440 @@ function formatCreatedAt(createdAt: string | undefined): string {
   }
 }
 
+// Zod Schema para Validação dos Formulários ERP
+const schema = z.object({
+  name: z.string().min(1, "Nome é obrigatório"),
+  email: z.union([z.string().email("E-mail inválido"), z.literal("")]).optional(),
+  phone: z.string().optional(),
+  cpf_cnpj: z.string().optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  zip_code: z.string().optional(),
+  notes: z.string().optional(),
+  contact_type: z.enum(["lead", "client"]).optional(),
+});
+
+type FormData = z.infer<typeof schema>;
+
+// --- SUB-COMPONENTE: FORMULÁRIO DE CADASTRO ERP ---
+interface CreateClientViewProps {
+  tenantId: string | null;
+  onCancel: () => void;
+  contactType?: "lead" | "client";
+}
+
+function CreateClientView({ tenantId, onCancel, contactType = "lead" }: CreateClientViewProps) {
+  const createContact = useCreateContact();
+  const [cepLoading, setCepLoading] = useState(false);
+
+  const { register, handleSubmit, formState: { errors }, setValue } = useForm<FormData>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      name: "",
+      email: "",
+      phone: "",
+      cpf_cnpj: "",
+      address: "",
+      city: "",
+      state: "",
+      zip_code: "",
+      notes: "",
+    },
+  });
+
+  const onSubmit = async (data: FormData) => {
+    if (!tenantId) {
+      toast.error("Selecione um tenant para cadastrar contatos");
+      return;
+    }
+    try {
+      await createContact.mutateAsync({
+        tenant_id: tenantId,
+        name: capitalizeName(data.name),
+        email: data.email || null,
+        phone: data.phone || null,
+        cpf_cnpj: data.cpf_cnpj || null,
+        address: data.address || null,
+        city: data.city || null,
+        state: data.state || null,
+        zip_code: data.zip_code || null,
+        notes: data.notes || null,
+        contact_type: contactType,
+      });
+      toast.success("Cliente cadastrado com sucesso!");
+      onCancel();
+    } catch (err: unknown) {
+      toast.error("Erro ao cadastrar: " + (err instanceof Error ? err.message : "erro desconhecido"));
+    }
+  };
+
+  return (
+    <Card className="border border-border bg-card shadow-sm rounded-lg">
+      <CardHeader className="border-b border-border/50 pb-4">
+        <h2 className="text-base font-semibold text-foreground">Ficha de Inclusão</h2>
+        <p className="text-xs text-muted-foreground">Preencha os dados abaixo para registrar o cliente no banco de dados.</p>
+      </CardHeader>
+      <form onSubmit={handleSubmit(onSubmit)}>
+        <CardContent className="p-6 space-y-6">
+          {/* Seção 1: Identificação */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-foreground pb-1 border-b border-border/50">1. Identificação</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <Label htmlFor="name" className="text-xs font-medium text-muted-foreground">Nome Completo *</Label>
+                <Input
+                  id="name"
+                  {...register("name")}
+                  onChange={(e) => {
+                    const cursor = e.target.selectionStart;
+                    const val = capitalizeAsYouType(e.target.value);
+                    setValue("name", val);
+                    setTimeout(() => {
+                      if (e.target && cursor !== null) {
+                        e.target.setSelectionRange(cursor, cursor);
+                      }
+                    }, 0);
+                  }}
+                  onBlur={(e) => {
+                    register("name").onBlur(e);
+                    setValue("name", capitalizeName(e.target.value));
+                  }}
+                  placeholder="Nome completo do cliente"
+                  className="h-9 text-sm"
+                />
+                {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message}</p>}
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="cpf_cnpj" className="text-xs font-medium text-muted-foreground">CPF ou CNPJ</Label>
+                <Input id="cpf_cnpj" {...register("cpf_cnpj")} placeholder="000.000.000-00" className="h-9 text-sm" />
+              </div>
+            </div>
+          </div>
+
+          {/* Seção 2: Contatos */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-foreground pb-1 border-b border-border/50">2. Informações de Contato</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <Label htmlFor="email" className="text-xs font-medium text-muted-foreground">E-mail</Label>
+                <Input id="email" type="email" {...register("email")} placeholder="exemplo@dominio.com" className="h-9 text-sm" />
+                {errors.email && <p className="text-xs text-destructive mt-1">{errors.email.message}</p>}
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="phone" className="text-xs font-medium text-muted-foreground">Telefone / WhatsApp</Label>
+                <Input id="phone" {...register("phone")} placeholder="(00) 00000-0000" className="h-9 text-sm" />
+              </div>
+            </div>
+          </div>
+
+          {/* Seção 3: Endereço */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-foreground pb-1 border-b border-border/50">3. Localidade e Endereço</h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="space-y-1 md:col-span-1">
+                <Label htmlFor="zip_code" className="text-xs font-medium text-muted-foreground">CEP</Label>
+                <div className="relative">
+                  <Input
+                    id="zip_code"
+                    placeholder="00000-000"
+                    disabled={cepLoading}
+                    className="h-9 text-sm pr-8"
+                    {...(() => {
+                      const { onBlur, ...rest } = register("zip_code");
+                      return {
+                        ...rest,
+                        onBlur: async (e: React.FocusEvent<HTMLInputElement>) => {
+                          onBlur(e);
+                          const cep = e.target.value.trim();
+                          if (cep.replace(/\D/g, "").length !== 8) return;
+                          setCepLoading(true);
+                          try {
+                            const result = await fetchAddressByCep(cep);
+                            if (result) {
+                              setValue("address", result.address);
+                              setValue("city", result.city);
+                              setValue("state", result.state);
+                              toast.success("Endereço preenchido automaticamente");
+                            } else {
+                              toast.error("CEP não encontrado");
+                            }
+                          } finally {
+                            setCepLoading(false);
+                          }
+                        },
+                      };
+                    })()}
+                  />
+                  {cepLoading && (
+                    <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+                  )}
+                </div>
+              </div>
+              
+              <div className="space-y-1 md:col-span-3">
+                <Label htmlFor="address" className="text-xs font-medium text-muted-foreground">Logradouro, Número, Complemento</Label>
+                <Input id="address" {...register("address")} placeholder="Rua, avenida, número, apto..." className="h-9 text-sm" />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-1 md:col-span-2">
+                <Label htmlFor="city" className="text-xs font-medium text-muted-foreground">Cidade</Label>
+                <Input id="city" {...register("city")} placeholder="Nome da cidade" className="h-9 text-sm" />
+              </div>
+              <div className="space-y-1 md:col-span-1">
+                <Label htmlFor="state" className="text-xs font-medium text-muted-foreground">Estado (UF)</Label>
+                <Input id="state" {...register("state")} placeholder="UF" maxLength={2} className="h-9 text-sm" />
+              </div>
+            </div>
+          </div>
+
+          {/* Seção 4: Informações Adicionais */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-foreground pb-1 border-b border-border/50">4. Observações e Notas</h3>
+            <div className="space-y-1">
+              <Label htmlFor="notes" className="text-xs font-medium text-muted-foreground">Observações internas do cliente</Label>
+              <Textarea id="notes" {...register("notes")} placeholder="Particularidades, histórico ou observações sobre o cliente..." rows={4} className="resize-none text-sm bg-background" />
+            </div>
+          </div>
+        </CardContent>
+
+        <CardFooter className="border-t border-border/50 bg-muted/20 px-6 py-4 flex items-center justify-end gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+            Cancelar
+          </Button>
+          <Button type="submit" size="sm" disabled={createContact.isPending}>
+            {createContact.isPending ? "Salvando..." : "Salvar Registro"}
+          </Button>
+        </CardFooter>
+      </form>
+    </Card>
+  );
+}
+
+// --- SUB-COMPONENTE: FORMULÁRIO DE EDIÇÃO ERP ---
+interface EditClientViewProps {
+  contact: Contact;
+  onCancel: () => void;
+}
+
+function EditClientView({ contact, onCancel }: EditClientViewProps) {
+  const updateContact = useUpdateContact();
+  const [cepLoading, setCepLoading] = useState(false);
+
+  const { register, handleSubmit, reset, formState: { errors }, setValue, watch } = useForm<FormData>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      name: "",
+      email: "",
+      phone: "",
+      cpf_cnpj: "",
+      address: "",
+      city: "",
+      state: "",
+      zip_code: "",
+      notes: "",
+      contact_type: "lead",
+    },
+  });
+
+  const contactType = watch("contact_type");
+
+  useEffect(() => {
+    if (contact) {
+      reset({
+        name: contact.name,
+        email: contact.email || "",
+        phone: contact.phone || "",
+        cpf_cnpj: contact.cpf_cnpj || "",
+        address: contact.address || "",
+        city: contact.city || "",
+        state: contact.state || "",
+        zip_code: contact.zip_code || "",
+        notes: contact.notes || "",
+        contact_type: (contact.contact_type === "client" ? "client" : "lead") as "lead" | "client",
+      });
+    }
+  }, [contact, reset]);
+
+  const onSubmit = async (data: FormData) => {
+    try {
+      await updateContact.mutateAsync({
+        id: contact.id,
+        name: capitalizeName(data.name),
+        email: data.email || null,
+        phone: data.phone || null,
+        cpf_cnpj: data.cpf_cnpj || null,
+        address: data.address || null,
+        city: data.city || null,
+        state: data.state || null,
+        zip_code: data.zip_code || null,
+        notes: data.notes || null,
+        contact_type: data.contact_type === "client" ? "client" : "lead",
+      });
+      toast.success("Cliente atualizado com sucesso!");
+      onCancel();
+    } catch (err: unknown) {
+      toast.error("Erro ao atualizar: " + (err instanceof Error ? err.message : "erro desconhecido"));
+    }
+  };
+
+  return (
+    <Card className="border border-border bg-card shadow-sm rounded-lg">
+      <CardHeader className="border-b border-border/50 pb-4">
+        <h2 className="text-base font-semibold text-foreground">Ficha de Edição</h2>
+        <p className="text-xs text-muted-foreground">Atualize as informações cadastrais e salve para registrar as alterações.</p>
+      </CardHeader>
+      <form onSubmit={handleSubmit(onSubmit)}>
+        <CardContent className="p-6 space-y-6">
+          {/* Seção 1: Identificação */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-foreground pb-1 border-b border-border/50">1. Identificação</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-1">
+                <Label htmlFor="name" className="text-xs font-medium text-muted-foreground">Nome Completo *</Label>
+                <Input
+                  id="name"
+                  {...register("name")}
+                  onChange={(e) => {
+                    const cursor = e.target.selectionStart;
+                    const val = capitalizeAsYouType(e.target.value);
+                    setValue("name", val);
+                    setTimeout(() => {
+                      if (e.target && cursor !== null) {
+                        e.target.setSelectionRange(cursor, cursor);
+                      }
+                    }, 0);
+                  }}
+                  onBlur={(e) => {
+                    register("name").onBlur(e);
+                    setValue("name", capitalizeName(e.target.value));
+                  }}
+                  className="h-9 text-sm"
+                />
+                {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message}</p>}
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-muted-foreground">Classificação do Contato</Label>
+                <Select value={contactType} onValueChange={(v) => setValue("contact_type", v as "lead" | "client")}>
+                  <SelectTrigger className="h-9 text-sm bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="lead">Lead</SelectItem>
+                    <SelectItem value="client">Cliente</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="cpf_cnpj" className="text-xs font-medium text-muted-foreground">CPF ou CNPJ</Label>
+                <Input id="cpf_cnpj" {...register("cpf_cnpj")} className="h-9 text-sm" />
+              </div>
+            </div>
+          </div>
+
+          {/* Seção 2: Contatos */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-foreground pb-1 border-b border-border/50">2. Informações de Contato</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <Label htmlFor="email" className="text-xs font-medium text-muted-foreground">E-mail</Label>
+                <Input id="email" type="email" {...register("email")} className="h-9 text-sm" />
+                {errors.email && <p className="text-xs text-destructive mt-1">{errors.email.message}</p>}
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="phone" className="text-xs font-medium text-muted-foreground">Telefone / WhatsApp</Label>
+                <Input id="phone" {...register("phone")} className="h-9 text-sm" />
+              </div>
+            </div>
+          </div>
+
+          {/* Seção 3: Endereço */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-foreground pb-1 border-b border-border/50">3. Localidade e Endereço</h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="space-y-1 md:col-span-1">
+                <Label htmlFor="zip_code" className="text-xs font-medium text-muted-foreground">CEP</Label>
+                <div className="relative">
+                  <Input
+                    id="zip_code"
+                    disabled={cepLoading}
+                    className="h-9 text-sm pr-8"
+                    {...(() => {
+                      const { onBlur, ...rest } = register("zip_code");
+                      return {
+                        ...rest,
+                        onBlur: async (e: React.FocusEvent<HTMLInputElement>) => {
+                          onBlur(e);
+                          const cep = e.target.value.trim();
+                          if (cep.replace(/\D/g, "").length !== 8) return;
+                          setCepLoading(true);
+                          try {
+                            const result = await fetchAddressByCep(cep);
+                            if (result) {
+                              setValue("address", result.address);
+                              setValue("city", result.city);
+                              setValue("state", result.state);
+                              toast.success("Endereço preenchido automaticamente");
+                            } else {
+                              toast.error("CEP não encontrado");
+                            }
+                          } finally {
+                            setCepLoading(false);
+                          }
+                        },
+                      };
+                    })()}
+                  />
+                  {cepLoading && (
+                    <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+                  )}
+                </div>
+              </div>
+              
+              <div className="space-y-1 md:col-span-3">
+                <Label htmlFor="address" className="text-xs font-medium text-muted-foreground">Logradouro, Número, Complemento</Label>
+                <Input id="address" {...register("address")} className="h-9 text-sm" />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-1 md:col-span-2">
+                <Label htmlFor="city" className="text-xs font-medium text-muted-foreground">Cidade</Label>
+                <Input id="city" {...register("city")} className="h-9 text-sm" />
+              </div>
+              <div className="space-y-1 md:col-span-1">
+                <Label htmlFor="state" className="text-xs font-medium text-muted-foreground">Estado (UF)</Label>
+                <Input id="state" {...register("state")} maxLength={2} className="h-9 text-sm" />
+              </div>
+            </div>
+          </div>
+
+          {/* Seção 4: Informações Adicionais */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-foreground pb-1 border-b border-border/50">4. Observações e Notas</h3>
+            <div className="space-y-1">
+              <Label htmlFor="notes" className="text-xs font-medium text-muted-foreground">Observações internas do cliente</Label>
+              <Textarea id="notes" {...register("notes")} rows={4} className="resize-none text-sm bg-background" />
+            </div>
+          </div>
+        </CardContent>
+
+        <CardFooter className="border-t border-border/50 bg-muted/20 px-6 py-4 flex items-center justify-end gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+            Cancelar
+          </Button>
+          <Button type="submit" size="sm" disabled={updateContact.isPending}>
+            {updateContact.isPending ? "Salvando..." : "Salvar Alterações"}
+          </Button>
+        </CardFooter>
+      </form>
+    </Card>
+  );
+}
+
+// --- COMPONENTE PRINCIPAL: CLIENTSPAGE ---
 export default function ClientsPage() {
   const embed = useEmbedClientsOptional();
   const isEmbed = !!embed;
@@ -91,7 +531,10 @@ export default function ClientsPage() {
   const [searchFocused, setSearchFocused] = useState(false);
   const [page, setPage] = useState(0);
   const [sort, setSort] = useState<(typeof SORT_OPTIONS)[number]["value"]>("recent");
-  const [createOpen, setCreateOpen] = useState(false);
+  
+  // Controle de Visualização da Página (list = Listagem, create = Criar Cliente, edit = Editar Cliente)
+  const [view, setView] = useState<"list" | "create" | "edit">("list");
+  
   const [importOpen, setImportOpen] = useState(false);
   const [editContact, setEditContact] = useState<Contact | null>(null);
   const [deleteContact, setDeleteContact] = useState<Contact | null>(null);
@@ -163,6 +606,50 @@ export default function ClientsPage() {
     }
   };
 
+  const handleCancelView = () => {
+    setEditContact(null);
+    setView("list");
+  };
+
+  // --- RENDERIZAR TELA DE CRIAÇÃO ERP ---
+  if (view === "create") {
+    return (
+      <div className={isEmbed ? "w-full px-4 py-6 sm:px-6" : "min-h-[calc(100vh-4rem)] w-full bg-muted/30 px-4 py-6 sm:px-6 lg:px-8"}>
+        <div className="mb-4">
+          <Button variant="ghost" size="sm" onClick={handleCancelView} className="gap-1.5 text-muted-foreground hover:text-foreground">
+            <ChevronLeft className="h-4 w-4" />
+            Voltar para a listagem
+          </Button>
+        </div>
+        <div className="mb-6">
+          <h1 className="text-xl font-bold tracking-tight text-foreground">Novo Cliente</h1>
+          <p className="text-sm text-muted-foreground">Ficha de cadastro para inclusão de novos registros no CRM.</p>
+        </div>
+        <CreateClientView tenantId={tenantId ?? null} onCancel={handleCancelView} contactType="client" />
+      </div>
+    );
+  }
+
+  // --- RENDERIZAR TELA DE EDIÇÃO ERP ---
+  if (view === "edit" && editContact) {
+    return (
+      <div className={isEmbed ? "w-full px-4 py-6 sm:px-6" : "min-h-[calc(100vh-4rem)] w-full bg-muted/30 px-4 py-6 sm:px-6 lg:px-8"}>
+        <div className="mb-4">
+          <Button variant="ghost" size="sm" onClick={handleCancelView} className="gap-1.5 text-muted-foreground hover:text-foreground">
+            <ChevronLeft className="h-4 w-4" />
+            Voltar para a listagem
+          </Button>
+        </div>
+        <div className="mb-6">
+          <h1 className="text-xl font-bold tracking-tight text-foreground">Editar Cliente</h1>
+          <p className="text-sm text-muted-foreground">Alteração da ficha cadastral de {editContact.name}.</p>
+        </div>
+        <EditClientView contact={editContact} onCancel={handleCancelView} />
+      </div>
+    );
+  }
+
+  // --- RENDERIZAR TELA DE LISTAGEM PADRÃO ---
   return (
     <div className={isEmbed ? "w-full px-4 py-6 sm:px-6" : "min-h-[calc(100vh-4rem)] w-full bg-muted/30"}>
       <div className={isEmbed ? "w-full" : "w-full px-4 py-6 sm:px-6 lg:px-8"}>
@@ -206,7 +693,7 @@ export default function ClientsPage() {
           )}
         </div>
 
-        <Card className="overflow-hidden border-border bg-card shadow-sm">
+        <Card className="overflow-hidden border border-border bg-card shadow-sm rounded-lg">
           <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-4 border-b border-border/50 pb-4">
             <div className="flex items-center gap-2">
               <h2 className="text-base font-semibold text-foreground">Clientes</h2>
@@ -257,7 +744,7 @@ export default function ClientsPage() {
                 </SelectContent>
               </Select>
               {!isEmbed && (
-              <Button size="sm" className="gap-1.5" onClick={() => setCreateOpen(true)}>
+              <Button size="sm" className="gap-1.5" onClick={() => setView("create")}>
                 <Plus className="h-4 w-4" />
                 Novo Cliente
               </Button>
@@ -451,7 +938,10 @@ export default function ClientsPage() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 rounded-lg bg-info/10 text-info hover:bg-info/20"
-                            onClick={() => setEditContact(contact)}
+                            onClick={() => {
+                              setEditContact(contact);
+                              setView("edit");
+                            }}
                             title="Editar"
                           >
                             <Pencil className="h-4 w-4" />
@@ -521,17 +1011,7 @@ export default function ClientsPage() {
         </Card>
       </div>
 
-      <CreateContactDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        contactType="client"
-      />
       <ImportClientsDialog open={importOpen} onOpenChange={setImportOpen} />
-      <EditContactDialog
-        contact={editContact}
-        open={!!editContact}
-        onOpenChange={(o) => !o && setEditContact(null)}
-      />
       <DeleteContactDialog
         contact={deleteContact}
         open={!!deleteContact}
