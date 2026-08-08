@@ -545,7 +545,14 @@ export function useDeleteContractTemplate() {
 export function useGenerateContactContract(contactId: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: { template_id: string }) => {
+    mutationFn: async (payload: {
+      template_id: string;
+      contract_number?: string;
+      value?: number | string;
+      payment_terms?: string;
+      start_date?: string;
+      end_date?: string;
+    }) => {
       return callAPI<ContactContract>(`/crm-contacts/${contactId}/contracts/generate`, {
         method: "POST",
         body: payload,

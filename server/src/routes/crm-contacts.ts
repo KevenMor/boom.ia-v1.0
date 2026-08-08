@@ -1366,12 +1366,26 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
   // --- Geração Automática de Contrato ---
   fastify.post(
     "/crm-contacts/:id/contracts/generate",
-    async (req: FastifyRequest<{ Params: { id: string }; Body: { template_id: string } }>, reply: FastifyReply) => {
+    async (
+      req: FastifyRequest<{
+        Params: { id: string };
+        Body: {
+          template_id: string;
+          contract_number?: string;
+          value?: number | string;
+          payment_terms?: string;
+          start_date?: string;
+          end_date?: string;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
       try {
         const auth = await requireAuthenticated(req, reply);
         if (!auth) return;
         const { id: contactId } = req.params;
-        const { template_id: templateId } = req.body;
+        const body = req.body;
+        const { template_id: templateId } = body;
         if (!templateId) return reply.status(400).send({ error: "template_id é obrigatório" });
 
         // 1. Carregar contato
@@ -1391,6 +1405,21 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
           .eq("tenant_id", contact.tenant_id)
           .maybeSingle();
         if (templateErr || !template) return reply.status(404).send({ error: "Modelo de contrato não encontrado" });
+
+        // Formatação de auxiliares do contrato
+        const valueNum = body.value != null && body.value !== "" ? Number(body.value) : null;
+        const formattedValue = valueNum != null && !isNaN(valueNum)
+          ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(valueNum)
+          : "";
+
+        const formatDateStr = (dateStr: unknown) => {
+          if (!dateStr || typeof dateStr !== "string") return "";
+          const parts = dateStr.split("-");
+          if (parts.length === 3) {
+            return `${parts[2]}/${parts[1]}/${parts[0]}`;
+          }
+          return dateStr;
+        };
 
         // 3. Substituir placeholders
         let text = template.content;
@@ -1420,6 +1449,19 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
             month: "long",
             year: "numeric"
           }),
+          // Campos específicos do contrato
+          valor: formattedValue,
+          valor_contrato: formattedValue,
+          valor_total: formattedValue,
+          forma_pagamento: String(body.payment_terms ?? ""),
+          condicoes_pagamento: String(body.payment_terms ?? ""),
+          pagamento: String(body.payment_terms ?? ""),
+          numero_contrato: String(body.contract_number ?? ""),
+          contrato_numero: String(body.contract_number ?? ""),
+          data_inicio: formatDateStr(body.start_date),
+          inicio: formatDateStr(body.start_date),
+          data_termino: formatDateStr(body.end_date),
+          termino: formatDateStr(body.end_date),
         };
 
         for (const [key, value] of Object.entries(replacements)) {
@@ -1427,7 +1469,7 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
           text = text.replace(regex, value);
         }
 
-        // 4. Salvar contrato gerado
+        // 4. Salvar contrato gerado com as informações preenchidas
         const contractRecord = {
           contact_id: contactId,
           tenant_id: contact.tenant_id,
@@ -1435,6 +1477,11 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
           status: "draft",
           description: template.description || null,
           content: text,
+          contract_number: body.contract_number || null,
+          value: valueNum,
+          payment_terms: body.payment_terms || null,
+          start_date: body.start_date || null,
+          end_date: body.end_date || null,
           metadata: JSON.stringify({ generated_from_template_id: templateId }),
         };
 

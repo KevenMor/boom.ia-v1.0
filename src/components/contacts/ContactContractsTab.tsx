@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -41,6 +41,7 @@ import {
   useContractTemplates,
   useGenerateContactContract,
   useContact,
+  useUpdateContact,
 } from "@/hooks/useContacts";
 import { useTenantContext } from "@/contexts/TenantContext";
 import type { ContactContract, ContactContractStatus } from "@/types/database";
@@ -419,6 +420,52 @@ function CreateContractDialog({
   );
 }
 
+const CONTACT_FIELD_MAP: Record<string, { label: string; key: string }> = {
+  nome: { label: "Nome completo do cliente", key: "name" },
+  nome_cliente: { label: "Nome completo do cliente", key: "name" },
+  email: { label: "E-mail do cliente", key: "email" },
+  telefone: { label: "Telefone do cliente", key: "phone" },
+  phone: { label: "Telefone do cliente", key: "phone" },
+  cpf_cnpj: { label: "CPF/CNPJ do cliente", key: "cpf_cnpj" },
+  cpf: { label: "CPF/CNPJ do cliente", key: "cpf_cnpj" },
+  cnpj: { label: "CPF/CNPJ do cliente", key: "cpf_cnpj" },
+  documento: { label: "CPF/CNPJ do cliente", key: "cpf_cnpj" },
+  endereco: { label: "Endereço completo", key: "address" },
+  address: { label: "Endereço completo", key: "address" },
+  cidade: { label: "Cidade", key: "city" },
+  city: { label: "Cidade", key: "city" },
+  estado: { label: "Estado/UF", key: "state" },
+  state: { label: "Estado/UF", key: "state" },
+  uf: { label: "Estado/UF", key: "state" },
+  cep: { label: "CEP", key: "zip_code" },
+  zip_code: { label: "CEP", key: "zip_code" },
+};
+
+const CONTRACT_FIELD_MAP: Record<string, { label: string; key: string; type: string }> = {
+  valor: { label: "Valor do contrato (R$)", key: "value", type: "number" },
+  valor_contrato: { label: "Valor do contrato (R$)", key: "value", type: "number" },
+  valor_total: { label: "Valor do contrato (R$)", key: "value", type: "number" },
+  forma_pagamento: { label: "Condições de pagamento", key: "payment_terms", type: "text" },
+  condicoes_pagamento: { label: "Condições de pagamento", key: "payment_terms", type: "text" },
+  pagamento: { label: "Condições de pagamento", key: "payment_terms", type: "text" },
+  numero_contrato: { label: "Número do contrato", key: "contract_number", type: "text" },
+  contrato_numero: { label: "Número do contrato", key: "contract_number", type: "text" },
+  data_inicio: { label: "Data de início", key: "start_date", type: "date" },
+  inicio: { label: "Data de início", key: "start_date", type: "date" },
+  data_termino: { label: "Data de término", key: "end_date", type: "date" },
+  termino: { label: "Data de término", key: "end_date", type: "date" },
+};
+
+const extractPlaceholders = (text: string): string[] => {
+  const regex = /\{\{\s*([a-zA-Z0-9_-]+)\s*\}\}/g;
+  const matches = new Set<string>();
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    matches.add(match[1].toLowerCase());
+  }
+  return Array.from(matches);
+};
+
 function GenerateContractDialog({
   contactId,
   open,
@@ -431,54 +478,151 @@ function GenerateContractDialog({
   const { selectedTenantId } = useTenantContext();
   const { data: templates } = useContractTemplates(selectedTenantId);
   const { data: contact } = useContact(contactId);
+  const updateContact = useUpdateContact();
   const generateContract = useGenerateContactContract(contactId);
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  
+  const [contractValues, setContractValues] = useState({
+    value: "",
+    payment_terms: "",
+    contract_number: "",
+    start_date: "",
+    end_date: "",
+  });
+
+  const [contactValues, setContactValues] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    cpf_cnpj: "",
+    address: "",
+    city: "",
+    state: "",
+    zip_code: "",
+  });
+
   const [previewText, setPreviewText] = useState<string>("");
 
   const templatesList = templates ?? [];
+  const template = templatesList.find((t) => t.id === selectedTemplateId);
 
+  // Preencher dados do contato quando ele abrir
+  useEffect(() => {
+    if (contact) {
+      setContactValues({
+        name: contact.name || "",
+        email: contact.email || "",
+        phone: contact.phone || "",
+        cpf_cnpj: contact.cpf_cnpj || "",
+        address: contact.address || "",
+        city: contact.city || "",
+        state: contact.state || "",
+        zip_code: contact.zip_code || "",
+      });
+    }
+  }, [contact, open]);
+
+  // Limpar formulário ao fechar/abrir
   useEffect(() => {
     if (!open) {
       setSelectedTemplateId("");
       setPreviewText("");
-      return;
+      setContractValues({
+        value: "",
+        payment_terms: "",
+        contract_number: "",
+        start_date: "",
+        end_date: "",
+      });
     }
   }, [open]);
 
+  // Analisa dinamicamente quais variáveis são necessárias
+  const requiredContactFields = useMemo(() => {
+    if (!template) return [];
+    const fields = new Map<string, { label: string; key: string }>();
+    const placeholders = extractPlaceholders(template.content);
+    for (const p of placeholders) {
+      const mapping = CONTACT_FIELD_MAP[p];
+      if (mapping && !fields.has(mapping.key)) {
+        fields.set(mapping.key, mapping);
+      }
+    }
+    return Array.from(fields.values());
+  }, [template]);
+
+  const requiredContractFields = useMemo(() => {
+    if (!template) return [];
+    const fields = new Map<string, { label: string; key: string; type: string }>();
+    const placeholders = extractPlaceholders(template.content);
+    for (const p of placeholders) {
+      const mapping = CONTRACT_FIELD_MAP[p];
+      if (mapping && !fields.has(mapping.key)) {
+        fields.set(mapping.key, mapping);
+      }
+    }
+    return Array.from(fields.values());
+  }, [template]);
+
+  // Gera pré-visualização dinâmica
   useEffect(() => {
-    const template = templatesList.find((t) => t.id === selectedTemplateId);
-    if (!template || !contact) {
+    if (!template) {
       setPreviewText("");
       return;
     }
 
+    const valNum = Number(contractValues.value);
+    const formattedValue = valNum && !isNaN(valNum)
+      ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(valNum)
+      : "";
+
+    const formatDateStr = (dateStr: string) => {
+      if (!dateStr) return "";
+      const parts = dateStr.split("-");
+      if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      return dateStr;
+    };
+
     let text = template.content;
     const replacements: Record<string, string> = {
-      nome: contact.name || "",
-      nome_cliente: contact.name || "",
-      email: contact.email || "",
-      telefone: contact.phone || "",
-      phone: contact.phone || "",
-      cpf_cnpj: contact.cpf_cnpj || "",
-      cpf: contact.cpf_cnpj || "",
-      cnpj: contact.cpf_cnpj || "",
-      documento: contact.cpf_cnpj || "",
-      endereco: contact.address || "",
-      address: contact.address || "",
-      cidade: contact.city || "",
-      city: contact.city || "",
-      estado: contact.state || "",
-      state: contact.state || "",
-      uf: contact.state || "",
-      cep: contact.zip_code || "",
-      zip_code: contact.zip_code || "",
+      nome: contactValues.name || "",
+      nome_cliente: contactValues.name || "",
+      email: contactValues.email || "",
+      telefone: contactValues.phone || "",
+      phone: contactValues.phone || "",
+      cpf_cnpj: contactValues.cpf_cnpj || "",
+      cpf: contactValues.cpf_cnpj || "",
+      cnpj: contactValues.cpf_cnpj || "",
+      documento: contactValues.cpf_cnpj || "",
+      endereco: contactValues.address || "",
+      address: contactValues.address || "",
+      cidade: contactValues.city || "",
+      city: contactValues.city || "",
+      estado: contactValues.state || "",
+      state: contactValues.state || "",
+      uf: contactValues.state || "",
+      cep: contactValues.zip_code || "",
+      zip_code: contactValues.zip_code || "",
       data: new Date().toLocaleDateString("pt-BR"),
       data_extenso: new Date().toLocaleDateString("pt-BR", {
         day: "numeric",
         month: "long",
         year: "numeric"
       }),
+      // Campos específicos do contrato
+      valor: formattedValue,
+      valor_contrato: formattedValue,
+      valor_total: formattedValue,
+      forma_pagamento: contractValues.payment_terms,
+      condicoes_pagamento: contractValues.payment_terms,
+      pagamento: contractValues.payment_terms,
+      numero_contrato: contractValues.contract_number,
+      contrato_numero: contractValues.contract_number,
+      data_inicio: formatDateStr(contractValues.start_date),
+      inicio: formatDateStr(contractValues.start_date),
+      data_termino: formatDateStr(contractValues.end_date),
+      termino: formatDateStr(contractValues.end_date),
     };
 
     for (const [key, value] of Object.entries(replacements)) {
@@ -486,21 +630,50 @@ function GenerateContractDialog({
       text = text.replace(regex, value);
     }
     setPreviewText(text);
-  }, [selectedTemplateId, contact, templatesList]);
+  }, [template, contactValues, contractValues, templatesList]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTemplateId) return;
 
-    generateContract.mutate(
-      { template_id: selectedTemplateId },
+    // 1. Atualizar silenciosamente o contato no banco de dados para sincronizar os campos
+    updateContact.mutate(
+      {
+        id: contactId,
+        name: contactValues.name,
+        email: contactValues.email,
+        phone: contactValues.phone,
+        cpf_cnpj: contactValues.cpf_cnpj,
+        address: contactValues.address,
+        city: contactValues.city,
+        state: contactValues.state,
+        zip_code: contactValues.zip_code,
+      },
       {
         onSuccess: () => {
-          toast.success("Contrato gerado com sucesso!");
-          onOpenChange(false);
+          // 2. Gerar o contrato enviando as variáveis do contrato
+          generateContract.mutate(
+            {
+              template_id: selectedTemplateId,
+              contract_number: contractValues.contract_number || undefined,
+              value: contractValues.value ? Number(contractValues.value) : undefined,
+              payment_terms: contractValues.payment_terms || undefined,
+              start_date: contractValues.start_date || undefined,
+              end_date: contractValues.end_date || undefined,
+            },
+            {
+              onSuccess: () => {
+                toast.success("Contrato gerado com sucesso!");
+                onOpenChange(false);
+              },
+              onError: (err: any) => {
+                toast.error("Erro ao gerar contrato: " + err.message);
+              },
+            }
+          );
         },
         onError: (err: any) => {
-          toast.error("Erro ao gerar contrato: " + err.message);
+          toast.error("Erro ao atualizar dados do cliente: " + err.message);
         },
       }
     );
@@ -508,11 +681,11 @@ function GenerateContractDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Gerar Contrato de Modelo</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-1.5">
             <Label>Selecione o Modelo de Contrato *</Label>
             <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
@@ -527,13 +700,59 @@ function GenerateContractDialog({
             </Select>
           </div>
 
+          {template && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Form de preenchimento de variáveis do contrato */}
+              {requiredContractFields.length > 0 && (
+                <div className="space-y-3 border p-4 rounded-lg bg-slate-50/50 dark:bg-slate-900/50">
+                  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Dados do Contrato</h3>
+                  <div className="space-y-3">
+                    {requiredContractFields.map((f) => (
+                      <div key={f.key} className="space-y-1.5">
+                        <Label className="text-xs">{f.label} *</Label>
+                        <Input
+                          type={f.type}
+                          value={contractValues[f.key as keyof typeof contractValues]}
+                          onChange={(e) => setContractValues(prev => ({ ...prev, [f.key]: e.target.value }))}
+                          required
+                          className="h-9 text-xs"
+                          placeholder={f.key === "value" ? "Ex: 1500" : ""}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Form de preenchimento de variáveis faltantes do contato */}
+              {requiredContactFields.length > 0 && (
+                <div className="space-y-3 border p-4 rounded-lg bg-slate-50/50 dark:bg-slate-900/50">
+                  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Cadastro do Cliente</h3>
+                  <div className="space-y-3">
+                    {requiredContactFields.map((f) => (
+                      <div key={f.key} className="space-y-1.5">
+                        <Label className="text-xs">{f.label} *</Label>
+                        <Input
+                          value={contactValues[f.key as keyof typeof contactValues]}
+                          onChange={(e) => setContactValues(prev => ({ ...prev, [f.key]: e.target.value }))}
+                          required
+                          className="h-9 text-xs border-amber-200 focus-visible:ring-amber-300 dark:border-amber-900/50"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {previewText && (
-            <div className="space-y-1.5">
-              <Label>Pré-visualização do Contrato Populado</Label>
+            <div className="space-y-1.5 pt-2 border-t">
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pré-visualização do Contrato Populado</Label>
               <Textarea
                 readOnly
                 value={previewText}
-                rows={12}
+                rows={10}
                 className="text-xs font-mono leading-relaxed bg-muted/40 resize-none cursor-default"
               />
             </div>
@@ -543,8 +762,8 @@ function GenerateContractDialog({
             <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit" size="sm" disabled={!selectedTemplateId || generateContract.isPending}>
-              {generateContract.isPending ? "Gerando..." : "Gerar Contrato"}
+            <Button type="submit" size="sm" disabled={!selectedTemplateId || generateContract.isPending || updateContact.isPending}>
+              {generateContract.isPending || updateContact.isPending ? "Processando..." : "Gerar e Salvar Contrato"}
             </Button>
           </DialogFooter>
         </form>
