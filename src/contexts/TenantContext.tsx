@@ -232,7 +232,11 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         setSelectedTenantModules(null);
       }
 
-      const [{ data: tenantData, error: tenantError }, { data: aclData }] = await Promise.all([
+      const [
+        { data: tenantData, error: tenantError },
+        { data: aclData },
+        { data: tenantRow }
+      ] = await Promise.all([
         nexusDb
           .from("tenant_modules")
           .select("module_key, enabled")
@@ -242,6 +246,11 @@ export function TenantProvider({ children }: { children: ReactNode }) {
           .select("module_key, enabled")
           .eq("tenant_id", tenantId)
           .eq("user_id", userId),
+        nexusDb
+          .from("tenants")
+          .select("*")
+          .eq("id", tenantId)
+          .maybeSingle(),
       ]);
 
       if (cancelled) return;
@@ -253,6 +262,10 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         }
         setTenantModulesLoading(false);
         return;
+      }
+
+      if (tenantRow) {
+        setSelectedTenant(tenantRow);
       }
 
       const resolved = resolveTenantModuleAccess(tenantData ?? [], aclData ?? []);
