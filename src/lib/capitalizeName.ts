@@ -14,3 +14,20 @@ export function capitalizeName(name: string): string {
     })
     .join(" ");
 }
+
+/**
+ * Capitaliza as iniciais de cada palavra em tempo real mantendo espaços adicionais intactos durante a digitação.
+ */
+export function capitalizeAsYouType(val: string): string {
+  if (!val || typeof val !== "string") return val;
+  return val
+    .split(/(\s+)/)
+    .map((part) => {
+      if (/^\s+$/.test(part)) return part;
+      if (part.length > 0) {
+        return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+      }
+      return part;
+    })
+    .join("");
+}

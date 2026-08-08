@@ -24,7 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useUpdateContact } from "@/hooks/useContacts";
 import { toast } from "sonner";
 import { fetchAddressByCep } from "@/lib/viacep";
-import { capitalizeName } from "@/lib/capitalizeName";
+import { capitalizeName, capitalizeAsYouType } from "@/lib/capitalizeName";
 import type { Contact } from "@/types/database";
 import { User, Phone, Mail, MapPin, FileText, Loader2, Building2 } from "lucide-react";
 
@@ -137,7 +137,25 @@ export function EditContactDialog({ contact, open, onOpenChange }: EditContactDi
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-1 md:col-span-1">
                 <Label htmlFor="name" className="text-xs font-semibold">Nome Completo *</Label>
-                <Input id="name" {...register("name")} className="h-9 text-sm" />
+                <Input
+                  id="name"
+                  {...register("name")}
+                  onChange={(e) => {
+                    const cursor = e.target.selectionStart;
+                    const val = capitalizeAsYouType(e.target.value);
+                    setValue("name", val);
+                    setTimeout(() => {
+                      if (e.target && cursor !== null) {
+                        e.target.setSelectionRange(cursor, cursor);
+                      }
+                    }, 0);
+                  }}
+                  onBlur={(e) => {
+                    register("name").onBlur(e);
+                    setValue("name", capitalizeName(e.target.value));
+                  }}
+                  className="h-9 text-sm capitalize"
+                />
                 {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message}</p>}
               </div>
 

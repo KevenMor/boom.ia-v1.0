@@ -18,7 +18,7 @@ import { useCreateContact } from "@/hooks/useContacts";
 import { useTenantContext } from "@/contexts/TenantContext";
 import { toast } from "sonner";
 import { fetchAddressByCep } from "@/lib/viacep";
-import { capitalizeName } from "@/lib/capitalizeName";
+import { capitalizeName, capitalizeAsYouType } from "@/lib/capitalizeName";
 import { User, Phone, Mail, MapPin, FileText, Loader2, Building2 } from "lucide-react";
 
 const schema = z.object({
@@ -112,7 +112,26 @@ export function CreateContactDialog({ open, onOpenChange, contactType = "lead" }
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <Label htmlFor="name" className="text-xs font-semibold">Nome Completo *</Label>
-                <Input id="name" {...register("name")} placeholder="Ex: Keven Moreira" className="h-9 text-sm" />
+                <Input
+                  id="name"
+                  {...register("name")}
+                  onChange={(e) => {
+                    const cursor = e.target.selectionStart;
+                    const val = capitalizeAsYouType(e.target.value);
+                    setValue("name", val);
+                    setTimeout(() => {
+                      if (e.target && cursor !== null) {
+                        e.target.setSelectionRange(cursor, cursor);
+                      }
+                    }, 0);
+                  }}
+                  onBlur={(e) => {
+                    register("name").onBlur(e);
+                    setValue("name", capitalizeName(e.target.value));
+                  }}
+                  placeholder="Ex: Keven Moreira"
+                  className="h-9 text-sm capitalize"
+                />
                 {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message}</p>}
               </div>
               <div className="space-y-1">
