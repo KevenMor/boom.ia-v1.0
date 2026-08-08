@@ -78,6 +78,7 @@ import { useMemo, useState } from "react";
 import type { Contact, ContactClientMetadata } from "@/types/database";
 import { useEmbedCrm } from "@/contexts/EmbedCrmContext";
 import { useEmbedClientsOptional } from "@/contexts/EmbedClientsContext";
+import { useTenantContext } from "@/contexts/TenantContext";
 import { openMegaChatwootConversation, isInsideParentEmbed } from "@/lib/open-mega-chatwoot-conversation";
 import { resolveMegaConversationNavigateUrl } from "@/lib/chatwoot-conversation-url";
 import { openContactMegaConversation } from "@/lib/open-contact-mega-conversation";
@@ -172,11 +173,28 @@ export default function ContactProfilePage() {
   const embedClients = useEmbedClientsOptional();
   const isEmbed = Boolean(embedCrm?.isEmbed);
   const [searchParams, setSearchParams] = useSearchParams();
-  const tabFromUrl = searchParams.get("tab");
-  const activeTab: ProfileTab = isProfileTab(tabFromUrl) ? tabFromUrl : "about";
+  const { isModuleEnabled } = useTenantContext();
+
+  const enabledTabs = useMemo(() => {
+    const tabs: string[] = ["about", "edit", "history", "documents"];
+    if (isModuleEnabled("hospedagem")) tabs.push("consultations");
+    if (isModuleEnabled("financeiro")) {
+      tabs.push("invoices");
+      tabs.push("contracts");
+    }
+    if (isModuleEnabled("service_catalog")) tabs.push("packages");
+    if (isModuleEnabled("calendar")) tabs.push("agenda");
+    return tabs;
+  }, [isModuleEnabled]);
+
+  const activeTab = useMemo(() => {
+    const tab = searchParams.get("tab");
+    if (tab && enabledTabs.includes(tab)) return tab;
+    return "about";
+  }, [searchParams, enabledTabs]);
 
   const handleProfileTabChange = (value: string) => {
-    const next: ProfileTab = isProfileTab(value) ? value : "about";
+    const next = enabledTabs.includes(value) ? value : "about";
     setSearchParams(
       (prev) => {
         const p = new URLSearchParams(prev);
@@ -465,9 +483,9 @@ export default function ContactProfilePage() {
               }}
               stats={[
                 { label: "Conversas", value: visibleCount },
-                { label: "Faturas", value: invoices.length },
-                { label: "Pacotes", value: summary?.active_packages ?? 0 },
-                { label: "Agenda", value: summary?.upcoming_appointments ?? 0 },
+                ...(isModuleEnabled("financeiro") ? [{ label: "Faturas", value: invoices.length }] : []),
+                ...(isModuleEnabled("service_catalog") ? [{ label: "Pacotes", value: summary?.active_packages ?? 0 }] : []),
+                ...(isModuleEnabled("calendar") ? [{ label: "Agenda", value: summary?.upcoming_appointments ?? 0 }] : []),
               ]}
             />
           )}
@@ -476,7 +494,7 @@ export default function ContactProfilePage() {
             <CardContent className="p-0 sm:p-0">
               <Tabs value={activeTab} onValueChange={handleProfileTabChange} className="w-full">
                 <div className="px-4 sm:px-5 pt-4 border-b border-border overflow-x-auto">
-                  <ProfileTabNav tabs={PROFILE_TABS} />
+                  <ProfileTabNav tabs={enabledTabs} />
                 </div>
                 <div className="p-4 sm:p-6">
                   <TabsContent value="about" className="mt-0 focus-visible:outline-none">
