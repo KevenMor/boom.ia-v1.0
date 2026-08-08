@@ -173,19 +173,33 @@ export default function ContactProfilePage() {
   const embedClients = useEmbedClientsOptional();
   const isEmbed = Boolean(embedCrm?.isEmbed);
   const [searchParams, setSearchParams] = useSearchParams();
-  const { isModuleEnabled } = useTenantContext();
+  const { isModuleEnabled, selectedTenant } = useTenantContext();
 
   const enabledTabs = useMemo(() => {
-    const tabs: string[] = ["about", "edit", "history", "documents"];
-    if (isModuleEnabled("hospedagem")) tabs.push("consultations");
-    if (isModuleEnabled("financeiro")) {
-      tabs.push("invoices");
-      tabs.push("contracts");
+    const customTabs = selectedTenant?.settings?.client_profile_tabs as Record<string, boolean> | undefined;
+
+    const isTabEnabled = (tabKey: string, moduleKey: string) => {
+      if (customTabs && typeof customTabs[tabKey] === "boolean") {
+        return customTabs[tabKey];
+      }
+      return isModuleEnabled(moduleKey);
+    };
+
+    const tabs: string[] = ["about", "edit", "history"];
+
+    if (customTabs && typeof customTabs.documents === "boolean") {
+      if (customTabs.documents) tabs.push("documents");
+    } else {
+      tabs.push("documents");
     }
-    if (isModuleEnabled("service_catalog")) tabs.push("packages");
-    if (isModuleEnabled("calendar")) tabs.push("agenda");
+
+    if (isTabEnabled("consultations", "hospedagem")) tabs.push("consultations");
+    if (isTabEnabled("invoices", "financeiro")) tabs.push("invoices");
+    if (isTabEnabled("contracts", "financeiro")) tabs.push("contracts");
+    if (isTabEnabled("packages", "service_catalog")) tabs.push("packages");
+    if (isTabEnabled("agenda", "calendar")) tabs.push("agenda");
     return tabs;
-  }, [isModuleEnabled]);
+  }, [isModuleEnabled, selectedTenant]);
 
   const activeTab = useMemo(() => {
     const tab = searchParams.get("tab");

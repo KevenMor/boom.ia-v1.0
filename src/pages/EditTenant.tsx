@@ -114,6 +114,14 @@ export default function EditTenant() {
   const { data: adminUsers } = useAdminUsers();
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [selectedMembershipRole, setSelectedMembershipRole] = useState<"tenant_admin" | "tenant_user">("tenant_user");
+  const [clientTabsState, setClientTabsState] = useState<Record<string, boolean>>({
+    consultations: true,
+    invoices: true,
+    contracts: true,
+    packages: true,
+    agenda: true,
+    documents: true,
+  });
 
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -126,6 +134,17 @@ export default function EditTenant() {
     if (tenant) {
       const settings = (tenant.settings || {}) as Record<string, unknown>;
       setLogoUrl(typeof settings.logo_url === "string" ? settings.logo_url : null);
+
+      const savedTabs = settings.client_profile_tabs as Record<string, boolean> | undefined;
+      setClientTabsState({
+        consultations: savedTabs?.consultations !== false,
+        invoices: savedTabs?.invoices !== false,
+        contracts: savedTabs?.contracts !== false,
+        packages: savedTabs?.packages !== false,
+        agenda: savedTabs?.agenda !== false,
+        documents: savedTabs?.documents !== false,
+      });
+
       reset({
         name: tenant.name, slug: tenant.slug, plan: tenant.plan, status: tenant.status,
         sync_url: typeof settings.sync_url === "string" ? settings.sync_url : "",
@@ -217,6 +236,7 @@ export default function EditTenant() {
         sync_url: data.sync_url || undefined,
         logo_url: logoUrl || undefined,
         prompt_caching_enabled: data.prompt_caching_enabled,
+        client_profile_tabs: clientTabsState,
       };
       await updateTenant.mutateAsync({
         id: tenant.id, name: data.name, slug: data.slug, plan: data.plan, status: data.status, settings: newSettings,
@@ -493,6 +513,42 @@ export default function EditTenant() {
               </div>
             ))
           )}
+        </div>
+
+        <div className="rounded-xl border border-border bg-card p-6 space-y-6">
+          <div>
+            <h3 className="text-base font-semibold text-foreground">Ficha do Cliente (CRM/ERP)</h3>
+            <p className="text-sm text-muted-foreground">
+              Selecione quais abas e recursos adicionais devem ser exibidos na visualização de detalhes de cada cliente.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            {[
+              { key: "consultations", label: "Consultas", desc: "Aba com histórico de cotações e reservas de hospedagem." },
+              { key: "invoices", label: "Faturas", desc: "Aba de controle de faturas, cobranças e histórico de pagamentos." },
+              { key: "contracts", label: "Contratos", desc: "Aba de upload, controle e visualização de contratos vinculados." },
+              { key: "packages", label: "Pacotes", desc: "Aba com controle de assinaturas e pacotes de serviços." },
+              { key: "agenda", label: "Agenda", desc: "Aba com calendário e compromissos agendados do cliente." },
+              { key: "documents", label: "Arquivos", desc: "Aba com upload de documentos gerais e anexos do cliente." },
+            ].map((tab) => (
+              <div
+                key={tab.key}
+                className="flex items-center justify-between rounded-lg border border-border bg-muted/20 p-3"
+              >
+                <div>
+                  <p className="text-sm font-medium text-foreground">{tab.label}</p>
+                  <p className="text-xs text-muted-foreground">{tab.desc}</p>
+                </div>
+                <Switch
+                  checked={clientTabsState[tab.key]}
+                  onCheckedChange={(checked) =>
+                    setClientTabsState((prev) => ({ ...prev, [tab.key]: checked }))
+                  }
+                />
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Footer */}
