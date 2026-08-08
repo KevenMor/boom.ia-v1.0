@@ -749,12 +749,12 @@ function GenerateContractDialog({
           {previewText && (
             <div className="space-y-1.5 pt-2 border-t">
               <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pré-visualização do Contrato Populado</Label>
-              <Textarea
-                readOnly
-                value={previewText}
-                rows={10}
-                className="text-xs font-mono leading-relaxed bg-muted/40 resize-none cursor-default"
-              />
+              <div className="border border-border/80 bg-white text-black p-6 sm:p-10 rounded-md max-h-[300px] overflow-y-auto select-none shadow-inner">
+                <div
+                  className="text-[11px] leading-relaxed text-gray-800 text-justify font-serif"
+                  dangerouslySetInnerHTML={{ __html: previewText }}
+                />
+              </div>
             </div>
           )}
 
@@ -852,9 +852,10 @@ function ViewContractContentDialog({
           </h2>
 
           {/* Corpo do Contrato */}
-          <div className="text-xs leading-relaxed text-gray-800 whitespace-pre-wrap text-justify font-serif px-2">
-            {content || "Nenhum texto associado a este contrato."}
-          </div>
+          <div 
+            className="text-xs leading-relaxed text-gray-800 text-justify font-serif px-2 select-text"
+            dangerouslySetInnerHTML={{ __html: content || "Nenhum texto associado a este contrato." }}
+          />
 
           {/* Bloco de Assinaturas */}
           {content && (

@@ -45,21 +45,26 @@ export default function ContractTemplatesPage() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"edit" | "preview">("edit");
 
-  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { title: "", description: "", content: "" },
   });
+
+  const contentValue = watch("content");
 
   const handleEdit = (t: any) => {
     setEditingId(t.id);
     setValue("title", t.title);
     setValue("description", t.description || "");
     setValue("content", t.content);
+    setActiveTab("edit");
   };
 
   const handleCancel = () => {
     setEditingId(null);
+    setActiveTab("edit");
     reset({ title: "", description: "", content: "" });
   };
 
@@ -236,15 +241,54 @@ export default function ContractTemplatesPage() {
                   />
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="content" className="text-xs font-semibold text-muted-foreground">Texto do Contrato *</Label>
-                  <Textarea
-                    id="content"
-                    {...register("content")}
-                    placeholder="Escreva as cláusulas do contrato aqui... Ex: Eu, {{nome_cliente}}, portador do documento {{cpf_cnpj}}, residente no endereço {{endereco}}..."
-                    rows={16}
-                    className="text-sm font-mono leading-relaxed resize-y"
-                  />
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between border-b pb-1.5 mb-2">
+                    <Label htmlFor="content" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Texto do Contrato *</Label>
+                    <div className="flex bg-muted p-0.5 rounded-md gap-0.5">
+                      <Button
+                        type="button"
+                        variant={activeTab === "edit" ? "secondary" : "ghost"}
+                        size="sm"
+                        className="h-7 text-xs px-2.5 font-medium"
+                        onClick={() => setActiveTab("edit")}
+                      >
+                        Código HTML
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={activeTab === "preview" ? "secondary" : "ghost"}
+                        size="sm"
+                        className="h-7 text-xs px-2.5 font-medium"
+                        onClick={() => setActiveTab("preview")}
+                      >
+                        Visualizar Layout
+                      </Button>
+                    </div>
+                  </div>
+
+                  {activeTab === "edit" ? (
+                    <div className="space-y-1.5">
+                      <Textarea
+                        id="content"
+                        {...register("content")}
+                        placeholder="Escreva as cláusulas do contrato em HTML... Ex: <h1 style='text-align:center;'>CONTRATO</h1><p>Eu, {{nome_cliente}}...</p>"
+                        rows={16}
+                        className="text-xs font-mono leading-relaxed resize-y bg-slate-900/5 dark:bg-slate-900/50"
+                      />
+                      <p className="text-[10px] text-muted-foreground leading-normal">
+                        Você pode usar tags HTML como <code>&lt;b&gt;</code>, <code>&lt;p&gt;</code>, <code>&lt;table&gt;</code>, <code>&lt;br&gt;</code> e estilos em linha para formatar o contrato.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="border border-border/80 bg-white text-black p-8 sm:p-12 rounded-lg max-h-[500px] overflow-y-auto font-sans select-none">
+                      <div
+                        className="text-xs leading-relaxed text-gray-800 text-justify font-serif"
+                        dangerouslySetInnerHTML={{
+                          __html: contentValue || "<p class='text-muted-foreground text-center py-10 font-sans'>Escreva código HTML na aba ao lado para visualizar aqui.</p>",
+                        }}
+                      />
+                    </div>
+                  )}
                   {errors.content && <p className="text-xs text-destructive">{errors.content.message}</p>}
                 </div>
               </CardContent>
