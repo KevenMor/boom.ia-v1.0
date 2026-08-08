@@ -114,6 +114,7 @@ interface CreateClientViewProps {
 function CreateClientView({ tenantId, onCancel, contactType = "lead" }: CreateClientViewProps) {
   const createContact = useCreateContact();
   const [cepLoading, setCepLoading] = useState(false);
+  const isComposingRef = useRef(false);
 
   const { register, handleSubmit, formState: { errors }, setValue } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -173,7 +174,22 @@ function CreateClientView({ tenantId, onCancel, contactType = "lead" }: CreateCl
                 <Input
                   id="name"
                   {...register("name")}
+                  onCompositionStart={() => {
+                    isComposingRef.current = true;
+                  }}
+                  onCompositionEnd={(e) => {
+                    isComposingRef.current = false;
+                    const cursor = e.currentTarget.selectionStart;
+                    const val = capitalizeAsYouType(e.currentTarget.value);
+                    setValue("name", val);
+                    setTimeout(() => {
+                      if (e.target && cursor !== null) {
+                        (e.target as HTMLInputElement).setSelectionRange(cursor, cursor);
+                      }
+                    }, 0);
+                  }}
                   onChange={(e) => {
+                    if (isComposingRef.current) return;
                     const cursor = e.target.selectionStart;
                     const val = capitalizeAsYouType(e.target.value);
                     setValue("name", val);
@@ -309,6 +325,7 @@ interface EditClientViewProps {
 function EditClientView({ contact, onCancel }: EditClientViewProps) {
   const updateContact = useUpdateContact();
   const [cepLoading, setCepLoading] = useState(false);
+  const isComposingRef = useRef(false);
 
   const { register, handleSubmit, reset, formState: { errors }, setValue, watch } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -384,7 +401,22 @@ function EditClientView({ contact, onCancel }: EditClientViewProps) {
                 <Input
                   id="name"
                   {...register("name")}
+                  onCompositionStart={() => {
+                    isComposingRef.current = true;
+                  }}
+                  onCompositionEnd={(e) => {
+                    isComposingRef.current = false;
+                    const cursor = e.currentTarget.selectionStart;
+                    const val = capitalizeAsYouType(e.currentTarget.value);
+                    setValue("name", val);
+                    setTimeout(() => {
+                      if (e.target && cursor !== null) {
+                        (e.target as HTMLInputElement).setSelectionRange(cursor, cursor);
+                      }
+                    }, 0);
+                  }}
                   onChange={(e) => {
+                    if (isComposingRef.current) return;
                     const cursor = e.target.selectionStart;
                     const val = capitalizeAsYouType(e.target.value);
                     setValue("name", val);
