@@ -1262,4 +1262,193 @@ export async function crmContactsRoutes(fastify: FastifyInstance) {
       }
     }
   );
+
+  // --- Modelos de Contrato ---
+  fastify.get(
+    "/contract-templates",
+    async (req: FastifyRequest<{ Querystring: { tenant_id: string } }>, reply: FastifyReply) => {
+      try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
+        const { tenant_id: tenantId } = req.query;
+        if (!tenantId) return reply.status(400).send({ error: "tenant_id é obrigatório" });
+        if (!canAccessTenant(auth, tenantId)) return reply.status(403).send({ error: "forbidden_tenant_access" });
+
+        const { data, error } = await supabase
+          .from("contract_templates")
+          .select("*")
+          .eq("tenant_id", tenantId)
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        return reply.send({ data: data ?? [] });
+      } catch (err: unknown) {
+        return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  );
+
+  fastify.post(
+    "/contract-templates",
+    async (req: FastifyRequest<{ Body: { tenant_id: string; title: string; description?: string; content: string } }>, reply: FastifyReply) => {
+      try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
+        const { tenant_id: tenantId, title, description, content } = req.body;
+        if (!tenantId) return reply.status(400).send({ error: "tenant_id é obrigatório" });
+        if (!title) return reply.status(400).send({ error: "title é obrigatório" });
+        if (!content) return reply.status(400).send({ error: "content é obrigatório" });
+        if (!canManageTenant(auth, tenantId)) return reply.status(403).send({ error: "forbidden_tenant_access" });
+
+        const record = {
+          tenant_id: tenantId,
+          title: title.trim(),
+          description: description?.trim() || null,
+          content: content.trim(),
+        };
+
+        const { data, error } = await supabase.from("contract_templates").insert(record).select().single();
+        if (error) throw error;
+        return reply.send(data);
+      } catch (err: unknown) {
+        return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  );
+
+  fastify.patch(
+    "/contract-templates/:id",
+    async (req: FastifyRequest<{ Params: { id: string }; Body: { title?: string; description?: string; content?: string } }>, reply: FastifyReply) => {
+      try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
+        const { id } = req.params;
+        const { title, description, content } = req.body;
+
+        const { data: template, error: getErr } = await supabase.from("contract_templates").select("tenant_id").eq("id", id).maybeSingle();
+        if (getErr || !template) return reply.status(404).send({ error: "Modelo não encontrado" });
+        if (!canManageTenant(auth, template.tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
+
+        const updates: Record<string, unknown> = {};
+        if (title !== undefined) updates.title = title.trim();
+        if (description !== undefined) updates.description = description?.trim() || null;
+        if (content !== undefined) updates.content = content.trim();
+
+        const { data, error } = await supabase.from("contract_templates").update(updates).eq("id", id).select().single();
+        if (error) throw error;
+        return reply.send(data);
+      } catch (err: unknown) {
+        return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  );
+
+  fastify.delete(
+    "/contract-templates/:id",
+    async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
+        const { id } = req.params;
+
+        const { data: template, error: getErr } = await supabase.from("contract_templates").select("tenant_id").eq("id", id).maybeSingle();
+        if (getErr || !template) return reply.status(404).send({ error: "Modelo não encontrado" });
+        if (!canManageTenant(auth, template.tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
+
+        const { error } = await supabase.from("contract_templates").delete().eq("id", id);
+        if (error) throw error;
+        return reply.send({ success: true });
+      } catch (err: unknown) {
+        return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  );
+
+  // --- Geração Automática de Contrato ---
+  fastify.post(
+    "/crm-contacts/:id/contracts/generate",
+    async (req: FastifyRequest<{ Params: { id: string }; Body: { template_id: string } }>, reply: FastifyReply) => {
+      try {
+        const auth = await requireAuthenticated(req, reply);
+        if (!auth) return;
+        const { id: contactId } = req.params;
+        const { template_id: templateId } = req.body;
+        if (!templateId) return reply.status(400).send({ error: "template_id é obrigatório" });
+
+        // 1. Carregar contato
+        const { data: contact, error: contactErr } = await supabase
+          .from("contacts")
+          .select("id, name, email, phone, cpf_cnpj, address, city, state, zip_code, tenant_id")
+          .eq("id", contactId)
+          .maybeSingle();
+        if (contactErr || !contact) return reply.status(404).send({ error: "Contato não encontrado" });
+        if (!canManageTenant(auth, contact.tenant_id)) return reply.status(403).send({ error: "forbidden_tenant_access" });
+
+        // 2. Carregar modelo de contrato
+        const { data: template, error: templateErr } = await supabase
+          .from("contract_templates")
+          .select("*")
+          .eq("id", templateId)
+          .eq("tenant_id", contact.tenant_id)
+          .maybeSingle();
+        if (templateErr || !template) return reply.status(404).send({ error: "Modelo de contrato não encontrado" });
+
+        // 3. Substituir placeholders
+        let text = template.content;
+        const replacements: Record<string, string> = {
+          nome: contact.name || "",
+          nome_cliente: contact.name || "",
+          email: contact.email || "",
+          telefone: contact.phone || "",
+          phone: contact.phone || "",
+          cpf_cnpj: contact.cpf_cnpj || "",
+          cpf: contact.cpf_cnpj || "",
+          cnpj: contact.cpf_cnpj || "",
+          documento: contact.cpf_cnpj || "",
+          endereco: contact.address || "",
+          address: contact.address || "",
+          cidade: contact.city || "",
+          city: contact.city || "",
+          estado: contact.state || "",
+          state: contact.state || "",
+          uf: contact.state || "",
+          cep: contact.zip_code || "",
+          zip_code: contact.zip_code || "",
+          data: new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }),
+          data_extenso: new Date().toLocaleDateString("pt-BR", {
+            timeZone: "America/Sao_Paulo",
+            day: "numeric",
+            month: "long",
+            year: "numeric"
+          }),
+        };
+
+        for (const [key, value] of Object.entries(replacements)) {
+          const regex = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, "gi");
+          text = text.replace(regex, value);
+        }
+
+        // 4. Salvar contrato gerado
+        const contractRecord = {
+          contact_id: contactId,
+          tenant_id: contact.tenant_id,
+          title: template.title,
+          status: "draft",
+          description: template.description || null,
+          content: text,
+          metadata: JSON.stringify({ generated_from_template_id: templateId }),
+        };
+
+        const { data: newContract, error: insertErr } = await supabase
+          .from("contact_contracts")
+          .insert(contractRecord)
+          .select()
+          .single();
+        if (insertErr) throw insertErr;
+
+        return reply.send(newContract);
+      } catch (err: unknown) {
+        return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  );
 }

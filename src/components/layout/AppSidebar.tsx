@@ -26,6 +26,7 @@ import {
   Cloud,
   BarChart3,
   FileText,
+  ScrollText,
   Activity,
   ClipboardCheck,
   Settings,
@@ -98,6 +99,7 @@ export const navGroups: NavGroup[] = [
       { to: "/contacts", icon: UserSearch, label: "Leads", moduleKey: "contacts" },
       { to: "/clients", icon: Users, label: "Clientes", moduleKey: "clients" },
       { to: "/financeiro", icon: CreditCard, label: "Financeiro", moduleKey: "financeiro" },
+      { to: "/financeiro/modelos-contrato", icon: ScrollText, label: "Modelos de Contrato", moduleKey: "financeiro" },
     ],
   },
   {

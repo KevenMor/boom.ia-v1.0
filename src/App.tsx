@@ -44,6 +44,7 @@ import ContactsPage from "@/pages/ContactsPage";
 import ClientsPage from "@/pages/ClientsPage";
 import ContactProfilePage from "@/pages/ContactProfilePage";
 import FinanceiroPage from "@/pages/FinanceiroPage";
+import ContractTemplatesPage from "@/pages/ContractTemplatesPage";
 import TokenAnalytics from "@/pages/TokenAnalytics";
 import PublicSandbox from "@/pages/PublicSandbox";
 import ChatwootEmbedMirror from "@/pages/ChatwootEmbedMirror";
@@ -370,6 +371,14 @@ const App = () => (
                 element={
                   <ModuleRoute moduleKey="financeiro">
                     <FinanceiroPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="/financeiro/modelos-contrato"
+                element={
+                  <ModuleRoute moduleKey="financeiro">
+                    <ContractTemplatesPage />
                   </ModuleRoute>
                 }
               />

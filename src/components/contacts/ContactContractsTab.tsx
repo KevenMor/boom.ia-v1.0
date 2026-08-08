@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, ScrollText, Pencil, Trash2, ExternalLink } from "lucide-react";
+import { Plus, ScrollText, Pencil, Trash2, ExternalLink, Eye, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,7 +38,11 @@ import {
   useCreateContactContract,
   useUpdateContactContract,
   useDeleteContactContract,
+  useContractTemplates,
+  useGenerateContactContract,
+  useContact,
 } from "@/hooks/useContacts";
+import { useTenantContext } from "@/contexts/TenantContext";
 import type { ContactContract, ContactContractStatus } from "@/types/database";
 import { toast } from "sonner";
 
@@ -92,6 +96,9 @@ interface Props {
 export function ContactContractsTab({ contactId }: Props) {
   const { data: contracts, isLoading } = useContactContracts(contactId);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [generateOpen, setGenerateOpen] = useState(false);
+  const [viewContent, setViewContent] = useState<string | null>(null);
+  const [viewTitle, setViewTitle] = useState<string>("");
   const [editing, setEditing] = useState<ContactContract | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const deleteContract = useDeleteContactContract(contactId);
@@ -116,13 +123,18 @@ export function ContactContractsTab({ contactId }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <p className="text-sm text-muted-foreground">
           {contracts?.length ? `${contracts.length} contrato(s)` : "Nenhum contrato"}
         </p>
-        <Button size="sm" onClick={handleOpenNew}>
-          <Plus className="h-4 w-4 mr-1" /> Novo contrato
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => setGenerateOpen(true)} className="h-8 text-xs">
+            <ScrollText className="h-3.5 w-3.5 mr-1" /> Gerar de modelo
+          </Button>
+          <Button size="sm" onClick={handleOpenNew} className="h-8 text-xs">
+            <Plus className="h-3.5 w-3.5 mr-1" /> Novo manual
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -134,16 +146,30 @@ export function ContactContractsTab({ contactId }: Props) {
       ) : contracts && contracts.length > 0 ? (
         <div className="space-y-3">
           {contracts.map((c) => (
-            <ContractCard key={c.id} contract={c} onEdit={() => handleEdit(c)} onDelete={() => setDeleteId(c.id)} />
+            <ContractCard
+              key={c.id}
+              contract={c}
+              onEdit={() => handleEdit(c)}
+              onDelete={() => setDeleteId(c.id)}
+              onViewContent={(title, content) => {
+                setViewTitle(title);
+                setViewContent(content);
+              }}
+            />
           ))}
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground gap-3">
           <ScrollText className="h-10 w-10 opacity-30" />
           <p className="text-sm">Nenhum contrato cadastrado</p>
-          <Button variant="outline" size="sm" onClick={handleOpenNew}>
-            <Plus className="h-4 w-4 mr-1" /> Adicionar contrato
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setGenerateOpen(true)}>
+              <ScrollText className="h-4 w-4 mr-1" /> Gerar de modelo
+            </Button>
+            <Button size="sm" onClick={handleOpenNew}>
+              <Plus className="h-4 w-4 mr-1" /> Adicionar manual
+            </Button>
+          </div>
         </div>
       )}
 
@@ -152,6 +178,19 @@ export function ContactContractsTab({ contactId }: Props) {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         editing={editing}
+      />
+
+      <GenerateContractDialog
+        contactId={contactId}
+        open={generateOpen}
+        onOpenChange={setGenerateOpen}
+      />
+
+      <ViewContractContentDialog
+        title={viewTitle}
+        content={viewContent}
+        open={!!viewContent}
+        onOpenChange={(open) => !open && setViewContent(null)}
       />
 
       <AlertDialog open={!!deleteId} onOpenChange={(v) => !v && setDeleteId(null)}>
@@ -176,21 +215,23 @@ function ContractCard({
   contract,
   onEdit,
   onDelete,
+  onViewContent,
 }: {
   contract: ContactContract;
   onEdit: () => void;
   onDelete: () => void;
+  onViewContent: (title: string, content: string) => void;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-card p-4 space-y-2">
+    <div className="rounded-lg border border-border bg-card p-4 space-y-2 shadow-sm">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-medium text-sm">{contract.title}</p>
+          <p className="font-medium text-sm text-foreground">{contract.title}</p>
           {contract.contract_number && (
-            <p className="text-xs text-muted-foreground">Nº {contract.contract_number}</p>
+            <p className="text-xs text-muted-foreground font-mono">Nº {contract.contract_number}</p>
           )}
         </div>
-        <Badge className={`text-xs border-0 ${STATUS_CLASS[contract.status]}`}>
+        <Badge className={`text-xs border-0 font-medium ${STATUS_CLASS[contract.status]}`}>
           {STATUS_LABELS[contract.status]}
         </Badge>
       </div>
@@ -201,20 +242,31 @@ function ContractCard({
         )}
       </div>
       {contract.payment_terms && (
-        <p className="text-xs text-muted-foreground line-clamp-2">{contract.payment_terms}</p>
+        <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{contract.payment_terms}</p>
       )}
-      <div className="flex items-center justify-end gap-1 pt-1">
+      <div className="flex items-center justify-end gap-1 pt-1 border-t border-border/40">
+        {contract.content && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-primary hover:text-primary hover:bg-primary/10"
+            onClick={() => onViewContent(contract.title, contract.content!)}
+            title="Visualizar texto do contrato"
+          >
+            <Eye className="h-3.5 w-3.5" />
+          </Button>
+        )}
         {contract.document_url && (
-          <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+          <Button variant="ghost" size="icon" className="h-7 w-7" asChild title="Abrir link do documento">
             <a href={contract.document_url} target="_blank" rel="noopener noreferrer">
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
           </Button>
         )}
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit}>
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit} title="Editar">
           <Pencil className="h-3.5 w-3.5" />
         </Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={onDelete}>
+        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={onDelete} title="Excluir">
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
       </div>
@@ -361,6 +413,186 @@ function CreateContractDialog({
             </Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function GenerateContractDialog({
+  contactId,
+  open,
+  onOpenChange,
+}: {
+  contactId: string;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const { selectedTenantId } = useTenantContext();
+  const { data: templates } = useContractTemplates(selectedTenantId);
+  const { data: contact } = useContact(contactId);
+  const generateContract = useGenerateContactContract(contactId);
+
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [previewText, setPreviewText] = useState<string>("");
+
+  const templatesList = templates ?? [];
+
+  useEffect(() => {
+    if (!open) {
+      setSelectedTemplateId("");
+      setPreviewText("");
+      return;
+    }
+  }, [open]);
+
+  useEffect(() => {
+    const template = templatesList.find((t) => t.id === selectedTemplateId);
+    if (!template || !contact) {
+      setPreviewText("");
+      return;
+    }
+
+    let text = template.content;
+    const replacements: Record<string, string> = {
+      nome: contact.name || "",
+      nome_cliente: contact.name || "",
+      email: contact.email || "",
+      telefone: contact.phone || "",
+      phone: contact.phone || "",
+      cpf_cnpj: contact.cpf_cnpj || "",
+      cpf: contact.cpf_cnpj || "",
+      cnpj: contact.cpf_cnpj || "",
+      documento: contact.cpf_cnpj || "",
+      endereco: contact.address || "",
+      address: contact.address || "",
+      cidade: contact.city || "",
+      city: contact.city || "",
+      estado: contact.state || "",
+      state: contact.state || "",
+      uf: contact.state || "",
+      cep: contact.zip_code || "",
+      zip_code: contact.zip_code || "",
+      data: new Date().toLocaleDateString("pt-BR"),
+      data_extenso: new Date().toLocaleDateString("pt-BR", {
+        day: "numeric",
+        month: "long",
+        year: "numeric"
+      }),
+    };
+
+    for (const [key, value] of Object.entries(replacements)) {
+      const regex = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, "gi");
+      text = text.replace(regex, value);
+    }
+    setPreviewText(text);
+  }, [selectedTemplateId, contact, templatesList]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTemplateId) return;
+
+    generateContract.mutate(
+      { template_id: selectedTemplateId },
+      {
+        onSuccess: () => {
+          toast.success("Contrato gerado com sucesso!");
+          onOpenChange(false);
+        },
+        onError: (err: any) => {
+          toast.error("Erro ao gerar contrato: " + err.message);
+        },
+      }
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Gerar Contrato de Modelo</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>Selecione o Modelo de Contrato *</Label>
+            <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+              <SelectTrigger className="h-10">
+                <SelectValue placeholder="Selecione um modelo..." />
+              </SelectTrigger>
+              <SelectContent>
+                {templatesList.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>{t.title}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {previewText && (
+            <div className="space-y-1.5">
+              <Label>Pré-visualização do Contrato Populado</Label>
+              <Textarea
+                readOnly
+                value={previewText}
+                rows={12}
+                className="text-xs font-mono leading-relaxed bg-muted/40 resize-none cursor-default"
+              />
+            </div>
+          )}
+
+          <DialogFooter className="pt-2 border-t border-border/40">
+            <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" size="sm" disabled={!selectedTemplateId || generateContract.isPending}>
+              {generateContract.isPending ? "Gerando..." : "Gerar Contrato"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ViewContractContentDialog({
+  title,
+  content,
+  open,
+  onOpenChange,
+}: {
+  title: string;
+  content: string | null;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    if (!content) return;
+    navigator.clipboard.writeText(content);
+    setCopied(true);
+    toast.success("Texto do contrato copiado!");
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader className="flex flex-row items-center justify-between pr-6 border-b border-border/50 pb-3">
+          <DialogTitle className="text-sm font-semibold truncate max-w-[80%]">{title}</DialogTitle>
+          {content && (
+            <Button variant="outline" size="sm" className="h-7 text-xs px-2 gap-1.5" onClick={handleCopy}>
+              {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+              {copied ? "Copiado!" : "Copiar"}
+            </Button>
+          )}
+        </DialogHeader>
+        <div className="p-4 bg-muted/30 border border-border/50 rounded-lg text-xs leading-relaxed font-mono whitespace-pre-wrap overflow-y-auto max-h-[60vh] select-text">
+          {content || "Nenhum texto associado a este contrato."}
+        </div>
+        <DialogFooter className="pt-3 border-t border-border/50">
+          <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+            Fechar
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

@@ -492,3 +492,65 @@ export function useDeleteContactContract(contactId: string | null) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-contacts", contactId, "contracts"] }),
   });
 }
+
+export function useContractTemplates(tenantId: string | null) {
+  return useQuery({
+    queryKey: ["contract-templates", tenantId],
+    queryFn: async () => {
+      const res = await callAPI<{ data: any[] }>(`/contract-templates?tenant_id=${tenantId}`, {
+        method: "GET",
+      });
+      return res.data;
+    },
+    enabled: !!tenantId,
+  });
+}
+
+export function useCreateContractTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { tenant_id: string; title: string; description?: string; content: string }) => {
+      return callAPI<any>("/contract-templates", {
+        method: "POST",
+        body: payload,
+      });
+    },
+    onSuccess: (_, variables) => qc.invalidateQueries({ queryKey: ["contract-templates", variables.tenant_id] }),
+  });
+}
+
+export function useUpdateContractTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, tenant_id, ...updates }: { id: string; tenant_id: string; title?: string; description?: string; content?: string }) => {
+      return callAPI<any>(`/contract-templates/${id}`, {
+        method: "PATCH",
+        body: updates,
+      });
+    },
+    onSuccess: (_, variables) => qc.invalidateQueries({ queryKey: ["contract-templates", variables.tenant_id] }),
+  });
+}
+
+export function useDeleteContractTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, tenant_id }: { id: string; tenant_id: string }) => {
+      await callAPI(`/contract-templates/${id}`, { method: "DELETE" });
+    },
+    onSuccess: (_, variables) => qc.invalidateQueries({ queryKey: ["contract-templates", variables.tenant_id] }),
+  });
+}
+
+export function useGenerateContactContract(contactId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { template_id: string }) => {
+      return callAPI<ContactContract>(`/crm-contacts/${contactId}/contracts/generate`, {
+        method: "POST",
+        body: payload,
+      });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-contacts", contactId, "contracts"] }),
+  });
+}
