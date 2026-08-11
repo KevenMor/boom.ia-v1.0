@@ -110,10 +110,7 @@ export default function SettingsPage() {
         {/* Card Header Premium */}
         <div className="border-b border-border/80 px-6 py-5 flex items-center justify-between bg-muted/20">
           <div className="space-y-1">
-            <div className="flex items-center gap-2.5">
-              <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
-                <Plug className="h-4.5 w-4.5" />
-              </div>
+            <div className="flex items-center gap-2">
               <span className="text-base font-semibold tracking-tight">Conexão MCP</span>
               <Badge variant="secondary" className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-md font-semibold tracking-wider bg-primary/5 text-primary border border-primary/10">
                 Live Server
@@ -167,9 +164,6 @@ export default function SettingsPage() {
             </div>
           ) : keys.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border/60 py-12 text-center bg-background/30 transition-all hover:bg-background/40">
-              <div className="h-10 w-10 mx-auto rounded-full bg-muted flex items-center justify-center mb-3">
-                <KeyRound className="h-5 w-5 text-muted-foreground/60" />
-              </div>
               <p className="text-sm font-medium text-foreground/90">Nenhuma chave MCP gerada</p>
               <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
                 Para permitir que o Claude Desktop, Cursor ou outras IAs acessem seus agentes, crie uma chave de API.
@@ -183,9 +177,6 @@ export default function SettingsPage() {
                   className="flex items-center justify-between gap-4 p-4 hover:bg-muted/10 transition-colors"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="p-2 rounded-lg bg-background border border-border/60 text-muted-foreground">
-                      <Lock className="h-4 w-4 text-primary/70" />
-                    </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-semibold tracking-tight text-foreground/90">{key.label}</span>
