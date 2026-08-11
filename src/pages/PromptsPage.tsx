@@ -165,7 +165,6 @@ export default function PromptsPage() {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1">
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Prompts por Tenant</h1>
           <p className="text-sm text-muted-foreground">Visualize os prompts gerenciados no código para cada tenant</p>
         </div>
         {!loading && tenants.length > 0 && (

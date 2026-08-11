@@ -41,10 +41,15 @@ export function KanbanCard({ card, onOpen }: Props) {
   return (
     <button
       type="button"
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData("text/plain", card.id);
+        e.dataTransfer.effectAllowed = "move";
+      }}
       onClick={() => onOpen(card)}
       className={cn(
         "group w-full rounded-xl border border-border/80 bg-card p-3 text-left shadow-sm",
-        "transition-all duration-150",
+        "transition-all duration-150 cursor-grab active:cursor-grabbing",
         "hover:border-primary/35 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
       )}
     >

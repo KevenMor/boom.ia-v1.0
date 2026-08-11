@@ -4,6 +4,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useEffect, useMemo, useState } from "react";
 import {
+  Terminal,
+  Code2,
   Bot,
   Save,
   Loader2,
@@ -20,6 +22,7 @@ import {
   Clock,
   SlidersHorizontal,
   Info,
+  Database,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +37,7 @@ import { Slider } from "@/components/ui/slider";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useAgents, useUpdateAgent } from "@/hooks/useAgents";
+import AgentKnowledgeBaseSection from "@/components/agents/AgentKnowledgeBaseSection";
 import { useTenants } from "@/hooks/useTenants";
 import { useTenantContext } from "@/contexts/TenantContext";
 import { useProviders } from "@/hooks/useProviders";
@@ -77,7 +81,7 @@ interface AdminPromptDetail {
   fullPromptLength?: number;
 }
 
-type EditAgentTab = "basic" | "model" | "integration" | "schedule" | "advanced";
+type EditAgentTab = "basic" | "model" | "prompts" | "integration" | "schedule" | "advanced" | "knowledge";
 
 const fld =
   "w-full min-w-0 max-w-full rounded-md border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-foreground/30 focus:ring-1 focus:ring-foreground/20 dark:bg-card";
@@ -100,9 +104,11 @@ const sliderTouch =
 const EDIT_AGENT_STITCH_TABS: { id: EditAgentTab; label: string; icon: LucideIcon }[] = [
   { id: "basic", label: "Informações Básicas", icon: User },
   { id: "model", label: "Modelo de IA", icon: Brain },
+  { id: "prompts", label: "Personalização de Prompts", icon: Terminal },
   { id: "integration", label: "Integração", icon: Plug },
   { id: "schedule", label: "Horário e Follow-up", icon: Clock },
   { id: "advanced", label: "Avançados", icon: SlidersHorizontal },
+  { id: "knowledge", label: "Base de Conhecimento", icon: Database },
 ];
 
 /** Mesma coluna para header + conteúdo (evita desalinhamento entre abas e cards) */
@@ -207,12 +213,19 @@ export default function EditAgent() {
   const [reminderTemplate, setReminderTemplate] = useState("");
   const [testAssigneeId, setTestAssigneeId] = useState("");
   const [agentAssigneeId, setAgentAssigneeId] = useState("");
+  const [overridePrompts, setOverridePrompts] = useState(false);
+  const [promptSubTab, setPromptSubTab] = useState<"system" | "rules" | "dispatcher" | "followup">("system");
+  const [communicationRules, setCommunicationRules] = useState("");
+  const [dispatcherPromptState, setDispatcherPromptState] = useState("");
+  const [alwaysInjectCommRules, setAlwaysInjectCommRules] = useState(false);
+  const [skipGreeting, setSkipGreeting] = useState(false);
+  const [currentVersion, setCurrentVersion] = useState("1.0.0");
   const [leadLabelEnabled, setLeadLabelEnabled] = useState(false);
   const [agentTab, setAgentTab] = useState<EditAgentTab>("basic");
   const [promptDlg, setPromptDlg] = useState<"closed" | "production" | "override">("closed");
   const [dbPromptOpen, setDbPromptOpen] = useState(false);
 
-  const { register, handleSubmit, setValue, watch, reset } = useForm<FormData>({ resolver: zodResolver(schema) });
+  const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<FormData>({ resolver: zodResolver(schema) });
 
   const tenantIdEffective = watch("tenant_id") || agent?.tenant_id || "";
   const tenantSlugForPrompt = useMemo(() => {
@@ -278,6 +291,12 @@ export default function EditAgent() {
       setTestAssigneeId(String((cfg as any).test_assignee_id ?? ""));
       setAgentAssigneeId(String((cfg as any).agent_assignee_id ?? ""));
       setLeadLabelEnabled((cfg as any).lead_label_enabled ?? false);
+      setOverridePrompts(agent.override_prompts ?? false);
+      setCommunicationRules(agent.communication_rules ?? "");
+      setDispatcherPromptState(agent.dispatcher_prompt ?? "");
+      setAlwaysInjectCommRules(agent.always_inject_comm_rules ?? false);
+      setSkipGreeting(agent.skip_greeting ?? false);
+      setCurrentVersion(agent.current_version ?? "1.0.0");
     }
   }, [agent, reset]);
 
@@ -290,6 +309,14 @@ export default function EditAgent() {
     };
   }, [agent]);
 
+  const onInvalid = (errors: any) => {
+    console.error("Form validation errors:", errors);
+    const firstError = Object.values(errors)[0] as any;
+    if (firstError) {
+      toast.error(`Erro de validação: ${firstError.message || "Verifique os campos obrigatórios."}`);
+    }
+  };
+
   const onSubmit = async (data: FormData) => {
     if (!agent) return;
     try {
@@ -299,6 +326,12 @@ export default function EditAgent() {
         id: agent.id, ...rest, avatar_url: avatarUrl,
         description: rest.description || null, provider_id: rest.provider_id || null,
         model: rest.model || null, system_prompt: rest.system_prompt || null,
+        override_prompts: overridePrompts,
+        communication_rules: communicationRules || null,
+        dispatcher_prompt: dispatcherPromptState || null,
+        always_inject_comm_rules: alwaysInjectCommRules,
+        skip_greeting: skipGreeting,
+        current_version: currentVersion,
         config: {
           ...currentConfig, top_p, top_k,
           read_delay_ms: Math.round(readDelay * 1000), typing_delay_ms: Math.round(typingDelay * 1000),
@@ -398,9 +431,9 @@ export default function EditAgent() {
 
         <div className="min-w-0 flex-1 pb-[max(2rem,env(safe-area-inset-bottom))]">
           <div className={cn(editAgentCol, "min-w-0 max-w-full pb-8 pt-4")}>
-            <form id="edit-agent-form" onSubmit={handleSubmit(onSubmit)} className="flex min-w-0 gap-6">
+            <form id="edit-agent-form" onSubmit={handleSubmit(onSubmit, onInvalid)} className="flex min-w-0 gap-6">
               {/* Section sidebar */}
-              <aside className="sticky top-[73px] hidden h-fit w-[220px] shrink-0 lg:block">
+              <aside className="sticky top-[73px] hidden h-fit w-[260px] shrink-0 lg:block">
                 <nav className="flex flex-col gap-0.5 rounded-lg border border-border bg-card p-2" aria-label="Seções do formulário">
                   {EDIT_AGENT_STITCH_TABS.map((t) => {
                     const Icon = t.icon;
@@ -412,7 +445,7 @@ export default function EditAgent() {
                         aria-selected={agentTab === t.id}
                         onClick={() => setAgentTab(t.id)}
                         className={cn(
-                          "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                          "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors",
                           agentTab === t.id
                             ? "bg-foreground/[0.06] text-foreground dark:bg-foreground/10"
                             : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -431,9 +464,6 @@ export default function EditAgent() {
 
               {agentTab === "basic" && (
               <section className="rounded-lg border-0 bg-transparent p-0 sm:border sm:border-border sm:bg-card sm:p-6">
-                <h3 className="mb-3 text-base font-semibold text-foreground sm:mb-4">
-                  Informações Básicas
-                </h3>
                 {/* Avatar — compact row on mobile, column on desktop */}
                 <div className="mb-6 flex flex-col gap-5 sm:mb-8">
                   <div className="flex justify-center border-b border-border/50 pb-5 sm:justify-start sm:border-0 sm:pb-0">
@@ -527,7 +557,6 @@ export default function EditAgent() {
 
             {agentTab === "model" && (
               <section className={cn(stitchCard, "space-y-6")}>
-                <h3 className="text-base font-semibold text-foreground">Configuração do Modelo de IA</h3>
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label className={stitchLbl}>Provedor</Label>
@@ -715,10 +744,228 @@ export default function EditAgent() {
               </section>
             )}
 
+            {agentTab === "prompts" && (
+              <div className="space-y-6">
+                <section className="space-y-6 rounded-xl border border-border bg-card p-5 sm:p-6 shadow-sm">
+
+                  {/* Switch Principal */}
+                  <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-muted/30 shadow-sm">
+                    <div className="space-y-0.5">
+                      <h4 className="text-sm font-semibold tracking-tight text-foreground">Customizar Prompts no Banco de Dados</h4>
+                      <p className="text-[11px] text-muted-foreground">Permite sobrepor os prompts definidos no código para calibração em tempo real</p>
+                    </div>
+                    <Switch checked={overridePrompts} onCheckedChange={setOverridePrompts} />
+                  </div>
+
+                  {/* Sub-abas de Prompts (Shadcn Tabs style) */}
+                  <div className="flex border-b border-border/80 gap-1 pt-2 pb-0.5 overflow-x-auto">
+                    {[
+                      { id: "system", label: "System Prompt", icon: Terminal },
+                      { id: "rules", label: "Regras de Comunicação", icon: Code2 },
+                      { id: "dispatcher", label: "Dispatcher Prompt", icon: Brain },
+                      { id: "followup", label: "Follow-up Prompt", icon: Clock },
+                    ].map((tab) => {
+                      const Icon = tab.icon;
+                      const isSelected = promptSubTab === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setPromptSubTab(tab.id as any)}
+                          className={cn(
+                            "flex items-center gap-2 px-4 py-2 border-b-2 font-plex text-xs font-semibold whitespace-nowrap transition-all -mb-[1.5px]",
+                            isSelected
+                              ? "border-primary text-primary bg-primary/[0.02]"
+                              : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                          )}
+                        >
+                          <Icon className="h-3.5 w-3.5" />
+                          {tab.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Editores estilo IDE */}
+                  <div className="pt-4">
+                    {/* System Prompt */}
+                    {promptSubTab === "system" && (
+                      <div className="group relative rounded-xl border border-border bg-card shadow-sm transition-all focus-within:border-primary/30 focus-within:ring-2 focus-within:ring-primary/10 overflow-hidden">
+                        <div className="flex items-center justify-between border-b border-border/60 bg-muted/40 px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <Terminal className="h-4 w-4 text-primary" />
+                            <span className="font-plex text-xs font-semibold uppercase tracking-wider text-muted-foreground">System Prompt (Comportamento)</span>
+                            <Badge variant="secondary" className="font-mono text-[9px] bg-primary/5 text-primary border border-primary/10">SYSTEM</Badge>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                              onClick={() => {
+                                void navigator.clipboard.writeText(watch("system_prompt") || "");
+                                toast.success("System prompt copiado!");
+                              }}
+                              title="Copiar prompt"
+                            >
+                              <Copy className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="relative p-1">
+                          <Textarea
+                            rows={12}
+                            value={watch("system_prompt") || ""}
+                            onChange={(e) => setValue("system_prompt", e.target.value)}
+                            placeholder="Instruções de personalidade, escopo e comportamento da inteligência..."
+                            className="w-full rounded-none border-0 bg-transparent px-4 py-3 font-sans text-sm leading-relaxed text-foreground placeholder:text-muted-foreground/60 outline-none focus-visible:ring-0 resize-y min-h-[220px]"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between border-t border-border/50 bg-muted/20 px-4 py-2 text-[10px] text-muted-foreground font-mono">
+                          <span>Format: raw_text</span>
+                          <span>Chars: {(watch("system_prompt") || "").length}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Regras de Comunicação */}
+                    {promptSubTab === "rules" && (
+                      <div className="group relative rounded-xl border border-border bg-card shadow-sm transition-all focus-within:border-primary/30 focus-within:ring-2 focus-within:ring-primary/10 overflow-hidden">
+                        <div className="flex items-center justify-between border-b border-border/60 bg-muted/40 px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <Code2 className="h-4 w-4 text-primary" />
+                            <span className="font-plex text-xs font-semibold uppercase tracking-wider text-muted-foreground">Regras de Comunicação</span>
+                            <Badge variant="secondary" className="font-mono text-[9px] bg-primary/5 text-primary border border-primary/10">COMM_RULES</Badge>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                              onClick={() => {
+                                void navigator.clipboard.writeText(communicationRules || "");
+                                toast.success("Regras de comunicação copiadas!");
+                              }}
+                              title="Copiar regras"
+                            >
+                              <Copy className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="relative p-1">
+                          <Textarea
+                            rows={10}
+                            value={communicationRules}
+                            onChange={(e) => setCommunicationRules(e.target.value)}
+                            placeholder="Ex: Use respostas curtas, no máximo 2 emojis por parágrafo, nunca cite telefones..."
+                            className="w-full rounded-none border-0 bg-transparent px-4 py-3 font-sans text-sm leading-relaxed text-foreground placeholder:text-muted-foreground/60 outline-none focus-visible:ring-0 resize-y min-h-[180px]"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between border-t border-border/50 bg-muted/20 px-4 py-2 text-[10px] text-muted-foreground font-mono">
+                          <span>Format: list_bullet</span>
+                          <span>Chars: {communicationRules.length}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Dispatcher Prompt */}
+                    {promptSubTab === "dispatcher" && (
+                      <div className="group relative rounded-xl border border-border bg-card shadow-sm transition-all focus-within:border-primary/30 focus-within:ring-2 focus-within:ring-primary/10 overflow-hidden">
+                        <div className="flex items-center justify-between border-b border-border/60 bg-muted/40 px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <Brain className="h-4 w-4 text-primary" />
+                            <span className="font-plex text-xs font-semibold uppercase tracking-wider text-muted-foreground">Dispatcher Prompt (Classificação de Tools)</span>
+                            <Badge variant="secondary" className="font-mono text-[9px] bg-primary/5 text-primary border border-primary/10">DISPATCHER</Badge>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                              onClick={() => {
+                                void navigator.clipboard.writeText(dispatcherPromptState || "");
+                                toast.success("Dispatcher prompt copiado!");
+                              }}
+                              title="Copiar dispatcher"
+                            >
+                              <Copy className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="relative p-1">
+                          <Textarea
+                            rows={10}
+                            value={dispatcherPromptState}
+                            onChange={(e) => setDispatcherPromptState(e.target.value)}
+                            placeholder="Prompt auxiliar de calibração para decidir qual ferramenta (tool) o dispatcher deve chamar..."
+                            className="w-full rounded-none border-0 bg-transparent px-4 py-3 font-sans text-sm leading-relaxed text-foreground placeholder:text-muted-foreground/60 outline-none focus-visible:ring-0 resize-y min-h-[180px]"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between border-t border-border/50 bg-muted/20 px-4 py-2 text-[10px] text-muted-foreground font-mono">
+                          <span>Format: raw_text</span>
+                          <span>Chars: {dispatcherPromptState.length}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Follow-up Prompt */}
+                    {promptSubTab === "followup" && (
+                      <div className="group relative rounded-xl border border-border bg-card shadow-sm transition-all focus-within:border-primary/30 focus-within:ring-2 focus-within:ring-primary/10 overflow-hidden">
+                        <div className="flex items-center justify-between border-b border-border/60 bg-muted/40 px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-4 w-4 text-primary" />
+                            <span className="font-plex text-xs font-semibold uppercase tracking-wider text-muted-foreground">Prompt de Follow-up (Opcional)</span>
+                            <Badge variant="secondary" className="font-mono text-[9px] bg-primary/5 text-primary border border-primary/10">FOLLOWUP</Badge>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-muted-foreground font-mono bg-muted/30 px-2 py-0.5 rounded border border-border/60">Variables: {"{attempt}"}, {"{max_attempts}"}</span>
+                          </div>
+                        </div>
+                        <div className="relative p-1">
+                          <Textarea
+                            rows={8}
+                            value={followupPrompt}
+                            onChange={(e) => setFollowupPrompt(e.target.value)}
+                            placeholder="Ex: Olá {{nome_cliente}}, restou alguma dúvida sobre o orçamento? (Tentativa {attempt} de {max_attempts})"
+                            className="w-full rounded-none border-0 bg-transparent px-4 py-3 font-sans text-sm leading-relaxed text-foreground placeholder:text-muted-foreground/60 outline-none focus-visible:ring-0 resize-y min-h-[140px]"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between border-t border-border/50 bg-muted/20 px-4 py-2 text-[10px] text-muted-foreground font-mono">
+                          <span>Format: raw_text</span>
+                          <span>Chars: {followupPrompt.length}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Flags / Opções secundárias */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-border/40">
+                    <div className="flex items-center justify-between gap-4 p-4 rounded-xl border border-border bg-card/40 shadow-sm transition-all hover:bg-muted/15 focus-within:border-primary/20">
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold text-foreground">Injetar Regras de Comunicação Sempre</Label>
+                        <p className="text-[10px] leading-normal text-muted-foreground">Injeta as regras mesmo se o bot não possuir ferramenta de inventário vinculada.</p>
+                      </div>
+                      <Switch checked={alwaysInjectCommRules} onCheckedChange={setAlwaysInjectCommRules} />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-4 p-4 rounded-xl border border-border bg-card/40 shadow-sm transition-all hover:bg-muted/15 focus-within:border-primary/20">
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold text-foreground">Ignorar Saudação Padrão do Atendente</Label>
+                        <p className="text-[10px] leading-normal text-muted-foreground">Inibe a injeção da saudação padrão de boas-vindas do sistema de chat.</p>
+                      </div>
+                      <Switch checked={skipGreeting} onCheckedChange={setSkipGreeting} />
+                    </div>
+                  </div>
+                </section>
+              </div>
+            )}
+
             {agentTab === "integration" && (
               <>
                 <section className={cn(stitchCard, "space-y-4")}>
-                  <h3 className="text-base font-semibold text-foreground">Integração Chatwoot &amp; WAHA</h3>
                   <ChatwootConfigSection
                     chatwootUrl={chatwootUrl} setChatwootUrl={setChatwootUrl}
                     chatwootApiToken={chatwootApiToken} setChatwootApiToken={setChatwootApiToken}
@@ -964,6 +1211,12 @@ export default function EditAgent() {
                     </div>
                   )}
                 </section>
+              </div>
+            )}
+
+            {agentTab === "knowledge" && agentId && (
+              <div className="min-w-0 w-full max-w-full space-y-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:space-y-6">
+                <AgentKnowledgeBaseSection agentId={agentId} />
               </div>
             )}
 

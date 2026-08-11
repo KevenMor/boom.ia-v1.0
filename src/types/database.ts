@@ -32,6 +32,13 @@ export interface Agent {
   provider_id: string | null;
   model: string | null;
   system_prompt: string | null;
+  communication_rules: string | null;
+  dispatcher_prompt: string | null;
+  followup_prompt: string | null;
+  always_inject_comm_rules: boolean;
+  skip_greeting: boolean;
+  override_prompts: boolean;
+  current_version: string;
   temperature: number;
   status: string;
   config: Record<string, unknown>;

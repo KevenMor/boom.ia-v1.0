@@ -707,8 +707,7 @@ export default function ClientsPage() {
         </Breadcrumb>
         )}
 
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-lg font-medium text-foreground">Clientes</h1>
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-end">
           {!isEmbed && (
           <div className="flex items-center gap-2">
             <Button

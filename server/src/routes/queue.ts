@@ -299,7 +299,7 @@ export async function processFollowUpItem(
 ): Promise<{ processed: boolean; nextId?: string; nextDelay?: number }> {
   const { data: agent } = await supabase
     .from("agents")
-    .select("id, name, provider_id, model, system_prompt, tenant_id, config, status")
+    .select("id, name, provider_id, model, system_prompt, tenant_id, config, status, followup_prompt, override_prompts")
     .eq("id", item.agent_id)
     .single();
 
@@ -449,7 +449,7 @@ export async function processFollowUpItem(
     return { processed: false };
   }
 
-  let followupPrompt = getFollowupPrompt(tenantSlug);
+  let followupPrompt = getFollowupPrompt(tenantSlug, agent.followup_prompt, agent.override_prompts);
   if (!followupPrompt) {
     followupPrompt = `[SISTEMA INTERNO - FOLLOW-UP]\nEscreva uma mensagem curta de follow-up (tentativa {attempt} de {max_attempts}). Seja natural, breve (1-2 frases) e use o contexto da conversa.`;
   }

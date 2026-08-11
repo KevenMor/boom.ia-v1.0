@@ -1,4 +1,4 @@
-﻿import { useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { Search, ShieldAlert, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -88,7 +88,6 @@ export default function Audit() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <ShieldAlert className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-lg font-medium text-foreground">Auditoria</h2>
           <span className="rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">{total} registro(s)</span>
         </div>
         <Button variant="outline" size="sm" className="gap-2 shrink-0" onClick={() => void refetch()} disabled={isFetching}>

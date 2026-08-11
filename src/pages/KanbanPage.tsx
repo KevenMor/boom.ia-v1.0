@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { Bot, Columns3, Loader2, Search } from "lucide-react";
 import { useAgents } from "@/hooks/useAgents";
-import { useConversations } from "@/hooks/useConversations";
+import { useConversations, type Conversation } from "@/hooks/useConversations";
 import { useTenantContext } from "@/contexts/TenantContext";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import type { KanbanCardData } from "@/components/kanban/KanbanCard";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { callAPI } from "@/lib/api-client";
+import { toast } from "sonner";
 
 export default function KanbanPage() {
   const navigate = useNavigate();
@@ -55,6 +57,84 @@ export default function KanbanPage() {
     [agents, selectedAgentId],
   );
 
+  const assignMutation = useMutation({
+    mutationFn: async ({
+      conversationId,
+      target,
+    }: {
+      conversationId: string;
+      target: string;
+    }) => {
+      return callAPI<{ success: boolean; assignee_name: string | null }>(
+        `/conversations/${conversationId}/assign`,
+        {
+          method: "POST",
+          body: {
+            agent_id: selectedAgentId,
+            target,
+          },
+        }
+      );
+    },
+    onMutate: async ({ conversationId, target }) => {
+      await queryClient.cancelQueries({ queryKey: ["conversations", selectedTenantId, selectedAgentId] });
+
+      const previousConversations = queryClient.getQueryData<Conversation[]>([
+        "conversations",
+        selectedTenantId ?? "—",
+        selectedAgentId,
+        500,
+      ]);
+
+      if (previousConversations) {
+        let newAssigneeName: string | null = null;
+        if (target === "__unassigned__") {
+          newAssigneeName = null;
+        } else if (target === "__ai_agent__") {
+          newAssigneeName = selectedAgent?.name ?? "Agente IA";
+        } else if (target.startsWith("assignee:")) {
+          newAssigneeName = target.substring("assignee:".length);
+        }
+
+        const updated = previousConversations.map((c) => {
+          if (c.id === conversationId) {
+            return {
+              ...c,
+              chatwoot_assignee_name: newAssigneeName,
+              message_count: target === "__unassigned__" ? 0 : (c.message_count || 1),
+            };
+          }
+          return c;
+        });
+
+        queryClient.setQueryData(
+          ["conversations", selectedTenantId ?? "—", selectedAgentId, 500],
+          updated
+        );
+      }
+
+      return { previousConversations };
+    },
+    onError: (err: any, _variables, context) => {
+      if (context?.previousConversations) {
+        queryClient.setQueryData(
+          ["conversations", selectedTenantId ?? "—", selectedAgentId, 500],
+          context.previousConversations
+        );
+      }
+      toast.error(err.message || "Erro ao atualizar atribuição.");
+    },
+    onSuccess: (data) => {
+      const msg = data.assignee_name
+        ? `Conversa atribuída a ${data.assignee_name} com sucesso.`
+        : "Conversa marcada como sem atendimento com sucesso.";
+      toast.success(msg);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+
   const openCard = (card: KanbanCardData) => {
     if (!selectedAgentId) return;
     sessionStorage.setItem("conv_selectedAgentId", selectedAgentId);
@@ -76,8 +156,7 @@ export default function KanbanPage() {
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-border bg-card text-primary shadow-sm">
               <Columns3 className="h-5 w-5" strokeWidth={2} />
             </div>
-            <h1 className="text-xl font-semibold tracking-tight text-foreground">Kanban de atendimentos</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Escolha o agente para ver a fila: sem atendimento e com quem está cada conversa.
             </p>
           </div>
@@ -119,15 +198,9 @@ export default function KanbanPage() {
     <div className="ds-typeui font-plex flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 md:p-6">
         <header className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="tu-label mb-1">Operação</p>
-            <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-[1.35rem]">
-              Kanban de atendimentos
-            </h1>
-            <p className="mt-0.5 text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {selectedAgent ? selectedAgent.name : "Agente"} · clique no card para abrir o chat
             </p>
-          </div>
 
           <div className="flex flex-wrap items-center gap-2">
             {agents && agents.length > 1 ? (
@@ -203,6 +276,9 @@ export default function KanbanPage() {
             searchTerm={searchTerm}
             onlyOpen={onlyOpen}
             onOpen={openCard}
+            onDropCard={(cardId, targetColKey) =>
+              assignMutation.mutate({ conversationId: cardId, target: targetColKey })
+            }
           />
         )}
       </div>

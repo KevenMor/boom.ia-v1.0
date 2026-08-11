@@ -72,9 +72,9 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
-      refetchOnMount: false,   // Não refaz ao remontar se dados estão em cache
-      staleTime: 1000 * 60 * 10,  // Dados válidos por 10 minutos
-      gcTime: 1000 * 60 * 30,     // Mantém no cache por 30 minutos
+      refetchOnMount: true,
+      staleTime: 1000 * 5,       // Considera dados obsoletos após 5 segundos
+      gcTime: 1000 * 60 * 5,     // Mantém no cache por 5 minutos
       retry: 1,
     },
   },

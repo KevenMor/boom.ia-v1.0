@@ -79,7 +79,6 @@ export default function DevelopmentsListPage() {
     <div className="pb-10">
       {!embed?.ready && (
         <div className={col}>
-          <h1 className="text-2xl font-semibold tracking-tight">Gestão de lotes</h1>
           {scopedTenantDisplayName && (
             <p className="mt-1 text-sm text-muted-foreground">{scopedTenantDisplayName}</p>
           )}

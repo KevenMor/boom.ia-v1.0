@@ -25,7 +25,6 @@ export default function SuiteGalleriesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-x-3">
-          <h2 className="text-lg font-medium text-foreground">Galeria</h2>
           {!isLoading && (
             <span className="rounded-full bg-primary/10 px-3 py-0.5 text-xs font-medium text-primary">
               {galleries.length} galeria{galleries.length !== 1 ? "s" : ""}

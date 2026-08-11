@@ -53,8 +53,7 @@ export default function TokenAnalytics() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-xl font-semibold">Analytics de Tokens</h1>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-end">
         <Select value={days} onValueChange={setDays}>
           <SelectTrigger className="w-[140px]">
             <SelectValue />

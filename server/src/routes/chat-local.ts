@@ -1,5 +1,6 @@
-﻿import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
+import { requireAuthenticated, canAccessTenant } from "../services/authorization.js";
 import { resolveDispatcherModel } from "../services/provider-api.js";
 import { buildSystemPrompt, getDispatcherPrompt, getPromptConfig } from "../services/prompts/registry.js";
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
@@ -1012,6 +1013,36 @@ function dedupeParallelSuiteGalleryToolCalls(
   return out;
 }
 
+function isGreetingOnly(text: string): boolean {
+  const clean = text.toLowerCase().trim();
+  if (clean.length < 3) return true;
+  const greetings = [
+    "oi", "olá", "ola", "bom dia", "boa tarde", "boa noite", "tudo bem",
+    "como vai", "opa", "oie", "olaa", "oii", "eae", "eai", "tudo bom", "ola tudo bem"
+  ];
+  return greetings.some(g => clean === g || clean.startsWith(g + " ") || clean.endsWith(" " + g));
+}
+
+async function getEmbeddingForRAG(text: string, apiKey: string): Promise<number[]> {
+  const res = await fetch("https://api.openai.com/v1/embeddings", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "text-embedding-ada-002",
+      input: text.slice(0, 8000),
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`OpenAI embeddings (Auto-RAG): ${res.status} ${err}`);
+  }
+  const data = (await res.json()) as { data: { embedding: number[] }[] };
+  return data.data[0].embedding;
+}
+
 export async function chatLocalRoutes(fastify: FastifyInstance) {
   fastify.post(
     "/chat-local",
@@ -1044,7 +1075,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
 
       const { data: agent, error: agentErr } = await supabase
         .from("agents")
-        .select("id, name, provider_id, model, system_prompt, temperature, tenant_id, config")
+        .select("id, name, provider_id, model, system_prompt, temperature, tenant_id, config, communication_rules, dispatcher_prompt, followup_prompt, always_inject_comm_rules, skip_greeting, override_prompts")
         .eq("id", agent_id)
         .single();
 
@@ -1075,22 +1106,63 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       });
       const hasInventoryTool = tools.some((t) => t.tool_type === "inventory_query");
 
-      const firstUserMessage = messages.find((m) => m.role === "user")?.content;
-
-      const systemPrompt = buildSystemPrompt(
-        agent.system_prompt || "", // ignorado quando o tenant tem entrada em TENANT_PROMPTS (prompt vem só do projeto)
-        tenantSlug,
-        hasInventoryTool,
-        { firstUserMessage, messages },
-      );
-
-
       const providerConfig = await getProviderApiKey(agent.provider_id, supabase);
       if (!providerConfig) {
         return reply.status(501).send({
           error: "No LLM provider configured. Set OPENAI_API_KEY or GEMINI_API_KEY, or configure provider with API key.",
         });
       }
+
+      const isGeminiProvider = /generativelanguage|googleapis\.com\/v1beta/i.test(providerConfig.baseUrl);
+
+      // Auto-RAG: Consulta automática na base de conhecimento antes de rodar o prompt do LLM
+      let ragContext = "";
+      const lastUserMsg = [...messages].reverse().find((m) => m.role === "user")?.content || "";
+      const openaiKey = process.env.OPENAI_API_KEY || (!isGeminiProvider ? providerConfig.apiKey : null);
+
+      if (lastUserMsg && openaiKey && !isGreetingOnly(lastUserMsg)) {
+        try {
+          const queryEmbedding = await getEmbeddingForRAG(lastUserMsg, openaiKey);
+          const { data: chunks, error: chunkErr } = await supabase.rpc("rag_search_chunks", {
+            p_agent_id: agent_id,
+            p_query_embedding: queryEmbedding,
+            p_limit: 4,
+          });
+
+          if (!chunkErr && chunks && chunks.length > 0) {
+            const relevantChunks = chunks
+              .map((c: any, i: number) => `[${i + 1}] Documento: ${c.title || "Base de Conhecimento"}\nConteúdo: ${c.content}`)
+              .join("\n\n");
+
+            if (relevantChunks.trim().length > 0) {
+              ragContext = `\n\n[INSTRUÇÃO IMPORTANTE - CONTEXTO DA BASE DE CONHECIMENTO]\nUtilize as informações extraídas dos documentos oficiais abaixo para responder ao cliente. Responda apenas com base neles se a pergunta for sobre regras de negócio contidas nesses textos:\n\n${relevantChunks}`;
+            }
+          }
+        } catch (ragErr) {
+          console.error("[Auto-RAG] Erro ao pesquisar base de conhecimento:", ragErr);
+        }
+      }
+
+      const firstUserMessage = messages.find((m) => m.role === "user")?.content;
+
+      let systemPrompt = buildSystemPrompt(
+        agent.system_prompt || "",
+        tenantSlug,
+        hasInventoryTool,
+        {
+          firstUserMessage,
+          messages,
+          overridePrompts: agent.override_prompts,
+          communicationRules: agent.communication_rules,
+          alwaysInjectCommRules: agent.always_inject_comm_rules,
+          skipGreeting: agent.skip_greeting,
+        },
+      );
+
+      if (ragContext) {
+        systemPrompt += ragContext;
+      }
+
       console.log("[Chat-Local] Provider config:", {
         hasApiKey: !!providerConfig.apiKey,
         apiKeyLength: providerConfig.apiKey?.length,
@@ -1101,7 +1173,6 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       let model = agent.model || "gpt-4o-mini";
       const { openaiTools, nameToTool } = buildOpenAITools(tools, providerConfig.baseUrl);
       const useTools = openaiTools.length > 0;
-      const isGeminiProvider = /generativelanguage|googleapis\.com\/v1beta/i.test(providerConfig.baseUrl);
 
       // Gemini 3 e 2.5 (thinking) exigem thought_signature em function calls - não suportado.
       // Fallback apenas em single-provider (quando Gemini recebe tools). Em dual-provider, Gemini conversacional não usa tools.
@@ -1456,7 +1527,7 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
 
           const dispatcherMessages = toOpenAIMessages(
-            getDispatcherPrompt(tenantSlug) + dispatcherDateContext + entityHint + schedulingHint + inventoryNameFollowUpHint,
+            getDispatcherPrompt(tenantSlug, agent.dispatcher_prompt, agent.override_prompts) + dispatcherDateContext + entityHint + schedulingHint + inventoryNameFollowUpHint,
             messages
           );
 
@@ -2607,6 +2678,174 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
       sendSse({ conversation_id: responseConvId });
       sendSse("[DONE]");
       reply.raw.end();
+    }
+  );
+
+  fastify.post(
+    "/conversations/:conversationId/assign",
+    async (
+      req: FastifyRequest<{
+        Params: { conversationId: string };
+        Body: {
+          agent_id: string;
+          target: string;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const authCtx = await requireAuthenticated(req, reply);
+      if (!authCtx) return;
+
+      const { conversationId } = req.params;
+      const { agent_id, target } = req.body;
+
+      if (!agent_id || !target) {
+        return reply.status(400).send({ error: "agent_id and target are required" });
+      }
+
+      const supabase = createNexusClient();
+
+      const { data: agent, error: agentErr } = await supabase
+        .from("agents")
+        .select("id, name, tenant_id, config")
+        .eq("id", agent_id)
+        .single();
+
+      if (agentErr || !agent) {
+        return reply.status(404).send({ error: "Agent not found" });
+      }
+
+      if (!canAccessTenant(authCtx, agent.tenant_id)) {
+        return reply.status(403).send({ error: "forbidden" });
+      }
+
+      const { data: tenant } = await supabase
+        .from("tenants")
+        .select("db_name")
+        .eq("id", agent.tenant_id)
+        .single();
+
+      const tenantSchema = tenant?.db_name;
+      if (!tenantSchema) {
+        return reply.status(500).send({ error: "Tenant schema not found" });
+      }
+
+      // 1. Obter o chatwoot_conversation_id através da RPC
+      let cwConvId: number | null = null;
+      try {
+        const { data, error: fetchErr } = await supabase.rpc("get_conversation_chatwoot_id", {
+          p_agent_id: agent_id,
+          p_conversation_id: conversationId,
+        });
+
+        if (fetchErr) {
+          if (fetchErr.message?.includes("does not exist") || fetchErr.code === "42883") {
+            return reply.status(400).send({
+              error: "Por favor, execute o arquivo SQL sql/054_assign_conversation_rpcs.sql no SQL Editor do seu Supabase para criar as funções de banco de dados necessárias.",
+            });
+          }
+          throw fetchErr;
+        }
+        cwConvId = data;
+      } catch (e: any) {
+        if (e.message?.includes("does not exist") || e.code === "42883") {
+          return reply.status(400).send({
+            error: "Por favor, execute o arquivo SQL sql/054_assign_conversation_rpcs.sql no SQL Editor do seu Supabase para criar as funções de banco de dados necessárias.",
+          });
+        }
+        return reply.status(500).send({ error: `Database error: ${e.message}` });
+      }
+
+      if (!cwConvId) {
+        return reply.status(404).send({ error: "Conversa não encontrada ou não vinculada ao Chatwoot" });
+      }
+
+      const cfg = (agent.config || {}) as Record<string, unknown>;
+      const cwUrl = cfg.chatwoot_url as string;
+      const cwToken = cfg.chatwoot_api_token as string;
+      const cwAccountId = cfg.chatwoot_account_id;
+
+      if (!cwUrl || !cwToken || !cwAccountId) {
+        return reply.status(400).send({ error: "Chatwoot integration not configured for this agent" });
+      }
+
+      const baseUrl = cwUrl.replace(/\/+$/, "");
+
+      let nextAssigneeId: number | null = null;
+      let nextAssigneeName: string | null = null;
+
+      if (target === "__unassigned__") {
+        nextAssigneeId = null;
+        nextAssigneeName = null;
+      } else if (target === "__ai_agent__") {
+        const agentAssigneeId = cfg.agent_assignee_id != null ? Number(cfg.agent_assignee_id) : null;
+        nextAssigneeId = agentAssigneeId;
+        nextAssigneeName = agent.name;
+      } else if (target.startsWith("assignee:")) {
+        const nameToMatch = target.substring("assignee:".length).trim();
+        const agentsUrl = `${baseUrl}/api/v1/accounts/${cwAccountId}/agents`;
+        try {
+          const resp = await fetch(agentsUrl, {
+            headers: { api_access_token: cwToken },
+          });
+          if (!resp.ok) {
+            throw new Error(`Chatwoot API returned ${resp.status}`);
+          }
+          const agentsList = (await resp.json()) as Array<{ id: number; name: string }>;
+          const matchedAgent = agentsList.find(
+            (a) => a.name.trim().toLowerCase() === nameToMatch.toLowerCase()
+          );
+          if (matchedAgent) {
+            nextAssigneeId = matchedAgent.id;
+            nextAssigneeName = matchedAgent.name;
+          } else {
+            return reply.status(400).send({ error: `Agent with name "${nameToMatch}" not found in Chatwoot` });
+          }
+        } catch (e: any) {
+          return reply.status(500).send({ error: `Failed to fetch agents list from Chatwoot: ${e.message}` });
+        }
+      } else {
+        return reply.status(400).send({ error: "Invalid target value" });
+      }
+
+      const assignUrl = `${baseUrl}/api/v1/accounts/${cwAccountId}/conversations/${cwConvId}/assignments`;
+      const assignBody: Record<string, unknown> = {
+        assignee_id: nextAssigneeId,
+      };
+
+      try {
+        const assignResp = await fetch(assignUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", api_access_token: cwToken },
+          body: JSON.stringify(assignBody),
+        });
+
+        if (!assignResp.ok) {
+          const detail = await assignResp.text();
+          return reply.status(502).send({
+            error: `Failed to assign in Chatwoot: ${assignResp.status} - ${detail.slice(0, 200)}`,
+          });
+        }
+      } catch (e: any) {
+        return reply.status(502).send({ error: `Network error when calling Chatwoot assignments API: ${e.message}` });
+      }
+
+      // 2. Atualizar o assignee name localmente via RPC
+      try {
+        const { error: updateErr } = await supabase.rpc("update_conversation_assignee", {
+          p_agent_id: agent_id,
+          p_conversation_id: conversationId,
+          p_chatwoot_assignee_name: nextAssigneeName,
+        });
+
+        if (updateErr) {
+          throw updateErr;
+        }
+      } catch (e: any) {
+        return reply.status(500).send({ error: `Failed to update local database: ${e.message}` });
+      }
+
+      return reply.send({ success: true, assignee_name: nextAssigneeName });
     }
   );
 }

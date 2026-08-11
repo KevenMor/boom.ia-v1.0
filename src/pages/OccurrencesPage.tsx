@@ -240,7 +240,6 @@ export default function OccurrencesPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-x-3">
-          <h2 className="text-lg font-medium text-foreground">Ocorrências</h2>
           <span className="rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">{total} registo(s)</span>
         </div>
         {canRegister && (

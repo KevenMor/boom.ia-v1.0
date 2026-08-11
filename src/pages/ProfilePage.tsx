@@ -95,7 +95,6 @@ export default function ProfilePage() {
   return (
     <div className="max-w-2xl space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Meu Perfil</h2>
         <p className="text-sm text-muted-foreground">Gerencie suas informações pessoais e segurança</p>
       </div>
 

@@ -159,11 +159,7 @@ export default function LodgingPricingPage() {
         <header className={cn("mb-2", isEmbed && "mb-4")}>
           {!isEmbed ? (
             <>
-              <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">Gestão de reservas</p>
               <div className="mt-2">
-                <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-foreground sm:text-3xl">
-                  Valores e tarifas
-                </h1>
                 <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-muted-foreground">
                   Tabela de preços por <strong className="font-medium text-foreground/90">categoria de hospedagem</strong>,{" "}
                   <strong className="font-medium text-foreground/90">número de pessoas</strong> e{" "}

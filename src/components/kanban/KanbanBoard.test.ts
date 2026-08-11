@@ -17,9 +17,9 @@ function conv(partial: Partial<Conversation> & Pick<Conversation, "id">): Conver
 }
 
 describe("classifyKanbanBucket", () => {
-  it("sem assignee e com mensagens → IA", () => {
+  it("sem assignee e com mensagens → sem atendimento", () => {
     expect(classifyKanbanBucket(conv({ id: "1", chatwoot_assignee_name: null, message_count: 4 }), "Manu")).toBe(
-      "ai",
+      "unassigned",
     );
   });
 
@@ -56,7 +56,7 @@ describe("buildKanbanColumns", () => {
         conv({
           id: "2",
           contact_name: "B",
-          chatwoot_assignee_name: null,
+          chatwoot_assignee_name: "Manu",
           message_count: 5,
           external_user_id: "5511222222222",
         }),

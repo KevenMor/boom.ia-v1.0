@@ -211,21 +211,53 @@ export async function adminRoutes(fastify: FastifyInstance) {
       if (!config) {
         return reply.status(404).send({ error: "Tenant not found in prompt registry" });
       }
-      const fullSystemPrompt = buildSystemPrompt("", slug, true);
-      const dispatcherPrompt = getDispatcherPrompt(slug);
-      const followupPrompt = getFollowupPrompt(slug);
+      const supabase = createNexusClient();
+      const { data: tenantData } = await supabase
+        .from("tenants")
+        .select("id")
+        .eq("slug", slug)
+        .maybeSingle();
+      const tenantId = tenantData?.id;
+      const { data: dbAgent } = tenantId
+        ? await supabase
+            .from("agents")
+            .select("system_prompt, communication_rules, dispatcher_prompt, followup_prompt, always_inject_comm_rules, skip_greeting, override_prompts")
+            .eq("tenant_id", tenantId)
+            .limit(1)
+            .maybeSingle()
+        : { data: null };
+
+      const overridePrompts = dbAgent?.override_prompts === true;
+      const fullSystemPrompt = buildSystemPrompt(
+        dbAgent?.system_prompt || "",
+        slug,
+        true,
+        {
+          overridePrompts,
+          communicationRules: dbAgent?.communication_rules,
+          alwaysInjectCommRules: dbAgent?.always_inject_comm_rules,
+          skipGreeting: dbAgent?.skip_greeting,
+        }
+      );
+      const dispatcherPrompt = getDispatcherPrompt(slug, dbAgent?.dispatcher_prompt, overridePrompts);
+      const followupPrompt = getFollowupPrompt(slug, dbAgent?.followup_prompt, overridePrompts);
 
       return reply.send({
         slug: config.slug,
         version: config.version,
         description: config.description,
         active: config.active !== false,
-        systemPrompt: config.systemPrompt || "(uses agent's database prompt)",
-        communicationRules: config.communicationRules || "(none)",
+        systemPrompt: overridePrompts ? (dbAgent?.system_prompt || "") : (config.systemPrompt || "(uses agent's database prompt)"),
+        communicationRules: overridePrompts ? (dbAgent?.communication_rules || "") : (config.communicationRules || "(none)"),
         dispatcherPrompt,
         followupPrompt: followupPrompt || "(usa prompt padrão do sistema)",
         fullComposedPrompt: fullSystemPrompt,
         fullPromptLength: fullSystemPrompt.length,
+        overridePrompts,
+        codeSystemPrompt: config.systemPrompt || "",
+        codeCommunicationRules: config.communicationRules || "",
+        codeDispatcherPrompt: config.dispatcherPrompt || "",
+        codeFollowupPrompt: config.followupPrompt || "",
       });
     }
 

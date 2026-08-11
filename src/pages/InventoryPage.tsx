@@ -86,7 +86,6 @@ export default function InventoryPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-x-3">
-          <h2 className="text-lg font-medium text-foreground">Inventário</h2>
           <span className="rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">
             {total} veículo(s)
           </span>

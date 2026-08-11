@@ -471,8 +471,28 @@ async function ensureStorageBuckets(): Promise<void> {
   try {
     const { createNexusClient } = await import("./services/supabase.js");
     const sb = createNexusClient();
-    const BUCKETS: Array<{ id: string; public: boolean; fileSizeLimit: number }> = [
-      { id: "suite-galleries", public: true, fileSizeLimit: 209_715_200 }, // 200 MB
+    const BUCKETS: Array<{ id: string; public: boolean; fileSizeLimit: number; allowedMimeTypes: string[] }> = [
+      {
+        id: "suite-galleries",
+        public: true,
+        fileSizeLimit: 209_715_200, // 200 MB
+        allowedMimeTypes: SUITE_GALLERY_ALLOWED_MIME_TYPES,
+      },
+      {
+        id: "agent-documents",
+        public: false,
+        fileSizeLimit: 52_428_800, // 50 MB
+        allowedMimeTypes: [
+          "application/pdf",
+          "text/plain",
+          "text/markdown",
+          "text/csv",
+          "application/csv",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "application/vnd.ms-excel"
+        ],
+      },
     ];
     for (const b of BUCKETS) {
       const { data: existing, error: getErr } = await sb.storage.getBucket(b.id);
@@ -482,7 +502,7 @@ async function ensureStorageBuckets(): Promise<void> {
         const { error: updateErr } = await sb.storage.updateBucket(b.id, {
           public: b.public,
           fileSizeLimit: b.fileSizeLimit,
-          allowedMimeTypes: SUITE_GALLERY_ALLOWED_MIME_TYPES,
+          allowedMimeTypes: b.allowedMimeTypes,
         });
         if (updateErr) {
           console.warn(`[Storage] Não foi possível actualizar allowed_mime_types do bucket '${b.id}':`, updateErr.message);
@@ -498,12 +518,12 @@ async function ensureStorageBuckets(): Promise<void> {
       const { error: createErr } = await sb.storage.createBucket(b.id, {
         public: b.public,
         fileSizeLimit: b.fileSizeLimit,
-        allowedMimeTypes: SUITE_GALLERY_ALLOWED_MIME_TYPES,
+        allowedMimeTypes: b.allowedMimeTypes,
       });
       if (createErr && !createErr.message?.toLowerCase().includes("already exists") && !createErr.message?.toLowerCase().includes("duplicate")) {
         console.error(`[Storage] Falha ao criar bucket '${b.id}':`, createErr.message);
       } else {
-        console.log(`[Storage] Bucket '${b.id}' criado (público, limite ${b.fileSizeLimit / 1024 / 1024} MB).`);
+        console.log(`[Storage] Bucket '${b.id}' criado (limite ${b.fileSizeLimit / 1024 / 1024} MB).`);
       }
     }
   } catch (err) {

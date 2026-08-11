@@ -1,20 +1,42 @@
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { KanbanCard, type KanbanCardData } from "./KanbanCard";
 import { Bot, Inbox, UserRound } from "lucide-react";
 
 interface Props {
+  columnKey: string;
   title: string;
   subtitle?: string;
   cards: KanbanCardData[];
   variant: "unassigned" | "ai" | "assigned";
   onOpen: (card: KanbanCardData) => void;
+  onDropCard?: (cardId: string, targetColKey: string) => void;
 }
 
-export function KanbanColumn({ title, subtitle, cards, variant, onOpen }: Props) {
+export function KanbanColumn({ columnKey, title, subtitle, cards, variant, onOpen, onDropCard }: Props) {
+  const [isOver, setIsOver] = useState(false);
   const Icon = variant === "unassigned" ? Inbox : variant === "ai" ? Bot : UserRound;
 
   return (
-    <div className="flex h-full w-[300px] shrink-0 flex-col rounded-2xl border border-border/80 bg-muted/25 dark:bg-muted/15">
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        setIsOver(true);
+      }}
+      onDragLeave={() => setIsOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setIsOver(false);
+        const cardId = e.dataTransfer.getData("text/plain");
+        if (cardId && onDropCard) {
+          onDropCard(cardId, columnKey);
+        }
+      }}
+      className={cn(
+        "flex h-full w-[300px] shrink-0 flex-col rounded-2xl border border-border/80 bg-muted/25 dark:bg-muted/15 transition-all duration-200",
+        isOver && "bg-primary/5 border-primary/30 ring-1 ring-primary/20 scale-[1.01]",
+      )}
+    >
       <header className="flex items-start gap-2.5 border-b border-border/70 px-3.5 py-3">
         <span
           className={cn(

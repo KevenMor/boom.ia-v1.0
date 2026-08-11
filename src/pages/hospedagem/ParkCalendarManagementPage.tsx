@@ -293,19 +293,17 @@ export default function ParkCalendarManagementPage() {
         <header className={cn("mb-2", isEmbed && "mb-4")}>
           {!isEmbed ? (
             <>
-              <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">Gestão de reservas</p>
-              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900 dark:text-foreground sm:text-3xl">
-                Calendário do parque
-              </h1>
-              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-muted-foreground">
-                Marque se o parque está aberto, fechado ou em manutenção, a etiqueta comercial do dia e, opcionalmente, o texto de valor
-                de ingresso por data para o cliente e para o agente de IA quando integrado ao calendário.
-                {scopedTenantDisplayName ? (
-                  <span className="block pt-2 text-[13px] text-muted-foreground">
-                    Tenant: <span className="font-medium text-foreground/80">{scopedTenantDisplayName}</span>
-                  </span>
-                ) : null}
-              </p>
+              <div className="mt-2">
+                <p className="max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-muted-foreground">
+                  Marque se o parque está aberto, fechado ou em manutenção, a etiqueta comercial do dia e, opcionalmente, o texto de valor
+                  de ingresso por data para o cliente e para o agente de IA quando integrado ao calendário.
+                  {scopedTenantDisplayName ? (
+                    <span className="block pt-2 text-[13px] text-muted-foreground">
+                      Tenant: <span className="font-medium text-foreground/80">{scopedTenantDisplayName}</span>
+                    </span>
+                  ) : null}
+                </p>
+              </div>
               <HospedagemSubNav />
             </>
           ) : (

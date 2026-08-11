@@ -1801,7 +1801,7 @@ export default function Conversations() {
                   tenantLabel={selectedTenantLabel}
                   phoneDisplay={getPhoneDisplay(selectedConv) ?? "—"}
                   channelLabel={getChannelLabel(String(selectedConv.channel ?? ""))}
-                  assigneeDisplay={selectedConv.chatwoot_assignee_name ?? selectedAgent?.name ?? "—"}
+                  assigneeDisplay={selectedConv.chatwoot_assignee_name ?? "Nenhum"}
                   labels={currentLabels}
                   onRequestAddLabel={() => setLabelPopoverOpen(true)}
                   profileCta={conversationProfileCta}
@@ -1822,7 +1822,7 @@ export default function Conversations() {
                     tenantLabel={selectedTenantLabel}
                     phoneDisplay={getPhoneDisplay(selectedConv) ?? "—"}
                     channelLabel={getChannelLabel(String(selectedConv.channel ?? ""))}
-                    assigneeDisplay={selectedConv.chatwoot_assignee_name ?? selectedAgent?.name ?? "—"}
+                    assigneeDisplay={selectedConv.chatwoot_assignee_name ?? "Nenhum"}
                     labels={currentLabels}
                     onRequestAddLabel={() => {
                       setLabelPopoverOpen(true);

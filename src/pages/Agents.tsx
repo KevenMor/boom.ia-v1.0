@@ -69,7 +69,6 @@ export default function Agents() {
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-x-3">
-          <h2 className="text-lg font-medium tracking-tight text-foreground">Agentes</h2>
           <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
             {totalAgents} configurados
           </span>

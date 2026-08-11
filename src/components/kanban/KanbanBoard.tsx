@@ -47,10 +47,9 @@ function namesMatch(a: string, b: string): boolean {
 }
 
 /**
- * Sem assignee humano → atendimento com a agente IA (mesma convenção do Chat ao Vivo:
- * `chatwoot_assignee_name ?? agent.name`).
- * Assignee cujo nome coincide com o da agente Boom também conta como IA.
- * Sem mensagens e sem assignee → ainda na fila ("Sem atendimento").
+ * Sem assignee no Chatwoot -> Sem atendimento.
+ * Assignee cujo nome coincide com o da agente Boom conta como IA.
+ * Caso contrário, conta como atendimento humano.
  */
 export function classifyKanbanBucket(
   conv: Conversation,
@@ -58,7 +57,7 @@ export function classifyKanbanBucket(
 ): "unassigned" | "ai" | "human" {
   const assignee = conv.chatwoot_assignee_name?.trim() || null;
   if (!assignee) {
-    return (conv.message_count ?? 0) > 0 ? "ai" : "unassigned";
+    return "unassigned";
   }
   if (agentName && namesMatch(assignee, agentName)) return "ai";
   return "human";
@@ -181,6 +180,7 @@ interface BoardProps {
   searchTerm?: string;
   onlyOpen?: boolean;
   onOpen: (card: KanbanCardData) => void;
+  onDropCard?: (cardId: string, targetColKey: string) => void;
 }
 
 export function KanbanBoard({
@@ -189,6 +189,7 @@ export function KanbanBoard({
   searchTerm = "",
   onlyOpen = false,
   onOpen,
+  onDropCard,
 }: BoardProps) {
   const columns = useMemo(() => {
     let rows = conversations;
@@ -243,11 +244,13 @@ export function KanbanBoard({
         {columns.map((col) => (
           <KanbanColumn
             key={col.key}
+            columnKey={col.key}
             title={col.title}
             subtitle={col.subtitle}
             cards={col.cards}
             variant={col.variant}
             onOpen={onOpen}
+            onDropCard={onDropCard}
           />
         ))}
       </div>

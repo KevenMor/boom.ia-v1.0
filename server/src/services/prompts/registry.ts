@@ -452,6 +452,10 @@ export interface BuildSystemPromptOptions {
   firstUserMessage?: string;
   /** Histórico completo — qualificação dinâmica Sunset (intenção + período já ditos). */
   messages?: Array<{ role: string; content?: string }>;
+  overridePrompts?: boolean;
+  communicationRules?: string | null;
+  alwaysInjectCommRules?: boolean;
+  skipGreeting?: boolean;
 }
 
 function isSunsetThermasPromptConfig(config: TenantPromptConfig | undefined): boolean {
@@ -465,17 +469,37 @@ export function buildSystemPrompt(
   options?: BuildSystemPromptOptions,
 ): string {
   const config = resolveTenantPromptConfig(tenantSlug);
-  const base = config
-    ? (config.systemPrompt?.trim() || "You are a helpful AI assistant.")
-    : (agentSystemPrompt.trim() || "You are a helpful AI assistant.");
-  const shouldInjectComm = (hasInventoryTool && config?.communicationRules) || config?.alwaysInjectCommRules;
-  const commRules = (shouldInjectComm && config?.communicationRules) ? "\n\n" + config.communicationRules : "";
-  const greeting = config?.skipGreeting ? "" : "\n\n" + BASE_GREETING;
+  
+  const isOverridden = options?.overridePrompts === true;
+  
+  const base = isOverridden
+    ? (agentSystemPrompt?.trim() || "You are a helpful AI assistant.")
+    : (config
+      ? (config.systemPrompt?.trim() || "You are a helpful AI assistant.")
+      : (agentSystemPrompt?.trim() || "You are a helpful AI assistant."));
+
+  const commRulesText = isOverridden
+    ? (options?.communicationRules?.trim() || "")
+    : (config?.communicationRules?.trim() || "");
+
+  const alwaysInject = isOverridden
+    ? (options?.alwaysInjectCommRules ?? false)
+    : (config?.alwaysInjectCommRules ?? false);
+
+  const skipGreetingVal = isOverridden
+    ? (options?.skipGreeting ?? false)
+    : (config?.skipGreeting ?? false);
+
+  const shouldInjectComm = (hasInventoryTool && commRulesText.length > 0) || alwaysInject;
+  const commRules = shouldInjectComm ? "\n\n" + commRulesText : "";
+  const greeting = skipGreetingVal ? "" : "\n\n" + BASE_GREETING;
 
   const now = new Date();
   const dateContext = buildBrasiliaTemporalContext(now);
 
-  const sunsetContext = isSunsetThermasPromptConfig(config)
+  // Regra especial Sunset Thermas: se não estiver sobredescrito, ou se for sobredescrito mas mantiver o mesmo prompt base
+  const isSunset = !isOverridden && isSunsetThermasPromptConfig(config);
+  const sunsetContext = isSunset
     ? appendSunsetConversationContext(options?.firstUserMessage, options?.messages, now)
     : "";
 
@@ -485,16 +509,30 @@ export function buildSystemPrompt(
 /**
  * Retorna o dispatcher prompt para um tenant.
  */
-export function getDispatcherPrompt(tenantSlug: string | null): string {
+export function getDispatcherPrompt(
+  tenantSlug: string | null,
+  overrideDispatcherPrompt?: string | null,
+  overridePrompts?: boolean
+): string {
+  if (overridePrompts === true && overrideDispatcherPrompt) {
+    return overrideDispatcherPrompt;
+  }
   const config = resolveTenantPromptConfig(tenantSlug);
   return config?.dispatcherPrompt || DEFAULT_DISPATCHER_PROMPT;
 }
 
 /**
  * Retorna o follow-up prompt para um tenant.
- * Se n?�o houver configura?�?�o espec?�fica, retorna null (usa o default do process-followups).
+ * Se não houver configuração específica, retorna null (usa o default do process-followups).
  */
-export function getFollowupPrompt(tenantSlug: string | null): string | null {
+export function getFollowupPrompt(
+  tenantSlug: string | null,
+  overrideFollowupPrompt?: string | null,
+  overridePrompts?: boolean
+): string | null {
+  if (overridePrompts === true && overrideFollowupPrompt) {
+    return overrideFollowupPrompt;
+  }
   const config = resolveTenantPromptConfig(tenantSlug);
   return config?.followupPrompt || null;
 }
