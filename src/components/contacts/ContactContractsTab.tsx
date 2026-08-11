@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, ScrollText, Pencil, Trash2, ExternalLink, Eye, Copy, Check, Printer } from "lucide-react";
+import { Plus, ScrollText, Pencil, Trash2, ExternalLink, Eye, Copy, Check, Printer, FileSignature } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -466,6 +466,25 @@ const extractPlaceholders = (text: string): string[] => {
   return Array.from(matches);
 };
 
+const getFieldIcon = (key: string) => {
+  switch (key) {
+    case "name": return <User className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />;
+    case "email": return <Mail className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />;
+    case "phone": return <Phone className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />;
+    case "cpf_cnpj": return <CreditCard className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />;
+    case "address": return <MapPin className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />;
+    case "city": return <Building2 className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />;
+    case "state": return <Globe className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />;
+    case "zip_code": return <Navigation className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />;
+    case "value": return <DollarSign className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />;
+    case "payment_terms": return <CreditCard className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />;
+    case "contract_number": return <Hash className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />;
+    case "start_date":
+    case "end_date": return <Calendar className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />;
+    default: return <FileText className="h-3.5 w-3.5 text-muted-foreground" />;
+  }
+};
+
 function GenerateContractDialog({
   contactId,
   open,
@@ -681,91 +700,157 @@ function GenerateContractDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Gerar Contrato de Modelo</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="space-y-1.5">
-            <Label>Selecione o Modelo de Contrato *</Label>
-            <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
-              <SelectTrigger className="h-10">
-                <SelectValue placeholder="Selecione um modelo..." />
-              </SelectTrigger>
-              <SelectContent>
-                {templatesList.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>{t.title}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {template && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Form de preenchimento de variáveis do contrato */}
-              {requiredContractFields.length > 0 && (
-                <div className="space-y-3 border p-4 rounded-lg bg-slate-50/50 dark:bg-slate-900/50">
-                  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Dados do Contrato</h3>
-                  <div className="space-y-3">
-                    {requiredContractFields.map((f) => (
-                      <div key={f.key} className="space-y-1.5">
-                        <Label className="text-xs">{f.label} *</Label>
-                        <Input
-                          type={f.type}
-                          value={contractValues[f.key as keyof typeof contractValues]}
-                          onChange={(e) => setContractValues(prev => ({ ...prev, [f.key]: e.target.value }))}
-                          required
-                          className="h-9 text-xs"
-                          placeholder={f.key === "value" ? "Ex: 1500" : ""}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Form de preenchimento de variáveis faltantes do contato */}
-              {requiredContactFields.length > 0 && (
-                <div className="space-y-3 border p-4 rounded-lg bg-slate-50/50 dark:bg-slate-900/50">
-                  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Cadastro do Cliente</h3>
-                  <div className="space-y-3">
-                    {requiredContactFields.map((f) => (
-                      <div key={f.key} className="space-y-1.5">
-                        <Label className="text-xs">{f.label} *</Label>
-                        <Input
-                          value={contactValues[f.key as keyof typeof contactValues]}
-                          onChange={(e) => setContactValues(prev => ({ ...prev, [f.key]: e.target.value }))}
-                          required
-                          className="h-9 text-xs border-amber-200 focus-visible:ring-amber-300 dark:border-amber-900/50"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {previewText && (
-            <div className="space-y-1.5 pt-2 border-t">
-              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pré-visualização do Contrato Populado</Label>
-              <div className="border border-border/80 bg-white text-black p-6 sm:p-10 rounded-md max-h-[300px] overflow-y-auto select-none shadow-inner">
-                <div
-                  className="text-[11px] leading-relaxed text-gray-800 text-justify font-serif"
-                  dangerouslySetInnerHTML={{ __html: previewText }}
-                />
+      <DialogContent className="max-w-5xl md:max-w-6xl w-[95vw] max-h-[90vh] h-[85vh] p-0 overflow-hidden flex flex-col rounded-xl border border-border/40 shadow-2xl">
+        <form onSubmit={handleSubmit} className="flex flex-col h-full overflow-hidden">
+          
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-border/50 bg-background shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400">
+                <FileSignature className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-sm font-semibold tracking-tight">Gerador de Contrato Digital</DialogTitle>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Preencha as variáveis e gere o documento final instantaneamente</p>
               </div>
             </div>
-          )}
+          </div>
 
-          <DialogFooter className="pt-2 border-t border-border/40">
-            <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+          {/* Main Content Split */}
+          <div className="flex-1 overflow-hidden grid grid-cols-1 md:grid-cols-12 bg-muted/10">
+            
+            {/* Left Panel: Form Settings */}
+            <div className="md:col-span-5 border-r border-border/40 overflow-y-auto p-6 space-y-6 bg-background dark:bg-slate-900/10">
+              <div className="space-y-2">
+                <Label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Modelo Base *</Label>
+                <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                  <SelectTrigger className="h-10 text-xs border-border/60 shadow-sm focus:ring-indigo-500/20">
+                    <SelectValue placeholder="Selecione um modelo de contrato..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {templatesList.map((t) => (
+                      <SelectItem key={t.id} value={t.id} className="text-xs">{t.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {template ? (
+                <div className="space-y-6">
+                  {/* Dados do Contrato */}
+                  {requiredContractFields.length > 0 && (
+                    <div className="space-y-4 pt-4 border-t border-border/50">
+                      <div className="flex items-center gap-2">
+                        <DollarSign className="h-4 w-4 text-indigo-500" />
+                        <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Dados do Contrato</h3>
+                      </div>
+                      <div className="space-y-3">
+                        {requiredContractFields.map((f) => (
+                          <div key={f.key} className="space-y-1.5">
+                            <Label className="text-[11px] font-medium text-muted-foreground">{f.label} *</Label>
+                            <div className="relative rounded-md shadow-sm">
+                              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                {getFieldIcon(f.key)}
+                              </div>
+                              <Input
+                                type={f.type}
+                                value={contractValues[f.key as keyof typeof contractValues]}
+                                onChange={(e) => setContractValues(prev => ({ ...prev, [f.key]: e.target.value }))}
+                                required
+                                className="h-9 pl-9 text-xs border-border/60 shadow-sm focus-visible:ring-indigo-500/20"
+                                placeholder={f.key === "value" ? "Ex: 1500" : ""}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Cadastro do Cliente */}
+                  {requiredContactFields.length > 0 && (
+                    <div className="space-y-4 pt-4 border-t border-border/50">
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-indigo-500" />
+                        <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Cadastro do Cliente</h3>
+                      </div>
+                      <div className="space-y-3">
+                        {requiredContactFields.map((f) => (
+                          <div key={f.key} className="space-y-1.5">
+                            <Label className="text-[11px] font-medium text-muted-foreground">{f.label} *</Label>
+                            <div className="relative rounded-md shadow-sm">
+                              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                {getFieldIcon(f.key)}
+                              </div>
+                              <Input
+                                value={contactValues[f.key as keyof typeof contactValues]}
+                                onChange={(e) => setContactValues(prev => ({ ...prev, [f.key]: e.target.value }))}
+                                required
+                                className="h-9 pl-9 text-xs border-amber-200 focus-visible:ring-amber-300 dark:border-amber-900/40 bg-amber-50/10"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground bg-muted/20 border border-dashed rounded-lg p-6">
+                  <ScrollText className="h-8 w-8 text-muted-foreground/40 mb-2" />
+                  <p className="text-[11px] font-medium">Selecione um modelo de contrato para preencher as variáveis do documento.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Right Panel: A4 Live Document Preview */}
+            <div className="md:col-span-7 bg-slate-100 dark:bg-slate-950 p-6 flex flex-col overflow-hidden">
+              <div className="flex items-center justify-between mb-3 border-b border-border/40 pb-2 shrink-0">
+                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Visualização do Documento
+                </span>
+                <span className="text-[9px] text-muted-foreground uppercase bg-white dark:bg-slate-900 px-2 py-0.5 rounded shadow-sm border border-border/40">Modo A4 Timbrado</span>
+              </div>
+              <div className="flex-1 bg-white text-black p-8 sm:p-12 rounded-lg shadow-lg border border-border/30 overflow-y-auto select-text font-serif leading-relaxed text-justify max-w-[800px] mx-auto w-full">
+                {previewText ? (
+                  <div
+                    className="text-[11px] text-gray-800"
+                    dangerouslySetInnerHTML={{ __html: previewText }}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-center py-20 text-muted-foreground font-sans">
+                    <FileText className="h-10 w-10 text-muted-foreground/30 mb-2 animate-bounce" />
+                    <p className="text-xs">Aguardando seleção do modelo base...</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 py-3.5 border-t border-border/50 bg-background flex items-center justify-end gap-2 shrink-0">
+            <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)} className="h-9 px-4 text-xs font-medium">
               Cancelar
             </Button>
-            <Button type="submit" size="sm" disabled={!selectedTemplateId || generateContract.isPending || updateContact.isPending}>
-              {generateContract.isPending || updateContact.isPending ? "Processando..." : "Gerar e Salvar Contrato"}
+            <Button 
+              type="submit" 
+              size="sm" 
+              disabled={!selectedTemplateId || generateContract.isPending || updateContact.isPending}
+              className="h-9 px-4 text-xs font-medium bg-indigo-600 hover:bg-indigo-700 text-white dark:bg-indigo-600 dark:hover:bg-indigo-700"
+            >
+              {generateContract.isPending || updateContact.isPending ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  Processando...
+                </>
+              ) : (
+                "Gerar e Salvar Contrato"
+              )}
             </Button>
-          </DialogFooter>
+          </div>
+
         </form>
       </DialogContent>
     </Dialog>
