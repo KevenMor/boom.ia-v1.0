@@ -1,11 +1,10 @@
 import { useState } from "react";
-import { Shield, Clock, Globe, Plug, Plus, Trash2, Copy, FileJson, KeyRound, CheckCircle2, AlertCircle, Loader2, Lock, Check } from "lucide-react";
+import { Plug, Plus, Trash2, Copy, FileJson, KeyRound, CheckCircle2, AlertCircle, Loader2, Lock, Check } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
   DialogContent,
@@ -27,38 +26,18 @@ import {
 import { toast } from "sonner";
 import { useMcpKeys, useCreateMcpKey, useRevokeMcpKey, type McpKey } from "@/hooks/useMcpKeys";
 
-const STORAGE_KEY = "boomia_platform_settings";
-
-interface PlatformSettings {
-  platform_name: string;
-  max_agents: number;
-  max_msgs_month: number;
-  retention_months: number;
-}
-
-const defaults: PlatformSettings = {
-  platform_name: "Boom IA",
-  max_agents: 5,
-  max_msgs_month: 50000,
-  retention_months: 12,
-};
-
-function loadSettings(): PlatformSettings {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return { ...defaults, ...JSON.parse(raw) };
-  } catch {}
-  return defaults;
-}
-
 function formatDate(iso: string | null): string {
   if (!iso) return "Nunca usado";
-  return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(iso));
 }
 
-// ─── MCP Keys Section ────────────────────────────────────────────────────────
-
-function McpKeysSection() {
+export default function SettingsPage() {
   const { data: keys = [], isLoading } = useMcpKeys();
   const createKey = useCreateMcpKey();
   const revokeKey = useRevokeMcpKey();
@@ -126,14 +105,14 @@ function McpKeysSection() {
   }
 
   return (
-    <>
+    <div className="w-full max-w-[900px] mx-auto pb-12 animate-in fade-in-50 duration-300">
       <Card className="border border-border/80 bg-card/60 backdrop-blur-md shadow-lg rounded-2xl overflow-hidden">
         {/* Card Header Premium */}
         <div className="border-b border-border/80 px-6 py-5 flex items-center justify-between bg-muted/20">
           <div className="space-y-1">
             <div className="flex items-center gap-2.5">
               <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
-                <Plug className="h-4 w-4" />
+                <Plug className="h-4.5 w-4.5" />
               </div>
               <span className="text-base font-semibold tracking-tight">Conexão MCP</span>
               <Badge variant="secondary" className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-md font-semibold tracking-wider bg-primary/5 text-primary border border-primary/10">
@@ -161,7 +140,7 @@ function McpKeysSection() {
         <div className="px-6 py-4 bg-muted/10 border-b border-border/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
           <div className="space-y-1">
             <span className="font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">URL de Endpoint do Servidor</span>
-            <div className="font-mono bg-background border border-border/60 text-foreground/80 px-3 py-1.5 rounded-lg text-[11px] select-all truncate max-w-md">
+            <div className="font-mono bg-background border border-border/60 text-foreground/80 px-3 py-1.5 rounded-lg text-[11px] select-all truncate max-w-[500px]">
               {MCP_SERVER_URL}
             </div>
           </div>
@@ -251,7 +230,7 @@ function McpKeysSection() {
 
           {keys.length >= 10 && (
             <div className="rounded-lg bg-amber-500/5 border border-amber-500/20 p-3 flex items-start gap-2.5">
-              <AlertCircle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+              <AlertCircle className="h-4.5 w-4.5 text-amber-500 shrink-0 mt-0.5" />
               <div className="space-y-0.5">
                 <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">Limite de Chaves Atingido</p>
                 <p className="text-[11px] text-muted-foreground">Você atingiu o limite de 10 chaves. Revogue um acesso antigo para poder criar novas credenciais.</p>
@@ -318,14 +297,14 @@ function McpKeysSection() {
           <div className="space-y-4 py-3">
             <div className="space-y-2">
               <Label className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Token de acesso</Label>
-              <code className="block rounded-xl bg-muted px-4 py-3 text-[12px] font-mono break-all leading-relaxed border border-border/80 relative select-all">
+              <code className="block rounded-xl bg-muted px-4 py-3 text-[12px] font-mono break-all leading-relaxed border border-border/80 relative select-all text-foreground/90">
                 {revealToken}
               </code>
             </div>
 
             <div className="space-y-2">
               <Label className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">JSON de configuração MCP</Label>
-              <code className="block rounded-xl bg-muted px-4 py-3 text-[11px] font-mono whitespace-pre border border-border/80 overflow-x-auto leading-relaxed max-h-[160px]">
+              <code className="block rounded-xl bg-muted px-4 py-3 text-[11px] font-mono whitespace-pre border border-border/80 overflow-x-auto leading-relaxed max-h-[160px] text-foreground/80">
                 {revealToken ? buildJsonConfig(revealToken) : ""}
               </code>
             </div>
@@ -397,7 +376,7 @@ function McpKeysSection() {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
-            <code className="block rounded-xl bg-muted px-4 py-3 text-[11px] font-mono whitespace-pre border border-border/80 overflow-x-auto leading-relaxed max-h-[200px]">
+            <code className="block rounded-xl bg-muted px-4 py-3 text-[11px] font-mono whitespace-pre border border-border/80 overflow-x-auto leading-relaxed max-h-[200px] text-foreground/80">
               {configTarget ? JSON.stringify({
                 mcpServers: {
                   "boom-ia": {
@@ -438,135 +417,6 @@ function McpKeysSection() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
-  );
-}
-
-// ─── Main Page ───────────────────────────────────────────────────────────────
-
-export default function SettingsPage() {
-  const [settings, setSettings] = useState<PlatformSettings>(loadSettings);
-
-  const handleSave = () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-    toast.success("Configurações da plataforma salvas!");
-  };
-
-  const update = (key: keyof PlatformSettings, value: string | number) => {
-    setSettings((prev) => ({ ...prev, [key]: value }));
-  };
-
-  return (
-    <div className="w-full max-w-[1400px] mx-auto space-y-8 pb-12 animate-in fade-in-50 duration-300">
-      {/* Premium Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/80 pb-6">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            Configurações Globais
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Gerencie os parâmetros operacionais da plataforma Boom IA e conexões de desenvolvimento.
-          </p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Side: Platform Configuration Forms */}
-        <div className="lg:col-span-5 space-y-6">
-          <div className="flex items-center gap-1.5 mb-1">
-            <span className="text-xs uppercase font-bold tracking-wider text-muted-foreground/80">Painel do Sistema</span>
-          </div>
-
-          <Card className="border border-border/80 bg-card/60 backdrop-blur-md shadow-lg rounded-2xl overflow-hidden p-6 space-y-6">
-            
-            {/* Platform Geral Section */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-sm font-semibold tracking-tight">
-                <div className="p-1 rounded-md bg-muted text-muted-foreground">
-                  <Globe className="h-4 w-4" />
-                </div>
-                Identidade Geral
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Nome da Plataforma</Label>
-                <Input
-                  value={settings.platform_name}
-                  onChange={(e) => update("platform_name", e.target.value)}
-                  className="h-10 bg-background/50 border-border/80 focus:border-primary focus:ring-1 focus:ring-primary rounded-xl"
-                />
-              </div>
-            </div>
-
-            <Separator className="bg-border/60" />
-
-            {/* Quotas Section */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-sm font-semibold tracking-tight">
-                <div className="p-1 rounded-md bg-muted text-muted-foreground">
-                  <Shield className="h-4 w-4" />
-                </div>
-                Quotas de Novos Tenants
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Lim. Agentes</Label>
-                  <Input
-                    type="number"
-                    value={settings.max_agents}
-                    onChange={(e) => update("max_agents", Number(e.target.value))}
-                    className="h-10 bg-background/50 border-border/80 focus:border-primary focus:ring-1 focus:ring-primary rounded-xl"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Msgs/Mês</Label>
-                  <Input
-                    type="number"
-                    value={settings.max_msgs_month}
-                    onChange={(e) => update("max_msgs_month", Number(e.target.value))}
-                    className="h-10 bg-background/50 border-border/80 focus:border-primary focus:ring-1 focus:ring-primary rounded-xl"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <Separator className="bg-border/60" />
-
-            {/* Data Retention (LGPD) */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-sm font-semibold tracking-tight">
-                <div className="p-1 rounded-md bg-muted text-muted-foreground">
-                  <Clock className="h-4 w-4" />
-                </div>
-                LGPD & Retenção
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Retenção de Mensagens (Meses)</Label>
-                <Input
-                  type="number"
-                  value={settings.retention_months}
-                  onChange={(e) => update("retention_months", Number(e.target.value))}
-                  className="h-10 bg-background/50 border-border/80 focus:border-primary focus:ring-1 focus:ring-primary rounded-xl"
-                />
-              </div>
-            </div>
-            
-            <Button 
-              onClick={handleSave} 
-              className="w-full h-10 rounded-xl font-medium tracking-tight shadow-md hover:shadow-lg transition-all active:scale-98"
-            >
-              Salvar Alterações
-            </Button>
-          </Card>
-        </div>
-
-        {/* Right Side: MCP Keys */}
-        <div className="lg:col-span-7 space-y-6">
-          <div className="flex items-center gap-1.5 mb-1">
-            <span className="text-xs uppercase font-bold tracking-wider text-muted-foreground/80">Acesso a Desenvolvedores & API</span>
-          </div>
-          <McpKeysSection />
-        </div>
-      </div>
     </div>
   );
 }
