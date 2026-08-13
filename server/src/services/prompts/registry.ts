@@ -329,7 +329,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: AI_DISPATCHER,
     followupPrompt: AI_FOLLOWUP,
     alwaysInjectCommRules: true,
-    version: "v8.15",
+    version: "v8.16",
     description: "Bia — SDR Autoescola Ideal (Sorocaba/SP)",
   },
   "autoescola-ideal": {
@@ -338,7 +338,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     dispatcherPrompt: AI_DISPATCHER,
     followupPrompt: AI_FOLLOWUP,
     alwaysInjectCommRules: true,
-    version: "v8.15",
+    version: "v8.16",
     description: "Bia — SDR Autoescola Ideal (Sorocaba/SP)",
   },
   "dr-iuri": {

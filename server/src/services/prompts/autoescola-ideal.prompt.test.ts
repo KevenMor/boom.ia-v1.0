@@ -22,7 +22,12 @@ describe("Autoescola Ideal — SYSTEM_PROMPT (contratos de negócio)", () => {
   });
 
   it("versão do prompt atualizada (rastreio de deploy)", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v8\.15/);
+    expect(SYSTEM_PROMPT).toMatch(/v8\.16/);
+  });
+
+  it("Aparecidinha usa Rua do Terço, 166 (não Joaquim Machado)", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Rua do Ter[cç]o,\s*166/i);
+    expect(SYSTEM_PROMPT).not.toMatch(/Joaquim Machado/i);
   });
 
   it("proíbe usar preço de quantidade errada na tabela (ex.: 15 aulas ≠ pacote de 12)", () => {

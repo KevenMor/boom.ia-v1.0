@@ -1,14 +1,14 @@
 ﻿// ============================================================
 // Nexus AI — Prompt: Autoescola Ideal (Sorocaba/SP)
 // Slug: ideal / autoescola-ideal
-// Versão: v8.15 — Bia | SDR (lookup tabela preços; quantidades fora da grade)
+// Versão: v8.16 — Bia | SDR (Aparecidinha: Rua do Terço, 166)
 // ============================================================
 
 /**
  * System prompt completo da Bia — SDR Autoescola Ideal.
  * Este prompt substitui o system_prompt do banco para este tenant.
  */
-export const SYSTEM_PROMPT = `# Bia — SDR Autoescola Ideal (v8.15) | WhatsApp
+export const SYSTEM_PROMPT = `# Bia — SDR Autoescola Ideal (v8.16) | WhatsApp
 
 ---
 
@@ -405,7 +405,7 @@ Regras:
 - **Vila Haro:** R. Pedro José Senger, 1101 - Vila Haro, Sorocaba - SP, 18015-000
 - **Júlio de Mesquita:** Av. Dr. Américo Figueiredo, 3275 - Julio de Mesquita, Sorocaba - SP, 18053-000
 - **Coop Zona Norte:** Av. Itavuvu, 3799 - Loja 7 - Jardim Santa Cecilia, Sorocaba - SP, 18078-005
-- **Aparecidinha:** R. Joaquim Machado, 569 - Aparecidinha, Sorocaba - SP, 18087-280
+- **Aparecidinha:** Rua do Terço, 166 - Aparecidinha, Sorocaba - SP
 
 **Pista de moto (somente aulas práticas de treino — categoria A ou moto em AB):** R. Elias Abud Dib, 131 - Vila Helena, Sorocaba/SP. **Isto não é o endereço da sede** da unidade Vila Helena para carro, matrícula ou "onde fica a autoescola" no sentido de aula de carro. **Também não é o local do exame prático de moto.**
 
