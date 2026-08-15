@@ -32,7 +32,15 @@ export async function mcpKeysRoutes(fastify: FastifyInstance) {
 
   /** Valida JWT e retorna o primeiro tenant do usuário autenticado */
   async function resolveUserTenant(req: FastifyRequest, reply: FastifyReply): Promise<{ userId: string; tenantId: string } | null> {
-    const ctx = await resolveAccessContext(req);
+    let ctx;
+    try {
+      ctx = await resolveAccessContext(req);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const pool = /connection pool|timeout/i.test(msg);
+      reply.code(pool ? 503 : 500).send({ error: msg });
+      return null;
+    }
     if (!ctx) {
       reply.code(401).send({ error: "Não autenticado." });
       return null;

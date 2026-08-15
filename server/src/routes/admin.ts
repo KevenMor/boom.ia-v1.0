@@ -1,7 +1,16 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
 import { requireSuperadmin, resolveAccessContext } from "../services/authorization.js";
+import type { AccessContext } from "../services/authorization.js";
 import { writeAuditLog } from "../services/audit.js";
+
+async function safeAccessContext(req: Parameters<typeof resolveAccessContext>[0]): Promise<AccessContext | null> {
+  try {
+    return await resolveAccessContext(req);
+  } catch {
+    return null;
+  }
+}
 import {
   getAllPromptConfigs,
   getPromptConfig,
@@ -473,7 +482,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
         }
       }
 
-      const actor = await resolveAccessContext(req);
+      const actor = await safeAccessContext(req);
       if (actor) {
         void writeAuditLog({
           tenantId: memberships[0]?.tenant_id ?? null,
@@ -616,7 +625,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
         }
       }
 
-      const actor = await resolveAccessContext(req);
+      const actor = await safeAccessContext(req);
       if (actor) {
         void writeAuditLog({
           tenantId:
@@ -741,7 +750,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
       const { error: authErr } = await supabase.auth.admin.deleteUser(userId);
       if (authErr) return reply.status(500).send({ error: authErr.message });
 
-      const actor = await resolveAccessContext(req);
+      const actor = await safeAccessContext(req);
       if (actor) {
         void writeAuditLog({
           tenantId: null,
@@ -827,7 +836,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
         req.log.info({ tenantId: data.id }, "Tenant schema provisioned successfully");
       }
 
-      const actor = await resolveAccessContext(req);
+      const actor = await safeAccessContext(req);
       if (actor) {
         void writeAuditLog({
           tenantId: data.id,
@@ -866,7 +875,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
         return reply.status(500).send({ error: error.message });
       }
 
-      const actor = await resolveAccessContext(req);
+      const actor = await safeAccessContext(req);
       if (actor) {
         void writeAuditLog({
           tenantId: id,

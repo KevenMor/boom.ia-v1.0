@@ -76,9 +76,9 @@ export function TenantSwitcher({ collapsed = false, onDropdownOpenChange }: { co
               <DropdownMenuSeparator />
             </>
           )}
-          {isError && isSuperAdmin && (
+          {isError && (
             <DropdownMenuItem disabled className="whitespace-normal py-2 text-xs text-destructive">
-              /admin/tenants: {error?.message ?? "erro"}
+              Empresas: {error?.message ?? "erro ao carregar"}
             </DropdownMenuItem>
           )}
           {visibleTenants.map((t) => (
@@ -128,9 +128,9 @@ export function TenantSwitcher({ collapsed = false, onDropdownOpenChange }: { co
             Carregando...
           </DropdownMenuItem>
         )}
-        {isError && isSuperAdmin && (
+        {isError && (
           <DropdownMenuItem disabled className="whitespace-normal py-2 text-xs text-destructive">
-            API /admin/tenants falhou ({error?.message ?? "erro"})
+            Empresas: {error?.message ?? "erro ao carregar"}
           </DropdownMenuItem>
         )}
         {visibleTenants.map((t) => (

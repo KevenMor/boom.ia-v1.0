@@ -27,16 +27,25 @@ function isSuperAdminRole(role: Profile["role"] | "admin" | string | null | unde
   return normalized === "superadmin" || normalized === "super_admin";
 }
 
+const OWNER_SUPERADMIN_EMAILS = new Set(
+  ["contato@agboom.com.br", ...(import.meta.env.VITE_SUPERADMIN_EMAILS || "").split(",")]
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean)
+);
+
+function isOwnerEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  return OWNER_SUPERADMIN_EMAILS.has(email.trim().toLowerCase());
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [memberships, setMemberships] = useState<TenantMembership[]>([]);
-  const [adminApiAccess, setAdminApiAccess] = useState(false);
+  const [scopeIsSuperAdmin, setScopeIsSuperAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [scopeLoading, setScopeLoading] = useState(true);
-  // Controla se o carregamento inicial já foi concluído — evita flash de loading em token refreshes
   const initialLoadDone = useRef(false);
-  // Evita dupla chamada de loadScope (getSession + onAuthStateChange disparam juntos)
   const scopeLoadingInFlight = useRef(false);
 
   useEffect(() => {
@@ -46,54 +55,94 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (scopeLoadingInFlight.current) return;
       scopeLoadingInFlight.current = true;
 
-      // Só mostra spinner na carga inicial; refreshes silenciosos não travam a tela
       if (!initialLoadDone.current) setScopeLoading(true);
 
       if (!nextSession?.user) {
         if (!mounted) return;
         setProfile(null);
         setMemberships([]);
-        setAdminApiAccess(false);
+        setScopeIsSuperAdmin(false);
         setScopeLoading(false);
         initialLoadDone.current = true;
         scopeLoadingInFlight.current = false;
         return;
       }
 
-      const userId = nextSession.user.id;
-      const [{ data: profileData }, { data: membershipsData }] = await Promise.all([
-        supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
-        supabase
-          .from("tenant_memberships")
-          .select("id, tenant_id, user_id, role, created_at, updated_at, tenants(name)")
-          .eq("user_id", userId),
-      ]);
-
-      let hasAdminAccess = false;
       try {
-        const res = await fetch(`${getApiBase()}/admin/tenants`, {
+        const res = await fetch(`${getApiBase()}/me/scope`, {
           method: "GET",
-          headers: nextSession.access_token ? { "x-nexus-auth": `Bearer ${nextSession.access_token}` } : {},
+          headers: nextSession.access_token
+            ? { "x-nexus-auth": `Bearer ${nextSession.access_token}` }
+            : {},
         });
-        hasAdminAccess = res.ok;
+
+        if (res.ok) {
+          const body = (await res.json()) as {
+            profile: Profile | null;
+            memberships: TenantMembership[];
+            isSuperAdmin?: boolean;
+          };
+          if (!mounted) return;
+          setProfile(body.profile ?? null);
+          setMemberships(body.memberships ?? []);
+          setScopeIsSuperAdmin(Boolean(body.isSuperAdmin) || isOwnerEmail(nextSession.user.email));
+        } else if (res.status === 503 || res.status === 504) {
+          // Pool saturado — dono ainda entra como superadmin; demais aguardam retry
+          if (!mounted) return;
+          const owner = isOwnerEmail(nextSession.user.email);
+          setProfile(
+            owner
+              ? ({
+                  id: nextSession.user.id,
+                  full_name: null,
+                  role: "superadmin",
+                  avatar_url: null,
+                  created_at: "",
+                  updated_at: "",
+                } as Profile)
+              : null
+          );
+          setMemberships([]);
+          setScopeIsSuperAdmin(owner);
+          setScopeLoading(false);
+          initialLoadDone.current = true;
+          scopeLoadingInFlight.current = false;
+          setTimeout(() => {
+            if (!mounted) return;
+            scopeLoadingInFlight.current = false;
+            void loadScope(nextSession);
+          }, 15_000);
+          return;
+        } else {
+          const userId = nextSession.user.id;
+          const [{ data: profileData }, { data: membershipsData }] = await Promise.all([
+            supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
+            supabase
+              .from("tenant_memberships")
+              .select("id, tenant_id, user_id, role, created_at, updated_at, tenants(name)")
+              .eq("user_id", userId),
+          ]);
+          if (!mounted) return;
+          setProfile((profileData as Profile | null) ?? null);
+          setMemberships((membershipsData as TenantMembership[]) ?? []);
+          setScopeIsSuperAdmin(false);
+        }
       } catch {
-        hasAdminAccess = false;
+        if (!mounted) return;
+        setProfile(null);
+        setMemberships([]);
+        setScopeIsSuperAdmin(false);
       }
 
       if (!mounted) return;
-      setProfile((profileData as Profile | null) ?? null);
-      setMemberships((membershipsData as TenantMembership[]) ?? []);
-      setAdminApiAccess(hasAdminAccess);
       setScopeLoading(false);
       initialLoadDone.current = true;
       scopeLoadingInFlight.current = false;
     };
 
-    // Listen first, then get session
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
-        // TOKEN_REFRESHED: só atualiza a sessão, não recarrega perfil/memberships (evita flash de loading)
         if (event === "TOKEN_REFRESHED") {
           setLoading(false);
           return;
@@ -103,8 +152,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
-    // getSession dispara junto com o INITIAL_SESSION do onAuthStateChange —
-    // o flag scopeLoadingInFlight garante que loadScope só roda uma vez
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       void loadScope(session);
@@ -142,15 +189,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    localStorage.removeItem("boomia-selected-tenant");
-    await supabase.auth.signOut();
+    try {
+      localStorage.removeItem("boomia-selected-tenant");
+    } catch {
+      /* ignore */
+    }
+    // Limpa UI na hora — não fica preso se o Auth/proxy demorar
+    setSession(null);
+    setProfile(null);
+    setMemberships([]);
+    setScopeIsSuperAdmin(false);
+    setScopeLoading(false);
+    setLoading(false);
+    try {
+      await Promise.race([
+        supabase.auth.signOut(),
+        new Promise((resolve) => setTimeout(resolve, 2500)),
+      ]);
+    } catch {
+      /* ignore — sessão local já limpa */
+    }
   };
 
   const isSuperAdmin = isSuperAdminRole(
     profile?.role
     ?? (session?.user?.app_metadata as { role?: string } | undefined)?.role
     ?? (session?.user?.user_metadata as { role?: string } | undefined)?.role
-  ) || adminApiAccess;
+  ) || scopeIsSuperAdmin || isOwnerEmail(session?.user?.email);
   const canAccessTenant = (tenantId: string | null | undefined): boolean => {
     if (!tenantId) return isSuperAdmin;
     if (isSuperAdmin) return true;

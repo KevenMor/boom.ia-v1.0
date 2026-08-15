@@ -2,9 +2,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { nexusDb as supabase } from "@/integrations/supabase/nexus-client";
 import type { Agent } from "@/types/database";
 
-export function useAgents(tenantId?: string) {
+export function useAgents(tenantId?: string, opts?: { enabled?: boolean }) {
   return useQuery({
-    queryKey: ["agents", tenantId],
+    queryKey: ["agents", tenantId ?? "all"],
+    enabled: opts?.enabled !== false,
+    retry: 1,
     queryFn: async () => {
       let query = supabase
         .from("agents")

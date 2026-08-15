@@ -1,5 +1,6 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { createNexusClient } from "./supabase.js";
+import { isOwnerSuperadminEmail } from "../lib/owner-superadmin.js";
 
 export type AccessRole = "superadmin" | "tenant_admin" | "tenant_user";
 type RawAccessRole = AccessRole | "admin";
@@ -22,6 +23,11 @@ function normalizeRole(role: RawAccessRole | string | null | undefined): AccessR
   return "tenant_user";
 }
 
+/** Exportado para rotas /me que montam o escopo sem duplicar a lógica. */
+export function normalizeRoleForExport(role: string | null | undefined): AccessRole {
+  return normalizeRole(role);
+}
+
 export function getBearerToken(req: FastifyRequest): string {
   const auth = (req.headers.authorization as string) || "";
   const alt = (req.headers["x-nexus-auth"] as string) || "";
@@ -37,23 +43,35 @@ export async function resolveAccessContext(req: FastifyRequest): Promise<AccessC
   const accessToken = bearer.replace(/^Bearer\s+/i, "").trim();
   if (!accessToken) return null;
 
-  // No Node, getUser() sem JWT usa storage/sessão — falha em pedidos stateless com só x-nexus-auth.
-  // getUser(accessToken) + cliente service role é o fluxo suportado pelo GoTrue para validar o JWT.
   const supabase = createNexusClient();
   const { data: userData, error: userErr } = await supabase.auth.getUser(accessToken);
   if (userErr || !userData.user) return null;
 
   const userId = userData.user.id;
-  const [{ data: profile }, { data: memberships }] = await Promise.all([
+  const email = userData.user.email ?? null;
+  const ownerSuper = isOwnerSuperadminEmail(email);
+
+  // Dono: não espera profiles/memberships (podem travar 10s no pool) — Auth JWT basta.
+  if (ownerSuper) {
+    return { userId, role: "superadmin", tenantIds: [], tenantAdminIds: [] };
+  }
+
+  const [{ data: profile, error: profileErr }, { data: memberships, error: memErr }] = await Promise.all([
     supabase.from("profiles").select("role").eq("id", userId).maybeSingle(),
     supabase.from("tenant_memberships").select("tenant_id, role").eq("user_id", userId),
   ]);
+
+  if (profileErr || memErr) {
+    const msg = profileErr?.message || memErr?.message || "access_context_query_failed";
+    throw new Error(msg);
+  }
 
   const role = normalizeRole(
     (profile as { role?: RawAccessRole | string } | null)?.role
     ?? (userData.user.app_metadata as { role?: string } | undefined)?.role
     ?? (userData.user.user_metadata as { role?: string } | undefined)?.role
   );
+
   const tenantIds = (memberships ?? []).map((m) => (m as { tenant_id: string }).tenant_id);
   const tenantAdminIds = (memberships ?? [])
     .filter((m) => (m as { role: AccessRole }).role === "tenant_admin")
@@ -66,12 +84,19 @@ export async function requireAuthenticated(
   req: FastifyRequest,
   reply: FastifyReply
 ): Promise<AccessContext | null> {
-  const ctx = await resolveAccessContext(req);
-  if (!ctx) {
-    reply.status(401).send({ error: "unauthorized" });
+  try {
+    const ctx = await resolveAccessContext(req);
+    if (!ctx) {
+      reply.status(401).send({ error: "unauthorized" });
+      return null;
+    }
+    return ctx;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const pool = /connection pool|timeout/i.test(msg);
+    reply.status(pool ? 503 : 500).send({ error: msg });
     return null;
   }
-  return ctx;
 }
 
 export function canAccessTenant(ctx: AccessContext, tenantId: string | null | undefined): boolean {

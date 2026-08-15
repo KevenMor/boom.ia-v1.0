@@ -5,32 +5,26 @@ import type { Tenant } from "@/types/database";
 import { useAuth } from "@/contexts/AuthContext";
 
 export function useTenants() {
-  const { user, isSuperAdmin, memberships, loading } = useAuth();
+  const { user, loading } = useAuth();
 
   return useQuery({
-    queryKey: ["tenants", user?.id ?? null, isSuperAdmin, memberships.length],
+    queryKey: ["tenants", user?.id ?? null],
     enabled: !loading && !!user,
+    retry: (count, err) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/503|connection pool|timeout/i.test(msg)) return count < 3;
+      return count < 1;
+    },
+    retryDelay: (i) => Math.min(15_000, 3_000 * (i + 1)),
+    staleTime: 1000 * 60,
     queryFn: async () => {
-      if (isSuperAdmin) {
-        const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.access_token;
-        const response = await callAPI<{ data: Tenant[] }>("/admin/tenants", {
-          method: "GET",
-          headers: token ? { "x-nexus-auth": `Bearer ${token}` } : {},
-        });
-        return response.data ?? [];
-      }
-
-      const tenantIds = memberships.map((m) => m.tenant_id);
-      if (tenantIds.length === 0) return [] as Tenant[];
-
-      const { data, error } = await supabase
-        .from("tenants")
-        .select("*")
-        .in("id", tenantIds)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data as Tenant[];
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const response = await callAPI<{ data: Tenant[] }>("/me/tenants", {
+        method: "GET",
+        headers: token ? { "x-nexus-auth": `Bearer ${token}` } : {},
+      });
+      return response.data ?? [];
     },
   });
 }
@@ -39,7 +33,6 @@ export function useCreateTenant() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (tenant: Partial<Tenant>) => {
-      // Call backend endpoint to bypass RLS (uses SERVICE_ROLE_KEY)
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
@@ -64,7 +57,6 @@ export function useCreateTenant() {
 
       const data = await response.json();
 
-      // Refetch para obter status atualizado (db_name preenchido pelo provisionamento)
       const { data: updated } = await supabase
         .from("tenants")
         .select("*")

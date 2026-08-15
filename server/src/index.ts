@@ -8,6 +8,7 @@ import { queueRoutes } from "./routes/queue.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { toolsRoutes } from "./routes/tools.js";
 import { adminRoutes } from "./routes/admin.js";
+import { meRoutes } from "./routes/me.js";
 import { promptReadRoutes } from "./routes/prompts-read.js";
 import { inventoryRoutes } from "./routes/inventory.js";
 import { inventorySyncReferencyRoutes } from "./routes/inventory-sync-referency.js";
@@ -181,6 +182,7 @@ async function build() {
   fastify.register(toolsRoutes, { prefix: "/api" });
   fastify.register(promptReadRoutes, { prefix: "/api" });
   fastify.register(adminRoutes, { prefix: "/api" });
+  fastify.register(meRoutes, { prefix: "/api" });
   fastify.register(inventoryRoutes, { prefix: "/api" });
   fastify.register(inventorySyncReferencyRoutes, { prefix: "/api" });
   fastify.register(ragRoutes, { prefix: "/api" });
@@ -540,6 +542,22 @@ build()
     const { isRedisEnabled, addFollowUpJob } = await import("./services/followup-queue.js");
     const { startFollowUpWorker } = await import("./workers/followup-worker.js");
 
+    /** Evita martelar o pool do Supabase quando já está saturado (504/timeout). */
+    let cronDbBackoffUntil = 0;
+    const markCronDbBackoff = (reason: string) => {
+      cronDbBackoffUntil = Date.now() + 5 * 60_000;
+      console.warn(`[Cron] backoff 5min — ${reason}`);
+    };
+    const cronDbReady = () => Date.now() >= cronDbBackoffUntil;
+
+    const cronsEnabled = process.env.ENABLE_INTERNAL_CRONS === "1";
+    if (!cronsEnabled) {
+      console.warn(
+        "[Server] Crons internos de follow-up/reminder DESLIGADOS (defina ENABLE_INTERNAL_CRONS=1 para ligar). " +
+          "Isso evita saturar o pool do Supabase em dev."
+      );
+    }
+
     if (isRedisEnabled()) {
       const { startFinanceiroCampaignWorker } = await import("./workers/financeiro-campaign-worker.js");
       const financeiroWorker = startFinanceiroCampaignWorker();
@@ -550,32 +568,44 @@ build()
       const worker = startFollowUpWorker();
       if (worker) {
         console.log("[Server] Follow-up BullMQ worker started");
-        const { createNexusClient } = await import("./services/supabase.js");
-        const supabase = createNexusClient();
-        const { data: pending } = await supabase
-          .from("follow_up_queue")
-          .select("id, scheduled_at")
-          .eq("status", "pending")
-          .order("scheduled_at", { ascending: true })
-          .limit(100);
-        const now = Date.now();
-        let rehydrated = 0;
-        for (const item of pending ?? []) {
-          const delayMs = Math.max(0, new Date(item.scheduled_at).getTime() - now);
-          if (await addFollowUpJob(item.id, delayMs)) rehydrated++;
-        }
-        if (rehydrated > 0) {
-          console.log(`[Server] Follow-up reidratação: ${rehydrated} job(s) adicionado(s)`);
+        if (cronsEnabled && cronDbReady()) {
+          const { createNexusClient } = await import("./services/supabase.js");
+          const supabase = createNexusClient();
+          const { data: pending, error: pendingErr } = await supabase
+            .from("follow_up_queue")
+            .select("id, scheduled_at")
+            .eq("status", "pending")
+            .order("scheduled_at", { ascending: true })
+            .limit(100);
+          if (pendingErr) {
+            markCronDbBackoff(`reidratação ${pendingErr.message}`);
+          } else {
+            const now = Date.now();
+            let rehydrated = 0;
+            for (const item of pending ?? []) {
+              const delayMs = Math.max(0, new Date(item.scheduled_at).getTime() - now);
+              if (await addFollowUpJob(item.id, delayMs)) rehydrated++;
+            }
+            if (rehydrated > 0) {
+              console.log(`[Server] Follow-up reidratação: ${rehydrated} job(s) adicionado(s)`);
+            }
+          }
         }
       }
-    } else {
+    } else if (cronsEnabled) {
       const FOLLOWUP_INTERVAL_MS = 60_000;
       const followupUrl = `http://127.0.0.1:${PORT}/api/queue/followups`;
       setInterval(async () => {
+        if (!cronDbReady()) return;
         try {
-          const resp = await fetch(followupUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", signal: AbortSignal.timeout(120_000) });
+          const resp = await fetch(followupUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: "{}",
+            signal: AbortSignal.timeout(25_000),
+          });
           if (resp.ok) {
-            const data = await resp.json() as { processed?: number; skipped?: number; total?: number };
+            const data = (await resp.json()) as { processed?: number; skipped?: number; total?: number };
             const processed = data.processed ?? 0;
             const skipped = data.skipped ?? 0;
             const total = data.total ?? 0;
@@ -586,28 +616,42 @@ build()
             } else {
               console.log("[FollowUp-Cron] tick: no pending items");
             }
+          } else if (resp.status >= 500) {
+            markCronDbBackoff(`followups HTTP ${resp.status}`);
           }
         } catch (e) {
-          console.warn("[FollowUp-Cron] request failed:", (e as Error)?.message ?? e);
+          markCronDbBackoff(`followups ${(e as Error)?.message ?? e}`);
         }
       }, FOLLOWUP_INTERVAL_MS);
       console.log(`[Server] Follow-up cron started (every ${FOLLOWUP_INTERVAL_MS / 1000}s)`);
     }
 
-    const REMINDER_INTERVAL_MS = 60_000;
-    const reminderUrl = `http://127.0.0.1:${PORT}/api/queue/reminders`;
-    setInterval(async () => {
-      try {
-        const resp = await fetch(reminderUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", signal: AbortSignal.timeout(30_000) });
-        if (resp.ok) {
-          const data = await resp.json() as { processed?: number; skipped?: number; failed?: number };
-          if ((data.processed ?? 0) > 0 || (data.skipped ?? 0) > 0 || (data.failed ?? 0) > 0) {
-            console.log("[Reminder-Cron] processed:", data.processed, "skipped:", data.skipped, "failed:", data.failed);
+    if (cronsEnabled) {
+      const REMINDER_INTERVAL_MS = 60_000;
+      const reminderUrl = `http://127.0.0.1:${PORT}/api/queue/reminders`;
+      setInterval(async () => {
+        if (!cronDbReady()) return;
+        try {
+          const resp = await fetch(reminderUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: "{}",
+            signal: AbortSignal.timeout(15_000),
+          });
+          if (resp.ok) {
+            const data = (await resp.json()) as { processed?: number; skipped?: number; failed?: number };
+            if ((data.processed ?? 0) > 0 || (data.skipped ?? 0) > 0 || (data.failed ?? 0) > 0) {
+              console.log("[Reminder-Cron] processed:", data.processed, "skipped:", data.skipped, "failed:", data.failed);
+            }
+          } else if (resp.status >= 500) {
+            markCronDbBackoff(`reminders HTTP ${resp.status}`);
           }
+        } catch (e) {
+          markCronDbBackoff(`reminders ${(e as Error)?.message ?? e}`);
         }
-      } catch { /* silent — endpoint logs its own errors */ }
-    }, REMINDER_INTERVAL_MS);
-    console.log(`[Server] Reminder cron started (every ${REMINDER_INTERVAL_MS / 1000}s)`);
+      }, REMINDER_INTERVAL_MS);
+      console.log(`[Server] Reminder cron started (every ${REMINDER_INTERVAL_MS / 1000}s)`);
+    }
   })
   .catch((err) => {
     console.error("[Server] Startup failed:", err?.message || err);

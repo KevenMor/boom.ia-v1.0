@@ -14,9 +14,11 @@ async function invokeProviderKeys(body: Record<string, unknown>) {
   });
 }
 
-export function useProviders() {
+export function useProviders(opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["providers"],
+    enabled: opts?.enabled !== false,
+    retry: 1,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("providers")
