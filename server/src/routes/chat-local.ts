@@ -1060,7 +1060,8 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const { agent_id, messages, conversation_id, chatwoot_conversation_id, external_user_id, skip_history_persist } = req.body;
+      try {
+        const { agent_id, messages, conversation_id, chatwoot_conversation_id, external_user_id, skip_history_persist } = req.body;
       const requestStartTime = Date.now();
 
       const skipHistoryExplicit =
@@ -2678,6 +2679,24 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
       sendSse({ conversation_id: responseConvId });
       sendSse("[DONE]");
       reply.raw.end();
+      } catch (error) {
+        console.error("[Chat-Local] Route handler error:", error);
+        if (reply.raw.headersSent) {
+          try {
+            reply.raw.write(`data: ${JSON.stringify({ error: (error as Error)?.message || String(error) })}\n\n`);
+            reply.raw.write("data: [DONE]\n\n");
+          } catch {
+            // ignore
+          }
+          try {
+            reply.raw.end();
+          } catch {
+            // ignore
+          }
+        } else {
+          reply.status(500).send({ error: (error as Error)?.message || "Internal server error" });
+        }
+      }
     }
   );
 

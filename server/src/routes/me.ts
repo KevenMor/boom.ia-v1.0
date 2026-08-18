@@ -125,7 +125,7 @@ export async function meRoutes(fastify: FastifyInstance) {
     if (auth.role === "superadmin") {
       try {
         const { data, error } = await withTimeout(
-          supabase.from("tenants").select("*").order("created_at", { ascending: false }).then((r) => r),
+          Promise.resolve(supabase.from("tenants").select("*").order("created_at", { ascending: false })),
           8_000
         );
         if (error) {
