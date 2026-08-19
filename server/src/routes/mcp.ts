@@ -91,6 +91,7 @@ const MCP_TOOLS = [
       properties: {
         agent_id: { type: "string", description: "UUID do agente" },
         model: { type: "string", description: "Modelo de IA (ex: gpt-4o, gemini-2.0-flash)" },
+        status: { type: "string", enum: ["active", "inactive", "test"], description: "Status operacional do agente" },
         temperature: { type: "number", description: "Temperatura de geração (0.0 a 2.0)" },
         override_prompts: { type: "boolean", description: "Se true, usa os prompts do banco em vez do código" },
         always_inject_comm_rules: { type: "boolean", description: "Se true, injeta regras de comunicação mesmo sem ferramentas vinculadas" },
@@ -178,7 +179,7 @@ async function executeTool(name: string, input: Record<string, unknown>, tenantI
     case "list_agents": {
       const { data, error } = await supabase
         .from("agents")
-        .select("id, name, model, provider_id, system_prompt, override_prompts, created_at")
+        .select("id, name, model, provider_id, system_prompt, override_prompts, status, temperature, description, created_at, updated_at")
         .eq("tenant_id", tenantId)
         .order("name");
       if (error) throw new Error(`Erro ao listar agentes: ${error.message}`);
@@ -188,7 +189,7 @@ async function executeTool(name: string, input: Record<string, unknown>, tenantI
     case "get_agent": {
       let query = supabase
         .from("agents")
-        .select("id, name, model, provider_id, system_prompt, communication_rules, dispatcher_prompt, followup_prompt, override_prompts, always_inject_comm_rules, skip_greeting, temperature, config, created_at, updated_at")
+        .select("id, name, model, provider_id, system_prompt, communication_rules, dispatcher_prompt, followup_prompt, override_prompts, always_inject_comm_rules, skip_greeting, temperature, status, description, config, created_at, updated_at")
         .eq("tenant_id", tenantId);
 
       if (typeof input.agent_id === "string") {
@@ -244,6 +245,12 @@ async function executeTool(name: string, input: Record<string, unknown>, tenantI
 
       const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
       if (typeof input.model === "string") updates.model = input.model;
+      if (typeof input.status === "string") {
+        const status = input.status.trim().toLowerCase();
+        if (status === "active" || status === "inactive" || status === "test") {
+          updates.status = status;
+        }
+      }
       if (typeof input.temperature === "number") updates.temperature = input.temperature;
       if (typeof input.override_prompts === "boolean") updates.override_prompts = input.override_prompts;
       if (typeof input.always_inject_comm_rules === "boolean") updates.always_inject_comm_rules = input.always_inject_comm_rules;

@@ -19,6 +19,7 @@ import type { ModuleGroup, ModuleKey } from "@/lib/tenant-modules";
 import { TENANT_MODULES, createDefaultModuleState } from "@/lib/tenant-modules";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { TenantApiIntegrationCard } from "@/components/tenants/TenantApiIntegrationCard";
 import type { TenantMembership } from "@/types/database";
 
 const schema = z.object({
@@ -391,6 +392,16 @@ export default function EditTenant() {
               onCheckedChange={(v) => setValue("prompt_caching_enabled", v)}
             />
           </div>
+        </div>
+
+        <div className="rounded-xl border border-border bg-card p-6 space-y-5">
+          <div>
+            <h3 className="text-base font-semibold text-foreground">Integração via API</h3>
+            <p className="text-sm text-muted-foreground">
+              Credenciais para conectar sistemas externos (Mega, cron-job.org) e ligar/desligar os agentes deste tenant.
+            </p>
+          </div>
+          <TenantApiIntegrationCard tenantId={tenant.id} />
         </div>
 
         <div className="rounded-xl border border-border bg-card p-6 space-y-6">

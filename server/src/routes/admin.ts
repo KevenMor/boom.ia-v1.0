@@ -80,6 +80,15 @@ export async function ensurePersonalCalendar(
   return { id: created.id as string, created: true };
 }
 
+function resolvePublicApiBaseUrl(): string {
+  const raw =
+    process.env.API_PUBLIC_URL?.trim() ||
+    process.env.VITE_PUBLIC_URL?.trim() ||
+    process.env.API_BASE_URL?.trim() ||
+    `http://localhost:${process.env.PORT || 3001}`;
+  return raw.replace(/\/+$/, "").replace(/\/api$/, "");
+}
+
 export async function adminRoutes(fastify: FastifyInstance) {
   fastify.addHook("preHandler", async (req, reply) => {
     const ctx = await requireSuperadmin(req, reply);
@@ -849,6 +858,45 @@ export async function adminRoutes(fastify: FastifyInstance) {
         });
       }
       return reply.status(201).send(data);
+    }
+  );
+
+  /** Credenciais para integração externa (Mega, cron-job.org) — liga/desliga agentes por tenant. */
+  fastify.get(
+    "/admin/tenants/:id/integration",
+    async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const tenantId = req.params.id?.trim();
+      if (!tenantId) return reply.status(400).send({ error: "id obrigatório" });
+
+      const supabase = createNexusClient();
+      const { data: tenant, error } = await supabase
+        .from("tenants")
+        .select("id, name, slug")
+        .eq("id", tenantId)
+        .maybeSingle();
+      if (error) return reply.status(500).send({ error: error.message });
+      if (!tenant) return reply.status(404).send({ error: "Tenant não encontrado" });
+
+      const apiBase = resolvePublicApiBaseUrl();
+      const toggleSecret = (process.env.TENANT_AI_TOGGLE_SECRET || "").trim();
+
+      return reply.send({
+        tenant_id: tenant.id,
+        tenant_name: tenant.name,
+        tenant_slug: tenant.slug,
+        api_base_url: apiBase,
+        toggle_secret_configured: toggleSecret.length > 0,
+        toggle_secret: toggleSecret || null,
+        header_name: "x-tenant-ai-toggle-secret",
+        endpoints: {
+          status: `${apiBase}/api/tenant-ai/status?tenant_id=${tenant.id}`,
+          toggle: `${apiBase}/api/tenant-ai/toggle`,
+        },
+        toggle_body_example: {
+          tenant_id: tenant.id,
+          enabled: true,
+        },
+      });
     }
   );
 
