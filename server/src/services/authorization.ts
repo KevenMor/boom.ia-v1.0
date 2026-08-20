@@ -51,26 +51,25 @@ export async function resolveAccessContext(req: FastifyRequest): Promise<AccessC
   const email = userData.user.email ?? null;
   const ownerSuper = isOwnerSuperadminEmail(email);
 
-  // Dono: não espera profiles/memberships (podem travar 10s no pool) — Auth JWT basta.
-  if (ownerSuper) {
-    return { userId, role: "superadmin", tenantIds: [], tenantAdminIds: [] };
-  }
-
   const [{ data: profile, error: profileErr }, { data: memberships, error: memErr }] = await Promise.all([
     supabase.from("profiles").select("role").eq("id", userId).maybeSingle(),
     supabase.from("tenant_memberships").select("tenant_id, role").eq("user_id", userId),
   ]);
 
   if (profileErr || memErr) {
+    if (ownerSuper) {
+      return { userId, role: "superadmin", tenantIds: [], tenantAdminIds: [] };
+    }
     const msg = profileErr?.message || memErr?.message || "access_context_query_failed";
     throw new Error(msg);
   }
 
-  const role = normalizeRole(
+  let role = normalizeRole(
     (profile as { role?: RawAccessRole | string } | null)?.role
     ?? (userData.user.app_metadata as { role?: string } | undefined)?.role
     ?? (userData.user.user_metadata as { role?: string } | undefined)?.role
   );
+  if (ownerSuper) role = "superadmin";
 
   const tenantIds = (memberships ?? []).map((m) => (m as { tenant_id: string }).tenant_id);
   const tenantAdminIds = (memberships ?? [])

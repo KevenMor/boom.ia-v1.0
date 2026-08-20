@@ -9,7 +9,7 @@
  */
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
-import { resolveAccessContext } from "../services/authorization.js";
+import { canAccessTenant, resolveAccessContext } from "../services/authorization.js";
 
 const MCP_SERVER_URL = process.env.MCP_SERVER_URL || "https://api.boom.ia/mcp";
 
@@ -30,7 +30,15 @@ async function hashToken(token: string): Promise<string> {
 export async function mcpKeysRoutes(fastify: FastifyInstance) {
   const supabase = createNexusClient();
 
-  /** Valida JWT e retorna o primeiro tenant do usuário autenticado */
+  function requestedTenantId(req: FastifyRequest): string | null {
+    const queryId = (req.query as { tenant_id?: string } | undefined)?.tenant_id;
+    const bodyId = (req.body as { tenant_id?: string } | null)?.tenant_id;
+    const headerId = req.headers["x-tenant-id"];
+    const raw = queryId || bodyId || (typeof headerId === "string" ? headerId : "");
+    return raw.trim() || null;
+  }
+
+  /** Valida JWT e resolve o tenant da chave MCP. Superadmin pode usar qualquer empresa. */
   async function resolveUserTenant(req: FastifyRequest, reply: FastifyReply): Promise<{ userId: string; tenantId: string } | null> {
     let ctx;
     try {
@@ -45,13 +53,38 @@ export async function mcpKeysRoutes(fastify: FastifyInstance) {
       reply.code(401).send({ error: "Não autenticado." });
       return null;
     }
-    // Pega o primeiro tenant que o usuário é membro
-    const tenantId = ctx.tenantAdminIds[0] ?? ctx.tenantIds[0];
-    if (!tenantId) {
-      reply.code(403).send({ error: "Usuário não vinculado a nenhum tenant." });
-      return null;
+
+    const requested = requestedTenantId(req);
+    if (requested) {
+      if (!canAccessTenant(ctx, requested)) {
+        reply.code(403).send({ error: "Sem acesso a este tenant." });
+        return null;
+      }
+      return { userId: ctx.userId, tenantId: requested };
     }
-    return { userId: ctx.userId, tenantId };
+
+    const fromMembership = ctx.tenantAdminIds[0] ?? ctx.tenantIds[0];
+    if (fromMembership) {
+      return { userId: ctx.userId, tenantId: fromMembership };
+    }
+
+    if (ctx.role === "superadmin") {
+      const { data: firstTenant, error } = await supabase
+        .from("tenants")
+        .select("id")
+        .eq("status", "active")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error || !firstTenant?.id) {
+        reply.code(403).send({ error: "Nenhuma empresa cadastrada para gerar chave MCP." });
+        return null;
+      }
+      return { userId: ctx.userId, tenantId: firstTenant.id as string };
+    }
+
+    reply.code(403).send({ error: "Usuário não vinculado a nenhum tenant." });
+    return null;
   }
 
   /** GET /api/mcp-keys — Lista keys do tenant */
