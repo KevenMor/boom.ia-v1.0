@@ -402,21 +402,16 @@ async function executeTool(name: string, input: Record<string, unknown>, tenantI
   }
 }
 
-// ─── Registro das Rotas ──────────────────────────────────────────────────────
-
-export async function mcpRoutes(fastify: FastifyInstance) {
-  /** GET /mcp — Discovery / health */
-  fastify.get("/mcp", async (_req: FastifyRequest, reply: FastifyReply) => {
-    return reply.send({
-      name: "Boom IA MCP Server",
-      version: "1.0.0",
-      description: "Servidor MCP do Boom IA — conecte sua IA ao painel de agentes.",
-      protocolVersion: "2024-11-05",
-    });
+async function mcpDiscovery(_req: FastifyRequest, reply: FastifyReply) {
+  return reply.send({
+    name: "Boom IA MCP Server",
+    version: "1.0.0",
+    description: "Servidor MCP do Boom IA — conecte sua IA ao painel de agentes.",
+    protocolVersion: "2024-11-05",
   });
+}
 
-  /** POST /mcp — Endpoint principal JSON-RPC 2.0 */
-  fastify.post("/mcp", async (req: FastifyRequest, reply: FastifyReply) => {
+async function mcpJsonRpc(req: FastifyRequest, reply: FastifyReply) {
     const tenantId = await authenticateMcpRequest(req);
     if (!tenantId) {
       return reply.code(401).send({
@@ -431,7 +426,7 @@ export async function mcpRoutes(fastify: FastifyInstance) {
     const method = body?.method as string | undefined;
     const params = body?.params ?? {};
 
-    fastify.log.info({ method, tenantId }, "[MCP] Request recebida");
+    req.log.info({ method, tenantId }, "[MCP] Request recebida");
 
     try {
       // ── initialize ──────────────────────────────────────────────────────────
@@ -491,12 +486,22 @@ export async function mcpRoutes(fastify: FastifyInstance) {
         error: { code: -32601, message: `Método desconhecido: ${method}` },
       });
     } catch (err: any) {
-      fastify.log.error(err, "[MCP] Erro ao executar tool");
+      req.log.error(err, "[MCP] Erro ao executar tool");
       return reply.send({
         jsonrpc: "2.0",
         id,
         error: { code: -32000, message: err?.message ?? "Erro interno do servidor MCP." },
       });
     }
-  });
+}
+
+// ─── Registro das Rotas ──────────────────────────────────────────────────────
+// /mcp — acesso direto ao container Node
+// /api/mcp — mesmo handler atrás do nginx de produção (só /api e /health são proxied)
+
+export async function mcpRoutes(fastify: FastifyInstance) {
+  fastify.get("/mcp", mcpDiscovery);
+  fastify.post("/mcp", mcpJsonRpc);
+  fastify.get("/api/mcp", mcpDiscovery);
+  fastify.post("/api/mcp", mcpJsonRpc);
 }
