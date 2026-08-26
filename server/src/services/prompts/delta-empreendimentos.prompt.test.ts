@@ -12,7 +12,7 @@ import {
 
 describe("Delta Empreendimentos — SYSTEM_PROMPT", () => {
   it("versão do prompt", () => {
-    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.18/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.5\.19/);
   });
 
   it("anti-loop nome: proíbe 'Prazer, Keven' + 'Como posso te chamar' na mesma bolha", () => {
@@ -56,26 +56,7 @@ describe("Delta Empreendimentos — SYSTEM_PROMPT", () => {
     expect(COMMUNICATION_RULES).toMatch(/Apresente o empreendimento/i);
   });
 
-  it("inclui links Google Maps do empreendimento e do plantão", () => {
-    expect(SYSTEM_PROMPT).toMatch(/google\.com\/maps/i);
-    expect(SYSTEM_PROMPT).toMatch(/-23\.4921389/);
-    expect(SYSTEM_PROMPT).toMatch(/Delta\+Empreendimentos|plantão de vendas \(Como chegar\)/i);
-  });
 
-  it("inclui tour virtual e galeria InstaCasa", () => {
-    expect(SYSTEM_PROMPT).toMatch(/tour\.instacasa\.com\.br\/reservas-do-brasil/i);
-    expect(SYSTEM_PROMPT).toMatch(/site\.instacasa\.com\.br\/empreendimentos\/reservas-do-brasil/i);
-    expect(SYSTEM_PROMPT).toMatch(/Galeria de fotos/i);
-  });
-
-  it("Reservas do Brasil com dados InstaCasa", () => {
-    expect(SYSTEM_PROMPT).toMatch(/145 lotes/i);
-    expect(SYSTEM_PROMPT).toMatch(/1\.442,84/);
-    expect(SYSTEM_PROMPT).toMatch(/SP-268/);
-    expect(SYSTEM_PROMPT).toMatch(/Playground/i);
-    expect(SYSTEM_PROMPT).toMatch(/InstaCasa/i);
-    expect(SYSTEM_PROMPT).toMatch(/30 meses/i);
-  });
 
   it("identidade Paula e empresa", () => {
     expect(SYSTEM_PROMPT).toMatch(/Paula/i);
@@ -113,14 +94,16 @@ describe("Delta Empreendimentos — SYSTEM_PROMPT", () => {
   });
 
   it("cita empreendimentos do portfólio", () => {
-    expect(SYSTEM_PROMPT).toMatch(/Reservas do Brasil/i);
+    expect(SYSTEM_PROMPT).not.toMatch(/Reservas do Brasil/i);
     expect(SYSTEM_PROMPT).toMatch(/Dallas/i);
     expect(SYSTEM_PROMPT).toMatch(/Vista Alegre/i);
-    expect(SYSTEM_PROMPT).toMatch(/Vale dos Cervos 5/i);
+    expect(SYSTEM_PROMPT).toMatch(/Vale dos Cervos/i);
+    expect(SYSTEM_PROMPT).not.toMatch(/Vale dos Cervos 5/i);
   });
 
-  it("conhecimento do Vale dos Cervos 5", () => {
-    expect(SYSTEM_PROMPT).toContain("Vale dos Cervos 5");
+  it("conhecimento do Vale dos Cervos", () => {
+    expect(SYSTEM_PROMPT).toContain("Vale dos Cervos");
+    expect(SYSTEM_PROMPT).not.toContain("Vale dos Cervos 5");
     expect(SYSTEM_PROMPT).toContain("150.000,00");
     expect(SYSTEM_PROMPT).toContain("50.000,00");
     expect(SYSTEM_PROMPT).toContain("matrícula individual");
@@ -152,7 +135,8 @@ describe("Delta Empreendimentos — DISPATCHER, COMM e FOLLOWUP", () => {
   it("dispatcher com suporte a suite_gallery_query", () => {
     expect(DISPATCHER_PROMPT).toContain("suite_gallery_query");
     expect(DISPATCHER_PROMPT).toContain("WHEN TO CALL suite_gallery_query");
-    expect(DISPATCHER_PROMPT).toMatch(/Vale dos Cervos 5/i);
+    expect(DISPATCHER_PROMPT).toMatch(/Vale dos Cervos/i);
+    expect(DISPATCHER_PROMPT).not.toMatch(/Vale dos Cervos 5/i);
   });
 
   it("communication rules proíbem emoji, inventar nome e várias perguntas", () => {
@@ -176,14 +160,14 @@ describe("Delta Empreendimentos — registry", () => {
   it("resolve slug delta-empreendimentos", () => {
     const cfg = getPromptConfig("delta-empreendimentos");
     expect(cfg).not.toBeNull();
-    expect(cfg!.version).toBe("v1.5.18");
+    expect(cfg!.version).toBe("v1.5.19");
     expect(cfg!.description).toMatch(/Paula/i);
   });
 
   it("buildSystemPrompt ignora prompt do banco e injeta Paula", () => {
     const prompt = buildSystemPrompt("PROMPT_BANCO_IGNORAR", "delta-empreendimentos", false);
     expect(prompt).toContain("Paula");
-    expect(prompt).toContain("v1.5.18");
+    expect(prompt).toContain("v1.5.19");
     expect(prompt).not.toContain("Sara");
     expect(prompt).not.toContain("PROMPT_BANCO_IGNORAR");
     expect(prompt).not.toContain("COMPORTAMENTO DE SAUDAÇÃO:");
