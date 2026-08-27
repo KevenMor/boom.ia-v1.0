@@ -32,6 +32,7 @@ import { hospedagemRoutes } from "./routes/hospedagem.js";
 import { loteamentosRoutes } from "./routes/loteamentos.js";
 import { embedChatwootLoteamentosRoutes } from "./routes/embed-chatwoot-loteamentos.js";
 import { mcpRoutes } from "./routes/mcp.js";
+import { providerRoutes } from "./routes/providers.js";
 import { mcpKeysRoutes } from "./routes/mcp-keys.js";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
@@ -180,6 +181,7 @@ async function build() {
   fastify.register(queueRoutes, { prefix: "/api" });
   fastify.register(webhookRoutes, { prefix: "/api" });
   fastify.register(toolsRoutes, { prefix: "/api" });
+  fastify.register(providerRoutes, { prefix: "/api" });
   fastify.register(promptReadRoutes, { prefix: "/api" });
   fastify.register(adminRoutes, { prefix: "/api" });
   fastify.register(meRoutes, { prefix: "/api" });

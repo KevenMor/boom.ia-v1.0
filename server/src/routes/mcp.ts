@@ -10,6 +10,7 @@
  */
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
+import { encrypt } from "../services/crypto.js";
 
 /** Calcula SHA-256 de um token */
 async function hashToken(token: string): Promise<string> {
@@ -168,6 +169,38 @@ const MCP_TOOLS = [
       },
     },
   },
+  {
+    name: "list_providers",
+    description: "Lista o catálogo global de provedores de modelo (sem devolver a API key).",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "upsert_provider",
+    description: "Cria ou atualiza um provedor global. Informe provider_id para atualizar.",
+    inputSchema: {
+      type: "object",
+      required: ["name"],
+      properties: {
+        provider_id: { type: "string", description: "UUID do provedor (omitir para criar)" },
+        name: { type: "string" },
+        base_url: { type: "string" },
+        model_default: { type: "string" },
+        status: { type: "string", enum: ["active", "degraded", "offline"] },
+        api_key: { type: "string", description: "API key em texto; criptografada no servidor" },
+      },
+    },
+  },
+  {
+    name: "delete_provider",
+    description: "Remove um provedor global do catálogo.",
+    inputSchema: {
+      type: "object",
+      required: ["provider_id"],
+      properties: {
+        provider_id: { type: "string" },
+      },
+    },
+  },
 ];
 
 // ─── Executores das Tools ────────────────────────────────────────────────────
@@ -179,7 +212,7 @@ async function executeTool(name: string, input: Record<string, unknown>, tenantI
     case "list_agents": {
       const { data, error } = await supabase
         .from("agents")
-        .select("id, name, model, provider_id, system_prompt, override_prompts, status, temperature, description, created_at, updated_at")
+        .select("id, name, model, provider_id, system_prompt, override_prompts, status, temperature, description, avatar_url, created_at, updated_at")
         .eq("tenant_id", tenantId)
         .order("name");
       if (error) throw new Error(`Erro ao listar agentes: ${error.message}`);
@@ -189,7 +222,7 @@ async function executeTool(name: string, input: Record<string, unknown>, tenantI
     case "get_agent": {
       let query = supabase
         .from("agents")
-        .select("id, name, model, provider_id, system_prompt, communication_rules, dispatcher_prompt, followup_prompt, override_prompts, always_inject_comm_rules, skip_greeting, temperature, status, description, config, created_at, updated_at")
+        .select("id, name, model, provider_id, system_prompt, communication_rules, dispatcher_prompt, followup_prompt, override_prompts, always_inject_comm_rules, skip_greeting, temperature, status, description, avatar_url, config, created_at, updated_at")
         .eq("tenant_id", tenantId);
 
       if (typeof input.agent_id === "string") {
@@ -350,7 +383,7 @@ async function executeTool(name: string, input: Record<string, unknown>, tenantI
     case "list_available_tools": {
       let query = supabase
         .from("tools")
-        .select("id, name, description, tool_type, created_at")
+        .select("id, name, description, tool_type, tenant_id, function_def, created_at")
         .order("name");
 
       if (typeof input.tool_type === "string" && input.tool_type.trim()) {
@@ -359,7 +392,11 @@ async function executeTool(name: string, input: Record<string, unknown>, tenantI
 
       const { data, error } = await query;
       if (error) throw new Error(`Erro ao listar tools: ${error.message}`);
-      return { tools: data ?? [], total: (data ?? []).length };
+      const tenantTools = (data ?? []).filter((row: { tenant_id?: string | null }) => {
+        const tid = row.tenant_id;
+        return !tid || tid === tenantId;
+      });
+      return { tools: tenantTools, total: tenantTools.length };
     }
 
     case "manage_agent_tool": {
@@ -395,6 +432,55 @@ async function executeTool(name: string, input: Record<string, unknown>, tenantI
         if (error) throw new Error(`Erro ao desvincular tool: ${error.message}`);
         return { success: true, action: "unlinked", agent_id: agentId, tool_id: toolId };
       }
+    }
+
+    case "list_providers": {
+      const { data, error } = await supabase
+        .from("providers")
+        .select("id, name, base_url, model_default, status, created_at, api_key_encrypted")
+        .order("name");
+      if (error) throw new Error(`Erro ao listar provedores: ${error.message}`);
+      const providers = (data ?? []).map((row: Record<string, unknown>) => {
+        const { api_key_encrypted, ...rest } = row;
+        return { ...rest, has_key: Boolean(api_key_encrypted) };
+      });
+      return { providers, total: providers.length };
+    }
+
+    case "upsert_provider": {
+      const providerId = typeof input.provider_id === "string" ? input.provider_id.trim() : "";
+      const name = typeof input.name === "string" ? input.name.trim() : "";
+      if (!name) throw new Error("name é obrigatório.");
+      const row: Record<string, unknown> = {
+        name,
+        base_url: typeof input.base_url === "string" ? input.base_url.trim() || null : null,
+        model_default: typeof input.model_default === "string" ? input.model_default.trim() || null : null,
+        status: typeof input.status === "string" && input.status.trim() ? input.status : "active",
+      };
+      if (typeof input.api_key === "string" && input.api_key.trim()) {
+        const encryptionKey = process.env.ENCRYPTION_KEY;
+        if (!encryptionKey) throw new Error("ENCRYPTION_KEY não configurada.");
+        row.api_key_encrypted = await encrypt(input.api_key.trim(), encryptionKey);
+      }
+      let saved: Record<string, unknown> | null = null;
+      if (providerId) {
+        const { data, error } = await supabase.from("providers").update(row).eq("id", providerId).select("id, name, base_url, model_default, status").single();
+        if (error) throw new Error(`Erro ao atualizar provedor: ${error.message}`);
+        saved = data as Record<string, unknown>;
+      } else {
+        const { data, error } = await supabase.from("providers").insert(row).select("id, name, base_url, model_default, status").single();
+        if (error) throw new Error(`Erro ao criar provedor: ${error.message}`);
+        saved = data as Record<string, unknown>;
+      }
+      return { provider: saved };
+    }
+
+    case "delete_provider": {
+      const providerId = typeof input.provider_id === "string" ? input.provider_id.trim() : "";
+      if (!providerId) throw new Error("provider_id é obrigatório.");
+      const { error } = await supabase.from("providers").delete().eq("id", providerId);
+      if (error) throw new Error(`Erro ao remover provedor: ${error.message}`);
+      return { success: true, deleted_id: providerId };
     }
 
     default:
