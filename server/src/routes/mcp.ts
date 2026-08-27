@@ -92,6 +92,9 @@ const MCP_TOOLS = [
       properties: {
         agent_id: { type: "string", description: "UUID do agente" },
         model: { type: "string", description: "Modelo de IA (ex: gpt-4o, gemini-2.0-flash)" },
+        name: { type: "string", description: "Nome exibido do agente" },
+        description: { type: "string", description: "Descrição interna do agente" },
+        avatar_url: { type: "string", description: "URL do avatar (/avatars/agent-1.png ou URL completa). Vazio remove." },
         status: { type: "string", enum: ["active", "inactive", "test"], description: "Status operacional do agente" },
         temperature: { type: "number", description: "Temperatura de geração (0.0 a 2.0)" },
         override_prompts: { type: "boolean", description: "Se true, usa os prompts do banco em vez do código" },
@@ -277,6 +280,13 @@ async function executeTool(name: string, input: Record<string, unknown>, tenantI
       if (!existing) throw new Error("Agente não encontrado ou sem permissão.");
 
       const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (typeof input.name === "string") updates.name = input.name.trim();
+      if (typeof input.description === "string") updates.description = input.description.trim();
+      if ("avatar_url" in input) {
+        const raw = input.avatar_url;
+        updates.avatar_url =
+          typeof raw === "string" && raw.trim() ? raw.trim() : null;
+      }
       if (typeof input.model === "string") updates.model = input.model;
       if (typeof input.status === "string") {
         const status = input.status.trim().toLowerCase();
