@@ -1888,6 +1888,112 @@ export interface ToolDef {
   tenant_id?: string;
   execution_config?: Record<string, unknown>;
   function_def?: Record<string, unknown>;
+  endpoint?: string | null;
+  auth_config?: Record<string, unknown> | null;
+}
+
+async function executeApiRestTool(
+  tool: ToolDef,
+  args: Record<string, unknown>
+): Promise<ToolExecutionResult> {
+  const config = (tool.execution_config || {}) as Record<string, unknown>;
+  const headersCfg =
+    config.headers && typeof config.headers === "object" && !Array.isArray(config.headers)
+      ? (config.headers as Record<string, string>)
+      : {};
+
+  const urlTemplate =
+    typeof config.url_template === "string" && config.url_template.trim()
+      ? config.url_template.trim()
+      : "";
+  const endpoint = typeof tool.endpoint === "string" && tool.endpoint.trim() ? tool.endpoint.trim() : "";
+
+  const resolveTemplate = (template: string) =>
+    template.replace(/\{(\w+)\}/g, (_match, key: string) => {
+      const val = args?.[key];
+      if (val == null) return "";
+      return encodeURIComponent(String(val));
+    });
+
+  let url = urlTemplate ? resolveTemplate(urlTemplate) : endpoint;
+  if (!url) {
+    return { success: false, result: null, error: "api_rest sem endpoint ou url_template configurado" };
+  }
+  if (!/^https?:\/\//i.test(url)) {
+    return { success: false, result: null, error: "URL api_rest inválida (use http/https)" };
+  }
+
+  const method = String(config.method || "GET").toUpperCase();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    "User-Agent": "BoomIA-Tool/1.0",
+    ...headersCfg,
+  };
+
+  const auth = (tool.auth_config || {}) as Record<string, unknown>;
+  if (typeof auth.api_key === "string" && auth.api_key.trim()) {
+    headers.Authorization = `Bearer ${auth.api_key.trim()}`;
+  } else if (typeof auth.bearer === "string" && auth.bearer.trim()) {
+    headers.Authorization = `Bearer ${auth.bearer.trim()}`;
+  } else if (typeof auth.header_name === "string" && typeof auth.header_value === "string") {
+    headers[auth.header_name] = auth.header_value;
+  }
+
+  const controller = new AbortController();
+  const timeoutMs =
+    typeof config.timeout_ms === "number" && config.timeout_ms > 0
+      ? Math.min(config.timeout_ms, 60000)
+      : 30000;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const fetchOpts: RequestInit = { method, headers, signal: controller.signal };
+    if (method !== "GET" && method !== "HEAD") {
+      const bodyTemplate = config.body_template;
+      if (typeof bodyTemplate === "string" && bodyTemplate.trim()) {
+        fetchOpts.body = bodyTemplate.replace(/\{(\w+)\}/g, (_m, key: string) =>
+          String(args?.[key] ?? "")
+        );
+      } else if (config.body && typeof config.body === "object") {
+        fetchOpts.body = JSON.stringify(config.body);
+      } else {
+        fetchOpts.body = JSON.stringify(args || {});
+      }
+    }
+
+    const response = await fetch(url, fetchOpts);
+    const text = await response.text();
+    let data: unknown = text;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = text.slice(0, 8000);
+    }
+
+    if (!response.ok) {
+      return {
+        success: false,
+        result: { status: response.status, data },
+        error: `api_rest HTTP ${response.status}`,
+      };
+    }
+
+    return {
+      success: true,
+      result: { status: response.status, data },
+    };
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error
+        ? err.name === "AbortError"
+          ? `Timeout após ${timeoutMs}ms`
+          : err.message
+        : "Falha na chamada api_rest";
+    return { success: false, result: null, error: message };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function executeTool(
@@ -1895,10 +2001,15 @@ export async function executeTool(
   args: Record<string, unknown>,
   agentId: string
 ): Promise<ToolExecutionResult> {
-  const supabase = createNexusClient();
-
   const fnName = (tool.function_def as Record<string, unknown>)?.name as string;
   const isEnviarNotificacao = /enviar[_ ]?notific(a|a[c├º])[o├Á]a?/i.test(fnName || "");
+
+  // api_rest não precisa do Supabase — resolve cedo (Omnicore / HTTP externo)
+  if (tool.tool_type === "api_rest") {
+    return executeApiRestTool(tool, args);
+  }
+
+  const supabase = createNexusClient();
 
   switch (tool.tool_type) {
     case "inventory_query":
@@ -1942,7 +2053,6 @@ export async function executeTool(
       return executeParkDayConsulta(supabase, tool, args, agentId);
 
     case "web_scraper":
-    case "api_rest":
     case "sql_query":
     default:
       if (isEnviarNotificacao) {

@@ -46,6 +46,156 @@ async function authenticateMcpRequest(req: FastifyRequest): Promise<string | nul
   return data.tenant_id as string;
 }
 
+const ALLOWED_MCP_TOOL_TYPES = new Set([
+  "api_rest",
+  "web_scraper",
+  "sql_query",
+  "rag_search",
+  "inventory_query",
+  "nearest_unit",
+  "fipe_query",
+  "calendar_query",
+  "chatwoot_assign",
+  "send_notification",
+  "omnibees_availability",
+  "artaxnet_availability",
+  "suite_gallery_query",
+  "lodging_consulta",
+  "park_consulta",
+  "marcar_lead",
+]);
+
+function sanitizeToolSlug(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 64);
+}
+
+function buildFunctionDef(input: Record<string, unknown>, name: string, description: string): Record<string, unknown> {
+  if (input.function_def && typeof input.function_def === "object" && !Array.isArray(input.function_def)) {
+    const fd = { ...(input.function_def as Record<string, unknown>) };
+    if (!fd.name) fd.name = name;
+    if (!fd.description) fd.description = description;
+    if (!fd.parameters) {
+      fd.parameters = { type: "object", properties: {}, required: [] };
+    }
+    return fd;
+  }
+  const parameters =
+    input.parameters && typeof input.parameters === "object" && !Array.isArray(input.parameters)
+      ? (input.parameters as Record<string, unknown>)
+      : { type: "object", properties: {}, required: [] };
+  const params =
+    parameters.type === "object"
+      ? parameters
+      : { type: "object", properties: parameters, required: [] };
+  return {
+    name,
+    description,
+    parameters: params,
+  };
+}
+
+function publicToolRow(row: Record<string, unknown>) {
+  const auth = (row.auth_config || null) as Record<string, unknown> | null;
+  let authPublic: Record<string, unknown> | null = null;
+  if (auth && typeof auth === "object") {
+    authPublic = { ...auth };
+    if (authPublic.api_key) authPublic.api_key = "***";
+  }
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    tool_type: row.tool_type,
+    tenant_id: row.tenant_id,
+    function_def: row.function_def,
+    endpoint: row.endpoint ?? null,
+    execution_config: row.execution_config ?? null,
+    auth_config: authPublic,
+    created_at: row.created_at,
+    updated_at: row.updated_at ?? null,
+  };
+}
+
+async function linkToolToAgent(
+  supabase: ReturnType<typeof createNexusClient>,
+  tenantId: string,
+  agentId: string,
+  toolId: string
+) {
+  const { data: agentCheck } = await supabase
+    .from("agents")
+    .select("id")
+    .eq("id", agentId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (!agentCheck) throw new Error("agent_id inválido ou sem permissão neste tenant.");
+  const { error } = await supabase
+    .from("agent_tools")
+    .upsert({ agent_id: agentId, tool_id: toolId }, { onConflict: "agent_id,tool_id" });
+  if (error) throw new Error(`Erro ao vincular tool ao agente: ${error.message}`);
+}
+
+function parseToolPayload(input: Record<string, unknown>, tenantId: string) {
+  const rawName = typeof input.name === "string" ? input.name.trim() : "";
+  if (!rawName) throw new Error("name é obrigatório.");
+  const name = sanitizeToolSlug(rawName) || rawName;
+  const description = typeof input.description === "string" ? input.description.trim() : "";
+  if (!description) throw new Error("description é obrigatória.");
+
+  const toolTypeRaw =
+    typeof input.tool_type === "string" && input.tool_type.trim()
+      ? input.tool_type.trim()
+      : "api_rest";
+  if (!ALLOWED_MCP_TOOL_TYPES.has(toolTypeRaw)) {
+    throw new Error(
+      `tool_type inválido: ${toolTypeRaw}. Permitidos: ${[...ALLOWED_MCP_TOOL_TYPES].join(", ")}`
+    );
+  }
+
+  const functionDef = buildFunctionDef(input, name, description);
+  const endpoint =
+    typeof input.endpoint === "string" && input.endpoint.trim() ? input.endpoint.trim() : null;
+  const executionConfig =
+    input.execution_config && typeof input.execution_config === "object" && !Array.isArray(input.execution_config)
+      ? (input.execution_config as Record<string, unknown>)
+      : {};
+  const authConfig =
+    input.auth_config && typeof input.auth_config === "object" && !Array.isArray(input.auth_config)
+      ? (input.auth_config as Record<string, unknown>)
+      : null;
+
+  if (toolTypeRaw === "api_rest") {
+    const urlTemplate =
+      typeof executionConfig.url_template === "string" ? executionConfig.url_template.trim() : "";
+    if (!endpoint && !urlTemplate) {
+      throw new Error("api_rest exige endpoint ou execution_config.url_template.");
+    }
+    const urlToCheck = urlTemplate || endpoint || "";
+    if (!/^https?:\/\//i.test(urlToCheck.replace(/\{[\w]+\}/g, "x"))) {
+      throw new Error("URL da tool api_rest deve começar com http:// ou https://");
+    }
+  }
+
+  return {
+    name,
+    description,
+    type: "function",
+    tool_type: toolTypeRaw,
+    tenant_id: tenantId,
+    function_def: functionDef,
+    endpoint,
+    execution_config: executionConfig,
+    auth_config: authConfig,
+  };
+}
+
 // ─── Definição das Tools MCP ────────────────────────────────────────────────
 
 const MCP_TOOLS = [
@@ -169,6 +319,74 @@ const MCP_TOOLS = [
         agent_id: { type: "string", description: "UUID do agente" },
         tool_id: { type: "string", description: "UUID da tool" },
         action: { type: "string", enum: ["link", "unlink"], description: "link para vincular, unlink para desvincular" },
+      },
+    },
+  },
+  {
+    name: "create_tool",
+    description:
+      "Cria uma ferramenta (function calling) no tenant. Use tool_type=api_rest para chamar endpoints externos (ex.: Omnicore hotel). Opcionalmente vincula a um agente com agent_id.",
+    inputSchema: {
+      type: "object",
+      required: ["name", "description"],
+      properties: {
+        name: { type: "string", description: "Slug da tool (ex: consultar_disponibilidade_hotel)" },
+        description: { type: "string", description: "Quando o agente deve usar esta tool (vai para o LLM)" },
+        tool_type: {
+          type: "string",
+          description: "Tipo. Padrão: api_rest. Ex: api_rest, web_scraper, chatwoot_assign, calendar_query",
+        },
+        function_def: {
+          type: "object",
+          description: "Schema OpenAI function calling: { name, description, parameters }",
+        },
+        parameters: {
+          type: "object",
+          description: "Atalho: JSON Schema das properties (monta function_def.parameters se function_def omitido)",
+        },
+        endpoint: { type: "string", description: "URL base (api_rest). Alternativa: execution_config.url_template" },
+        execution_config: {
+          type: "object",
+          description: "Config de execução. api_rest: { url_template, method, headers }",
+        },
+        auth_config: {
+          type: "object",
+          description: "Auth opcional. api_rest: { api_key } → Bearer no request",
+        },
+        agent_id: { type: "string", description: "Se informado, vincula a tool a este agente após criar" },
+      },
+    },
+  },
+  {
+    name: "upsert_tool",
+    description:
+      "Cria ou atualiza uma tool do tenant. Informe tool_id para atualizar; sem tool_id cria nova. Mesmos campos de create_tool.",
+    inputSchema: {
+      type: "object",
+      required: ["name", "description"],
+      properties: {
+        tool_id: { type: "string", description: "UUID da tool (omitir para criar)" },
+        name: { type: "string" },
+        description: { type: "string" },
+        tool_type: { type: "string" },
+        function_def: { type: "object" },
+        parameters: { type: "object" },
+        endpoint: { type: "string" },
+        execution_config: { type: "object" },
+        auth_config: { type: "object" },
+        agent_id: { type: "string", description: "Se informado, garante vínculo com o agente" },
+      },
+    },
+  },
+  {
+    name: "delete_tool",
+    description: "Remove uma tool do tenant. Vínculos em agent_tools são apagados em cascata.",
+    inputSchema: {
+      type: "object",
+      required: ["tool_id"],
+      properties: {
+        tool_id: { type: "string", description: "UUID da tool" },
+        confirm: { type: "boolean", description: "Deve ser true para confirmar" },
       },
     },
   },
@@ -393,7 +611,7 @@ async function executeTool(name: string, input: Record<string, unknown>, tenantI
     case "list_available_tools": {
       let query = supabase
         .from("tools")
-        .select("id, name, description, tool_type, tenant_id, function_def, created_at")
+        .select("id, name, description, tool_type, tenant_id, function_def, endpoint, execution_config, auth_config, created_at")
         .order("name");
 
       if (typeof input.tool_type === "string" && input.tool_type.trim()) {
@@ -406,7 +624,10 @@ async function executeTool(name: string, input: Record<string, unknown>, tenantI
         const tid = row.tenant_id;
         return !tid || tid === tenantId;
       });
-      return { tools: tenantTools, total: tenantTools.length };
+      return {
+        tools: tenantTools.map((row) => publicToolRow(row as Record<string, unknown>)),
+        total: tenantTools.length,
+      };
     }
 
     case "manage_agent_tool": {
@@ -442,6 +663,93 @@ async function executeTool(name: string, input: Record<string, unknown>, tenantI
         if (error) throw new Error(`Erro ao desvincular tool: ${error.message}`);
         return { success: true, action: "unlinked", agent_id: agentId, tool_id: toolId };
       }
+    }
+
+    case "create_tool": {
+      const row = parseToolPayload(input, tenantId);
+      const { data, error } = await supabase
+        .from("tools")
+        .insert(row)
+        .select("id, name, description, tool_type, tenant_id, function_def, endpoint, execution_config, auth_config, created_at")
+        .single();
+      if (error) throw new Error(`Erro ao criar tool: ${error.message}`);
+      const toolId = data.id as string;
+      let linked = false;
+      if (typeof input.agent_id === "string" && input.agent_id.trim()) {
+        await linkToolToAgent(supabase, tenantId, input.agent_id.trim(), toolId);
+        linked = true;
+      }
+      return { tool: publicToolRow(data as Record<string, unknown>), linked_agent_id: linked ? input.agent_id : null };
+    }
+
+    case "upsert_tool": {
+      const toolId = typeof input.tool_id === "string" ? input.tool_id.trim() : "";
+      const row = parseToolPayload(input, tenantId);
+
+      let saved: Record<string, unknown> | null = null;
+      if (toolId) {
+        const { data: existing } = await supabase
+          .from("tools")
+          .select("id, tenant_id")
+          .eq("id", toolId)
+          .maybeSingle();
+        if (!existing) throw new Error("Tool não encontrada.");
+        if (existing.tenant_id && existing.tenant_id !== tenantId) {
+          throw new Error("Sem permissão para editar esta tool.");
+        }
+        if (!existing.tenant_id) {
+          throw new Error("Tools globais não podem ser editadas via MCP do tenant.");
+        }
+        const { data, error } = await supabase
+          .from("tools")
+          .update(row)
+          .eq("id", toolId)
+          .eq("tenant_id", tenantId)
+          .select("id, name, description, tool_type, tenant_id, function_def, endpoint, execution_config, auth_config, created_at")
+          .single();
+        if (error) throw new Error(`Erro ao atualizar tool: ${error.message}`);
+        saved = data as Record<string, unknown>;
+      } else {
+        const { data, error } = await supabase
+          .from("tools")
+          .insert(row)
+          .select("id, name, description, tool_type, tenant_id, function_def, endpoint, execution_config, auth_config, created_at")
+          .single();
+        if (error) throw new Error(`Erro ao criar tool: ${error.message}`);
+        saved = data as Record<string, unknown>;
+      }
+
+      let linked = false;
+      const savedId = saved.id as string;
+      if (typeof input.agent_id === "string" && input.agent_id.trim()) {
+        await linkToolToAgent(supabase, tenantId, input.agent_id.trim(), savedId);
+        linked = true;
+      }
+      return {
+        tool: publicToolRow(saved),
+        created: !toolId,
+        linked_agent_id: linked ? input.agent_id : null,
+      };
+    }
+
+    case "delete_tool": {
+      const toolId = typeof input.tool_id === "string" ? input.tool_id.trim() : "";
+      if (!toolId) throw new Error("tool_id é obrigatório.");
+      if (input.confirm !== true) throw new Error("Envie confirm=true para excluir a tool.");
+
+      const { data: existing } = await supabase
+        .from("tools")
+        .select("id, tenant_id, name")
+        .eq("id", toolId)
+        .maybeSingle();
+      if (!existing) throw new Error("Tool não encontrada.");
+      if (!existing.tenant_id || existing.tenant_id !== tenantId) {
+        throw new Error("Só é possível excluir tools do próprio tenant.");
+      }
+
+      const { error } = await supabase.from("tools").delete().eq("id", toolId).eq("tenant_id", tenantId);
+      if (error) throw new Error(`Erro ao excluir tool: ${error.message}`);
+      return { success: true, deleted_id: toolId, name: existing.name };
     }
 
     case "list_providers": {
