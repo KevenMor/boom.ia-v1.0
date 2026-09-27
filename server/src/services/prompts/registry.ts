@@ -103,6 +103,12 @@ import {
   DISPATCHER_PROMPT as DE_DISPATCHER,
   FOLLOWUP_PROMPT as DE_FOLLOWUP,
 } from "./delta-empreendimentos.js";
+import {
+  SYSTEM_PROMPT as DC_SYSTEM,
+  COMMUNICATION_RULES as DC_COMM_RULES,
+  DISPATCHER_PROMPT as DC_DISPATCHER,
+  FOLLOWUP_PROMPT as DC_FOLLOWUP,
+} from "./divino-chale.js";
 
 /**
  * Configura?�?�o de prompt por tenant.
@@ -418,6 +424,26 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     skipGreeting: true,
     version: "v1.5.19",
     description: "Paula — SDR consultora Delta Empreendimentos (Araçoiaba da Serra/SP)",
+  },
+  "divino-chale": {
+    systemPrompt: DC_SYSTEM,
+    communicationRules: DC_COMM_RULES,
+    dispatcherPrompt: DC_DISPATCHER,
+    followupPrompt: DC_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    skipGreeting: true,
+    version: "v1.1.1",
+    description: "Lara — Consultora de reservas Divino Chalé (Vitória da Conquista/BA)",
+  },
+  divinochale: {
+    systemPrompt: DC_SYSTEM,
+    communicationRules: DC_COMM_RULES,
+    dispatcherPrompt: DC_DISPATCHER,
+    followupPrompt: DC_FOLLOWUP,
+    alwaysInjectCommRules: true,
+    skipGreeting: true,
+    version: "v1.1.1",
+    description: "Lara — Consultora de reservas Divino Chalé (Vitória da Conquista/BA)",
   },
 };
 
