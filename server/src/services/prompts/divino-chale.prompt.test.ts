@@ -11,7 +11,7 @@ describe("Divino Chalé — SYSTEM_PROMPT", () => {
   it("identifica Lara e Divino Chalé", () => {
     expect(SYSTEM_PROMPT).toMatch(/Lara/i);
     expect(SYSTEM_PROMPT).toMatch(/Divino Chalé/i);
-    expect(SYSTEM_PROMPT).toMatch(/v1\.1\.1/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.1\.2/);
   });
 
   it("proíbe template formulário de datas", () => {
@@ -41,6 +41,14 @@ describe("Divino Chalé — SYSTEM_PROMPT", () => {
     expect(COMMUNICATION_RULES).toMatch(/perguntar a idade/i);
   });
 
+  it("disponibilidade só via handoff — sem inventar ocupado/livre", () => {
+    expect(SYSTEM_PROMPT).toMatch(/já está reservado/i);
+    expect(SYSTEM_PROMPT).toMatch(/handoff/i);
+    expect(COMMUNICATION_RULES).toMatch(/Disponibilidade → sempre handoff/i);
+    expect(DISPATCHER_PROMPT).toMatch(/NO_TOOLS_NEEDED/);
+    expect(DISPATCHER_PROMPT).toMatch(/consultar_evento|calendar_query/i);
+  });
+
   it("pets não permitidos e cancelamento via handoff", () => {
     expect(SYSTEM_PROMPT).toMatch(/Pets: NÃO permitidos|não permitidos/i);
     expect(SYSTEM_PROMPT).toMatch(/Cancelamento ou remanejamento/i);
@@ -61,7 +69,7 @@ describe("Divino Chalé — SYSTEM_PROMPT", () => {
 describe("Divino Chalé — registry", () => {
   it("resolve slug divino-chale com skipGreeting", () => {
     const cfg = getPromptConfig("divino-chale");
-    expect(cfg?.version).toBe("v1.1.1");
+    expect(cfg?.version).toBe("v1.1.2");
     expect(cfg?.skipGreeting).toBe(true);
     expect(cfg?.alwaysInjectCommRules).toBe(true);
   });
@@ -77,7 +85,7 @@ describe("Divino Chalé — registry", () => {
     const custom = "PROMPT OVERRIDE TESTE DIVINO";
     const out = buildSystemPrompt(custom, "divino-chale", false, { overridePrompts: true });
     expect(out).toContain(custom);
-    expect(out).not.toContain("LARA | DIVINO CHALÉ — v1.1.1");
+    expect(out).not.toContain("LARA | DIVINO CHALÉ — v1.1.2");
   });
 });
 

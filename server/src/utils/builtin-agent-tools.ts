@@ -29,8 +29,16 @@ const TENANTS_WITH_GALLERY_BUILTIN = new Set([
   "delta_empreendimentos",
 ]);
 
+/** Tenants sem ferramenta (ex.: chalé — disponibilidade só via equipe humana). */
+const TENANTS_FORCE_NO_TOOLS = new Set(["divino-chale", "divinochale"]);
+
 export function tenantUsesGalleryBuiltin(slug: string | null | undefined): boolean {
   return !!slug && TENANTS_WITH_GALLERY_BUILTIN.has(slug);
+}
+
+/** Se true, chat-local não envia tools ao dispatcher (ignora agent_tools no banco). */
+export function tenantForcesNoTools(slug: string | null | undefined): boolean {
+  return !!slug && TENANTS_FORCE_NO_TOOLS.has(slug);
 }
 
 export function createSuiteGalleryQueryTool(tenantId?: string): ToolDef {
@@ -49,6 +57,17 @@ export function mergeBuiltinAgentTools(
   tools: ToolDef[],
   opts: { tenantSlug: string | null; tenantId: string }
 ): ToolDef[] {
+  if (tenantForcesNoTools(opts.tenantSlug)) {
+    if (tools.length > 0) {
+      console.warn(
+        `[Chat-Local] Tenant ${opts.tenantSlug} força zero tools — ignorando ${tools.length} tool(s) vinculada(s): ${tools
+          .map((t) => `${t.name}:${t.tool_type}`)
+          .join(", ")}`
+      );
+    }
+    return [];
+  }
+
   const out = [...tools];
   const hasType = (toolType: string) => out.some((t) => t.tool_type === toolType);
 

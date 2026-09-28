@@ -432,7 +432,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     followupPrompt: DC_FOLLOWUP,
     alwaysInjectCommRules: true,
     skipGreeting: true,
-    version: "v1.1.1",
+    version: "v1.1.2",
     description: "Lara — Consultora de reservas Divino Chalé (Vitória da Conquista/BA)",
   },
   divinochale: {
@@ -442,7 +442,7 @@ const TENANT_PROMPTS: Record<string, TenantPromptConfig> = {
     followupPrompt: DC_FOLLOWUP,
     alwaysInjectCommRules: true,
     skipGreeting: true,
-    version: "v1.1.1",
+    version: "v1.1.2",
     description: "Lara — Consultora de reservas Divino Chalé (Vitória da Conquista/BA)",
   },
 };
