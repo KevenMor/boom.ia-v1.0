@@ -24,6 +24,13 @@ import {
 import { buildInventoryPhotosMarkdown, filterValidInventoryPhotoUrls } from "../lib/inventory-photo-url.js";
 import { decodeHtmlEntities } from "../lib/html-entities.js";
 import { fetchSunsetLodgingGalleryPhotos, shouldIncludeSunsetLodgingPhotoInQuote } from "../utils/sunset-lodging-gallery-photos.js";
+import {
+  findLodgingConflicts,
+  isLodgingAvailabilityAction,
+  isLodgingDeleteAction,
+  parseLodgingStayArgs,
+  pickLodgingCalendars,
+} from "../utils/lodging-calendar-availability.js";
 
 /**
  * Impede handoff “para a própria IA”: se assignee_id for o bot (agent_assignee_id / test_assignee_id),
@@ -797,7 +804,230 @@ async function executeCalendarQuery(
     }
 
     const calendarArgs: Record<string, unknown> = { ...args, tenant_id: tenantId };
-    const action = (calendarArgs.action || "check_availability") as string;
+    const action = String(calendarArgs.action || calendarArgs.acao || "check_availability").toLowerCase();
+
+    // Excluir reserva/bloqueio de hospedagem (diárias) — por event_id ou check_in/check_out
+    if (isLodgingDeleteAction(action)) {
+      const eventIdRaw = calendarArgs.event_id ?? calendarArgs.id;
+      const eventId = typeof eventIdRaw === "string" && eventIdRaw.trim() ? eventIdRaw.trim() : "";
+      const stay = parseLodgingStayArgs(calendarArgs);
+
+      let { data: calendars } = await supabase
+        .from("calendars")
+        .select("id, name, is_active")
+        .eq("tenant_id", tenantId)
+        .eq("is_active", true)
+        .order("name", { ascending: true })
+        .limit(20);
+      if (!calendars?.length) {
+        const { data: anyCals } = await supabase
+          .from("calendars")
+          .select("id, name, is_active")
+          .eq("tenant_id", tenantId)
+          .order("name", { ascending: true })
+          .limit(20);
+        calendars = anyCals ?? [];
+      }
+
+      const lodgingCals = pickLodgingCalendars(calendars || []);
+      const calendarIds = (lodgingCals.length ? lodgingCals : calendars || []).map((c) => c.id);
+      if (!calendarIds.length) {
+        return { success: false, result: null, error: "Nenhuma agenda encontrada para excluir evento." };
+      }
+
+      // 1) Por event_id
+      if (eventId) {
+        const { data: matched, error: findErr } = await supabase
+          .from("calendar_events")
+          .select("id, title, start_at, end_at, calendar_id")
+          .eq("id", eventId)
+          .in("calendar_id", calendarIds)
+          .maybeSingle();
+        if (findErr) {
+          return { success: false, result: null, error: findErr.message };
+        }
+        if (!matched) {
+          return {
+            success: false,
+            result: null,
+            error: `Evento ${eventId} não encontrado nas agendas do chalé.`,
+          };
+        }
+        const { error: delErr } = await supabase.from("calendar_events").delete().eq("id", matched.id);
+        if (delErr) {
+          return { success: false, result: null, error: delErr.message };
+        }
+        return {
+          success: true,
+          result: {
+            action: "excluir",
+            deleted_count: 1,
+            deleted_events: [matched],
+            message: `Evento removido da agenda: ${matched.title || matched.id}.`,
+          },
+        };
+      }
+
+      // 2) Por período de hospedagem (check_in / check_out)
+      if (stay) {
+        const periodEndUtc = new Date(`${stay.checkOut}T00:00:00-03:00`).toISOString();
+        const periodStartUtc = new Date(`${stay.checkIn}T00:00:00-03:00`).toISOString();
+        const { data: events, error: evErr } = await supabase
+          .from("calendar_events")
+          .select("id, title, start_at, end_at, all_day, calendar_id")
+          .in("calendar_id", calendarIds)
+          .lt("start_at", periodEndUtc)
+          .order("start_at", { ascending: true })
+          .limit(150);
+        if (evErr) {
+          return { success: false, result: null, error: evErr.message };
+        }
+        const inWindow = (events || []).filter((e) => {
+          if (!e.start_at) return false;
+          const end = e.end_at ? new Date(e.end_at).getTime() : new Date(e.start_at).getTime() + 86400000;
+          return end > new Date(periodStartUtc).getTime();
+        });
+        const toDelete = findLodgingConflicts(inWindow, stay);
+        if (toDelete.length === 0) {
+          return {
+            success: true,
+            result: {
+              action: "excluir",
+              check_in: stay.checkIn,
+              check_out: stay.checkOut,
+              deleted_count: 0,
+              deleted_events: [],
+              message: `Nenhum evento encontrado no período ${stay.checkIn} → ${stay.checkOut} para excluir.`,
+            },
+          };
+        }
+        const ids = toDelete.map((e) => e.id).filter((id): id is string => !!id);
+        const { error: delErr } = await supabase.from("calendar_events").delete().in("id", ids);
+        if (delErr) {
+          return { success: false, result: null, error: delErr.message };
+        }
+        return {
+          success: true,
+          result: {
+            action: "excluir",
+            check_in: stay.checkIn,
+            check_out: stay.checkOut,
+            deleted_count: ids.length,
+            deleted_events: toDelete.map((e) => ({
+              id: e.id,
+              title: e.title,
+              start_at: e.start_at,
+              end_at: e.end_at,
+            })),
+            message: `Removido(s) ${ids.length} evento(s) da agenda no período ${stay.checkIn} → ${stay.checkOut}.`,
+          },
+        };
+      }
+
+      // 3) Fallback: lógica clássica (nome / start_at) — continua abaixo no bloco legado se action for cancelar
+      // Para action=excluir sem params → erro claro
+      if (action === "excluir" || action === "remover") {
+        return {
+          success: false,
+          result: null,
+          error:
+            'Para excluir da agenda, informe event_id OU check_in+check_out (YYYY-MM-DD). Ex.: {"action":"excluir","check_in":"2026-10-03","check_out":"2026-10-04"}',
+        };
+      }
+      // cancel/delete sem stay/event_id → cai no handler legado abaixo
+    }
+
+    // Hospedagem (diárias): check_in/check_out — NÃO usar slots horários de consultório
+    if (isLodgingAvailabilityAction(action, calendarArgs)) {
+      const stay = parseLodgingStayArgs(calendarArgs);
+      if (!stay) {
+        return {
+          success: false,
+          result: null,
+          error:
+            "Para verificar disponibilidade do chalé, informe check_in e check_out (YYYY-MM-DD). Ex.: check_in=2026-10-03, check_out=2026-10-04.",
+        };
+      }
+
+      let { data: calendars, error: calErr } = await supabase
+        .from("calendars")
+        .select("id, name, is_active")
+        .eq("tenant_id", tenantId)
+        .eq("is_active", true)
+        .order("name", { ascending: true })
+        .limit(20);
+      if (calErr) {
+        return { success: false, result: null, error: calErr.message };
+      }
+      if (!calendars?.length) {
+        const { data: anyCals } = await supabase
+          .from("calendars")
+          .select("id, name, is_active")
+          .eq("tenant_id", tenantId)
+          .order("name", { ascending: true })
+          .limit(20);
+        calendars = anyCals ?? [];
+      }
+
+      const lodgingCals = pickLodgingCalendars(calendars || []);
+      if (!lodgingCals.length) {
+        return {
+          success: true,
+          result: {
+            action: "check_lodging",
+            check_in: stay.checkIn,
+            check_out: stay.checkOut,
+            available: true,
+            conflicts: [],
+            note: "Nenhuma agenda encontrada — tratar como livre e confirmar com a equipe.",
+          },
+        };
+      }
+
+      const calendarIds = lodgingCals.map((c) => c.id);
+      const periodEndUtc = new Date(`${stay.checkOut}T00:00:00-03:00`).toISOString();
+      const periodStartUtc = new Date(`${stay.checkIn}T00:00:00-03:00`).toISOString();
+      // Amplia um pouco a busca; o overlap fino é em findLodgingConflicts
+      const { data: events, error: evErr } = await supabase
+        .from("calendar_events")
+        .select("id, title, start_at, end_at, all_day, calendar_id")
+        .in("calendar_id", calendarIds)
+        .lt("start_at", periodEndUtc)
+        .order("start_at", { ascending: true })
+        .limit(150);
+
+      if (evErr) {
+        return { success: false, result: null, error: evErr.message };
+      }
+
+      const inWindow = (events || []).filter((e) => {
+        if (!e.start_at) return false;
+        const end = e.end_at ? new Date(e.end_at).getTime() : new Date(e.start_at).getTime() + 86400000;
+        return end > new Date(periodStartUtc).getTime();
+      });
+
+      const conflicts = findLodgingConflicts(inWindow, stay);
+      const available = conflicts.length === 0;
+
+      return {
+        success: true,
+        result: {
+          action: "check_lodging",
+          check_in: stay.checkIn,
+          check_out: stay.checkOut,
+          available,
+          calendar: lodgingCals.map((c) => c.name).join(", "),
+          conflicts: conflicts.map((e) => ({
+            title: e.title,
+            start_at: e.start_at,
+            end_at: e.end_at,
+          })),
+          message: available
+            ? `Chalé LIVRE de ${stay.checkIn} a ${stay.checkOut}.`
+            : `Chalé OCUPADO de ${stay.checkIn} a ${stay.checkOut} (${conflicts.length} reserva(s) no calendário).`,
+        },
+      };
+    }
 
     if (action === "check_availability") {
       // Compute today's date in BRT (UTC-3), not UTC

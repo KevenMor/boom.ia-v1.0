@@ -29,8 +29,8 @@ const TENANTS_WITH_GALLERY_BUILTIN = new Set([
   "delta_empreendimentos",
 ]);
 
-/** Tenants sem ferramenta (ex.: chalé — disponibilidade só via equipe humana). */
-const TENANTS_FORCE_NO_TOOLS = new Set(["divino-chale", "divinochale"]);
+/** Tenants que nunca devem receber tools no dispatcher (vazio por padrão). */
+const TENANTS_FORCE_NO_TOOLS = new Set<string>();
 
 export function tenantUsesGalleryBuiltin(slug: string | null | undefined): boolean {
   return !!slug && TENANTS_WITH_GALLERY_BUILTIN.has(slug);

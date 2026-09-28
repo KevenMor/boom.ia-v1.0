@@ -1,6 +1,5 @@
 /**
- * Aplica prompt Lara v1.1.2 no agente Divino Chalé e remove tools indevidas
- * (calendar_query / consultar_evento).
+ * Aplica prompt Lara + function_def (check_lodging + excluir) e religa a tool.
  *
  * Uso: cd server && npx tsx scripts/apply-divino-chale-prompt.ts
  */
@@ -14,6 +13,36 @@ import {
 } from "../src/services/prompts/divino-chale.ts";
 
 const AGENT_ID = "8b9433df-37f2-4ea3-9564-8b3d4f7640cc";
+const TOOL_ID = "5e383e6d-8ddf-404e-a654-77a190227837";
+
+const FUNCTION_DEF = {
+  name: "consultar_evento",
+  description:
+    "Calendário do Divino Chalé (diárias). Actions: check_lodging (disponibilidade) e excluir (remove reserva/bloqueio). Sempre use check_in e check_out YYYY-MM-DD para diárias. NÃO use slots de consultório.",
+  parameters: {
+    type: "object",
+    properties: {
+      action: {
+        type: "string",
+        description: "check_lodging = verificar vaga; excluir = remover da agenda",
+        enum: ["check_lodging", "excluir"],
+      },
+      check_in: {
+        type: "string",
+        description: "Data de entrada (check-in) YYYY-MM-DD",
+      },
+      check_out: {
+        type: "string",
+        description: "Data de saída (check-out) YYYY-MM-DD — dia seguinte ao último pernoite",
+      },
+      event_id: {
+        type: "string",
+        description: "UUID do evento (só para action=excluir, se conhecido)",
+      },
+    },
+    required: ["action"],
+  },
+};
 
 async function main() {
   const env = Object.fromEntries(
@@ -29,39 +58,37 @@ async function main() {
     auth: { persistSession: false },
   });
 
-  const { data: linked, error: listErr } = await sb
-    .from("agent_tools")
-    .select("tool_id, tools(id, name, tool_type)")
-    .eq("agent_id", AGENT_ID);
-  if (listErr) {
-    console.error("list agent_tools:", listErr);
+  const { error: toolErr } = await sb
+    .from("tools")
+    .update({
+      name: "consultar_evento",
+      description: FUNCTION_DEF.description,
+      function_def: FUNCTION_DEF,
+    })
+    .eq("id", TOOL_ID);
+  if (toolErr) {
+    console.error("update tool:", toolErr);
     process.exit(1);
   }
 
-  const toRemove = (linked || []).filter((row: { tools?: { tool_type?: string; name?: string } | null }) => {
-    const t = row.tools;
-    const type = (t?.tool_type || "").toLowerCase();
-    const name = (t?.name || "").toLowerCase();
-    return (
-      type === "calendar_query" ||
-      type.includes("calendar") ||
-      name.includes("evento") ||
-      name.includes("agenda")
-    );
-  });
+  const { data: existingLink } = await sb
+    .from("agent_tools")
+    .select("tool_id")
+    .eq("agent_id", AGENT_ID)
+    .eq("tool_id", TOOL_ID)
+    .maybeSingle();
 
-  let removed = 0;
-  for (const row of toRemove) {
-    const { error } = await sb
-      .from("agent_tools")
-      .delete()
-      .eq("agent_id", AGENT_ID)
-      .eq("tool_id", row.tool_id);
-    if (error) {
-      console.error("delete agent_tool:", error);
+  let linked = !!existingLink;
+  if (!existingLink) {
+    const { error: linkErr } = await sb.from("agent_tools").insert({
+      agent_id: AGENT_ID,
+      tool_id: TOOL_ID,
+    });
+    if (linkErr) {
+      console.error("link agent_tools:", linkErr);
       process.exit(1);
     }
-    removed += 1;
+    linked = true;
   }
 
   const { data, error } = await sb
@@ -77,26 +104,20 @@ async function main() {
       updated_at: new Date().toISOString(),
     })
     .eq("id", AGENT_ID)
-    .select("id, name, override_prompts, skip_greeting, always_inject_comm_rules")
+    .select("id, name, override_prompts")
     .single();
   if (error) {
     console.error(error);
     process.exit(1);
   }
 
-  const { data: remaining } = await sb
-    .from("agent_tools")
-    .select("tool_id, tools(name, tool_type)")
-    .eq("agent_id", AGENT_ID);
-
   console.log(
     JSON.stringify(
       {
         ok: true,
-        promptVersion: "v1.1.2",
-        promptLen: SYSTEM_PROMPT.length,
-        toolsRemoved: removed,
-        remainingTools: remaining,
+        toolUpdated: true,
+        toolLinked: linked,
+        actions: ["check_lodging", "excluir"],
         agent: data,
       },
       null,

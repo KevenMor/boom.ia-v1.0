@@ -15,24 +15,25 @@ const calendarTool: ToolDef = {
 };
 
 describe("tenantForcesNoTools", () => {
-  it("bloqueia divino-chale e alias", () => {
-    expect(tenantForcesNoTools("divino-chale")).toBe(true);
-    expect(tenantForcesNoTools("divinochale")).toBe(true);
+  it("não bloqueia divino-chale (calendário de diárias ativo)", () => {
+    expect(tenantForcesNoTools("divino-chale")).toBe(false);
+    expect(tenantForcesNoTools("divinochale")).toBe(false);
   });
 
-  it("não bloqueia outros tenants", () => {
+  it("não bloqueia outros tenants por padrão", () => {
     expect(tenantForcesNoTools("sunset-thermas-park")).toBe(false);
     expect(tenantForcesNoTools(null)).toBe(false);
   });
 });
 
 describe("mergeBuiltinAgentTools", () => {
-  it("zera tools do Divino Chalé mesmo com calendar_query vinculada", () => {
+  it("mantém calendar_query do Divino Chalé", () => {
     const out = mergeBuiltinAgentTools([calendarTool], {
       tenantSlug: "divino-chale",
       tenantId: "tenant-1",
     });
-    expect(out).toEqual([]);
+    expect(out).toHaveLength(1);
+    expect(out[0].tool_type).toBe("calendar_query");
   });
 
   it("mantém tools de outros tenants", () => {

@@ -21,7 +21,7 @@ import { useTenantContext } from "@/contexts/TenantContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useTenants } from "@/hooks/useTenants";
-import { useCalendars, useCreateCalendar } from "@/hooks/useCalendars";
+import { useCalendars, useCreateCalendar, useDeleteCalendar } from "@/hooks/useCalendars";
 import { useCalendarEvents, useCreateCalendarEvent, useUpdateCalendarEvent, useDeleteCalendarEvent } from "@/hooks/useCalendarEvents";
 import { useAgents } from "@/hooks/useAgents";
 import { usePendingReminders } from "@/hooks/usePendingReminders";
@@ -212,6 +212,7 @@ export default function CalendarPage() {
   const updateEvent = useUpdateCalendarEvent();
   const deleteEvent = useDeleteCalendarEvent();
   const createCalendar = useCreateCalendar();
+  const deleteCalendar = useDeleteCalendar();
 
   // Map DB events to FullCalendar format (converte UTC → BRT para exibição correta)
   const events: EventInput[] = useMemo(() => {
@@ -684,6 +685,21 @@ export default function CalendarPage() {
     }
   };
 
+  const handleDeleteCalendar = async (cal: Calendar) => {
+    if (!selectedTenantId) return;
+    const ok = window.confirm(
+      `Excluir a agenda "${cal.name}"?\n\nTodos os eventos dessa agenda também serão removidos. Esta ação não pode ser desfeita.`,
+    );
+    if (!ok) return;
+    try {
+      await deleteCalendar.mutateAsync({ id: cal.id, tenantId: selectedTenantId });
+      if (selectedCalendarId === cal.id) setSelectedCalendarId("all");
+      toast.success(`Agenda "${cal.name}" excluída.`);
+    } catch (e: any) {
+      toast.error(e.message || "Erro ao excluir agenda.");
+    }
+  };
+
   const dialogDateLabel = useMemo(() => {
     const s = `${startDate}T${startTime}`;
     const e = `${endDate}T${endTime}`;
@@ -874,30 +890,49 @@ export default function CalendarPage() {
               const c = EVENT_COLORS[cal.color] || EVENT_COLORS.primary;
               const active = selectedCalendarId === cal.id;
               return (
-                <button
-                  type="button"
+                <div
                   key={cal.id}
                   className={cn(
-                    "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors",
+                    "group flex w-full items-center gap-1 rounded-lg pr-1 transition-colors",
                     active ? "bg-muted/80" : "hover:bg-muted/50",
                   )}
-                  onClick={() => setSelectedCalendarId(cal.id === selectedCalendarId ? "all" : cal.id)}
                 >
-                  <span
-                    className={cn(
-                      "flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] border",
-                      active ? "border-transparent" : "border-border/80 bg-transparent",
-                    )}
-                    style={active ? { backgroundColor: c.bg, borderColor: c.bg } : undefined}
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px]"
+                    onClick={() => setSelectedCalendarId(cal.id === selectedCalendarId ? "all" : cal.id)}
                   >
-                    {active ? (
-                      <span className="block h-2 w-2 rounded-[1px] bg-white/95" />
-                    ) : (
-                      <span className="block h-2 w-2 rounded-[1px]" style={{ backgroundColor: c.bg }} />
-                    )}
-                  </span>
-                  <span className="flex-1 truncate font-medium tracking-[-0.01em] text-foreground">{cal.name}</span>
-                </button>
+                    <span
+                      className={cn(
+                        "flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] border",
+                        active ? "border-transparent" : "border-border/80 bg-transparent",
+                      )}
+                      style={active ? { backgroundColor: c.bg, borderColor: c.bg } : undefined}
+                    >
+                      {active ? (
+                        <span className="block h-2 w-2 rounded-[1px] bg-white/95" />
+                      ) : (
+                        <span className="block h-2 w-2 rounded-[1px]" style={{ backgroundColor: c.bg }} />
+                      )}
+                    </span>
+                    <span className="flex-1 truncate font-medium tracking-[-0.01em] text-foreground">{cal.name}</span>
+                  </button>
+                  {!calendarScoped && (
+                    <button
+                      type="button"
+                      title={`Excluir agenda ${cal.name}`}
+                      aria-label={`Excluir agenda ${cal.name}`}
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-70 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                      disabled={deleteCalendar.isPending}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleDeleteCalendar(cal);
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -993,17 +1028,37 @@ export default function CalendarPage() {
                       <div
                         key={cal.id}
                         className={cn(
-                          "flex min-h-11 items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm cursor-pointer transition-colors active:bg-muted",
+                          "flex min-h-11 items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm transition-colors active:bg-muted",
                           selectedCalendarId === cal.id ? "bg-muted" : ""
                         )}
-                        onClick={() => {
-                          setSelectedCalendarId(cal.id === selectedCalendarId ? "all" : cal.id);
-                          setSidebarSheetOpen(false);
-                        }}
                       >
-                        <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: c.bg }} />
-                        <span className="text-foreground flex-1">{cal.name}</span>
-                        <CalendarDays className="h-3 w-3 text-muted-foreground" />
+                        <button
+                          type="button"
+                          className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                          onClick={() => {
+                            setSelectedCalendarId(cal.id === selectedCalendarId ? "all" : cal.id);
+                            setSidebarSheetOpen(false);
+                          }}
+                        >
+                          <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: c.bg }} />
+                          <span className="text-foreground flex-1 truncate">{cal.name}</span>
+                        </button>
+                        {!calendarScoped ? (
+                          <button
+                            type="button"
+                            aria-label={`Excluir agenda ${cal.name}`}
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground active:bg-destructive/10 active:text-destructive"
+                            disabled={deleteCalendar.isPending}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleDeleteCalendar(cal);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        ) : (
+                          <CalendarDays className="h-3 w-3 text-muted-foreground" />
+                        )}
                       </div>
                     );
                   })}

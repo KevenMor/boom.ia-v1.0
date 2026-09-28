@@ -75,10 +75,16 @@ export function useDeleteCalendar() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, tenantId }: { id: string; tenantId: string }) => {
+      // Eventos primeiro (evita falha de FK se não houver CASCADE)
+      const { error: evErr } = await supabase.from("calendar_events").delete().eq("calendar_id", id);
+      if (evErr) throw evErr;
       const { error } = await supabase.from("calendars").delete().eq("id", id);
       if (error) throw error;
       return tenantId;
     },
-    onSuccess: (tenantId) => qc.invalidateQueries({ queryKey: ["calendars", tenantId] }),
+    onSuccess: (tenantId) => {
+      qc.invalidateQueries({ queryKey: ["calendars", tenantId] });
+      qc.invalidateQueries({ queryKey: ["calendar-events", tenantId] });
+    },
   });
 }
