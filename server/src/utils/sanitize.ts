@@ -91,6 +91,15 @@ export function stripSimulatedToolCallLeakage(text: string): string {
   t = t.replace(/Chamada de ferramenta\s*:\s*[^\n]*/gim, "");
   t = t.replace(/Chamada da ferramenta\s*:\s*[^\n]*/gim, "");
   t = t.replace(/\{\s*"tool_code"\s*:\s*"[^"]+"\s*,\s*"parameters"\s*:\s*\{[\s\S]*?\}\s*\}\s*/gim, "");
+  // Gemini às vezes escreve blocos [tool_code] print(consultar_evento(...)) [/tool_code]
+  t = t.replace(/\[\s*\/?tool_code\s*\]/gim, "");
+  t = t.replace(/```(?:tool_code|tool)?\s*[\s\S]*?```/gim, "");
+  t = t.replace(/\bprint\s*\(\s*consultar_evento\s*\([^)]*\)\s*\)\s*/gim, "");
+  t = t.replace(/\bconsultar_evento\s*\(\s*[^)]*\)\s*/gim, "");
+  t = t.replace(/\[\s*tool_check_lodging\s*\][\s\S]*?(?=\[\/tool_check_lodging\]|$)/gim, "");
+  t = t.replace(/\[\s*\/?tool_check_lodging\s*\]/gim, "");
+  t = t.replace(/\bcheck_in\s*=\s*["']?\d{4}-\d{2}-\d{2}["']?/gim, "");
+  t = t.replace(/\bcheck_out\s*=\s*["']?\d{4}-\d{2}-\d{2}["']?/gim, "");
   t = t.replace(/\bconsultar_(?:parque|hospedagem)_sunset\s*\(\s*\{[\s\S]*?\}\s*\)\s*/gim, "");
   t = t.replace(/\bconsultar_(?:parque|hospedagem)_sunset\s*\(\s*[^)]*\)\s*/gim, "");
   return t;

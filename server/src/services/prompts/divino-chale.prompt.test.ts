@@ -11,13 +11,13 @@ describe("Divino Chalé — SYSTEM_PROMPT", () => {
   it("identifica Lara e Divino Chalé", () => {
     expect(SYSTEM_PROMPT).toMatch(/Lara/i);
     expect(SYSTEM_PROMPT).toMatch(/Divino Chalé/i);
-    expect(SYSTEM_PROMPT).toMatch(/v1\.2\.0/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.3\.2/);
   });
 
-  it("proíbe template formulário de datas", () => {
-    expect(SYSTEM_PROMPT).toMatch(/PROIBIDO/i);
+  it("guia conversa natural e evita formulário", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Regra de ouro|perguntou|WhatsApp/i);
     expect(SYSTEM_PROMPT).toMatch(/Data de entrada/i);
-    expect(SYSTEM_PROMPT).toMatch(/cópia e cola|copia e cola|formulário|formulario/i);
+    expect(SYSTEM_PROMPT).toMatch(/formulário|formulario|soa robô|Evite/i);
   });
 
   it("define tabela oficial e extras", () => {
@@ -29,13 +29,42 @@ describe("Divino Chalé — SYSTEM_PROMPT", () => {
   });
 
   it("nome do cliente no máximo uma vez na conversa", () => {
-    expect(SYSTEM_PROMPT).toMatch(/Nome do cliente|nome do cliente/i);
-    expect(SYSTEM_PROMPT).toMatch(/no máximo UMA vez|máximo UMA vez|máx\. 1x/i);
+    expect(SYSTEM_PROMPT).toMatch(/Nome do cliente/i);
+    expect(SYSTEM_PROMPT).toMatch(/no máximo UMA vez|máximo UMA vez/i);
     expect(COMMUNICATION_RULES).toMatch(/Nome do cliente no máximo 1 vez/i);
   });
 
+  it("não reperguntar data já mencionada", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Data já mencionada|já deu a data/i);
+    expect(SYSTEM_PROMPT).toMatch(/NÃO pergunte de novo|não pergunte de novo/i);
+    expect(COMMUNICATION_RULES).toMatch(/Data já dita|não pergunte de novo/i);
+  });
+
+  it("nunca anuncia verificação — tool imediata", () => {
+    expect(SYSTEM_PROMPT).toMatch(/vou verificar|deixa eu checar/i);
+    expect(SYSTEM_PROMPT).toMatch(/IMEDIATA|invisível/i);
+    expect(COMMUNICATION_RULES).toMatch(/vou verificar|deixa eu checar/i);
+    expect(DISPATCHER_PROMPT).toMatch(/IMMEDIATE/i);
+  });
+
+  it("sem vaga: pergunta final de semana ou durante a semana", () => {
+    expect(SYSTEM_PROMPT).toMatch(/available=false|SEM VAGA/i);
+    expect(SYSTEM_PROMPT).toMatch(/final de semana/i);
+    expect(SYSTEM_PROMPT).toMatch(/durante a semana/i);
+    expect(COMMUNICATION_RULES).toMatch(/available=false/i);
+    expect(COMMUNICATION_RULES).toMatch(/final de semana/i);
+  });
+
+  it("sugerir_datas devolve no máximo 3 datas sem varrer dia a dia", () => {
+    expect(SYSTEM_PROMPT).toMatch(/sugerir_datas/i);
+    expect(SYSTEM_PROMPT).toMatch(/máx\. 3|no máx\. 3|até 3/i);
+    expect(DISPATCHER_PROMPT).toMatch(/sugerir_datas/i);
+    expect(DISPATCHER_PROMPT).toMatch(/NEVER loop|At most ONE tool call|limit ALWAYS <= 3/i);
+    expect(COMMUNICATION_RULES).toMatch(/sugerir_datas/i);
+  });
+
   it("pergunta idade da criança antes de fechar orçamento", () => {
-    expect(SYSTEM_PROMPT).toMatch(/CRIANÇA NO ORÇAMENTO|CRIANCA NO ORCAMENTO/i);
+    expect(SYSTEM_PROMPT).toMatch(/Criança na reserva|idade/i);
     expect(SYSTEM_PROMPT).toMatch(/Qual a idade/i);
     expect(SYSTEM_PROMPT).toMatch(/se tiver menos de 7/i);
     expect(COMMUNICATION_RULES).toMatch(/perguntar a idade/i);
@@ -48,18 +77,18 @@ describe("Divino Chalé — SYSTEM_PROMPT", () => {
     expect(DISPATCHER_PROMPT).toMatch(/check_out/);
     expect(DISPATCHER_PROMPT).toMatch(/NEVER empty args|NEVER call with empty args/i);
     expect(DISPATCHER_PROMPT).toMatch(/excluir/i);
-    expect(COMMUNICATION_RULES).toMatch(/tool check_lodging|tool obrigatória|excluir/i);
+    expect(COMMUNICATION_RULES).toMatch(/tool check_lodging|excluir/i);
   });
 
   it("pets não permitidos e cancelamento via handoff", () => {
     expect(SYSTEM_PROMPT).toMatch(/Pets: NÃO permitidos|não permitidos/i);
-    expect(SYSTEM_PROMPT).toMatch(/Cancelamento ou remanejamento/i);
+    expect(SYSTEM_PROMPT).toMatch(/Cancelamento ou remanejamento|cancelamento ou remanejamento/i);
     expect(SYSTEM_PROMPT).toMatch(/handoff|passar pra (nossa )?equipe|passar para/i);
   });
 
   it("máximo uma pergunta e saudação progressiva", () => {
-    expect(SYSTEM_PROMPT).toMatch(/UMA pergunta/i);
-    expect(SYSTEM_PROMPT).toMatch(/SAUDAÇÃO SIMPLES|SAUDACAO SIMPLES/i);
+    expect(SYSTEM_PROMPT).toMatch(/Uma pergunta por vez|uma pergunta/i);
+    expect(SYSTEM_PROMPT).toMatch(/Saudação simples|SAUDAÇÃO SIMPLES/i);
   });
 
   it("Vitória da Conquista / Lagoa das Flores", () => {
@@ -71,7 +100,7 @@ describe("Divino Chalé — SYSTEM_PROMPT", () => {
 describe("Divino Chalé — registry", () => {
   it("resolve slug divino-chale com skipGreeting", () => {
     const cfg = getPromptConfig("divino-chale");
-    expect(cfg?.version).toBe("v1.2.0");
+    expect(cfg?.version).toBe("v1.3.2");
     expect(cfg?.skipGreeting).toBe(true);
     expect(cfg?.alwaysInjectCommRules).toBe(true);
   });
@@ -87,7 +116,7 @@ describe("Divino Chalé — registry", () => {
     const custom = "PROMPT OVERRIDE TESTE DIVINO";
     const out = buildSystemPrompt(custom, "divino-chale", false, { overridePrompts: true });
     expect(out).toContain(custom);
-    expect(out).not.toContain("LARA | DIVINO CHALÉ — v1.2.0");
+    expect(out).not.toContain("LARA | DIVINO CHALÉ — v1.3.2");
   });
 });
 

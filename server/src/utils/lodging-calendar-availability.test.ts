@@ -3,9 +3,12 @@ import {
   addDaysIso,
   eventOverlapsStay,
   findLodgingConflicts,
+  findNextAvailableLodgingNights,
   isLodgingAvailabilityAction,
   isLodgingDeleteAction,
+  isLodgingSuggestDatesAction,
   parseLodgingStayArgs,
+  parseLodgingSuggestArgs,
   pickLodgingCalendars,
 } from "./lodging-calendar-availability.js";
 
@@ -115,6 +118,53 @@ describe("isLodgingDeleteAction", () => {
     expect(isLodgingDeleteAction("excluir")).toBe(true);
     expect(isLodgingDeleteAction("remover")).toBe(true);
     expect(isLodgingDeleteAction("check_lodging")).toBe(false);
+  });
+});
+
+describe("sugerir_datas / findNextAvailableLodgingNights", () => {
+  it("reconhece action sugerir_datas e não confunde com check_lodging", () => {
+    expect(isLodgingSuggestDatesAction("sugerir_datas")).toBe(true);
+    expect(isLodgingSuggestDatesAction("find_next_available")).toBe(true);
+    expect(isLodgingAvailabilityAction("sugerir_datas", {})).toBe(false);
+  });
+
+  it("limita a 3 e pula noites ocupadas", () => {
+    const events = [
+      { start_at: "2026-10-02T00:00:00-03:00", end_at: "2026-10-03T00:00:00-03:00" },
+      { start_at: "2026-10-03T00:00:00-03:00", end_at: "2026-10-04T00:00:00-03:00" },
+    ];
+    const suggested = findNextAvailableLodgingNights(events, {
+      fromDate: "2026-10-02",
+      preference: "any",
+      limit: 3,
+      nights: 1,
+      searchDays: 14,
+    });
+    expect(suggested).toHaveLength(3);
+    expect(suggested[0].check_in).toBe("2026-10-04");
+    expect(suggested.every((s) => s.check_out > s.check_in)).toBe(true);
+  });
+
+  it("preference weekend só sex/sáb/dom", () => {
+    const suggested = findNextAvailableLodgingNights([], {
+      fromDate: "2026-10-05", // segunda
+      preference: "weekend",
+      limit: 3,
+      nights: 1,
+      searchDays: 21,
+    });
+    expect(suggested.length).toBeGreaterThan(0);
+    for (const s of suggested) {
+      const dow = new Date(`${s.check_in}T12:00:00.000Z`).getUTCDay();
+      expect([0, 5, 6]).toContain(dow);
+    }
+  });
+
+  it("parseLodgingSuggestArgs força limit <= 3", () => {
+    const opts = parseLodgingSuggestArgs({ preference: "weekend", limit: 99 }, "2026-10-01");
+    expect(opts.limit).toBe(3);
+    expect(opts.preference).toBe("weekend");
+    expect(opts.fromDate).toBe("2026-10-01");
   });
 });
 

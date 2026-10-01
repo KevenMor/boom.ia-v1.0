@@ -25,12 +25,17 @@ import { buildInventoryPhotosMarkdown, filterValidInventoryPhotoUrls } from "../
 import { decodeHtmlEntities } from "../lib/html-entities.js";
 import { fetchSunsetLodgingGalleryPhotos, shouldIncludeSunsetLodgingPhotoInQuote } from "../utils/sunset-lodging-gallery-photos.js";
 import {
+  addDaysIso,
   findLodgingConflicts,
+  findNextAvailableLodgingNights,
   isLodgingAvailabilityAction,
   isLodgingDeleteAction,
+  isLodgingSuggestDatesAction,
   parseLodgingStayArgs,
+  parseLodgingSuggestArgs,
   pickLodgingCalendars,
 } from "../utils/lodging-calendar-availability.js";
+import { getBrasiliaDateStr } from "../utils/brasiliaTime.js";
 
 /**
  * Impede handoff “para a própria IA”: se assignee_id for o bot (agent_assignee_id / test_assignee_id),
@@ -935,6 +940,86 @@ async function executeCalendarQuery(
         };
       }
       // cancel/delete sem stay/event_id → cai no handler legado abaixo
+    }
+
+    // Próximas datas livres (máx. 3) — UMA chamada; NÃO varrer dia a dia no dispatcher
+    if (isLodgingSuggestDatesAction(action)) {
+      const opts = parseLodgingSuggestArgs(calendarArgs, getBrasiliaDateStr());
+      let { data: calendars, error: calErr } = await supabase
+        .from("calendars")
+        .select("id, name, is_active")
+        .eq("tenant_id", tenantId)
+        .eq("is_active", true)
+        .order("name", { ascending: true })
+        .limit(20);
+      if (calErr) {
+        return { success: false, result: null, error: calErr.message };
+      }
+      if (!calendars?.length) {
+        const { data: anyCals } = await supabase
+          .from("calendars")
+          .select("id, name, is_active")
+          .eq("tenant_id", tenantId)
+          .order("name", { ascending: true })
+          .limit(20);
+        calendars = anyCals ?? [];
+      }
+
+      const lodgingCals = pickLodgingCalendars(calendars || []);
+      if (!lodgingCals.length) {
+        const suggested = findNextAvailableLodgingNights([], opts);
+        return {
+          success: true,
+          result: {
+            action: "sugerir_datas",
+            preference: opts.preference,
+            from_date: opts.fromDate,
+            limit: opts.limit,
+            suggested_dates: suggested,
+            count: suggested.length,
+            note: "Nenhuma agenda encontrada — datas sugeridas como livres; confirmar com a equipe.",
+            message: `Sugestões (até ${opts.limit}): ${suggested.map((s) => s.check_in).join(", ") || "nenhuma"}.`,
+          },
+        };
+      }
+
+      const calendarIds = lodgingCals.map((c) => c.id);
+      const searchEnd = addDaysIso(opts.fromDate, opts.searchDays + opts.nights);
+      const periodEndUtc = new Date(`${searchEnd}T00:00:00-03:00`).toISOString();
+      const periodStartUtc = new Date(`${opts.fromDate}T00:00:00-03:00`).toISOString();
+      const { data: events, error: evErr } = await supabase
+        .from("calendar_events")
+        .select("id, title, start_at, end_at, all_day, calendar_id")
+        .in("calendar_id", calendarIds)
+        .lt("start_at", periodEndUtc)
+        .order("start_at", { ascending: true })
+        .limit(300);
+      if (evErr) {
+        return { success: false, result: null, error: evErr.message };
+      }
+      const inWindow = (events || []).filter((e) => {
+        if (!e.start_at) return false;
+        const end = e.end_at ? new Date(e.end_at).getTime() : new Date(e.start_at).getTime() + 86400000;
+        return end > new Date(periodStartUtc).getTime();
+      });
+      const suggested = findNextAvailableLodgingNights(inWindow, opts);
+      return {
+        success: true,
+        result: {
+          action: "sugerir_datas",
+          preference: opts.preference,
+          from_date: opts.fromDate,
+          nights: opts.nights,
+          limit: opts.limit,
+          calendar: lodgingCals.map((c) => c.name).join(", "),
+          suggested_dates: suggested,
+          count: suggested.length,
+          message:
+            suggested.length > 0
+              ? `Próximas ${suggested.length} data(s) livre(s): ${suggested.map((s) => s.check_in).join(", ")}.`
+              : `Nenhuma data livre nos próximos ${opts.searchDays} dias (preferência: ${opts.preference}).`,
+        },
+      };
     }
 
     // Hospedagem (diárias): check_in/check_out — NÃO usar slots horários de consultório

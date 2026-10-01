@@ -91,7 +91,7 @@ export function pickLodgingCalendars<T extends { id: string; name?: string | nul
 
 export function isLodgingAvailabilityAction(action: string, args: Record<string, unknown>): boolean {
   const a = action.toLowerCase();
-  // Mutações / listagem não são check de disponibilidade
+  // Mutações / listagem / sugestão em lote não são check de UMA diária
   if (
     a === "cancelar" ||
     a === "cancel" ||
@@ -103,7 +103,8 @@ export function isLodgingAvailabilityAction(action: string, args: Record<string,
     a === "listar_eventos" ||
     a === "list_events" ||
     a === "reagendar" ||
-    a === "reschedule"
+    a === "reschedule" ||
+    isLodgingSuggestDatesAction(a)
   ) {
     return false;
   }
@@ -121,5 +122,90 @@ export function isLodgingAvailabilityAction(action: string, args: Record<string,
 export function isLodgingDeleteAction(action: string): boolean {
   const a = action.toLowerCase();
   return a === "excluir" || a === "remover" || a === "cancelar" || a === "cancel" || a === "delete";
+}
+
+/** Uma chamada: próximas diárias livres (máx. 3). Evita o dispatcher varrer dia a dia. */
+export function isLodgingSuggestDatesAction(action: string): boolean {
+  const a = action.toLowerCase().trim();
+  return (
+    a === "sugerir_datas" ||
+    a === "find_next" ||
+    a === "find_next_available" ||
+    a === "proximas_datas" ||
+    a === "next_available"
+  );
+}
+
+export type LodgingDatePreference = "any" | "weekend" | "weekday";
+
+export type LodgingSuggestOptions = {
+  fromDate: string;
+  preference: LodgingDatePreference;
+  limit: number;
+  nights: number;
+  searchDays: number;
+};
+
+export function parseLodgingSuggestArgs(args: Record<string, unknown>, todayIso: string): LodgingSuggestOptions {
+  const rawFrom = String(args.from_date ?? args.a_partir_de ?? args.after_date ?? args.check_in ?? "").trim().slice(0, 10);
+  const fromDate = ISO_DATE.test(rawFrom) ? rawFrom : todayIso;
+
+  const prefRaw = String(args.preference ?? args.preferencia ?? args.periodo ?? "any")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  let preference: LodgingDatePreference = "any";
+  if (/fim|final|weekend|fds|sabad|sex/.test(prefRaw)) preference = "weekend";
+  else if (/semana|weekday|util|meio/.test(prefRaw) && !/fim|final|weekend|fds/.test(prefRaw)) {
+    preference = "weekday";
+  }
+
+  const limitRaw = Number(args.limit ?? args.max ?? args.quantidade ?? 3);
+  const limit = Number.isFinite(limitRaw) ? Math.min(3, Math.max(1, Math.floor(limitRaw))) : 3;
+
+  const nightsRaw = Number(args.nights ?? args.noites ?? 1);
+  const nights = Number.isFinite(nightsRaw) ? Math.min(7, Math.max(1, Math.floor(nightsRaw))) : 1;
+
+  const searchRaw = Number(args.search_days ?? args.dias_busca ?? 45);
+  const searchDays = Number.isFinite(searchRaw) ? Math.min(90, Math.max(7, Math.floor(searchRaw))) : 45;
+
+  return { fromDate, preference, limit, nights, searchDays };
+}
+
+/** Dow ISO YYYY-MM-DD (UTC noon): 0=dom … 6=sáb */
+function isoWeekdayUtcNoon(isoDate: string): number {
+  return new Date(`${isoDate}T12:00:00.000Z`).getUTCDay();
+}
+
+function matchesLodgingPreference(checkInIso: string, preference: LodgingDatePreference): boolean {
+  if (preference === "any") return true;
+  const dow = isoWeekdayUtcNoon(checkInIso); // 0 Sun … 6 Sat
+  // Preço fim de semana no chalé: sex–dom → check-in sex(5), sáb(6), dom(0)
+  if (preference === "weekend") return dow === 5 || dow === 6 || dow === 0;
+  // Durante a semana: seg–qui
+  return dow >= 1 && dow <= 4;
+}
+
+export type SuggestedLodgingNight = { check_in: string; check_out: string };
+
+/**
+ * Varre no máximo `searchDays` noites a partir de fromDate e devolve até `limit` livres.
+ * Preferência weekend/weekday filtra o dia de check-in.
+ */
+export function findNextAvailableLodgingNights(
+  events: LodgingCalendarEvent[],
+  opts: LodgingSuggestOptions,
+): SuggestedLodgingNight[] {
+  const out: SuggestedLodgingNight[] = [];
+  for (let i = 0; i < opts.searchDays && out.length < opts.limit; i++) {
+    const checkIn = addDaysIso(opts.fromDate, i);
+    if (!matchesLodgingPreference(checkIn, opts.preference)) continue;
+    const checkOut = addDaysIso(checkIn, opts.nights);
+    const stay = { checkIn, checkOut };
+    if (findLodgingConflicts(events, stay).length === 0) {
+      out.push({ check_in: checkIn, check_out: checkOut });
+    }
+  }
+  return out;
 }
 

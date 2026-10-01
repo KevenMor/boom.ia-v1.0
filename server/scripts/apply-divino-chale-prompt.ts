@@ -18,22 +18,36 @@ const TOOL_ID = "5e383e6d-8ddf-404e-a654-77a190227837";
 const FUNCTION_DEF = {
   name: "consultar_evento",
   description:
-    "Calendário do Divino Chalé (diárias). Actions: check_lodging (disponibilidade) e excluir (remove reserva/bloqueio). Sempre use check_in e check_out YYYY-MM-DD para diárias. NÃO use slots de consultório.",
+    "Calendário do Divino Chalé (diárias). Actions: check_lodging (1 data), sugerir_datas (até 3 próximas livres numa chamada), excluir. NÃO varra dia a dia. NÃO use slots de consultório.",
   parameters: {
     type: "object",
     properties: {
       action: {
         type: "string",
-        description: "check_lodging = verificar vaga; excluir = remover da agenda",
-        enum: ["check_lodging", "excluir"],
+        description:
+          "check_lodging = 1 diária; sugerir_datas = até 3 próximas livres; excluir = remover da agenda",
+        enum: ["check_lodging", "sugerir_datas", "excluir"],
       },
       check_in: {
         type: "string",
-        description: "Data de entrada (check-in) YYYY-MM-DD",
+        description: "Data de entrada (check-in) YYYY-MM-DD — obrigatório em check_lodging / excluir por período",
       },
       check_out: {
         type: "string",
         description: "Data de saída (check-out) YYYY-MM-DD — dia seguinte ao último pernoite",
+      },
+      preference: {
+        type: "string",
+        description: "Só sugerir_datas: any | weekend | weekday",
+        enum: ["any", "weekend", "weekday"],
+      },
+      from_date: {
+        type: "string",
+        description: "Só sugerir_datas: a partir de YYYY-MM-DD (default: hoje)",
+      },
+      limit: {
+        type: "number",
+        description: "Só sugerir_datas: máximo de datas (1–3, default 3)",
       },
       event_id: {
         type: "string",
@@ -117,7 +131,7 @@ async function main() {
         ok: true,
         toolUpdated: true,
         toolLinked: linked,
-        actions: ["check_lodging", "excluir"],
+        actions: ["check_lodging", "sugerir_datas", "excluir"],
         agent: data,
       },
       null,
