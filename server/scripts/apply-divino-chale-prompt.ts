@@ -1,5 +1,5 @@
 /**
- * Aplica prompt Lara + function_def (check_lodging + excluir) e religa a tool.
+ * Aplica prompt Lara + tools (calendário diárias + galeria) e religa no agente.
  *
  * Uso: cd server && npx tsx scripts/apply-divino-chale-prompt.ts
  */
@@ -11,11 +11,13 @@ import {
   DISPATCHER_PROMPT,
   FOLLOWUP_PROMPT,
 } from "../src/services/prompts/divino-chale.ts";
+import { SUITE_GALLERY_FUNCTION_DEF } from "../src/utils/builtin-agent-tools.ts";
 
 const AGENT_ID = "8b9433df-37f2-4ea3-9564-8b3d4f7640cc";
-const TOOL_ID = "5e383e6d-8ddf-404e-a654-77a190227837";
+const TENANT_ID = "7bc760ef-1a32-4552-ad0c-43f5a3e45bc9";
+const CALENDAR_TOOL_ID = "5e383e6d-8ddf-404e-a654-77a190227837";
 
-const FUNCTION_DEF = {
+const CALENDAR_FUNCTION_DEF = {
   name: "consultar_evento",
   description:
     "Calendário do Divino Chalé (diárias). Actions: check_lodging (1 data), sugerir_datas (até 3 próximas livres numa chamada), excluir. NÃO varra dia a dia. NÃO use slots de consultório.",
@@ -58,6 +60,26 @@ const FUNCTION_DEF = {
   },
 };
 
+async function ensureAgentToolLink(
+  sb: ReturnType<typeof createClient>,
+  agentId: string,
+  toolId: string,
+): Promise<boolean> {
+  const { data: existingLink } = await sb
+    .from("agent_tools")
+    .select("tool_id")
+    .eq("agent_id", agentId)
+    .eq("tool_id", toolId)
+    .maybeSingle();
+  if (existingLink) return true;
+  const { error: linkErr } = await sb.from("agent_tools").insert({
+    agent_id: agentId,
+    tool_id: toolId,
+  });
+  if (linkErr) throw linkErr;
+  return true;
+}
+
 async function main() {
   const env = Object.fromEntries(
     readFileSync(new URL("../.env", import.meta.url), "utf8")
@@ -76,34 +98,54 @@ async function main() {
     .from("tools")
     .update({
       name: "consultar_evento",
-      description: FUNCTION_DEF.description,
-      function_def: FUNCTION_DEF,
+      description: CALENDAR_FUNCTION_DEF.description,
+      function_def: CALENDAR_FUNCTION_DEF,
     })
-    .eq("id", TOOL_ID);
+    .eq("id", CALENDAR_TOOL_ID);
   if (toolErr) {
-    console.error("update tool:", toolErr);
+    console.error("update calendar tool:", toolErr);
     process.exit(1);
   }
+  await ensureAgentToolLink(sb, AGENT_ID, CALENDAR_TOOL_ID);
 
-  const { data: existingLink } = await sb
-    .from("agent_tools")
-    .select("tool_id")
-    .eq("agent_id", AGENT_ID)
-    .eq("tool_id", TOOL_ID)
+  let { data: galleryTool } = await sb
+    .from("tools")
+    .select("id")
+    .eq("tenant_id", TENANT_ID)
+    .eq("tool_type", "suite_gallery_query")
     .maybeSingle();
 
-  let linked = !!existingLink;
-  if (!existingLink) {
-    const { error: linkErr } = await sb.from("agent_tools").insert({
-      agent_id: AGENT_ID,
-      tool_id: TOOL_ID,
-    });
-    if (linkErr) {
-      console.error("link agent_tools:", linkErr);
+  if (!galleryTool) {
+    const { data: created, error: createErr } = await sb
+      .from("tools")
+      .insert({
+        name: "suite_gallery_query",
+        description:
+          "Consulta galerias de fotos do Divino Chalé cadastradas no painel Galeria (Markdown).",
+        tool_type: "suite_gallery_query",
+        tenant_id: TENANT_ID,
+        function_def: SUITE_GALLERY_FUNCTION_DEF,
+        execution_config: {},
+      })
+      .select("id")
+      .single();
+    if (createErr || !created) {
+      console.error("create gallery tool:", createErr);
       process.exit(1);
     }
-    linked = true;
+    galleryTool = created;
+  } else {
+    await sb
+      .from("tools")
+      .update({
+        name: "suite_gallery_query",
+        function_def: SUITE_GALLERY_FUNCTION_DEF,
+        description:
+          "Consulta galerias de fotos do Divino Chalé cadastradas no painel Galeria (Markdown).",
+      })
+      .eq("id", galleryTool.id);
   }
+  await ensureAgentToolLink(sb, AGENT_ID, galleryTool.id);
 
   const { data, error } = await sb
     .from("agents")
@@ -129,9 +171,9 @@ async function main() {
     JSON.stringify(
       {
         ok: true,
-        toolUpdated: true,
-        toolLinked: linked,
-        actions: ["check_lodging", "sugerir_datas", "excluir"],
+        calendarToolId: CALENDAR_TOOL_ID,
+        galleryToolId: galleryTool.id,
+        actions: ["check_lodging", "sugerir_datas", "excluir", "suite_gallery_query"],
         agent: data,
       },
       null,

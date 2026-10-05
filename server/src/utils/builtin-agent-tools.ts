@@ -27,6 +27,8 @@ const TENANTS_WITH_GALLERY_BUILTIN = new Set([
   "delta",
   "delta-empreendimentos",
   "delta_empreendimentos",
+  "divino-chale",
+  "divinochale",
 ]);
 
 /** Tenants que nunca devem receber tools no dispatcher (vazio por padrão). */

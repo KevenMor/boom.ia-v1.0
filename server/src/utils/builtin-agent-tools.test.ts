@@ -27,13 +27,12 @@ describe("tenantForcesNoTools", () => {
 });
 
 describe("mergeBuiltinAgentTools", () => {
-  it("mantém calendar_query do Divino Chalé", () => {
+  it("mantém calendar_query do Divino Chalé e injeta galeria", () => {
     const out = mergeBuiltinAgentTools([calendarTool], {
       tenantSlug: "divino-chale",
       tenantId: "tenant-1",
     });
-    expect(out).toHaveLength(1);
-    expect(out[0].tool_type).toBe("calendar_query");
+    expect(out.map((t) => t.tool_type).sort()).toEqual(["calendar_query", "suite_gallery_query"]);
   });
 
   it("mantém tools de outros tenants", () => {
@@ -47,6 +46,17 @@ describe("mergeBuiltinAgentTools", () => {
 
   it("gallery builtin só para tenants allowlist", () => {
     expect(tenantUsesGalleryBuiltin("sunset-thermas-park")).toBe(true);
-    expect(tenantUsesGalleryBuiltin("divino-chale")).toBe(false);
+    expect(tenantUsesGalleryBuiltin("divino-chale")).toBe(true);
+    expect(tenantUsesGalleryBuiltin("divinochale")).toBe(true);
+    expect(tenantUsesGalleryBuiltin("ppl-motors")).toBe(false);
+  });
+
+  it("injeta suite_gallery_query no Divino Chalé quando faltando", () => {
+    const out = mergeBuiltinAgentTools([calendarTool], {
+      tenantSlug: "divino-chale",
+      tenantId: "tenant-1",
+    });
+    expect(out.some((t) => t.tool_type === "suite_gallery_query")).toBe(true);
+    expect(out.some((t) => t.tool_type === "calendar_query")).toBe(true);
   });
 });
