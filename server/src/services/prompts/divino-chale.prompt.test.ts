@@ -11,13 +11,29 @@ describe("Divino Chalé — SYSTEM_PROMPT", () => {
   it("identifica Lara e Divino Chalé", () => {
     expect(SYSTEM_PROMPT).toMatch(/Lara/i);
     expect(SYSTEM_PROMPT).toMatch(/Divino Chalé/i);
-    expect(SYSTEM_PROMPT).toMatch(/v1\.3\.4/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.3\.6/);
   });
 
   it("guia conversa natural e evita formulário", () => {
     expect(SYSTEM_PROMPT).toMatch(/Regra de ouro|perguntou|WhatsApp/i);
     expect(SYSTEM_PROMPT).toMatch(/Data de entrada/i);
     expect(SYSTEM_PROMPT).toMatch(/formulário|formulario|soa robô|Evite/i);
+  });
+
+  it("pedido genérico de info: teaser curto, sem despejar catálogo", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Pedido genérico de informação|quero mais informações/i);
+    expect(SYSTEM_PROMPT).toMatch(/teaser|NÃO despeje|nao despeje/i);
+    expect(COMMUNICATION_RULES).toMatch(/teaser|genérico|catalogo|catálogo/i);
+  });
+
+  it("escrita humanizada sem hífen/travessão e sem recomendar delivery", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Escrita humanizada/i);
+    expect(SYSTEM_PROMPT).toMatch(/PROIBIDO usar hífen|sem hífen/i);
+    expect(SYSTEM_PROMPT).toMatch(/travessão/i);
+    expect(SYSTEM_PROMPT).toMatch(/NÃO recomende delivery|NUNCA recomende delivery/i);
+    expect(SYSTEM_PROMPT).toMatch(/Comida\?.*"Alimentação não vem inclusa/i);
+    expect(COMMUNICATION_RULES).toMatch(/hífen|travessão/i);
+    expect(COMMUNICATION_RULES).toMatch(/delivery/i);
   });
 
   it("define tabela oficial e extras", () => {
@@ -112,7 +128,7 @@ describe("Divino Chalé — SYSTEM_PROMPT", () => {
 describe("Divino Chalé — registry", () => {
   it("resolve slug divino-chale com skipGreeting", () => {
     const cfg = getPromptConfig("divino-chale");
-    expect(cfg?.version).toBe("v1.3.4");
+    expect(cfg?.version).toBe("v1.3.6");
     expect(cfg?.skipGreeting).toBe(true);
     expect(cfg?.alwaysInjectCommRules).toBe(true);
   });
@@ -128,7 +144,7 @@ describe("Divino Chalé — registry", () => {
     const custom = "PROMPT OVERRIDE TESTE DIVINO";
     const out = buildSystemPrompt(custom, "divino-chale", false, { overridePrompts: true });
     expect(out).toContain(custom);
-    expect(out).not.toContain("LARA | DIVINO CHALÉ — v1.3.4");
+    expect(out).not.toContain("LARA | DIVINO CHALÉ — v1.3.6");
   });
 });
 
