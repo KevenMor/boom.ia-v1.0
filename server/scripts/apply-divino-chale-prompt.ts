@@ -1,5 +1,6 @@
 /**
- * Aplica prompt Lara + tools (calendário diárias + galeria) e religa no agente.
+ * Aplica prompt Lara + tools (calendário, galeria, handoff, notificação grupo)
+ * e garante follow-up habilitado no agente.
  *
  * Uso: cd server && npx tsx scripts/apply-divino-chale-prompt.ts
  */
@@ -16,6 +17,11 @@ import { SUITE_GALLERY_FUNCTION_DEF } from "../src/utils/builtin-agent-tools.ts"
 const AGENT_ID = "8b9433df-37f2-4ea3-9564-8b3d4f7640cc";
 const TENANT_ID = "7bc760ef-1a32-4552-ad0c-43f5a3e45bc9";
 const CALENDAR_TOOL_ID = "5e383e6d-8ddf-404e-a654-77a190227837";
+
+/** Chatwoot Mega account 17 — Gabriella (humano). Nunca 60 (Lara bot). */
+const HANDOFF_ASSIGNEE_ID = 1;
+/** Grupo WhatsApp "Marketing Divino Chalé" no Chatwoot. */
+const NOTIFY_CONVERSATION_ID = 1;
 
 const CALENDAR_FUNCTION_DEF = {
   name: "consultar_evento",
@@ -60,6 +66,43 @@ const CALENDAR_FUNCTION_DEF = {
   },
 };
 
+const HANDOFF_FUNCTION_DEF = {
+  name: "encaminhar_atendente",
+  description:
+    "Encaminha o atendimento ao humano no Chatwoot. Use quando Lara precisar passar Pix/link, reserva, reclamação, endereço/acesso, ou o cliente pedir humano. Cancela follow-ups e notifica o grupo automaticamente.",
+  parameters: {
+    type: "object",
+    properties: {
+      reason: {
+        type: "string",
+        description: "Motivo curto: Pagamento | Reserva | Reclamação | Endereço | Setor responsável",
+      },
+    },
+    required: ["reason"],
+  },
+};
+
+const HANDOFF_EXEC_CONFIG = {
+  assignee_id: HANDOFF_ASSIGNEE_ID,
+  rules: [
+    { label: "Pagamento", assignee_id: HANDOFF_ASSIGNEE_ID },
+    { label: "Reserva", assignee_id: HANDOFF_ASSIGNEE_ID },
+    { label: "Reclamação", assignee_id: HANDOFF_ASSIGNEE_ID },
+    { label: "Endereço", assignee_id: HANDOFF_ASSIGNEE_ID },
+    { label: "Setor responsável", assignee_id: HANDOFF_ASSIGNEE_ID },
+  ],
+};
+
+const NOTIFY_FUNCTION_DEF = {
+  name: "enviar_notificacao",
+  description: "NÃO chamar manualmente. Notificação automática no handoff (encaminhar_atendente).",
+  parameters: {
+    type: "object",
+    properties: {},
+    required: [] as string[],
+  },
+};
+
 async function ensureAgentToolLink(
   sb: ReturnType<typeof createClient>,
   agentId: string,
@@ -78,6 +121,54 @@ async function ensureAgentToolLink(
   });
   if (linkErr) throw linkErr;
   return true;
+}
+
+async function upsertTenantTool(
+  sb: ReturnType<typeof createClient>,
+  opts: {
+    toolType: string;
+    name: string;
+    description: string;
+    functionDef: Record<string, unknown>;
+    executionConfig: Record<string, unknown>;
+  },
+): Promise<string> {
+  const { data: existing } = await sb
+    .from("tools")
+    .select("id")
+    .eq("tenant_id", TENANT_ID)
+    .eq("tool_type", opts.toolType)
+    .maybeSingle();
+
+  if (existing?.id) {
+    const { error } = await sb
+      .from("tools")
+      .update({
+        name: opts.name,
+        description: opts.description,
+        function_def: opts.functionDef,
+        execution_config: opts.executionConfig,
+      })
+      .eq("id", existing.id);
+    if (error) throw error;
+    return existing.id as string;
+  }
+
+  const { data: created, error } = await sb
+    .from("tools")
+    .insert({
+      name: opts.name,
+      description: opts.description,
+      type: "function",
+      tool_type: opts.toolType,
+      tenant_id: TENANT_ID,
+      function_def: opts.functionDef,
+      execution_config: opts.executionConfig,
+    })
+    .select("id")
+    .single();
+  if (error || !created) throw error || new Error(`create tool ${opts.name} failed`);
+  return created.id as string;
 }
 
 async function main() {
@@ -147,6 +238,47 @@ async function main() {
   }
   await ensureAgentToolLink(sb, AGENT_ID, galleryTool.id);
 
+  const handoffToolId = await upsertTenantTool(sb, {
+    toolType: "chatwoot_assign",
+    name: "encaminhar_atendente",
+    description:
+      "Transfere a conversa no Chatwoot para a equipe humana do Divino Chalé (Gabi). Cancela follow-ups e dispara alerta no grupo automaticamente.",
+    functionDef: HANDOFF_FUNCTION_DEF,
+    executionConfig: HANDOFF_EXEC_CONFIG,
+  });
+  await ensureAgentToolLink(sb, AGENT_ID, handoffToolId);
+
+  const notifyToolId = await upsertTenantTool(sb, {
+    toolType: "send_notification",
+    name: "enviar_notificacao",
+    description:
+      "Config interna: alerta Cliente aguardando atendimento no grupo Chatwoot após handoff. Não chamar pelo LLM.",
+    functionDef: NOTIFY_FUNCTION_DEF,
+    executionConfig: { conversation_id: NOTIFY_CONVERSATION_ID },
+  });
+  await ensureAgentToolLink(sb, AGENT_ID, notifyToolId);
+
+  const { data: agentRow, error: fetchErr } = await sb
+    .from("agents")
+    .select("id, name, config")
+    .eq("id", AGENT_ID)
+    .single();
+  if (fetchErr || !agentRow) {
+    console.error("fetch agent:", fetchErr);
+    process.exit(1);
+  }
+
+  const prevConfig = (agentRow.config || {}) as Record<string, unknown>;
+  const nextConfig = {
+    ...prevConfig,
+    followup_enabled: true,
+    followup_intervals: Array.isArray(prevConfig.followup_intervals)
+      ? prevConfig.followup_intervals
+      : [30, 120, 1440],
+    followup_quiet_start: prevConfig.followup_quiet_start || "22:00",
+    followup_quiet_end: prevConfig.followup_quiet_end || "08:00",
+  };
+
   const { data, error } = await sb
     .from("agents")
     .update({
@@ -157,24 +289,40 @@ async function main() {
       override_prompts: true,
       always_inject_comm_rules: true,
       skip_greeting: true,
+      config: nextConfig,
       updated_at: new Date().toISOString(),
     })
     .eq("id", AGENT_ID)
-    .select("id, name, override_prompts")
+    .select("id, name, override_prompts, config")
     .single();
   if (error) {
     console.error(error);
     process.exit(1);
   }
 
+  const cfg = (data?.config || {}) as Record<string, unknown>;
   console.log(
     JSON.stringify(
       {
         ok: true,
+        version: "v1.3.9",
         calendarToolId: CALENDAR_TOOL_ID,
         galleryToolId: galleryTool.id,
-        actions: ["check_lodging", "sugerir_datas", "excluir", "suite_gallery_query"],
-        agent: data,
+        handoffToolId,
+        notifyToolId,
+        handoffAssigneeId: HANDOFF_ASSIGNEE_ID,
+        notifyConversationId: NOTIFY_CONVERSATION_ID,
+        followup_enabled: cfg.followup_enabled,
+        followup_intervals: cfg.followup_intervals,
+        actions: [
+          "check_lodging",
+          "sugerir_datas",
+          "excluir",
+          "suite_gallery_query",
+          "encaminhar_atendente",
+          "enviar_notificacao(auto)",
+        ],
+        agent: { id: data?.id, name: data?.name, override_prompts: data?.override_prompts },
       },
       null,
       2,

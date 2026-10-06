@@ -11,7 +11,7 @@ describe("Divino Chalé — SYSTEM_PROMPT", () => {
   it("identifica Lara e Divino Chalé", () => {
     expect(SYSTEM_PROMPT).toMatch(/Lara/i);
     expect(SYSTEM_PROMPT).toMatch(/Divino Chalé/i);
-    expect(SYSTEM_PROMPT).toMatch(/v1\.3\.8/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.3\.9/);
   });
 
   it("guia conversa natural e evita formulário", () => {
@@ -114,8 +114,16 @@ describe("Divino Chalé — SYSTEM_PROMPT", () => {
 
   it("pets não permitidos e cancelamento via handoff", () => {
     expect(SYSTEM_PROMPT).toMatch(/Pets: NÃO permitidos|não permitidos/i);
-    expect(SYSTEM_PROMPT).toMatch(/Cancelamento ou remanejamento|cancelamento ou remanejamento/i);
-    expect(SYSTEM_PROMPT).toMatch(/handoff|passar pra (nossa )?equipe|passar para/i);
+    expect(SYSTEM_PROMPT).toMatch(/Cancelamento|cancelamento|reembolso/i);
+    expect(SYSTEM_PROMPT).toMatch(/handoff|passar pra (nossa )?equipe|passar para|encaminhar_atendente/i);
+  });
+
+  it("handoff chama encaminhar_atendente e notifica grupo automaticamente", () => {
+    expect(SYSTEM_PROMPT).toMatch(/encaminhar_atendente/i);
+    expect(SYSTEM_PROMPT).toMatch(/enviar_notificacao/i);
+    expect(DISPATCHER_PROMPT).toMatch(/encaminhar_atendente/i);
+    expect(DISPATCHER_PROMPT).toMatch(/chatwoot_assign/i);
+    expect(DISPATCHER_PROMPT).toMatch(/Pagamento|Reserva|Reclamação/i);
   });
 
   it("máximo uma pergunta e saudação progressiva", () => {
@@ -144,7 +152,7 @@ describe("Divino Chalé — SYSTEM_PROMPT", () => {
 describe("Divino Chalé — registry", () => {
   it("resolve slug divino-chale com skipGreeting", () => {
     const cfg = getPromptConfig("divino-chale");
-    expect(cfg?.version).toBe("v1.3.8");
+    expect(cfg?.version).toBe("v1.3.9");
     expect(cfg?.skipGreeting).toBe(true);
     expect(cfg?.alwaysInjectCommRules).toBe(true);
   });
@@ -160,7 +168,7 @@ describe("Divino Chalé — registry", () => {
     const custom = "PROMPT OVERRIDE TESTE DIVINO";
     const out = buildSystemPrompt(custom, "divino-chale", false, { overridePrompts: true });
     expect(out).toContain(custom);
-    expect(out).not.toContain("LARA | DIVINO CHALÉ — v1.3.8");
+    expect(out).not.toContain("LARA | DIVINO CHALÉ — v1.3.9");
   });
 });
 
@@ -174,5 +182,6 @@ describe("Divino Chalé — demais exports", () => {
     expect(COMMUNICATION_RULES.length).toBeGreaterThan(40);
     expect(FOLLOWUP_PROMPT).toMatch(/Lara/i);
     expect(FOLLOWUP_PROMPT).toMatch(/\{attempt\}/);
+    expect(FOLLOWUP_PROMPT).toMatch(/Tentativa 1|tentativa \{attempt\}/i);
   });
 });
