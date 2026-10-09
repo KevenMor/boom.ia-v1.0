@@ -91,6 +91,22 @@ describe("suite-gallery-markdown-inject", () => {
     expect(r!.appended).toMatch(/https:\/\/cdn\.example/);
   });
 
+  it("reconhece pedido de imagens e promessa de envio sem markdown", () => {
+    expect(
+      shouldInjectSuiteGalleryMarkdown({
+        assistantText: "Claro, vou te enviar mais imagens.",
+        galleryMarkdown: "![a](https://x/y.jpg)",
+        lastUserMessage: "ok",
+      })
+    ).toBe(true);
+    expect(
+      shouldInjectSuiteGalleryMarkdown({
+        assistantText: "Claro!",
+        galleryMarkdown: "![a](https://x/y.jpg)",
+        lastUserMessage: "Teria mais imagens?",
+      })
+    ).toBe(true);
+  });
   it("shouldInject respeita última mensagem do usuário", () => {
     expect(
       shouldInjectSuiteGalleryMarkdown({

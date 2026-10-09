@@ -7,7 +7,7 @@ import { executeTool, type ToolDef } from "../services/tool-executor.js";
 import { filterCommandLinesFromStream, sanitizeLLMOutput, fallbackSanitizeForRetry, stripChatbotPhrases } from "../utils/sanitize.js";
 import { mergeLlmStreamUsage, parseOpenAIStreamUsage, type LlmStreamUsage } from "../utils/llm-usage.js";
 import { emitMediaCommandsSseIfNeeded } from "../utils/extract-media-commands.js";
-import { injectSuiteGalleryMarkdownIfMissing, injectSuiteGalleryVideosIfMissing } from "../utils/suite-gallery-markdown-inject.js";
+import { injectSuiteGalleryMarkdownIfMissing, injectSuiteGalleryVideosIfMissing, shouldFetchSuiteGalleryForDelivery } from "../utils/suite-gallery-markdown-inject.js";
 import { injectOmnibeesQuotePhotosIfMissing } from "../utils/omnibees-photo-markdown.js";
 import {
   collectSunsetLodgingGalleryPhotosFromToolResults,
@@ -1367,18 +1367,42 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         if (!trimmed) return;
         sendSse({ repaired_assistant: trimmed });
       };
+      const isDivinoChaleTenant = /divino/.test((tenantSlug || "").toLowerCase().replace(/[\s_-]+/g, ""));
       const applySuiteGalleryRepairs = async (
         assistantText: string,
         toolResultStrings: string[],
         lastUserMessage: string
       ): Promise<string> => {
         let text = assistantText;
+        let galleryToolResults = toolResultStrings;
 
-        const skipSuiteGalleryBulkInject = isSunsetLodgingQuoteContext(text, toolResultStrings);
+        if (
+          isDivinoChaleTenant &&
+          shouldFetchSuiteGalleryForDelivery({
+            assistantText: text,
+            lastUserMessage,
+            toolResultStrings: galleryToolResults,
+          })
+        ) {
+          const galleryTool = tools.find((t) => t.tool_type === "suite_gallery_query");
+          if (galleryTool) {
+            try {
+              const fetched = await executeTool(galleryTool, { nome: "Divino Chalé" }, agent_id);
+              if (fetched.success && fetched.result != null) {
+                console.log("[Chat-Local] Divino: galeria buscada porque foto foi pedida ou prometida sem markdown");
+                galleryToolResults = [...galleryToolResults, JSON.stringify(fetched.result)];
+              }
+            } catch (e) {
+              console.warn("[Chat-Local] Divino: falha ao buscar galeria sob demanda:", (e as Error)?.message);
+            }
+          }
+        }
+
+        const skipSuiteGalleryBulkInject = isSunsetLodgingQuoteContext(text, galleryToolResults);
         if (!skipSuiteGalleryBulkInject) {
           const galleryInject = injectSuiteGalleryMarkdownIfMissing({
             assistantText: text,
-            toolResultStrings,
+            toolResultStrings: galleryToolResults,
             lastUserMessage,
           });
           if (galleryInject) {
@@ -1388,7 +1412,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         }
         const videoInject = injectSuiteGalleryVideosIfMissing({
           assistantText: text,
-          toolResultStrings,
+          toolResultStrings: galleryToolResults,
           lastUserMessage,
         });
         if (videoInject) {

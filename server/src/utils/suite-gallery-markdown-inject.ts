@@ -226,21 +226,35 @@ export function userLikelyAskedForPhotos(text: string): boolean {
   if (/\b(todas|todos|cada\s+uma|todas\s+as|as\s+3|as\s+tr[êe]s)\b/.test(t) && /\bfotos?\b/.test(t)) return true;
   if (/^\s*quero\s+fotos?\s*$/i.test((text || "").trim())) return true;
   if (/\bquero\s+fotos?\b/.test(t)) return true;
-  if (/\b(tem|mostra|mostrar|manda)\b/.test(t) && /\bfotos?\b/.test(t)) return true;
+  if (/\b(tem|teria|mostra|mostrar|manda|mandar|envia|enviar|ver|pode)\b/.test(t) && /\b(fotos?|imagens?|fotinhas?)\b/.test(t)) return true;
   if (/\b(primeira\s+vez|não\s+conheço|nunca\s+fui)\b/.test(t) && /\bfotos?\b/.test(t)) return true;
   if (/\b(quero|queria|manda|mandar|mande|mostra|mostrar|envia|enviar|ver|pedir|pedi|gostaria)\b/.test(t) &&
     /\b(fotos?|imagens?|galeria|su[ií]te|suites?|quarto|acomod)\b/.test(t)) {
     return true;
   }
+  if (/\bmais\s+(fotos?|imagens?)\b/.test(t)) return true;
   if (/\b(tem|tem\s+fotos?|fotos?\s*\?|imagem)\b/.test(t) && /\b(fotos?|imagens?)\b/.test(t)) return true;
   return false;
 }
 
 function assistantClaimsPhotoDelivery(text: string): boolean {
-  const head = (text || "").slice(0, 800);
-  return /\b(aqui est[aã]o|aqui estao|seguem as fotos|segue(?:m)?\s+(?:uma\s+)?foto|fotos das acomoda[cç][oõ]es|algumas fotos da|segue(?:m)?\s+o\s+material|segue(?:m)?\s+as\s+imagens?|as\s+fotos?\s+(da|das|do)\s+su[ií]te)\b/i.test(
-    head
-  );
+  const head = (text || "").slice(0, 1200);
+  if (/\b(aqui est[aã]o|aqui estao|seguem as fotos|segue(?:m)?\s+(?:uma\s+)?foto|fotos das acomoda[cç][oõ]es|algumas fotos da|segue(?:m)?\s+o\s+material|segue(?:m)?\s+as\s+imagens?|as\s+fotos?\s+(da|das|do)\s+su[ií]te|olha algumas fotos)\b/i.test(head)) {
+    return true;
+  }
+  return /\b(fotos?|imagens?|fotinhas?)\b/i.test(head) &&
+    /\b(vou|te)\s+(te\s+)?(enviar|mando|mandar|envia)|(?:enviar|mando|mandar)\s+(as\s+|umas\s+|mais\s+)?(fotos?|imagens?)/i.test(head);
+}
+
+/** Tool de galeria ainda não rodou, mas o cliente pediu foto ou a resposta prometeu enviar. */
+export function shouldFetchSuiteGalleryForDelivery(params: {
+  assistantText: string;
+  lastUserMessage: string;
+  toolResultStrings: string[];
+}): boolean {
+  if (hasAtLeastOneCompleteMarkdownHttpImage(params.assistantText || "")) return false;
+  if (collectSuiteGalleryMarkdownFromToolResults(params.toolResultStrings).trim()) return false;
+  return userLikelyAskedForPhotos(params.lastUserMessage) || assistantClaimsPhotoDelivery(params.assistantText || "");
 }
 
 export function shouldInjectSuiteGalleryMarkdown(params: {

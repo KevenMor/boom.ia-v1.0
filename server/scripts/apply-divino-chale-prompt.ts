@@ -305,7 +305,7 @@ async function main() {
     JSON.stringify(
       {
         ok: true,
-        version: "v1.3.9",
+        version: "v1.3.10",
         calendarToolId: CALENDAR_TOOL_ID,
         galleryToolId: galleryTool.id,
         handoffToolId,

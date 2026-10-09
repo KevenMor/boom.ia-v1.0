@@ -11,7 +11,7 @@ describe("Divino Chalé — SYSTEM_PROMPT", () => {
   it("identifica Lara e Divino Chalé", () => {
     expect(SYSTEM_PROMPT).toMatch(/Lara/i);
     expect(SYSTEM_PROMPT).toMatch(/Divino Chalé/i);
-    expect(SYSTEM_PROMPT).toMatch(/v1\.3\.9/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.3\.10/);
   });
 
   it("guia conversa natural e evita formulário", () => {
@@ -134,6 +134,9 @@ describe("Divino Chalé — SYSTEM_PROMPT", () => {
   it("Vitória da Conquista / Lagoa das Flores", () => {
     expect(SYSTEM_PROMPT).toMatch(/Vitória da Conquista/i);
     expect(SYSTEM_PROMPT).toMatch(/Lagoa das Flores/i);
+    expect(SYSTEM_PROMPT).toMatch(
+      /Nosso chalé fica localizado em Vitória da Conquista, próximo a Lagoa das Flores, a 15km do centro da cidade\./
+    );
   });
 
   it("pagamento: Pix, link de cartão e acréscimo no parcelamento", () => {
@@ -152,7 +155,7 @@ describe("Divino Chalé — SYSTEM_PROMPT", () => {
 describe("Divino Chalé — registry", () => {
   it("resolve slug divino-chale com skipGreeting", () => {
     const cfg = getPromptConfig("divino-chale");
-    expect(cfg?.version).toBe("v1.3.9");
+    expect(cfg?.version).toBe("v1.3.10");
     expect(cfg?.skipGreeting).toBe(true);
     expect(cfg?.alwaysInjectCommRules).toBe(true);
   });
@@ -168,7 +171,7 @@ describe("Divino Chalé — registry", () => {
     const custom = "PROMPT OVERRIDE TESTE DIVINO";
     const out = buildSystemPrompt(custom, "divino-chale", false, { overridePrompts: true });
     expect(out).toContain(custom);
-    expect(out).not.toContain("LARA | DIVINO CHALÉ — v1.3.9");
+    expect(out).not.toContain("LARA | DIVINO CHALÉ — v1.3.10");
   });
 });
 
