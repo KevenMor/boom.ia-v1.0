@@ -6,6 +6,7 @@ import {
   stripThoughtAndReasoningBlocks,
   stripChatbotPhrases,
   stripSimulatedToolCallLeakage,
+  flushCommandLineBuffer,
 } from "./sanitize.js";
 
 describe("sanitizeLLMOutput — regressão vazamento para cliente", () => {
@@ -122,6 +123,12 @@ Chamada de ferramenta:
     expect(out).not.toMatch(/tool_code/i);
     expect(out).not.toMatch(/consultar_parque_sunset/i);
     expect(out.toLowerCase()).toContain("keven");
+  });
+
+  it("não deixa action=check_lodging ir para o cliente", () => {
+    expect(sanitizeLLMOutput("action=check_lodging")).toBe("");
+    expect(flushCommandLineBuffer("action=check_lodging")).toBe("");
+    expect(sanitizeLLMOutput("A diária fica R$ 399,99.")).toMatch(/399,99/);
   });
 
   it("stripSimulatedToolCallLeakage remove bloco tool_code isolado", () => {

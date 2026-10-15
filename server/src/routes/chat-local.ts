@@ -4,7 +4,7 @@ import { requireAuthenticated, canAccessTenant } from "../services/authorization
 import { resolveDispatcherModel } from "../services/provider-api.js";
 import { buildSystemPrompt, getDispatcherPrompt, getPromptConfig } from "../services/prompts/registry.js";
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
-import { filterCommandLinesFromStream, sanitizeLLMOutput, fallbackSanitizeForRetry, stripChatbotPhrases } from "../utils/sanitize.js";
+import { filterCommandLinesFromStream, flushCommandLineBuffer, sanitizeLLMOutput, fallbackSanitizeForRetry, stripChatbotPhrases } from "../utils/sanitize.js";
 import { mergeLlmStreamUsage, parseOpenAIStreamUsage, type LlmStreamUsage } from "../utils/llm-usage.js";
 import { emitMediaCommandsSseIfNeeded } from "../utils/extract-media-commands.js";
 import { injectSuiteGalleryMarkdownIfMissing, injectSuiteGalleryVideosIfMissing, shouldFetchSuiteGalleryForDelivery } from "../utils/suite-gallery-markdown-inject.js";
@@ -2063,9 +2063,13 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             if (done) {
               // convFullContent já inclui todos os delta.content; não somar streamFilterBuffer (duplicava o sufixo).
               if (streamFilterBuffer) {
-                debugSendCount++;
-                debugSendTotalLen += streamFilterBuffer.length;
-                sendSse({ choices: [{ delta: { content: streamFilterBuffer } }] });
+                const tail = flushCommandLineBuffer(streamFilterBuffer);
+                streamFilterBuffer = "";
+                if (tail) {
+                  debugSendCount++;
+                  debugSendTotalLen += tail.length;
+                  sendSse({ choices: [{ delta: { content: tail } }] });
+                }
               }
               // Primeiro contato: pergunta do nome só se NÃO tiver vídeo de boas-vindas, modelo ainda não perguntou E usuário ainda não informou
               const isFirstContact = messages.filter((m) => m.role === "assistant").length === 0;
@@ -2399,8 +2403,12 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           }
           if (done) {
             if (streamFilterBuffer) {
-              emitWelcomeImagePrefix();
-              sendSse({ choices: [{ delta: { content: streamFilterBuffer } }] });
+              const tail = flushCommandLineBuffer(streamFilterBuffer);
+              streamFilterBuffer = "";
+              if (tail) {
+                emitWelcomeImagePrefix();
+                sendSse({ choices: [{ delta: { content: tail } }] });
+              }
             }
             const isFirstContact = messages.filter((m) => m.role === "assistant").length === 0;
             const agentCfgSingle = (agent?.config || {}) as Record<string, unknown>;
@@ -2471,6 +2479,12 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
             toolStringsSP,
             lastUserForGalleryInjectSP
           );
+          if (!sanitizeLLMOutput(fullContent).trim() && fullContent.trim()) {
+            const apology = "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?";
+            console.warn("[Chat-Local] Resposta single-provider era só vazamento de tool — substituída");
+            sendSse({ choices: [{ delta: { content: apology } }] });
+            fullContent = apology;
+          }
           emitMediaCommandsSseIfNeeded(sendSse, fullContent);
           sendSingleProviderSandboxDebug();
           if (singleProviderUsageAccum.total_tokens > 0) {

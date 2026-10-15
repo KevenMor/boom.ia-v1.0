@@ -96,6 +96,7 @@ export function stripSimulatedToolCallLeakage(text: string): string {
   t = t.replace(/```(?:tool_code|tool)?\s*[\s\S]*?```/gim, "");
   t = t.replace(/\bprint\s*\(\s*consultar_evento\s*\([^)]*\)\s*\)\s*/gim, "");
   t = t.replace(/\bconsultar_evento\s*\(\s*[^)]*\)\s*/gim, "");
+  t = t.replace(/\baction\s*=\s*(?:check_lodging|sugerir_datas|excluir)\b[^\n]*/gim, "");
   t = t.replace(/\[\s*tool_check_lodging\s*\][\s\S]*?(?=\[\/tool_check_lodging\]|$)/gim, "");
   t = t.replace(/\[\s*\/?tool_check_lodging\s*\]/gim, "");
   t = t.replace(/\bcheck_in\s*=\s*["']?\d{4}-\d{2}-\d{2}["']?/gim, "");
@@ -500,6 +501,8 @@ export function isCommandLine(line: string): boolean {
     /^.*\b(TOOL_CALL|FUNCTION_CALL|ACTION_OUTPUT)[:\s].*$/im.test(t) ||
     /\[\s*CHAMAR\s+FERRAMENTA[^\]]*\]/im.test(t) ||
     /^\s*NO_TOOLS_NEEDED\s*$/im.test(t) ||
+    /^\s*action\s*=\s*(?:check_lodging|sugerir_datas|excluir)\b/im.test(t) ||
+    /^\s*(?:check_lodging|sugerir_datas)\s*$/im.test(t) ||
     /^\s*\[SISTEMA\s+INTERNO\s*[-—]\s*FOLLOW-UP\s+GUARD\]\s*$/im.test(t) ||
     /^.*Responda\s+APENAS\s+com\s+uma\s+destas\s+palavras:.*$/im.test(t) ||
     /^\s*[-•]?\s*SEND\s*=\s*.*$/im.test(t) ||
@@ -602,6 +605,14 @@ export function filterCommandLinesFromStream(buffer: string, chunk: string): { t
     else if (!body.trim()) toSend += "\n";
   }
   return { toSend, newBuffer: acc };
+}
+
+/** Resto do stream sem \\n final: não enviar se for só nome de ferramenta. */
+export function flushCommandLineBuffer(buffer: string): string {
+  const t = (buffer || "").trim();
+  if (!t) return "";
+  if (isCommandLine(t)) return "";
+  return sanitizeLLMOutput(t);
 }
 
 /**
