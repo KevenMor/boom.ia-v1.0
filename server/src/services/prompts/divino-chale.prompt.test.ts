@@ -11,7 +11,7 @@ describe("Divino Chalé — SYSTEM_PROMPT", () => {
   it("identifica Lara e Divino Chalé", () => {
     expect(SYSTEM_PROMPT).toMatch(/Lara/i);
     expect(SYSTEM_PROMPT).toMatch(/Divino Chalé/i);
-    expect(SYSTEM_PROMPT).toMatch(/v1\.3\.12/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.3\.13/);
   });
 
   it("guia conversa natural e evita formulário", () => {
@@ -113,6 +113,7 @@ describe("Divino Chalé — SYSTEM_PROMPT", () => {
   it("não ensina a Lara a escrever action= na resposta", () => {
     expect(SYSTEM_PROMPT).toMatch(/PROIBIDO escrever na mensagem/i);
     expect(SYSTEM_PROMPT).not.toMatch(/action=check_lodging/);
+    expect(SYSTEM_PROMPT).not.toMatch(/→ \[tool\]/);
     expect(SYSTEM_PROMPT).toMatch(/valor da hospedagem/i);
   });
 
@@ -169,7 +170,7 @@ describe("Divino Chalé — SYSTEM_PROMPT", () => {
 describe("Divino Chalé — registry", () => {
   it("resolve slug divino-chale com skipGreeting", () => {
     const cfg = getPromptConfig("divino-chale");
-    expect(cfg?.version).toBe("v1.3.12");
+    expect(cfg?.version).toBe("v1.3.13");
     expect(cfg?.skipGreeting).toBe(true);
     expect(cfg?.alwaysInjectCommRules).toBe(true);
   });
@@ -185,7 +186,7 @@ describe("Divino Chalé — registry", () => {
     const custom = "PROMPT OVERRIDE TESTE DIVINO";
     const out = buildSystemPrompt(custom, "divino-chale", false, { overridePrompts: true });
     expect(out).toContain(custom);
-    expect(out).not.toContain("LARA | DIVINO CHALÉ — v1.3.12");
+    expect(out).not.toContain("LARA | DIVINO CHALÉ — v1.3.13");
   });
 });
 

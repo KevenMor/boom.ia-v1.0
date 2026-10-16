@@ -131,6 +131,16 @@ Chamada de ferramenta:
     expect(sanitizeLLMOutput("A diária fica R$ 399,99.")).toMatch(/399,99/);
   });
 
+  it("remove blocos [tool consultar_evento] e preserva o preço", () => {
+    const raw = `[tool consultar_evento
+start_date="2026-10-16"
+end_date="2026-10-17"] [tool consultar_evento start_date="2026-10-18" end_date="2026-10-19"]
+Pra casal, de segunda a quinta a diária fica R$ 399,99.`;
+    const out = sanitizeLLMOutput(raw);
+    expect(out).not.toMatch(/consultar_evento|start_date|end_date|\[tool/i);
+    expect(out).toMatch(/399,99/);
+  });
+
   it("stripSimulatedToolCallLeakage remove bloco tool_code isolado", () => {
     const out = stripSimulatedToolCallLeakage(
       '{"tool_code":"consultar_parque_sunset","parameters":{"date":"2026-07-06"}}'
