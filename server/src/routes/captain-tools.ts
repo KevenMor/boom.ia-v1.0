@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
+import { parseLodgingStayArgs } from "../utils/lodging-calendar-availability.js";
 
 const DIVINO_SLUGS = ["divino-chale", "divinochale"] as const;
 
@@ -91,9 +92,17 @@ export async function captainToolsRoutes(fastify: FastifyInstance) {
       if (!tool) return reply.status(404).send({ error: "tool calendar_query não registrada para o tenant" });
       const agentId = await resolveAgentId(supabase, tenantId, tool.id);
       if (!agentId) return reply.status(404).send({ error: "agente vinculado à tool não encontrado" });
-      const action = String(body.action || "check_lodging");
+      let action = String(
+        body.action ?? body.acao ?? body.tool_action ?? body.operation ?? "sugerir_datas",
+      ).toLowerCase();
+      if (action === "check_availability" || action === "check_stay" || action === "verificar") action = "check_lodging";
       const args: Record<string, unknown> = { ...body, action, tenant_id: tenantId };
       delete args.slug;
+      if (action === "check_lodging" && !parseLodgingStayArgs(args)) {
+        args.action = "sugerir_datas";
+        if (args.preference == null) args.preference = "any";
+        if (args.limit == null) args.limit = 3;
+      }
       const out = await executeTool(tool, args, agentId);
       return reply.send({ success: out.success, result: out.result, error: out.error ?? null });
     } catch (err) {
