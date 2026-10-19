@@ -5,6 +5,37 @@ import { parseLodgingStayArgs } from "../utils/lodging-calendar-availability.js"
 
 const DIVINO_SLUGS = ["divino-chale", "divinochale"] as const;
 
+const PLURAX_BASE_URL =
+  process.env.PLURAX_BASE_URL || "https://www.plurax.com.br/plurax/mcp/v1";
+const PLURAX_COMPANY_ID = Number(process.env.PLURAX_COMPANY_ID || 5);
+const PLURAX_TENANT_ID = Number(process.env.PLURAX_TENANT_ID || 5);
+const PLURAX_SLUG = process.env.PLURAX_SLUG || "divino-chale";
+
+async function pluraxFetch(
+  path: string,
+  method: string,
+  body?: Record<string, unknown>,
+): Promise<{ status: number; data: unknown }> {
+  const token = process.env.PLURAX_MCP_TOKEN;
+  if (!token) throw new Error("PLURAX_MCP_TOKEN não configurado no servidor");
+  const res = await fetch(`${PLURAX_BASE_URL}${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const text = await res.text();
+  let data: unknown = text;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  return { status: res.status, data };
+}
+
 function checkBearer(req: FastifyRequest, reply: FastifyReply): boolean {
   const expected = process.env.CAPTAIN_TOOLS_TOKEN;
   if (!expected) {
@@ -79,6 +110,8 @@ async function resolveAgentId(
  * POST /api/captain-tools/calendar  { slug?, action, check_in?, check_out?, ... }
  * POST /api/captain-tools/gallery   { slug?, nome? }
  * POST /api/captain-tools/handoff   { slug?, reason?, chatwoot_conversation_id?, conversation_id? }
+ * POST /api/captain-tools/plurax    { operation, model?, domain?, fields?, ids?, limit?, order?, values?, method?, args?, kwargs? }
+ *   Proxy escopado no Divino Chalé (company_id 5, tenant_id 5, slug divino-chale).
  */
 export async function captainToolsRoutes(fastify: FastifyInstance) {
   fastify.post("/captain-tools/calendar", async (req: FastifyRequest, reply: FastifyReply) => {
@@ -141,6 +174,55 @@ export async function captainToolsRoutes(fastify: FastifyInstance) {
       delete args.slug;
       const out = await executeTool(toolDef, args, agentId);
       return reply.send({ success: out.success, result: out.result, error: out.error ?? null });
+    } catch (err) {
+      return reply.status(500).send({ error: (err as Error)?.message || "internal error" });
+    }
+  });
+
+  fastify.post("/captain-tools/plurax", async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkBearer(req, reply)) return;
+    try {
+      const body = (req.body || {}) as Record<string, unknown>;
+      const operation = String(
+        body.operation ?? body.action ?? body.op ?? "search_read",
+      ).toLowerCase();
+      const model = String(body.model ?? "hotel.reservation");
+      const scoped = {
+        company_id: PLURAX_COMPANY_ID,
+        tenant_id: PLURAX_TENANT_ID,
+        slug: PLURAX_SLUG,
+      };
+      if (operation === "models") {
+        const out = await pluraxFetch(`/orm/models?slug=${encodeURIComponent(PLURAX_SLUG)}`, "GET");
+        return reply.status(out.status).send(out.data);
+      }
+      if (!["search_read", "read", "create", "write", "call"].includes(operation)) {
+        return reply.status(400).send({ error: `operation inválida: ${operation}` });
+      }
+      const payload: Record<string, unknown> = { ...body, ...scoped, model };
+      delete payload.slug;
+      delete payload.operation;
+      delete payload.action;
+      delete payload.op;
+      for (const key of ["domain", "fields", "ids", "values", "args", "kwargs"]) {
+        const val = payload[key];
+        if (typeof val === "string" && val.trim()) {
+          try {
+            payload[key] = JSON.parse(val);
+          } catch {
+            // mantém como string; o Plurax responde o erro
+          }
+        }
+      }
+      if (operation === "search_read") {
+        if (payload.limit == null) payload.limit = 20;
+        if (!Array.isArray(payload.fields)) payload.fields = ["id"];
+      }
+      if ((operation === "create" || operation === "write" || operation === "call") && payload.confirm == null) {
+        payload.confirm = true;
+      }
+      const out = await pluraxFetch(`/orm/${operation}`, "POST", payload);
+      return reply.status(out.status).send(out.data);
     } catch (err) {
       return reply.status(500).send({ error: (err as Error)?.message || "internal error" });
     }
