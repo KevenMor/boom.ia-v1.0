@@ -7,6 +7,7 @@ import {
   stripChatbotPhrases,
   stripSimulatedToolCallLeakage,
   flushCommandLineBuffer,
+  isCommandLine,
 } from "./sanitize.js";
 
 describe("sanitizeLLMOutput — regressão vazamento para cliente", () => {
@@ -129,6 +130,12 @@ Chamada de ferramenta:
     expect(sanitizeLLMOutput("action=check_lodging")).toBe("");
     expect(flushCommandLineBuffer("action=check_lodging")).toBe("");
     expect(sanitizeLLMOutput("A diária fica R$ 399,99.")).toMatch(/399,99/);
+  });
+
+  it("não deixa check_lodging() ir para o cliente", () => {
+    expect(sanitizeLLMOutput("check_lodging(, )")).toBe("");
+    expect(flushCommandLineBuffer("check_lodging(, )")).toBe("");
+    expect(isCommandLine("check_lodging(, )")).toBe(true);
   });
 
   it("remove blocos [tool consultar_evento] e preserva o preço", () => {

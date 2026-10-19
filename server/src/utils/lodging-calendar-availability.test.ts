@@ -34,6 +34,13 @@ describe("parseLodgingStayArgs", () => {
     });
   });
 
+  it("aceita start_date / end_date como apelido", () => {
+    expect(parseLodgingStayArgs({ start_date: "2026-10-16", end_date: "2026-10-17" })).toEqual({
+      checkIn: "2026-10-16",
+      checkOut: "2026-10-17",
+    });
+  });
+
   it("args inválidos → null", () => {
     expect(parseLodgingStayArgs({})).toBeNull();
     expect(parseLodgingStayArgs({ check_in: "03/10" })).toBeNull();

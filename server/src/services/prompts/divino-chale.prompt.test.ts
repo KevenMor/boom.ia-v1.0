@@ -11,7 +11,7 @@ describe("Divino Chalé — SYSTEM_PROMPT", () => {
   it("identifica Lara e Divino Chalé", () => {
     expect(SYSTEM_PROMPT).toMatch(/Lara/i);
     expect(SYSTEM_PROMPT).toMatch(/Divino Chalé/i);
-    expect(SYSTEM_PROMPT).toMatch(/v1\.3\.13/);
+    expect(SYSTEM_PROMPT).toMatch(/v1\.3\.17/);
   });
 
   it("guia conversa natural e evita formulário", () => {
@@ -88,7 +88,8 @@ describe("Divino Chalé — SYSTEM_PROMPT", () => {
   });
 
   it("sugerir_datas devolve no máximo 3 datas sem varrer dia a dia", () => {
-    expect(SYSTEM_PROMPT).toMatch(/sugerir_datas/i);
+    expect(SYSTEM_PROMPT).not.toMatch(/check_lodging/i);
+    expect(DISPATCHER_PROMPT).toMatch(/sugerir_datas/i);
     expect(SYSTEM_PROMPT).toMatch(/máx\. 3|no máx\. 3|até 3/i);
     expect(DISPATCHER_PROMPT).toMatch(/sugerir_datas/i);
     expect(DISPATCHER_PROMPT).toMatch(/NEVER loop|At most ONE tool call|limit ALWAYS <= 3/i);
@@ -107,24 +108,32 @@ describe("Divino Chalé — SYSTEM_PROMPT", () => {
     expect(SYSTEM_PROMPT).toMatch(/quarto com varanda/i);
     expect(SYSTEM_PROMPT).toMatch(/pergolado, rede e balanço/i);
     expect(SYSTEM_PROMPT).toMatch(/NÃO responda só com alimentação ou cozinha/i);
+    expect(SYSTEM_PROMPT).toMatch(/ornamentação romântica/i);
+    expect(SYSTEM_PROMPT).toMatch(/R\$ 80,00/);
+    expect(SYSTEM_PROMPT).toMatch(/Não diga que não oferece|Não diga que não tem esse serviço/i);
+    expect(COMMUNICATION_RULES).toMatch(/ornamentação romântica/);
+    expect(DISPATCHER_PROMPT).toMatch(/ornamentação romântica/);
     expect(COMMUNICATION_RULES).toMatch(/O que está incluso|só a casa/i);
   });
 
   it("não ensina a Lara a escrever action= na resposta", () => {
-    expect(SYSTEM_PROMPT).toMatch(/PROIBIDO escrever na mensagem/i);
+    expect(SYSTEM_PROMPT).toMatch(/A resposta é sempre uma frase em português/i);
     expect(SYSTEM_PROMPT).not.toMatch(/action=check_lodging/);
     expect(SYSTEM_PROMPT).not.toMatch(/→ \[tool\]/);
     expect(SYSTEM_PROMPT).toMatch(/valor da hospedagem/i);
   });
 
   it("usa consultar_evento para disponibilidade de diárias", () => {
-    expect(SYSTEM_PROMPT).toMatch(/consultar_evento/i);
+    expect(SYSTEM_PROMPT).not.toMatch(/check_lodging/i);
+    expect(SYSTEM_PROMPT).toMatch(/check-in é a partir das 14h/i);
+    expect(DISPATCHER_PROMPT).toMatch(/consultar_evento/i);
     expect(SYSTEM_PROMPT).toMatch(/available/i);
     expect(DISPATCHER_PROMPT).toMatch(/check_in/);
     expect(DISPATCHER_PROMPT).toMatch(/check_out/);
     expect(DISPATCHER_PROMPT).toMatch(/NEVER empty args|NEVER call with empty args/i);
     expect(DISPATCHER_PROMPT).toMatch(/excluir/i);
-    expect(COMMUNICATION_RULES).toMatch(/check_lodging|calendário/i);
+    expect(COMMUNICATION_RULES).toMatch(/calendário|agenda/i);
+    expect(COMMUNICATION_RULES).not.toMatch(/check_lodging/i);
   });
 
   it("pets não permitidos e cancelamento via handoff", () => {
@@ -170,7 +179,7 @@ describe("Divino Chalé — SYSTEM_PROMPT", () => {
 describe("Divino Chalé — registry", () => {
   it("resolve slug divino-chale com skipGreeting", () => {
     const cfg = getPromptConfig("divino-chale");
-    expect(cfg?.version).toBe("v1.3.13");
+    expect(cfg?.version).toBe("v1.3.17");
     expect(cfg?.skipGreeting).toBe(true);
     expect(cfg?.alwaysInjectCommRules).toBe(true);
   });
@@ -186,7 +195,7 @@ describe("Divino Chalé — registry", () => {
     const custom = "PROMPT OVERRIDE TESTE DIVINO";
     const out = buildSystemPrompt(custom, "divino-chale", false, { overridePrompts: true });
     expect(out).toContain(custom);
-    expect(out).not.toContain("LARA | DIVINO CHALÉ — v1.3.13");
+    expect(out).not.toContain("LARA | DIVINO CHALÉ — v1.3.17");
   });
 });
 

@@ -31,6 +31,7 @@ import { formatOmnibeesQuoteForDelivery } from "../utils/omnibees-quote-format.j
 import { getWelcomeConversationImageMarkdown } from "../utils/suite-gallery-welcome-image.js";
 import { formatDateBR, buildFallbackAgendaNotification, buildCancelNotification, buildHandoffNotification, extractClientNameFromMessages, toBrasiliaISO } from "../utils/agendaNotification.js";
 import { formatLodgingConsultaForLlm } from "../utils/lodging-consulta-summary.js";
+import { ensureDivinoCheckLodgingCall, extractDivinoLodgingStay } from "../utils/divino-lodging-stay.js";
 import { formatParkDayConsultaForLlm } from "../utils/park-day-consulta-summary.js";
 import {
   isSunsetThermasTenantSlug,
@@ -1364,6 +1365,10 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
         let processed = sanitizeLLMOutput(text || "");
         if (hasRegistryPromptForTenant) processed = stripChatbotPhrases(processed);
         const trimmed = processed.trim();
+        if (!trimmed && (text || "").trim() && /check_lodging|sugerir_datas|consultar_evento|\[\s*tool|action\s*=/i.test(text)) {
+          trimmed = "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?";
+          sendSse({ choices: [{ delta: { content: trimmed } }] });
+        }
         if (!trimmed) return;
         sendSse({ repaired_assistant: trimmed });
       };
@@ -1658,7 +1663,17 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
           const phase1ToolCallsRaw = Object.values(toolCallsAccum)
             .filter((tc) => tc.name)
             .map((tc) => ({ id: tc.id, function: { name: tc.name, arguments: tc.args } }));
-          const phase1ToolCalls = dedupeParallelSuiteGalleryToolCalls(phase1ToolCallsRaw, dispatcherNameToTool);
+          const phase1Deduped = dedupeParallelSuiteGalleryToolCalls(phase1ToolCallsRaw, dispatcherNameToTool);
+          const recentUserTexts = messages.filter((m) => m.role === "user").slice(-6).map((m) => String(m.content || ""));
+          const lastUserOnly = recentUserTexts[recentUserTexts.length - 1] || "";
+          const divinoUserText = extractDivinoLodgingStay(lastUserOnly) ? lastUserOnly : recentUserTexts.join("\n");
+          const calendarTool = tools.find((t) => t.tool_type === "calendar_query");
+          const phase1ToolCalls = ensureDivinoCheckLodgingCall({
+            isDivino: isDivinoChaleTenant,
+            calls: phase1Deduped,
+            userText: divinoUserText,
+            calendarToolName: calendarTool?.name || "consultar_evento",
+          });
 
           if (phase1ToolCalls.length > 0) {
             console.log("[Chat-Local] Dispatcher decidiu chamar tools:", phase1ToolCalls.map((tc) => ({
@@ -2250,7 +2265,11 @@ Para REMARCAR: a conversa contém o horário já confirmado (ex.: "confirmado pa
 
           const rawConvAssist = prependWelcomeToAssistantText((convFullContent || "").trim());
           emitRepairedAssistant(rawConvAssist);
-          const assistantForHistory = sanitizeLLMOutput(rawConvAssist) || rawConvAssist;
+          const assistantForHistory =
+            sanitizeLLMOutput(rawConvAssist).trim() ||
+            (/check_lodging|sugerir_datas|consultar_evento|\[\s*tool|action\s*=/i.test(rawConvAssist)
+              ? "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?"
+              : rawConvAssist);
           const assistantMetadata = tokenUsagePayload.dispatcher || tokenUsagePayload.conversational
             ? { token_usage: tokenUsagePayload }
             : undefined;

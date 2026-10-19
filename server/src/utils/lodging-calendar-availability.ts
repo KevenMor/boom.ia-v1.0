@@ -18,10 +18,10 @@ export type LodgingCalendarEvent = {
 /** Extrai check-in / check-out (YYYY-MM-DD) dos args da tool. */
 export function parseLodgingStayArgs(args: Record<string, unknown>): LodgingStay | null {
   const rawIn = String(
-    args.check_in ?? args.data_entrada ?? args.checkin ?? args.entrada ?? args.date_in ?? "",
+    args.check_in ?? args.data_entrada ?? args.checkin ?? args.entrada ?? args.date_in ?? args.start_date ?? "",
   ).trim();
   const rawOut = String(
-    args.check_out ?? args.data_saida ?? args.checkout ?? args.saida ?? args.date_out ?? "",
+    args.check_out ?? args.data_saida ?? args.checkout ?? args.saida ?? args.date_out ?? args.end_date ?? "",
   ).trim();
 
   let checkIn = rawIn.slice(0, 10);

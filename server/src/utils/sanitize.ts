@@ -96,6 +96,7 @@ export function stripSimulatedToolCallLeakage(text: string): string {
   t = t.replace(/```(?:tool_code|tool)?\s*[\s\S]*?```/gim, "");
   t = t.replace(/\bprint\s*\(\s*consultar_evento\s*\([^)]*\)\s*\)\s*/gim, "");
   t = t.replace(/\bconsultar_evento\s*\(\s*[^)]*\)\s*/gim, "");
+  t = t.replace(/\b(?:check_lodging|sugerir_datas|excluir|encaminhar_atendente|suite_gallery_query|consultar_galeria)\s*\([^)]*\)\s*/gim, "");
   t = t.replace(/\baction\s*=\s*(?:check_lodging|sugerir_datas|excluir)\b[^\n]*/gim, "");
   t = t.replace(/\[\s*tool\b[\s\S]*?\]/gi, "");
   t = t.replace(/\[\s*tool\b[^\n]*/gi, "");
@@ -507,6 +508,7 @@ export function isCommandLine(line: string): boolean {
     /^\s*NO_TOOLS_NEEDED\s*$/im.test(t) ||
     /^\s*action\s*=\s*(?:check_lodging|sugerir_datas|excluir)\b/im.test(t) ||
     /^\s*(?:check_lodging|sugerir_datas)\s*$/im.test(t) ||
+    /^\s*(?:check_lodging|sugerir_datas|excluir|consultar_evento|encaminhar_atendente)\s*\([^)]*\)\s*$/im.test(t) ||
     /^\s*\[?\s*tool\b/im.test(t) ||
     /^\s*(?:start_date|end_date|check_in|check_out)\s*=\s*["']?\d{4}-\d{2}-\d{2}/im.test(t) ||
     /^\s*consultar_evento\b/im.test(t) ||
