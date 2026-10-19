@@ -1,7 +1,7 @@
 # components
 
 ## Contexto rápido
-Componentes React do painel — primitivos UI (shadcn), layout da app e componentes de domínio por feature.
+Primitivos shadcn (`ui/`), shell (`layout/`) e domínio. Spec: `docs/DESIGN-SYSTEM.md`. Inventário de pastas: `CLAUDE.md`.
 
 ## Stack e ferramentas
 - React 18, TypeScript
@@ -16,7 +16,8 @@ Componentes React do painel — primitivos UI (shadcn), layout da app e componen
 2. Para primitivo UI: `npx shadcn-ui@latest add {component}`
 3. Tipar props com interface
 4. Consumir dados via hooks (não fetch direto)
-5. Usar primitivos de `ui/` para consistência visual
+5. Usar primitivos de `ui/` e o DS certo (TypeUI vs Chatwoot vs default)
+6. Dashboard/kanban: classes `.tu-*` só dentro de `.ds-typeui`
 
 ### Corrigir um bug
 1. Identificar componente pelo DOM (React DevTools)
@@ -45,7 +46,9 @@ npx tsc --noEmit
 - Nunca colocar lógica de negócio em componentes UI
 - Nunca importar hooks de dados em `ui/` (manter primitivos puros)
 - Nunca fazer fetch direto — usar hooks
-- Sempre suportar dark mode (usar classes Tailwind dark:)
+- Sempre suportar dark mode (`dark:`)
+- Não usar `ui/sidebar.tsx` (shell é `AppSidebar`)
+- Não inventar classes `bg-cw-*` (tokens Chatwoot ainda não estão no Tailwind)
 - Sempre tipar props (nunca `any`)
 
 ## Mapa de dependências

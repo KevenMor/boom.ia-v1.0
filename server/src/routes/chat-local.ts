@@ -1364,7 +1364,7 @@ export async function chatLocalRoutes(fastify: FastifyInstance) {
       const emitRepairedAssistant = (text: string) => {
         let processed = sanitizeLLMOutput(text || "");
         if (hasRegistryPromptForTenant) processed = stripChatbotPhrases(processed);
-        const trimmed = processed.trim();
+        let trimmed = processed.trim();
         if (!trimmed && (text || "").trim() && /check_lodging|sugerir_datas|consultar_evento|\[\s*tool|action\s*=/i.test(text)) {
           trimmed = "Desculpe, tive um problema ao processar sua mensagem. Pode repetir, por favor?";
           sendSse({ choices: [{ delta: { content: trimmed } }] });

@@ -1,7 +1,7 @@
 # contexts
 
 ## Contexto rápido
-Providers React de estado global — autenticação (Supabase), tenant ativo e sidebar.
+Providers globais: Auth, Tenant, Sidebar, e Embed* (Chatwoot). Embeds não compartilham TenantContext do painel.
 
 ## Stack e ferramentas
 - React 18 (Context API)
@@ -13,7 +13,7 @@ Providers React de estado global — autenticação (Supabase), tenant ativo e s
 ### Adicionar uma feature
 1. Se for estado global novo: criar `src/contexts/NovoContext.tsx`
 2. Exportar provider + hook (`useNovo()`)
-3. Adicionar provider na hierarquia em `App.tsx` (atenção à ordem)
+3. Adicionar provider na hierarquia em `App.tsx` (Auth → Tenant → resto). Embed: provider só nas rotas `/embed/chatwoot/*`.
 
 ### Corrigir um bug
 1. Para bugs de auth: verificar `AuthContext.tsx` → `loadScope()`

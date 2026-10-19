@@ -1,7 +1,7 @@
 # docs
 
 ## Contexto rápido
-Documentação operacional — paridade dev/prod, relatórios E2E, hospedagem e guias de funcionalidades.
+Documentação operacional + **DESIGN-SYSTEM.md** (fonte de verdade visual). E2E, hospedagem, loteamentos.
 
 ## Stack e ferramentas
 - Markdown

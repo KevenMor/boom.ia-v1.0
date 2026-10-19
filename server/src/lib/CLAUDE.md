@@ -1,16 +1,19 @@
 # lib
 
 ## Propósito
-Utilitário de normalização de URLs do Supabase Storage para acesso público.
+Helpers de infraestrutura do server (URLs Storage, fotos, segmentos, HTML, superadmin). Funções puras.
 
 ## Arquitetura
-- Arquivo único que garante que URLs de Storage contenham o segmento `/object/public/` para buckets públicos.
-- Consumido por `services/tool-executor.ts` e `routes/` ao retornar URLs de mídia.
+- Sem side-effects. Consumido por `tool-executor`, rotas de proxy Storage e inventory.
 
 ## Arquivos-chave
 | Arquivo | Responsabilidade |
 |---------|-----------------|
-| supabase-storage-public-url.ts | ensureSupabaseStoragePublicObjectPath(), normalizeStorageUrlForExternalUse() |
+| supabase-storage-public-url.ts | path público de Storage |
+| inventory-photo-url.ts | URLs de foto de estoque |
+| vehicle-segments.ts | segmentos de veículo |
+| html-entities.ts | decode HTML |
+| owner-superadmin.ts | detecção owner/superadmin |
 
 ## Decisões técnicas
 - Supabase Storage exige `/object/public/{bucket}/` para GET em buckets públicos — URLs sem `public` retornam 404.

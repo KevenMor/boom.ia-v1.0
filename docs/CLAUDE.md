@@ -6,11 +6,13 @@ Documentação operacional do projeto — paridade dev/prod, relatórios E2E, si
 ## Arquitetura
 - Documentos markdown organizados por tema.
 - Relatórios E2E gerados por scripts de teste.
+- Design system: `docs/DESIGN-SYSTEM.md` + `docs/design/DS_IMPROVEMENTS.html`.
 - Documentação de hospedagem é a mais extensa (8 arquivos).
 
 ## Arquivos-chave
 | Arquivo | Responsabilidade |
 |---------|-----------------|
+| DESIGN-SYSTEM.md | Spec visual (shadcn / TypeUI / Chatwoot) — ler antes de produzir UI |
 | DEV-PROD-PARIDADE.md | Regras de paridade entre dev e produção |
 | LEMBRETES-AGENDAMENTO.md | Documentação do sistema de lembretes |
 | CHAT-AO-VIVO-LOGS.md | Logging de chat ao vivo |

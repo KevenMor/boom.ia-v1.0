@@ -1,7 +1,7 @@
 # scripts
 
 ## Contexto rápido
-Scripts de automação — testes E2E visuais (PowerShell) e utilitários de verificação/migração de dados (TypeScript).
+Embeds Chatwoot (HTML/mjs), cron tenant-AI, E2E visual. TS operacional: `server/scripts/AGENTS.md`.
 
 ## Stack e ferramentas
 - PowerShell (E2E visual)

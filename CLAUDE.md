@@ -1,227 +1,284 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guia para agentes IA neste repositório. **Ler este arquivo primeiro**, depois o CLAUDE.md da pasta que for alterar. Produzir UI: ler também `docs/DESIGN-SYSTEM.md`.
+
+## Como um agente deve ler este repo
+
+1. Este arquivo (mapa + regras)
+2. Pasta-alvo: `*/CLAUDE.md` (o quê existe) + `*/AGENTS.md` (como modificar)
+3. UI: `docs/DESIGN-SYSTEM.md` + skill `.cursor/skills/boom-chatwoot-ds/` ou `typeui-dashboard/`
+4. Código: `server/src/routes/chat-local.ts` (cérebro) · `App.tsx` (rotas) · `src/lib/tenant-modules.ts` (ACL)
+
+Não inventar pastas, rotas ou tokens CSS. Se o inventário da pasta e o código divergirem, o **código vence** — atualizar o CLAUDE.md da pasta.
+
+---
 
 ## Visão Geral
 
-**Boom IA / Nexus AI** é uma plataforma SaaS multi-tenant de **agentes de IA conversacionais** (WhatsApp/Chatwoot/WAHA) com painel administrativo web.
+**Boom IA / Nexus AI** — SaaS multi-tenant de agentes de IA conversacionais (WhatsApp / Chatwoot / WAHA) + painel admin.
 
-- **Tipo:** monorepo (frontend + backend Node) com Supabase como data plane
-- **Linguagem:** TypeScript
-- **Frontend:** Vite + React 18 + shadcn/ui + Tailwind + React Router + TanStack Query
-- **Backend:** Fastify 5 + Supabase JS + BullMQ (Redis opcional) + undici
-- **Edge Functions:** Supabase Deno (`supabase/functions/`) — `conversation-history`, `e2e-inspector`, `new-contact`, `public-agent-info`, `send-operator-message`
-- **Origem:** projeto gerado pelo Lovable (`lovable-tagger`)
+| Camada | Stack |
+|--------|--------|
+| Frontend | Vite + React 18 + shadcn/ui + Tailwind + React Router + TanStack Query (`src/`) |
+| Backend | Fastify 5 + Supabase JS + BullMQ (Redis opcional) + undici (`server/`) |
+| Data | Supabase Postgres + RLS por tenant |
+| Edge | Deno `supabase/functions/` |
+| Origem | Lovable (`lovable-tagger`) |
 
-## Comandos Principais
+---
+
+## Design System (resumo)
+
+Três camadas. Spec completa: **`docs/DESIGN-SYSTEM.md`**.
+
+| Contexto | Wrapper | Tokens |
+|----------|---------|--------|
+| Painel admin (maioria) | nenhum (`AppLayout`) | shadcn `bg-background` `text-primary` |
+| `/dashboard`, `/kanban` | `ds-typeui font-plex` | `--tu-*`, `.tu-panel` `.tu-kpi` |
+| Embeds Chatwoot + perfil contato | `ds-chatwoot font-cw` | wrapper existe; tokens `cw-*` **ainda não** estão no Tailwind — usar shadcn + fallbacks |
+
+- Fontes: Inter (app), IBM Plex Sans (TypeUI), JetBrains Mono.
+- Dark: `next-themes`, classe `.dark`, default **dark**, key `boomia-theme`.
+- Primitivos: `src/components/ui/` (shadcn). Custom: `date-input-br`, `theme-toggle`.
+- **Não** alterar `--primary` global para imitar Chatwoot. **Não** usar `bg-cw-*` como se fosse classe Tailwind estável.
+
+---
+
+## Mapa do monorepo
+
+Cada pasta listada tem `CLAUDE.md` + `AGENTS.md` (exceto as marcadas).
+
+```
+boom.ia-v1.0/
+├── src/                          # Frontend React
+│   ├── App.tsx                   # Rotas
+│   ├── index.css                 # Tokens globais + TypeUI
+│   ├── pages/                    # Uma página = uma rota
+│   ├── components/               # ui/ + layout/ + domínio
+│   ├── hooks/                    # TanStack Query
+│   ├── contexts/                 # Auth, Tenant, Sidebar, Embed*
+│   ├── lib/                      # Utils + API client + módulos
+│   ├── integrations/supabase/    # nexusDb (proxy)
+│   └── types/                    # calendar.ts, database.ts
+├── server/src/
+│   ├── index.ts                  # Bootstrap Fastify :3001
+│   ├── routes/                   # HTTP /api/*
+│   ├── services/                 # Tools, delivery, crypto, Asaas
+│   ├── services/prompts/         # Prompts TS por tenant
+│   ├── utils/                    # Sanitize, Sunset lodging, mídia
+│   ├── workers/                  # BullMQ + fallback cron
+│   ├── config/ env.ts
+│   ├── constants/ lib/ types/
+│   └── ../scripts/               # E2E e verify (server/scripts/)
+├── sql/                          # Migrations manuais 001–054
+├── supabase/functions/           # Edge Deno
+├── supabase/migrations/          # CLI (paridade parcial com sql/)
+├── docker/                       # Proxy nginx + docs Portainer
+├── docs/                         # Operacional + DESIGN-SYSTEM.md
+├── scripts/                      # Embeds Chatwoot + cron tenant AI
+└── .cursor/skills/               # boom-chatwoot-ds, typeui-dashboard
+```
+
+---
+
+## Comandos principais
 
 ```bash
-# Desenvolvimento
-npm run dev:all          # Frontend (:8080) + Backend (:3001) via concurrently
-npm run dev              # Frontend apenas (Vite :8080)
-npm run server           # Backend apenas (Fastify :3001)
-
-# Build
-npm run build            # Frontend (vite build)
-cd server && npm run build  # Backend (tsc → dist/)
-
-# Lint & typecheck
-npm run lint             # ESLint em todo o repo
-# Typecheck raiz: tsc -p tsconfig.app.json (sem script dedicado; usar IDE)
-
-# Testes
-npm run test             # Vitest frontend (vitest run)
-npm run test:watch       # Vitest watch mode
-npx vitest run src/lib/foo.test.ts   # rodar um único teste (caminho relativo)
-cd server && npm run test            # Vitest server
-cd server && npm run e2e             # Validação E2E (scripts/e2e-validation.ts)
-
-# Server helpers
-cd server && npm run verify:tools    # Audita tools registradas por agente
-cd server && npm run verify:tokens   # Audita tracking de tokens
-
-# Docker (build local → push GHCR)
-npm run build:docker:all      # server + frontend
-npm run build:docker:server   # server apenas
-npm run build:docker:frontend # frontend apenas
+npm run dev:all              # Frontend :8080 + Backend :3001
+npm run dev                  # Só Vite
+npm run server               # Só Fastify
+npm run build                # Frontend
+cd server && npm run build   # tsc → dist/
+npm run lint
+npm run test                 # Vitest frontend
+cd server && npm run test    # Vitest server
+cd server && npm run e2e
+cd server && npm run verify:tools
+cd server && npm run verify:tokens
+npm run build:docker:all     # GHCR server + frontend
 ```
+
+---
 
 ## Arquitetura
 
-### Fluxo Principal
 ```
-WAHA/Chatwoot → webhook → debounce → POST /api/chat → fastify.inject() → POST /api/chat-local
-→ LLM (OpenAI/Gemini) + tool loop (max 5) → sanitize → SSE → delivery → WAHA/Chatwoot
+WAHA/Chatwoot → webhook → debounce → POST /api/chat
+  → fastify.inject() → POST /api/chat-local
+  → LLM (OpenAI/Gemini) + tool loop (max 5)
+  → sanitize → SSE → delivery → WAHA/Chatwoot
 ```
 
-### Multi-tenant
-- Control plane: `tenants`, `agents`, `tools`, `providers` com RLS por tenant
-- Prompts por tenant em `server/src/services/prompts/` (registry em `registry.ts`)
-  - Slugs ativos: `ppl-motors`, `pet-home`, `vale-suico`, `sunset-thermas`, `delta-empreendimentos`, `monte-verde-ranch`, `pousada-flores-do-lazaro`, `referency`, `instituto-vicentim-maekawa`, `clinica-odonto`, `dr-iuri`, `imperio-cfc`, `autoescola-ideal`, `contabilidade-ideal`, `durce-vita`, `biazini`
-- Registry em `server/src/services/prompts/registry.ts`; cada prompt traz slug + versão (ex.: Sunset `v1.5.36`)
-- **Migrations de data plane** em dois lugares: `sql/` (manuais, 001–042) e `supabase/migrations/` (Supabase CLI). Quando editar uma, verificar se a outra está em paridade.
+Painel: `AuthProvider` → `TenantProvider` → `ProtectedRoute` → `ModuleRoute` → página → hooks (`nexusDb` via `/api/supabase-proxy`).
 
-### Backend (server/src/)
-| Arquivo | Responsabilidade |
-|---------|-----------------|
-| `routes/chat-local.ts` | Cérebro do agente: provider, prompt, tool loop, SSE, guards por tenant |
-| `routes/loteamentos.ts` | CRUD empreendimentos/lotes (módulo `loteamentos`) |
-| `services/tool-executor.ts` | Tools: estoque, FIPE, Omnibees, hospedagem, handoff, galeria |
-| `services/delivery.ts` | Entrega mensagens (humanização com jitter) |
-| `services/crypto.ts` | Criptografia AES de API keys |
-| `services/prompts/registry.ts` | Mapa slug → prompt + versão (ex.: Sunset `v1.5.36`) |
-| `utils/sunset-lodging-params.ts` | Detecção de intenção + allowlist de tool hospedagem Sunset |
-| `utils/sunset-lodging-quote-format.ts` | Formatação de orçamento e rebuild pós-tool |
-| `workers/` | BullMQ (follow-up, campanhas) com fallback cron |
+---
 
-### Sunset Thermas Park (Julia) — runtime v1.5.36
+## Multi-tenant e prompts
 
-Prompt em `server/src/services/prompts/sunset-thermas.ts`; lógica de **quando** chamar tool fica no **runtime** (`chat-local.ts` + utils), não só no prompt.
+Control plane: `tenants`, `agents`, `tools`, `providers` + RLS. Prompts em **TypeScript** (`server/src/services/prompts/`), não no DB — **redeploy do server** para alterar. Registry: `registry.ts` (aliases + typos). Encoding UTF-8 **sem BOM**.
 
-**Qualificação em turnos (§00d):**
-- Turno 1: saudação + nome — **sem** orçamento nem tool de hospedagem
-- Turno 2: promo 25% OFF + confirmação — ainda **sem** tool
-- Turno 3+ (`sim`/`certo`): orçamento com Loft (padrão `interest_keywords: loft, spa, hidromassagem` quando o formulário não traz `Acomodação:`)
+| Slug principal | Versão | Agente |
+|----------------|--------|--------|
+| `ppl-motors` | v2.3.1 | Ana Júlia |
+| `referency` | v1.6.4 | Amanda |
+| `pousada-flores-do-lazaro` | v1.0.0 | Marina |
+| `instituto-vicentim-maekawa` | v1.2.0 | Mariana |
+| `pet-home` | v1.2.1 | Tia Ana |
+| `vale-suico` | v1.2.46 | Vitória |
+| `sunset-thermas-park` | **v1.5.58** | Julia |
+| `durce-vita` | v1.2.1 | Juliana |
+| `contabilidade-ideal` | v1.0 | Vitória |
+| `clinica-odonto-generica` | v1.0.0 | template |
+| `imperio-cfc` | v2.0 | Roberta |
+| `autoescola-ideal` | v8.16 | Bia |
+| `dr-iuri` | v1.1.1 | Camila |
+| `biazini` | v1.0.1 | Bia |
+| `monte-verde-ranch` | v1.2.1 | Cleide |
+| `delta-empreendimentos` | v1.5.18 | Paula |
 
-**Tool sob demanda (economia de tokens):**
-- `userNeedsSunsetLodgingToolCall()` — allowlist; padrão é **não** chamar tool
-- `shouldDeferSunsetLodgingQuote()` — bloqueia hint/orçamento/auto-invoke nos turnos 1–2
-- `messageDeclaresLodgingAmenityFaq()` — FAQ de amenidade (ex.: “spa é aquecido?”) → só texto, sem tool nem repetir R$
-- `shouldRebuildSunsetQuoteFromTool()` — não reconstrói orçamento em FAQ
+Migrations data plane: `sql/` (001–054, **023 ausente**, 032/033 duplicados) **e** `supabase/migrations/`. Editar um → checar o outro.
 
-**Hospedagem Sunset — galeria de fotos:**
-- Migrations `sql/041_register_suite_gallery_tool_sunset.sql` + `sql/042_link_suite_gallery_tool_to_sunset_agent.sql` registram a tool e linkam ao agente Sunset
-- Versão `v1.5.36` introduziu qualificação + Loft + anti-repetição; commits recentes (`dd6a907`, `4049835`, `0ad64b0`, `1d9a3ec`, `da93eba`) só ajustaram prompt + runtime — não exigem nova migration
+---
 
-Testes: `sunset-lodging-params.test.ts`, `sunset-thermas.test.ts`, `sunset-thermas.prompt.test.ts`, `sunset-lodging-quote-format.test.ts`, `sunset-lodging-quote-layout.test.ts`, `sunset-lodging-quote-image-overlays.test.ts`.
+## Backend (`server/src/`)
 
-### Módulo loteamentos (painel + embed Chatwoot)
+Rotas registradas em `index.ts` (prefixo `/api`, exceto MCP). Inventário: `server/src/routes/CLAUDE.md`.
 
-- Rotas admin: `/loteamentos/empreendimentos` — mapa visual + status de lotes
-- API: `/api/loteamentos/*` — exige módulo `loteamentos` no tenant
-- SQL: `sql/039_lot_developments_and_lots.sql`, seed `040_lot_seed_reservas_do_brasil.sql`
-- Embed Mega: `scripts/tenants/delta-empreendimentos-dashboard-loteamentos.script.html`
-- Doc: `docs/LOTEAMENTOS.md`
+| Arquivo | Papel |
+|---------|--------|
+| `chat.ts` / `chat-local.ts` | Entry + cérebro (provider, prompt, tool loop, SSE) |
+| `webhooks.ts` | WAHA/Chatwoot, debounce, CRM sync, AI toggle |
+| `delivery.ts` | Entrega com jitter |
+| `queue.ts` | Follow-ups + cron reminders |
+| `tools.ts` `providers.ts` `admin.ts` `me.ts` | CRUD + perfil |
+| `inventory.ts` `inventory-sync-referency.ts` | Estoque |
+| `hospedagem.ts` `suite-galleries.ts` `loteamentos.ts` | Reservas / galeria / lotes |
+| `contacts.ts` `crm-contacts.ts` `occurrences.ts` | CRM |
+| `calendar-services.ts` `financeiro.ts` `audit.ts` | Agenda / campanhas / logs |
+| `rag.ts` `prompts-read.ts` `demo.ts` | RAG, leitura de prompts, demo |
+| `tenant-ai-toggle.ts` `mcp.ts` `mcp-keys.ts` | Toggle IA, MCP |
+| `embed-chatwoot*.ts` | Embeds Mega (mirror, CRM, hospedagem, inventory, clients, loteamentos) |
 
-### Frontend (src/)
-| Arquivo | Responsabilidade |
-|---------|-----------------|
-| `integrations/supabase/nexus-client.ts` | Cliente principal via proxy `/api/supabase-proxy/*` |
-| `App.tsx` | Rotas com ProtectedRoute + ModuleRoute |
-| `hooks/` | React Query hooks por recurso |
-| `pages/loteamentos/` | Mapa e lista de empreendimentos (módulo `loteamentos`) |
-| `lib/tenant-modules.ts` | Flags de módulos opcionais por tenant |
+**Dead code (existem, NÃO registrados em `index.ts`):** `auth.ts`, `payments-asaas.ts`, `webhooks-asaas.ts`. Não usar sem registrar e remover o aviso.
 
-### Storage
-- Bucket `suite-galleries` (auto-criado)
-- Limites: fotos 20MB, vídeos 200MB
-- Backend faz proxy de Storage com correção de path
+Helpers de auth embed: `embed-auth.ts`, `*-embed-auth.ts` (não são plugins Fastify).
 
-## Variáveis de Ambiente
+Services-chave: `tool-executor.ts` (retorno `{ success, result, error }`), `crypto.ts` (AES, `ENCRYPTION_KEY` ≥ 32), `delivery.ts`, `provider-api.ts`. Ver `server/src/services/CLAUDE.md`.
+
+---
+
+## Frontend (`src/`)
+
+Rotas: `src/App.tsx`. ACL: `src/lib/tenant-modules.ts` (22 `ModuleKey`).
+
+**Módulos:** `dashboard` `conversations` `agents` `calendar` `financeiro` `followups` `inventory` `occurrences` `service_catalog` `suite_galleries` `hospedagem` `loteamentos` `contacts` `clients` `tenants` `tools` `providers` `analytics_tokens` `prompts` `monitoring` `audit` `settings`.
+
+**Páginas protegidas (amostra):** `/dashboard` `/agents` `/conversations` `/kanban` `/calendar` `/followups` `/inventory` `/occurrences` `/galeria` `/catalog` `/contacts` `/clients` `/hospedagem/*` `/loteamentos/*` `/financeiro` `/tools` `/providers` `/analytics/tokens` `/monitoring` `/audit` `/settings` `/prompts` `/profile` `/tenants` `/users` `/permissions`. Superadmin: tenants/users/permissions.
+
+**Públicas:** `/login` `/demo/:agentId` `/embed/chatwoot/*`.
+
+**Órfã:** `TenantPaymentsPage.tsx` — sem rota.
+
+QueryClient: `staleTime` 10 min. Cliente dados: **sempre** `nexusDb` (`nexus-client.ts`), nunca Supabase direto no browser.
+
+---
+
+## Sunset Thermas Park (Julia) — runtime v1.5.58
+
+Prompt: `sunset-thermas.ts`. **Quando** chamar tool = runtime (`chat-local.ts` + `utils/sunset-lodging-params.ts`), não só o prompt.
+
+- Turnos 1–2: `shouldDeferSunsetLodgingQuote()` — sem orçamento / tool hospedagem
+- Tool sob demanda: `userNeedsSunsetLodgingToolCall()` (allowlist)
+- Loft padrão se o form não traz `Acomodação:`
+- FAQ amenidade: texto só, sem reconstruir R$
+
+Galeria: SQL `041`/`042`. Testes: `sunset-lodging-params`, `sunset-thermas`, `sunset-lodging-quote-format` (+ layout/overlays).
+
+---
+
+## Módulo loteamentos
+
+Painel `/loteamentos/empreendimentos`. API `/api/loteamentos/*` (módulo `loteamentos`). SQL `039` + seed `040`. Embed: `scripts/tenants/delta-empreendimentos-dashboard-loteamentos.script.html`. Doc: `docs/LOTEAMENTOS.md`.
+
+---
+
+## Storage
+
+Bucket `suite-galleries` (auto-criado). Fotos 20MB, vídeos 200MB. Proxy de Storage no backend com correção de path (`server/src/lib/supabase-storage-public-url.ts`). Contatos: bucket `contact-files` (SQL 037).
+
+---
+
+## Variáveis de ambiente
 
 ```bash
-# Server (server/.env)
-NEXUS_DB_URL=postgresql://postgres:[PASSWORD]@db.xxx.supabase.co:5432/postgres
-NEXUS_SERVICE_ROLE_KEY=eyJ...  # service_role, não anon key
-ENCRYPTION_KEY=...  # mín. 32 chars
+# server/.env
+NEXUS_DB_URL=postgresql://...
+NEXUS_SERVICE_ROLE_KEY=eyJ...   # service_role, não anon
+ENCRYPTION_KEY=...              # mín. 32 chars
 OPENAI_API_KEY=sk-...
 GEMINI_API_KEY=AIza...
-GOOGLE_MAPS_API_KEY=...  # opcional (fallback Haversine)
+GOOGLE_MAPS_API_KEY=...         # opcional (fallback Haversine)
 
-# Frontend (.env)
+# raiz .env (frontend)
 VITE_SUPABASE_URL=https://xxx.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=eyJ...
 VITE_API_URL=http://127.0.0.1:3001
 ```
 
+---
+
 ## Deploy
 
-Imagens buildadas no PC → push para **GHCR** (`ghcr.io/kevenmor/boom-ia-server|frontend|proxy`).
+Imagens no PC → GHCR (`ghcr.io/kevenmor/boom-ia-server|frontend|proxy`). VPS: Portainer **pull** (não clone). Stack: `docker-compose.portainer.yml` colado no editor.
 
-Na VPS, Portainer faz **pull** das imagens (não clone). Stack definida via `docker-compose.portainer.yml` colado no Web editor.
+**Paridade:** server e frontend no mesmo deploy. `docs/DEV-PROD-PARIDADE.md`. Sete `docker-compose.*` — **não criar oitava** sem remover uma. Produção = só `docker-compose.portainer.yml`.
 
-**Paridade dev ↔ prod (regra crítica):** server e frontend devem ir juntos no mesmo deploy. Se só o server for atualizado, a produção terá frontend antigo (e vice-versa) → webhooks/embeds quebram. Ver `docs/DEV-PROD-PARIDADE.md`.
-
-Há 7 variantes de `docker-compose.*` no repo — **não criar nova sem remover uma**. Em produção usa-se apenas `docker-compose.portainer.yml`. Outras variantes (git/traefik/images/local) cobrem cenários específicos.
-
-Ver: `AGENTS.md` (fluxo de deploy detalhado), `docker/PORTAINER-*.md`, `DEPLOY-GUIDE.md`, `DEPLOY-PORTAINER-GIT.md`.
+---
 
 ## Convenções
 
-- Commits em **pt-BR**: `fix(prompt):`, `feat:`, `fix:`
-- Datas em código: usar `utils/brasiliaTime.ts` (timezone São Paulo)
-- Não citar números de telefone em respostas da Bia (regra compliance)
+- Commits **pt-BR**: `fix(prompt):`, `feat:`, `fix:`
+- Datas: `utils/brasiliaTime.ts` (America/Sao_Paulo)
+- Sem telefones nas respostas da Bia / prompts
 - Testes lado-a-lado: `arquivo.ts` → `arquivo.test.ts`
-- Workers sem Redis: garantir fallback cron em `index.ts`
-- Prompts em TS (não DB) — exige redeploy para alterar
+- Workers: toda fila nova precisa de cron em `index.ts` se Redis faltar
+- Tools: `{ success, result, error }`
+- Frontend: dados nos hooks; UI nos components; páginas só composição
 
-## Design System
+---
 
-- **shadcn/ui** + Tailwind como padrão
-- **Chatwoot-style**: escopo `.ds-chatwoot`, tokens `cw-*` (`bg-cw-elevated`, `text-cw-brand`) — pattern em `.cursor/skills/boom-chatwoot-ds/SKILL.md`
-- **typeui-dashboard**: para métricas futuras (IBM Plex Sans, 8pt grid, WCAG 2.2 AA) — pattern em `.cursor/skills/typeui-dashboard/SKILL.md`
-- Antes de criar componente novo, ler a skill correspondente — evitar cores/tipografia fora do padrão
+## Pontos de atenção
 
-## Pontos de Atenção
+- **Sunset Julia** — prompt + runtime juntos; bump `version` no registry; redeploy server
+- **UTF-8 sem BOM** em prompts (histórico de corrupção)
+- **`auth.ts` / `payments-asaas.ts` / `webhooks-asaas.ts`** — dead code
+- Catch-all content-type `*` → buffer em `index.ts` (webhooks; risco se upload não validado)
+- `ENCRYPTION_KEY` ≥ 32; nunca logar keys descriptografadas
+- Tokens Chatwoot `cw-*` documentados na skill mas **ausentes** de `index.css` / Tailwind
+- `sql/CLAUDE.md` histórico citava 001–028; o repo tem **até 054**
 
-- **Sunset Julia** — alterar fluxo de qualificação/orçamento exige alinhar **prompt** (`sunset-thermas.ts`) **e** runtime (`chat-local.ts`, `sunset-lodging-params.ts`). Redeploy do server obrigatório. SQL `041`/`042` para tool galeria Sunset se ainda não aplicados.
-- **Encoding UTF-8 sem BOM** — histórico de corrupção em prompts (commits cb51a1a, 31b6e85, dd954fe). Salvar TS de prompt com encoding UTF-8 (sem BOM) sempre. Adicionar `*.ts text eol=lf working-tree-encoding=UTF-8` em `.gitattributes` é a mitigação definitiva (ver `ROADMAP.md` §1.3).
-- **Workers sem Redis** — BullMQ tem fallback cron em `server/src/index.ts`. Garantir que toda fila tenha um cron correspondente quando rodar sem Redis.
-- **`server/src/routes/auth.ts`** existe mas não está registrado em `index.ts` — dead code. Não usar sem antes registrá-lo e remover o comentário.
-- **Catch-all content-type parser** (`*` → buffer) em `index.ts` — útil para webhooks com payloads arbitrários, mas arriscado se o servidor for exposto a uploads não validados.
-- **Múltiplos `docker-compose.*`** (7 variantes) — não criar nova variante sem remover uma. Em produção VPS usa-se o `docker-compose.portainer.yml` colado no Portainer.
-- **Paridade dev ↔ prod** — server e frontend devem ir juntos. Ver `docs/DEV-PROD-PARIDADE.md`.
-- **`ENCRYPTION_KEY`** mínimo 32 caracteres — usado em `server/src/services/crypto.ts` para AES de API keys. Nunca logar keys descriptografadas.
-- **`.env` no git** — `ROADMAP.md` §1.2 sinaliza `.env` (placeholder) commitado na raiz; correto deixar só `.env.example` e garantir `.env` no `.gitignore`.
-- **Telefones em respostas da Bia** — regra compliance: nunca citar números de telefone nas respostas da IA.
-- **Tools retornam `{ success, result, error }`** — convenção de retorno de tools registrada em `tool-executor.ts`.
+---
 
-## Workers (BullMQ + Cron fallback)
+## Workers
 
-Workers ficam em `server/src/workers/` (follow-up, campanhas financeiras). O bootstrap em `server/src/index.ts` tenta subir BullMQ com Redis; se indisponível, agenda os mesmos jobs via `node-cron`. Ao adicionar uma fila nova, **sempre** prover o equivalente em cron para o modo degradado.
+`server/src/workers/`: `followup-worker.ts`, `financeiro-campaign-worker.ts`. Sem Redis: cron em `index.ts`. Nova fila → equivalente cron.
 
-## Ordem de Leitura Recomendada (novos agentes)
+---
 
-1. `server/src/routes/chat-local.ts` — cérebro do agente (provider + tool loop + SSE + guards)
-2. `server/src/services/tool-executor.ts` — engine de tools
-3. `server/src/services/prompts/registry.ts` — sistema de prompts
-4. `server/src/index.ts` — bootstrap do server
-5. `src/App.tsx` — árvore de rotas do frontend
-6. `src/contexts/AuthContext.tsx` — autenticação
-7. `src/integrations/supabase/nexus-client.ts` — cliente Supabase (via proxy)
+## Subdocs CLAUDE.md / AGENTS.md
 
-## Subdocs CLAUDE.md
+| Pasta | Docs |
+|-------|------|
+| `server/src/routes/` | rotas HTTP |
+| `server/src/services/` | tools e integrações |
+| `server/src/services/prompts/` | prompts por tenant |
+| `server/src/utils/` | sanitize + Sunset lodging |
+| `server/src/workers/` | BullMQ |
+| `server/src/config/` `constants/` `lib/` `types/` | env, soft-replies, storage URLs |
+| `src/pages/` `components/` `hooks/` `lib/` `contexts/` | frontend |
+| `src/integrations/supabase/` | nexus-client |
+| `src/types/` | tipos frontend |
+| `sql/` `supabase/functions/` `docker/` `docs/` `scripts/` | infra |
+| `server/scripts/` | E2E / verify |
 
-O repo tem CLAUDE.md granulares por pasta — ler antes de modificar:
-
-| Pasta | Subdoc |
-|-------|--------|
-| `server/src/routes/` | `server/src/routes/CLAUDE.md` |
-| `server/src/services/` | `server/src/services/CLAUDE.md` |
-| `server/src/services/prompts/` | `server/src/services/prompts/CLAUDE.md` |
-| `server/src/utils/` | `server/src/utils/CLAUDE.md` |
-| `server/src/workers/` | `server/src/workers/CLAUDE.md` |
-| `src/components/` | `src/components/CLAUDE.md` |
-| `src/hooks/` | `src/hooks/CLAUDE.md` |
-| `src/pages/` | `src/pages/CLAUDE.md` |
-| `src/lib/` | `src/lib/CLAUDE.md` |
-| `src/integrations/supabase/` | `src/integrations/supabase/CLAUDE.md` |
-| `sql/` | `sql/CLAUDE.md` |
-| `docker/` | `docker/CLAUDE.md` |
-
-## Documentação Detalhada por Pasta
-
-| Pasta | Arquivo |
-|-------|---------|
-| Server routes | `server/src/routes/CLAUDE.md` |
-| Server services | `server/src/services/CLAUDE.md` |
-| Server prompts | `server/src/services/prompts/CLAUDE.md` |
-| Server utils | `server/src/utils/CLAUDE.md` |
-| Server workers | `server/src/workers/CLAUDE.md` |
-| Frontend components | `src/components/CLAUDE.md` |
-| Frontend hooks | `src/hooks/CLAUDE.md` |
-| Frontend pages | `src/pages/CLAUDE.md` |
-| Frontend lib | `src/lib/CLAUDE.md` |
-| Frontend supabase | `src/integrations/supabase/CLAUDE.md` |
-| SQL migrations | `sql/CLAUDE.md` |
-| Docker | `docker/CLAUDE.md` |
+Docs operacionais extras: `docs/HOSPEDAGEM*.md`, `docs/LOTEAMENTOS.md`, `docs/DEV-PROD-PARIDADE.md`, `AGENTS.md` (deploy).

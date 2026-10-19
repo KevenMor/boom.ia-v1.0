@@ -1,7 +1,7 @@
 # sql
 
 ## Contexto rápido
-Migrations SQL manuais do banco Postgres (Supabase) — schema, RLS, tabelas de domínio e seeds de dados.
+Migrations manuais 001–054. Inventário por faixa: `CLAUDE.md`. Paridade com `supabase/migrations/`.
 
 ## Stack e ferramentas
 - PostgreSQL (Supabase)
@@ -11,7 +11,7 @@ Migrations SQL manuais do banco Postgres (Supabase) — schema, RLS, tabelas de 
 ## Como modificar
 
 ### Adicionar uma feature (nova tabela/coluna)
-1. Criar `sql/NNN_descricao.sql` (próximo número sequencial)
+1. Criar `sql/NNN_descricao.sql` (próximo: **055**; 023 não existe; 032/033 duplicados)
 2. Usar `CREATE TABLE IF NOT EXISTS` ou `ALTER TABLE`
 3. Adicionar RLS policy com filtro por `tenant_id`
 4. Aplicar no Supabase SQL Editor

@@ -1,63 +1,38 @@
 # hooks
 
 ## Propósito
-React Query hooks para data fetching — cada hook encapsula queries/mutations para um recurso específico do sistema.
+TanStack Query: um hook por recurso. Query key `[entity, tenantId, ...filtros]`. Mutations invalidam cache.
 
 ## Arquitetura
-- Padrão: TanStack Query (useQuery/useMutation) com `nexusDb` Supabase client.
-- Query keys seguem `[entity, ...filters]` (ex: `["agents", tenantId]`).
-- Mutations invalidam cache automaticamente via `queryClient.invalidateQueries()`.
-- Dependências internas: `../integrations/supabase/nexus-client.ts`, `../contexts/TenantContext.tsx`.
-- Dependências externas: @tanstack/react-query, @supabase/supabase-js.
+`nexusDb` (`../integrations/supabase/nexus-client.ts`) + `tenantId` do TenantContext. Endpoints custom: `../lib/api-client.ts`. `staleTime` 10 min, `gcTime` 30 min, `refetchOnWindowFocus: false`.
 
-## Arquivos-chave
-| Arquivo | Responsabilidade |
-|---------|-----------------|
-| useAgents.ts | CRUD de agentes |
-| useTenants.ts | CRUD de tenants |
-| useProviders.ts | CRUD de providers LLM |
-| useTools.ts | CRUD de tools |
-| useConversations.ts | Lista/detalhe de conversas |
-| useContacts.ts | Gestão de contatos |
-| useCalendars.ts | Calendários |
-| useCalendarEvents.ts | Eventos de calendário |
-| useCalendarServices.ts | Serviços de calendário |
-| useInventory.ts | Inventário de veículos |
-| useHospedagem.ts | Gestão de hospedagem |
-| useSuiteGalleries.ts | Galerias de suítes |
-| useFollowUpQueue.ts | Fila de follow-ups |
-| useOccurrences.ts | Ocorrências |
-| useTokensByAgent.ts | Tokens por agente |
-| useTokensByProvider.ts | Tokens por provider |
-| useAgentTokenUsage.ts | Uso de tokens detalhado |
-| useUsageMetrics.ts | Métricas de uso |
-| useAdminUsers.ts | Gestão de usuários |
-| useAuditLogs.ts | Logs de auditoria |
-| useNotifications.ts | Notificações |
-| usePendingReminders.ts | Lembretes pendentes |
-| useFirstEnabledRoute.ts | Primeira rota habilitada (redirect) |
-| useModuleActions.ts | Permissões de ações por módulo |
-| useUserModuleAcl.ts | ACL de módulos por usuário |
-| use-toast.ts | Toast notifications (shadcn) |
+## Inventário
 
-## Decisões técnicas
-- `staleTime: 10min`, `gcTime: 30min` — dados ficam em cache para evitar refetches desnecessários.
-- `refetchOnWindowFocus: false` — evita refetch ao alternar abas.
-- Hooks filtram por `tenantId` do TenantContext — multi-tenant transparente.
+| Hook | Domínio |
+|------|---------|
+| useAgents / useTenants / useProviders / useTools | CRUD core |
+| useConversations / useConversationGrowth | Chat ao vivo |
+| useContacts | Leads / clientes |
+| useCalendars / useCalendarEvents / useCalendarServices | Agenda |
+| useInventory | Estoque |
+| useHospedagem / useHospedagemTenantScope | Reservas |
+| useLoteamentos / useLoteamentosTenantScope | Lotes |
+| useSuiteGalleries | Galerias |
+| useFollowUpQueue | Follow-ups |
+| useOccurrences | Ocorrências |
+| useServiceCatalog | Catálogo |
+| useTokensByAgent / useTokensByProvider / useAgentTokenUsage / useUsageMetrics | Analytics |
+| useAdminUsers / useTenantMembers / useUserModuleAcl / useModuleActions | ACL / users |
+| useAuditLogs / useNotifications / usePendingReminders / useAppointmentRemindersList | Ops |
+| useAsaasConfig / useTenantIntegration / useMcpKeys | Integrações |
+| useFirstEnabledRoute | Redirect inicial |
+| use-toast / use-mobile | UI |
 
 ## Convenções
-- Nome: `use{Recurso}.ts` (PascalCase do recurso).
-- Cada hook exporta funções nomeadas (não default export).
-- Queries retornam `{ data, isLoading, error }`.
-- Mutations retornam `{ mutate, mutateAsync, isPending }`.
+- `use{Recurso}.ts`, named exports
+- `enabled: !!tenantId` (isolamento)
+- Sempre invalidar queries relacionadas no `onSuccess`
 
-## Fluxos críticos
-1. `Página monta → hook useX() → useQuery(key, fetchFn) → Supabase query → dados em cache → render`
-2. `Formulário submit → useMutation → Supabase insert/update → invalidateQueries → refetch automático`
-3. `TenantSwitcher → tenantId muda → hooks com tenantId na key refazem fetch`
-
-## Cuidados ao modificar
-- Alterar query key invalida cache existente — pode causar flash de loading.
-- Não fazer fetch sem tenantId (retorna dados de todos os tenants — violação de isolamento).
-- Mutations devem sempre invalidar queries relacionadas.
-- Não usar `refetchOnMount: true` sem necessidade — degrada performance.
+## Cuidados
+- Sem tenantId = vazamento cross-tenant
+- Embeds usam contexts `Embed*` — não misturar com TenantContext do painel sem checar o hook

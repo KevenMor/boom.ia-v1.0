@@ -1,7 +1,7 @@
 # scripts
 
 ## Propósito
-Scripts de automação — E2E visual (PowerShell) e utilitários de verificação/migração (TypeScript no server).
+Scripts de automação: embeds Chatwoot (HTML + geradores), cron toggle IA, E2E visual. Scripts TS de dados ficam em `server/scripts/` (doc própria).
 
 ## Arquitetura
 - `scripts/` (raiz): PowerShell scripts para testes E2E visuais.
@@ -11,15 +11,11 @@ Scripts de automação — E2E visual (PowerShell) e utilitários de verificaç�
 ## Arquivos-chave
 | Arquivo | Responsabilidade |
 |---------|-----------------|
-| scripts/e2e-gallery-visual.ps1 | Teste E2E visual de galerias |
-| server/scripts/e2e-validation.ts | Runner de validação E2E |
-| server/scripts/verify-agent-tools.ts | Verifica configuração de tools dos agentes |
-| server/scripts/verify-token-tracking.ts | Verifica setup de tracking de tokens |
-| server/scripts/run-token-migration.ts | Migração de token tracking |
-| server/scripts/remove-unimplemented-tools.ts | Limpa tools não implementadas do banco |
-| server/scripts/test-autoescola-nearest-unit.ts | Teste de unidade mais próxima |
-| server/scripts/export-vale-suico-n8n-json.ts | Exporta dados para n8n |
-| server/scripts/e2e-vale-suico-orcamento.ts | E2E de orçamento Vale Suíço |
+| chatwoot-*.script.html / chatwoot-generate-*.mjs / chatwoot-install-*.mjs | apps dashboard Mega |
+| tenants/*.script.html | embeds por tenant (Delta, PPL, Sunset, Dr Iuri, Autoescola Ideal) |
+| cron-tenant-ai/ | sync cron-job.org do toggle IA |
+| e2e-gallery-visual.ps1 | E2E visual galerias |
+| server/scripts/* | E2E/verify TS — ver `server/scripts/CLAUDE.md` |
 
 ## Decisões técnicas
 - Scripts TS usam tsx/ts-node para execução direta.

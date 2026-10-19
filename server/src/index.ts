@@ -34,6 +34,7 @@ import { embedChatwootLoteamentosRoutes } from "./routes/embed-chatwoot-loteamen
 import { mcpRoutes } from "./routes/mcp.js";
 import { providerRoutes } from "./routes/providers.js";
 import { mcpKeysRoutes } from "./routes/mcp-keys.js";
+import { captainToolsRoutes } from "./routes/captain-tools.js";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 
@@ -199,6 +200,7 @@ async function build() {
   fastify.register(auditRoutes, { prefix: "/api" });
   fastify.register(tenantAiToggleRoutes, { prefix: "/api" });
   fastify.register(mcpKeysRoutes, { prefix: "/api" });
+  fastify.register(captainToolsRoutes, { prefix: "/api" });
   fastify.register(mcpRoutes);
   fastify.register(demoRoutes, { prefix: "/api" });
   fastify.register(embedChatwootRoutes, { prefix: "/api" });

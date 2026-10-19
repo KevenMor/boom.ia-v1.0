@@ -1,7 +1,7 @@
 # services
 
 ## Contexto rápido
-Lógica de negócio do backend — tools do agente IA, integrações externas (FIPE, Omnibees, WAHA, Chatwoot), criptografia e delivery de mensagens.
+Lógica de negócio: tools, Chatwoot embed, Asaas, RAG, lodging, lotes. Inventário: `CLAUDE.md`. Tools = `{ success, result, error }`.
 
 ## Stack e ferramentas
 - TypeScript, Node.js

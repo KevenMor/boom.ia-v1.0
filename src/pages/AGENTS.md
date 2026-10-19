@@ -1,12 +1,12 @@
 # pages
 
 ## Contexto rápido
-Páginas do painel admin React — cada arquivo é uma rota, consome hooks para dados e renderiza componentes de domínio.
+Páginas do painel e embeds Chatwoot. Inventário e DS: `CLAUDE.md` desta pasta + `docs/DESIGN-SYSTEM.md`.
 
 ## Stack e ferramentas
 - React 18, React Router v6
 - TanStack Query (via hooks)
-- shadcn/ui + Tailwind CSS
+- shadcn default · TypeUI (`Dashboard`, `Kanban`) · wrapper Chatwoot (embeds + perfil)
 - TypeScript
 
 ## Como modificar
@@ -16,7 +16,9 @@ Páginas do painel admin React — cada arquivo é uma rota, consome hooks para 
 2. Adicionar rota em `src/App.tsx` dentro de `<Routes>`
 3. Envolver com `<ProtectedRoute>` e `<ModuleRoute module="nome">`
 4. Criar hook em `src/hooks/useNovoRecurso.ts` se necessário
-5. Adicionar link na sidebar (`AppSidebar`)
+5. Adicionar link na sidebar (`AppSidebar`) com `moduleKey`
+6. Embed Chatwoot: rota **pública** (fora do AppLayout) + wrapper `ds-chatwoot font-cw` + auth `embed-*-auth.ts`
+7. Métricas: wrapper `ds-typeui font-plex`
 
 ### Corrigir um bug
 1. Identificar a página pela URL
@@ -43,8 +45,9 @@ npm run build
 
 ## Regras invioláveis
 - Nunca fazer fetch direto na página — usar hooks
-- Sempre proteger com ProtectedRoute + ModuleRoute
-- Nunca hardcodar tenantId — usar TenantContext
+- Sempre proteger painel com ProtectedRoute + ModuleRoute (exceto `/profile` e embeds públicos)
+- Nunca hardcodar tenantId — TenantContext no painel; Embed*Context nos embeds
+- Não copiar `TenantPaymentsPage` (órfã, sem rota)
 - Sempre testar com roles diferentes (superadmin, admin, user)
 
 ## Mapa de dependências

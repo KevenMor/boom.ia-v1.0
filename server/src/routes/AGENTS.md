@@ -16,6 +16,8 @@ Endpoints REST Fastify sob `/api` — recebem webhooks, processam chat com LLM, 
 2. Exportar `async function novoRecursoRoutes(fastify: FastifyInstance)`
 3. Registrar em `server/src/index.ts`: `fastify.register(novoRecursoRoutes, { prefix: "/api" })`
 4. Seguir padrão: validar env no início, usar `createNexusClient()`, retornar JSON
+5. MCP: registrar **sem** `{ prefix: "/api" }` (ver `mcp.ts` em `index.ts`)
+6. **Não** registrar `auth.ts`, `payments-asaas.ts`, `webhooks-asaas.ts` (dead code) sem plano explícito
 
 ### Corrigir um bug
 1. Verificar logs do Fastify (pino-pretty em dev)

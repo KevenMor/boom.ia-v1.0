@@ -22,7 +22,7 @@ Prompts de IA por tenant — cada cliente tem personalidade, regras e comportame
 2. Editar o arquivo do tenant específico
 3. Rodar `npx vitest run src/services/prompts/`
 4. Verificar se o encoding está UTF-8 sem BOM
-5. **Sunset (`sunset-thermas-park`, v1.5.36):** fluxo de qualificação §00d e economia de tool também vivem em `chat-local.ts` e `utils/sunset-lodging-params.ts` — atualizar os três lugares e bump de `version` no `registry.ts`
+5. **Sunset (`sunset-thermas-park`, v1.5.58):** fluxo §00d e economia de tool também em `chat-local.ts` e `utils/sunset-lodging-params.ts` — atualizar os três e bump de `version` no `registry.ts`
 
 ### Refatorar
 1. Não mover prompts para o banco sem migração planejada

@@ -1,7 +1,7 @@
 # lib
 
 ## Contexto rápido
-Utilitário de normalização de URLs do Supabase Storage — garante path correto para acesso público a buckets.
+Helpers de infra: Storage público, fotos de estoque, segmentos, HTML entities, superadmin. Funções puras.
 
 ## Stack e ferramentas
 - TypeScript puro

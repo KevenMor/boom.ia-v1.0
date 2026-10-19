@@ -1,38 +1,31 @@
 # contexts
 
 ## Propósito
-Context providers React que gerenciam estado global da aplicação — autenticação, tenant selecionado e sidebar.
+Estado global: auth, tenant, sidebar e sessão dos **embeds** Chatwoot.
 
-## Arquitetura
-- Padrão: React Context + Provider com hooks customizados (`useAuth()`, `useTenant()`, `useSidebar()`).
-- Hierarquia em App.tsx: `AuthProvider` → `TenantProvider` → rotas.
-- Dependências internas: `../integrations/supabase/nexus-client.ts`, `../lib/api-client.ts`.
-- Dependências externas: @supabase/supabase-js, React.
+## Hierarquia (painel)
+`ThemeProvider` → `AuthProvider` → `TenantProvider` → rotas. Sidebar via `SidebarContext` dentro do layout.
 
-## Arquivos-chave
-| Arquivo | Responsabilidade |
-|---------|-----------------|
-| AuthContext.tsx | Sessão Supabase, profile, memberships, superadmin detection, signIn/signOut, canAccessTenant(), isTenantAdmin() |
-| TenantContext.tsx | Tenant selecionado, lista de tenants, switchTenant() |
-| SidebarContext.tsx | Estado open/collapsed da sidebar |
+## Arquivos
 
-## Decisões técnicas
-- Auth via proxy (`/api/supabase-proxy`) para evitar CORS com Supabase direto.
-- `isSuperAdmin` normaliza variações de role (superadmin, super_admin, SuperAdmin).
-- Token refresh silencioso — não mostra spinner em refreshes, apenas na carga inicial.
-- `scopeLoadingInFlight` ref evita dupla chamada (getSession + onAuthStateChange disparam juntos).
+| Arquivo | Papel |
+|---------|--------|
+| AuthContext.tsx | sessão, profile, memberships, superadmin, signIn/Out, `canAccessTenant`, `isTenantAdmin` |
+| TenantContext.tsx | tenant ativo, lista, `switchTenant` |
+| SidebarContext.tsx | open/collapsed |
+| EmbedClientsContext.tsx | embed CRM clientes |
+| EmbedCrmContext.tsx | embed CRM |
+| EmbedHospedagemContext.tsx | embed reservas |
+| EmbedInventoryContext.tsx | embed estoque |
+| EmbedLoteamentosContext.tsx | embed lotes |
 
-## Convenções
-- Provider wraps children, hook consome context.
-- Loading state granular: `loading` (session) + `scopeLoading` (profile/memberships).
-- Nunca acessar Supabase Auth diretamente fora do AuthContext.
+## Decisões
+- Auth via `/api/supabase-proxy` (CORS)
+- `isSuperAdmin` normaliza `superadmin` / `super_admin` / `SuperAdmin`
+- `scopeLoadingInFlight` evita race getSession + onAuthStateChange
+- Embeds **não** usam TenantContext do painel — cada um tem token/credencial própria (`embed-credentials.ts`)
 
-## Fluxos críticos
-1. `App mount → AuthProvider → getSession() + onAuthStateChange → loadScope(session) → profile + memberships → render`
-2. `Login → signIn(email, pass) → Supabase Auth → session → loadScope → redirect`
-3. `TenantSwitcher → switchTenant(id) → TenantContext update → hooks refetch`
-
-## Cuidados ao modificar
-- Alterar AuthContext afeta TODA a aplicação — testar login/logout/refresh.
-- Não remover `scopeLoadingInFlight` — causa race condition com duplo fetch.
-- TenantContext depende de AuthContext estar resolvido — ordem dos providers importa.
+## Cuidados
+- Ordem dos providers importa
+- Nunca `nexusDb.auth` fora do AuthContext no painel
+- Não misturar hooks de painel (tenantId) com hooks de embed sem o context certo

@@ -1,43 +1,32 @@
 # sql
 
 ## Propósito
-Migrations SQL manuais para o banco Supabase (Postgres) — definem schema, RLS, tabelas de domínio e seeds.
+Migrations manuais do Postgres Supabase (001–054). Aplicar no SQL Editor / psql. **Não** editar migration já aplicada — criar a próxima.
 
-## Arquitetura
-- Migrations numeradas sequencialmente (001-028).
-- Aplicadas manualmente ou via scripts — NÃO usam Supabase CLI migrations.
-- Cobrem: control plane (tenants, agents, tools, providers), inventário, follow-ups, calendário, hospedagem, storage.
-- Dependências: Supabase Postgres com extensões padrão.
+Coexiste com `supabase/migrations/` (CLI). Ao criar uma, verificar paridade.
 
-## Arquivos-chave
-| Arquivo | Responsabilidade |
-|---------|-----------------|
-| 001_control_plane.sql | Tabelas core: tenants, agents, tools, providers, conversations, messages + RLS |
-| 002_fix_rls_recursion.sql | Fix de recursão infinita em RLS policies |
-| 004_conversation_memory.sql | Memória/contexto de conversas |
-| 006_inventory_table.sql | Tabela de inventário de veículos |
-| 007_message_debounce_buffer.sql | Buffer de debounce para webhooks |
-| 011_follow_up_queue.sql | Tabela de fila de follow-ups |
-| 015_appointment_reminders.sql | Lembretes de agendamento |
-| 018_lodging_park_calendar_and_reservations.sql | Calendário e reservas de hospedagem |
+**Lacunas:** 023 não existe. 032 e 033 têm **dois** arquivos cada (tool types vs register/link).
 
-## Decisões técnicas
-- Numeração manual (não timestamp) — mais legível mas exige coordenação.
-- RLS por tenant_id em todas as tabelas de dados.
-- Separação entre `sql/` (manual) e `supabase/migrations/` (CLI) — coexistem.
-- Seeds de dados (021, 024) misturados com DDL — idealmente separar.
+## Inventário (agrupado)
+
+| Faixa | Tema |
+|-------|------|
+| 001–005 | control plane, RLS, data plane, memória, tools |
+| 006–016 | inventory, debounce, Chatwoot, FIPE, follow-up, calendar, reminders, RPC grants |
+| 017–028 | storage galerias, lodging/park Sunset, seeds, tools hospedagem |
+| 029–035 | revoke key, Referency, ArtaxNet, park consulta, Flores do Lázaro |
+| 036–038 | docs/contratos contato, bucket contact-files, Asaas |
+| 039–040 | loteamentos + seed Reservas do Brasil |
+| 041–048 | tools galeria/handoff/notification Sunset e Delta |
+| 049–054 | contract templates, tenants policy, prompts dinâmicos, MCP keys, KB RPCs, assign conversa |
+
+Arquivos-chave: `001_control_plane.sql`, `006_inventory_table.sql`, `011_follow_up_queue.sql`, `018_lodging_park_calendar_and_reservations.sql`, `038_asaas_integration.sql`, `039_lot_developments_and_lots.sql`, `052_tenant_mcp_keys.sql`.
 
 ## Convenções
-- Prefixo numérico de 3 dígitos: `001_`, `002_`, etc.
-- Nome descritivo em snake_case após o número.
-- Cada arquivo é idempotente quando possível (IF NOT EXISTS).
+- `NNN_snake_case.sql`, preferir `IF NOT EXISTS`
+- RLS com `tenant_id` em tabela nova
+- Seeds (021, 024, 040) misturados com DDL — não alterar seed antigo em prod
 
-## Fluxos críticos
-1. `Nova feature → criar migration NNN_nome.sql → aplicar no Supabase (SQL Editor ou psql)`
-2. `Deploy → verificar se migrations pendentes foram aplicadas`
-
-## Cuidados ao modificar
-- Nunca alterar migrations já aplicadas em produção — criar nova migration.
-- RLS policies devem sempre filtrar por tenant_id.
-- Testar com service_role E anon key (RLS se aplica diferente).
-- Verificar se `supabase/migrations/` não tem conflito com `sql/`.
+## Cuidados
+- Testar anon (RLS) e service_role
+- Próximo número: **055**

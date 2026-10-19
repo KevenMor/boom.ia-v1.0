@@ -1,7 +1,7 @@
 # hooks
 
 ## Contexto rápido
-React Query hooks — data fetching e mutations para todos os recursos do painel admin, com cache e invalidação automática.
+React Query hooks — um por recurso. Lista completa: `CLAUDE.md`. Sempre `enabled: !!tenantId` no painel.
 
 ## Stack e ferramentas
 - TanStack Query (React Query) v5
@@ -41,7 +41,8 @@ npx tsc --noEmit
 - Sempre filtrar por tenantId (isolamento multi-tenant)
 - Sempre invalidar cache após mutations
 - Nunca fazer queries sem enabled: !!tenantId (evita fetch sem contexto)
-- Nunca usar queryClient diretamente em componentes — usar hooks
+- Também: Embed*Context (não TenantContext) nos hooks de embed
+- Hooks novos: useLoteamentos, useMcpKeys, useAsaasConfig, useServiceCatalog — seguir o mesmo padrão de key
 
 ## Mapa de dependências
 ```

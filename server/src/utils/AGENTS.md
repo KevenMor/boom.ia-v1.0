@@ -1,7 +1,7 @@
 # utils
 
 ## Contexto rápido
-Funções utilitárias do backend — sanitização de LLM, extração de mídia, notificações, formatação de datas BR.
+Sanitize, mídia, Brasília, **Sunset lodging** (`sunset-lodging-*.ts`). Inventário: `CLAUDE.md`.
 
 ## Stack e ferramentas
 - TypeScript puro (sem dependências externas pesadas)

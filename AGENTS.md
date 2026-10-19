@@ -1,166 +1,175 @@
-# AGENTS – Boom IA – Deploy e fluxo das imagens
+# AGENTS – Boom IA
 
-Documentação para agentes e desenvolvedores sobre como o projeto sobe na VPS (Portainer) e de onde vêm as imagens.
+Como produzir neste repo: deploy, design system, pastas e receitas. Mapa conceitual: `CLAUDE.md`. Spec visual: `docs/DESIGN-SYSTEM.md`.
+
+Antes de editar uma pasta, ler o `AGENTS.md` **daquela pasta**.
 
 ---
 
 ## O que está rodando na VPS
 
-1. **Compose (YAML)**  
-   O conteúdo do `docker-compose.portainer.yml` é **colado no Portainer** (Web editor). Ou seja: a definição da stack é o arquivo que **você colou** no Portainer, **não** um clone do repositório na VPS.
+1. **Compose (YAML)** — o conteúdo de `docker-compose.portainer.yml` é **colado no Portainer**. A stack é o YAML colado, não um clone na VPS.
+2. **Imagens** — build no PC → `docker push` GHCR (`ghcr.io/kevenmor/boom-ia-server|frontend|proxy`). Na VPS só **pull**. Sem clone, sem `docker build`.
 
-2. **Imagens (server, frontend, proxy)**  
-   São **buildadas no PC** (ou em CI) e enviadas para o **GitHub Container Registry (GHCR)** com `docker push`.  
-   Na VPS o Docker **só faz pull** dessas imagens do GHCR (`ghcr.io/kevenmor/...`).  
-   Na VPS **não** acontece:
-   - clone do repositório no GitHub
-   - `docker build`
-   - uso direto do código do GitHub
+| O quê | Onde |
+|-------|------|
+| Código | GitHub (PC / CI) |
+| Build | PC → GHCR |
+| VPS | compose colado + pull GHCR |
 
----
+**Paridade:** server e frontend no mesmo deploy. `docs/DEV-PROD-PARIDADE.md`.
 
-## Resumo
-
-| O quê              | Onde fica / de onde vem                            |
-|--------------------|----------------------------------------------------|
-| Código do projeto  | Repositório GitHub (no PC / CI; não é clonado na VPS) |
-| Build das imagens  | Feito no PC → enviado para o GHCR                  |
-| Na VPS             | Só o **compose** (colado no Portainer) + **pull** das imagens do GHCR |
-
-Conclusão: na VPS sobe o **build do projeto** no sentido de **imagens já buildadas** (que estavam no GHCR). A stack usa o **arquivo (compose) que foi colado no Portainer**, e **não** um clone direto do repositório no GitHub. O repositório GitHub não é acessado pela VPS nesse fluxo; só o **GHCR** (registry de imagens) é.
-
----
-
-## Paridade dev ↔ produção
-
-**Regra:** Server e frontend devem ser deployados juntos. Se só o server for atualizado, a produção terá frontend antigo (e vice-versa). Ver `docs/DEV-PROD-PARIDADE.md`.
-
----
-
-## Arquivos relevantes
-
-- **Stack Portainer (Web editor):** `docker-compose.portainer.yml`
-- **Deploy por Git (quando suportado):** `docker-compose.portainer-git.yml`
-- **Compose local (Docker Desktop):** `docker-compose.yml`
-- **Registry:** GHCR – `ghcr.io/kevenmor/boom-ia-server`, `boom-ia-frontend`, `boom-ia-proxy`
-- **Token GHCR:** configurar em Portainer > Registries (ou `docker login ghcr.io` na VPS)
+Arquivos: `docker-compose.portainer.yml` (prod) · `docker-compose.portainer-git.yml` · `docker-compose.yml` (local). **Não criar 8ª variante** sem remover uma.
 
 ---
 
 ## Desenvolvimento local
 
-### Pré-requisitos
-- Node.js 18+
-- npm
-
-### Setup
 ```bash
-npm install
-cd server && npm install
+npm install && (cd server && npm install)
+cp .env.example .env
+cp server/.env.example server/.env
+# NEXUS_DB_URL, NEXUS_SERVICE_ROLE_KEY, NEXUS_DB_ANON_KEY, ENCRYPTION_KEY,
+# VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY
+npm run dev:all    # :8080 frontend + :3001 API (Vite proxy /api)
 ```
 
-### Variáveis de ambiente
-- Copiar `.env.example` → `.env` (raiz)
-- Copiar `server/.env.example` → `server/.env`
-- Preencher: `NEXUS_DB_URL`, `NEXUS_SERVICE_ROLE_KEY`, `NEXUS_DB_ANON_KEY`, `ENCRYPTION_KEY`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`
-
-### Rodar
-```bash
-npm run dev:all
-```
-- Frontend: http://localhost:8080
-- Backend: http://localhost:3001
-- Vite proxy: `/api` → backend
-
-### Testes
-```bash
-cd server && npm run test        # testes do server
-npm run test                     # testes do frontend
-```
+Testes: `npm run test` (frontend) · `cd server && npm run test`.
 
 ---
 
-## Estrutura de pastas
+## Design system — como produzir UI
+
+Ler `docs/DESIGN-SYSTEM.md` **antes** de criar tela. Skills: `.cursor/skills/typeui-dashboard/` e `.cursor/skills/boom-chatwoot-ds/`.
+
+| Tela | Wrapper | Primitivos |
+|------|---------|------------|
+| Quase todo o painel | nenhum (`AppLayout`) | shadcn `Card` `Button` `space-y-6` |
+| `/dashboard` `/kanban` | `ds-typeui font-plex` | `.tu-panel` `.tu-kpi` `SectionHeader` |
+| Embed Chatwoot / perfil contato | `ds-chatwoot font-cw` | shadcn por baixo; **não** usar `bg-cw-*` como classe Tailwind (tokens ainda não estão em `tailwind.config.ts`) |
+
+- `cn()` em `src/lib/utils.ts`. Tokens semânticos, nunca hex solto.
+- Dark: `next-themes`, classe `.dark`, default dark, key `boomia-theme`. Testar os dois temas.
+- Ícones Lucide. Não copiar `glass-card`, `font-jakarta`, `primary-tint*`.
+- Não alterar `--primary` global para “ficar Chatwoot”.
+- Página nova: rota em `App.tsx` + `ProtectedRoute` + `ModuleRoute` + item na `AppSidebar` (`moduleKey`) + módulo em `tenant-modules.ts` se for recurso novo.
+- Dados: hooks. `ui/` sem fetch.
+
+---
+
+## Estrutura de pastas (produção)
 
 ```
-├── src/                    Frontend React (painel admin)
-│   ├── pages/              Páginas/rotas
-│   ├── components/         Componentes UI e de domínio
-│   ├── hooks/              React Query hooks
-│   ├── contexts/           Providers globais (Auth, Tenant, Sidebar)
-│   ├── integrations/       Cliente Supabase
-│   └── lib/                Utilitários puros
-│
-├── server/                 Backend Fastify
-│   └── src/
-│       ├── routes/         Endpoints REST
-│       ├── services/       Lógica de negócio + tools
-│       ├── utils/          Utilitários (sanitize, notificações)
-│       ├── workers/        BullMQ workers
-│       └── config/         Env vars
-│
-├── supabase/functions/     Edge Functions Deno
-├── sql/                    Migrations SQL manuais
-├── docker/                 Infra Docker + docs de deploy
-├── docs/                   Documentação operacional
-└── scripts/                Scripts E2E e utilitários
+src/
+  App.tsx                 rotas — sempre atualizar junto com página nova
+  index.css               tokens shadcn + TypeUI
+  pages/                  uma rota; subpastas hospedagem/ loteamentos/
+  components/
+    ui/                   shadcn (CLI). Custom: date-input-br, theme-toggle
+    layout/               AppLayout, AppSidebar, AppHeader, TenantSwitcher
+    dashboard/ + v2/      métricas (TypeUI no painel)
+    {domínio}/            agents, contacts, kanban, loteamentos, embed, …
+  hooks/                  use{Recurso}.ts — query key inclui tenantId
+  contexts/               Auth, Tenant, Sidebar, Embed*
+  lib/                    api-client, tenant-modules, cn(), embeds
+  integrations/supabase/  nexusDb (proxy /api/supabase-proxy)
+  types/                  calendar.ts, database.ts
+
+server/src/
+  index.ts                CORS, parsers, registro de rotas, workers/cron
+  routes/                 um arquivo = domínio; registrar em index.ts
+  services/               tool-executor, delivery, crypto, Asaas, Chatwoot embed
+  services/prompts/       um TS por tenant + registry.ts
+  utils/                  sanitize, sunset-lodging-*, mídia, brasiliaTime
+  workers/                followup + financeiro (BullMQ; cron se sem Redis)
+  config/env.ts           validateEnv
+  lib/                    URLs Storage, segmentos veículo, superadmin
+
+sql/                      001–054 (023 falta; 032/033 duplicados)
+supabase/functions/       5 Edge Functions Deno
+supabase/migrations/      CLI — manter paridade com sql/
+docker/                   proxy nginx + docs Portainer
+docs/                     DESIGN-SYSTEM.md + operacional
+scripts/                  HTML embed Chatwoot + cron-tenant-ai
+server/scripts/           e2e / verify / migrate
+.cursor/skills/           DS Chatwoot + TypeUI
 ```
+
+Cada pasta acima (exceto `server/scripts` recém documentada) tem `CLAUDE.md` + `AGENTS.md`.
+
+---
+
+## Receitas
+
+### Nova página admin
+1. `src/pages/X.tsx` — composição, sem fetch
+2. `src/hooks/useX.ts` se precisar de dados (`enabled: !!tenantId`)
+3. Rota em `App.tsx`
+4. Nav em `AppSidebar` + título em `AppHeader`
+5. Módulo em `tenant-modules.ts` se ACL nova
+
+### Nova rota API
+1. `server/src/routes/x.ts` exportando `async function xRoutes(fastify)`
+2. `fastify.register(xRoutes, { prefix: "/api" })` em `index.ts`
+3. Lógica em `services/`, não na rota
+4. Validar env / `createNexusClient()`
+
+### Novo tenant / prompt
+1. `server/src/services/prompts/slug.ts` (`SYSTEM_PROMPT`, `COMMUNICATION_RULES`, `DISPATCHER_PROMPT`, `FOLLOWUP_PROMPT`)
+2. Registrar em `registry.ts` + aliases
+3. `slug.prompt.test.ts`
+4. Redeploy **server**. UTF-8 sem BOM. Sem telefones.
+
+### Nova tool
+1. Serviço + case em `tool-executor.ts` → `{ success, result, error }`
+2. Migration `sql/NNN_*.sql` (não editar migration já aplicada)
+3. Teste lado-a-lado
+4. Prompt do tenant se a IA precisar chamar
+
+### Novo worker
+`startXWorker(): Worker | null` + **cron equivalente** em `index.ts`.
 
 ---
 
 ## Regras globais
 
-### Commits
-- Mensagens em **pt-BR**
-- Formato: `fix(escopo): descrição`, `feat(escopo): descrição`
-
-### Código
-- TypeScript strict
-- Frontend: shadcn/ui + Tailwind, hooks para dados, contexts para estado global
-- Backend: Fastify, serviços como funções, tools retornam `{ success, result, error }`
-- Datas: sempre timezone Brasília
-- Nunca citar telefones em prompts/respostas da IA
-
-### Testes
-- Vitest (server e frontend)
-- Testes lado-a-lado: `arquivo.ts` → `arquivo.test.ts`
-- Obrigatório para: sanitização, tools, prompts, utilitários
+- Commits pt-BR: `fix(escopo):`, `feat(escopo):`
+- TypeScript strict. Datas: `brasiliaTime.ts`. Tools: `{ success, result, error }`
+- Testes lado-a-lado. Obrigatório: sanitize, tools, prompts, utils
+- Nunca logar API keys. Nunca `process.env` de service_role no frontend
+- Dead code: `routes/auth.ts`, `payments-asaas.ts`, `webhooks-asaas.ts` — não usar sem registrar
+- Catch-all content-type em `index.ts` — não expor upload sem validação
 
 ---
 
-## Ordem de leitura recomendada
+## Ordem de leitura (código)
 
-1. `server/src/routes/chat-local.ts` — cérebro do agente
-2. `server/src/services/tool-executor.ts` — engine de tools
-3. `server/src/services/prompts/registry.ts` — sistema de prompts
-4. `server/src/index.ts` — bootstrap do server
-5. `src/App.tsx` — árvore de rotas do frontend
-6. `src/contexts/AuthContext.tsx` — autenticação
-7. `src/integrations/supabase/nexus-client.ts` — cliente Supabase
+1. `server/src/routes/chat-local.ts`
+2. `server/src/services/tool-executor.ts`
+3. `server/src/services/prompts/registry.ts`
+4. `server/src/index.ts`
+5. `src/App.tsx`
+6. `src/contexts/AuthContext.tsx`
+7. `src/integrations/supabase/nexus-client.ts`
+8. `docs/DESIGN-SYSTEM.md` (UI)
 
 ---
 
-## Sunset Thermas Park (Julia) — v1.5.36
+## Sunset Thermas Park (Julia) — v1.5.58
 
-Agente de hospedagem (`sunset-thermas-park`). Versão atual no registry: **v1.5.36**.
-
-### Arquivos-chave
+Slug `sunset-thermas-park`. Registry: **v1.5.58**. Qualificação §00d vive no **prompt e no runtime**.
 
 | Área | Arquivo |
 |------|---------|
-| Prompt + qualificação §00d | `server/src/services/prompts/sunset-thermas.ts` |
-| Allowlist / params tool | `server/src/utils/sunset-lodging-params.ts` |
-| Formato orçamento | `server/src/utils/sunset-lodging-quote-format.ts` |
-| Guards no loop | `server/src/routes/chat-local.ts` |
+| Prompt | `server/src/services/prompts/sunset-thermas.ts` |
+| Allowlist / FAQ | `server/src/utils/sunset-lodging-params.ts` |
+| Orçamento | `server/src/utils/sunset-lodging-quote-format.ts` |
+| Guards | `server/src/routes/chat-local.ts` |
 
-### Regras de runtime (não só prompt)
-
-1. **Turnos 1–2** — `shouldDeferSunsetLodgingQuote()` impede hint `[HINT OBRIGATÓRIO]`, formatação e auto-invoke de hospedagem.
-2. **Tool sob demanda** — `userNeedsSunsetLodgingToolCall()` usa allowlist; FAQ de amenidade e turnos iniciais **não** disparam tool.
-3. **Loft no orçamento** — sem `Acomodação:` no formulário, `extractSunsetLodgingParams` usa `SUNSET_DEFAULT_LOFT_INTEREST_KEYWORDS`.
-4. **Anti-repetição** — `messageDeclaresLodgingAmenityFaq()` + `shouldRebuildSunsetQuoteFromTool()` evitam reenviar preços em dúvidas como “spa é aquecido?”.
-
-### Testes
+1. Turnos 1–2: `shouldDeferSunsetLodgingQuote()` — sem tool / hint de orçamento
+2. Tool só com `userNeedsSunsetLodgingToolCall()`
+3. Sem `Acomodação:` → Loft (`SUNSET_DEFAULT_LOFT_INTEREST_KEYWORDS`)
+4. FAQ amenidade: não reconstruir R$
 
 ```bash
 cd server && npx vitest run src/utils/sunset-lodging-params.test.ts
@@ -168,52 +177,23 @@ cd server && npx vitest run src/services/prompts/sunset-thermas.test.ts
 cd server && npx vitest run src/utils/sunset-lodging-quote-format.test.ts
 ```
 
-### Deploy
-
-- Redeploy do **server** após mudanças em prompt ou runtime.
-- Migrations opcionais Sunset galeria: `sql/041_register_suite_gallery_tool_sunset.sql`, `sql/042_link_suite_gallery_tool_to_sunset_agent.sql`.
+Redeploy server. Galeria: SQL `041`/`042`.
 
 ---
 
-## Módulo loteamentos
+## Loteamentos
 
-Gestão de empreendimentos e lotes (mapa visual, status, embed Chatwoot). Ver `docs/LOTEAMENTOS.md`.
-
-| Item | Caminho |
-|------|---------|
-| Rotas API | `server/src/routes/loteamentos.ts`, `loteamentos-embed-auth.ts` |
-| Frontend | `src/pages/loteamentos/`, `src/hooks/useLoteamentos.ts` |
-| SQL schema | `sql/039_lot_developments_and_lots.sql` |
-| Embed script | `scripts/tenants/delta-empreendimentos-dashboard-loteamentos.script.html` |
-
-Ativação: habilitar módulo `loteamentos` no tenant + aplicar migration 039.
+Módulo `loteamentos`. `docs/LOTEAMENTOS.md`. API `loteamentos.ts` + `loteamentos-embed-auth.ts`. Painel `src/pages/loteamentos/`. SQL `039` + seed `040`. Embed Delta em `scripts/tenants/`.
 
 ---
 
 ## Documentação por pasta
 
 ### Server
-- [routes](server/src/routes/AGENTS.md)
-- [services](server/src/services/AGENTS.md)
-- [prompts](server/src/services/prompts/AGENTS.md)
-- [utils](server/src/utils/AGENTS.md)
-- [workers](server/src/workers/AGENTS.md)
-- [config](server/src/config/AGENTS.md)
-- [constants](server/src/constants/AGENTS.md)
-- [types](server/src/types/AGENTS.md)
-- [lib](server/src/lib/AGENTS.md)
+[routes](server/src/routes/AGENTS.md) · [services](server/src/services/AGENTS.md) · [prompts](server/src/services/prompts/AGENTS.md) · [utils](server/src/utils/AGENTS.md) · [workers](server/src/workers/AGENTS.md) · [config](server/src/config/AGENTS.md) · [constants](server/src/constants/AGENTS.md) · [types](server/src/types/AGENTS.md) · [lib](server/src/lib/AGENTS.md) · [scripts](server/scripts/AGENTS.md)
 
 ### Frontend
-- [pages](src/pages/AGENTS.md)
-- [components](src/components/AGENTS.md)
-- [hooks](src/hooks/AGENTS.md)
-- [contexts](src/contexts/AGENTS.md)
-- [lib](src/lib/AGENTS.md)
-- [integrations/supabase](src/integrations/supabase/AGENTS.md)
+[pages](src/pages/AGENTS.md) · [components](src/components/AGENTS.md) · [hooks](src/hooks/AGENTS.md) · [contexts](src/contexts/AGENTS.md) · [lib](src/lib/AGENTS.md) · [supabase](src/integrations/supabase/AGENTS.md) · [types](src/types/AGENTS.md)
 
-### Infraestrutura
-- [sql](sql/AGENTS.md)
-- [supabase/functions](supabase/functions/AGENTS.md)
-- [docker](docker/AGENTS.md)
-- [docs](docs/AGENTS.md)
-- [scripts](scripts/AGENTS.md)
+### Infra
+[sql](sql/AGENTS.md) · [functions](supabase/functions/AGENTS.md) · [docker](docker/AGENTS.md) · [docs](docs/AGENTS.md) · [scripts](scripts/AGENTS.md)

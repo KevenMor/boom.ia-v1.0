@@ -1,7 +1,7 @@
 # lib (frontend)
 
 ## Contexto rápido
-Utilitários puros do frontend — API client com auto-auth, formatação BR, CSV, validação e helpers de domínio.
+Utilitários puros + HTTP. Inventário: `CLAUDE.md`. `cn()` e `getApiBase()` são globais — não mudar assinatura.
 
 ## Stack e ferramentas
 - TypeScript puro

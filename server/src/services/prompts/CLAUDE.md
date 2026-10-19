@@ -1,54 +1,39 @@
 # prompts
 
 ## Propósito
-Sistema de prompts por tenant — cada cliente tem seu próprio system prompt, regras de comunicação, dispatcher e follow-up hardcoded em TypeScript.
+System prompts por tenant em TypeScript. `registry.ts` mapeia slug → config (aliases + typos). `buildSystemPrompt()` junta prompt + regras + greeting + horário Brasília.
 
-## Arquitetura
-- Padrão: um arquivo TS por tenant exportando constantes (`SYSTEM_PROMPT`, `COMMUNICATION_RULES`, `DISPATCHER_PROMPT`, `FOLLOWUP_PROMPT`).
-- `registry.ts` mapeia slugs → configs via `TENANT_PROMPTS` (Record). Suporta aliases e normalização de slug (typos, hífens, underscores).
-- `base.ts` contém `BASE_GREETING` e `DEFAULT_DISPATCHER_PROMPT` compartilhados.
-- `buildSystemPrompt()` compõe: prompt do tenant + communication rules + greeting + contexto temporal (Brasília).
-- Dependências internas: nenhuma (pasta isolada).
-- Dependências externas: nenhuma.
+## Arquivos
+`base.ts` · `registry.ts` · um `.ts` por tenant · `*.prompt.test.ts`.
 
-## Arquivos-chave
-| Arquivo | Responsabilidade |
-|---------|-----------------|
-| registry.ts | Mapa slug→config, buildSystemPrompt(), getDispatcherPrompt(), getFollowupPrompt(), getAllPromptConfigs() |
-| base.ts | BASE_GREETING, DEFAULT_DISPATCHER_PROMPT |
-| ppl-motors.ts | Prompt Ana Júlia — SDR concessionária |
-| pet-home.ts | Prompt Tia Ana — hotel/creche para cães |
-| vale-suico.ts | Prompt Vitória — consultora Vale Suíço Resort |
-| sunset-thermas.ts | Prompt Julia — consultora Sunset Thermas Park |
-| autoescola-ideal.ts | Prompt Bia — SDR Autoescola Ideal |
-| biazini.ts | Prompt Bia — secretária veterinária |
-| instituto-vicentim-maekawa.ts | Prompt Mariana — recepcionista odontologia |
-| imperio-cfc.ts | Prompt Roberta — SDR autoescola |
-| dr-iuri.ts | Prompt Camila — assistente otomodelação |
-| durce-vita.ts | Prompt Juliana — recepcionista odontologia |
-| contabilidade-ideal.ts | Prompt Vitória — contabilidade |
-| clinica-odonto.ts | Template genérico clínica odontológica |
+| Arquivo / slug | Versão | Agente |
+|----------------|--------|--------|
+| ppl-motors.ts | v2.3.1 | Ana Júlia |
+| referency.ts | v1.6.4 | Amanda |
+| pousada-flores-do-lazaro.ts | v1.0.0 | Marina |
+| instituto-vicentim-maekawa.ts | v1.2.0 | Mariana |
+| pet-home.ts | v1.2.1 | Tia Ana |
+| vale-suico.ts | v1.2.46 | Vitória |
+| sunset-thermas.ts (`sunset-thermas-park`) | **v1.5.58** | Julia |
+| durce-vita.ts | v1.2.1 | Juliana |
+| contabilidade-ideal.ts | v1.0 | Vitória |
+| clinica-odonto.ts | v1.0.0 | template |
+| imperio-cfc.ts | v2.0 | Roberta |
+| autoescola-ideal.ts | v8.16 | Bia |
+| dr-iuri.ts | v1.1.1 | Camila |
+| biazini.ts | v1.0.1 | Bia |
+| monte-verde-ranch.ts | v1.2.1 | Cleide |
+| delta-empreendimentos.ts | v1.5.18 | Paula |
 
-## Decisões técnicas
-- Prompts em código TS (não em DB) — garante versionamento e review em PR, mas exige redeploy para alterar.
-- Registry suporta múltiplos slugs por tenant (aliases para typos no banco).
-- `alwaysInjectCommRules: true` — força injeção de regras mesmo sem tool de inventário.
-- Contexto temporal injetado automaticamente (data/hora Brasília) para o LLM saber "hoje"/"amanhã".
+Exports: `SYSTEM_PROMPT`, `COMMUNICATION_RULES`, `DISPATCHER_PROMPT`, `FOLLOWUP_PROMPT`.
 
-## Convenções
-- Um arquivo por tenant, nomeado pelo slug principal.
-- Exports padronizados: `SYSTEM_PROMPT`, `COMMUNICATION_RULES`, `DISPATCHER_PROMPT`, `FOLLOWUP_PROMPT`.
-- Testes: `*.prompt.test.ts` — validam estrutura e conteúdo crítico.
-- Versão semântica no campo `version` do registry.
+## Decisões
+- Código, não DB → versionamento em PR, **redeploy** para mudar
+- `alwaysInjectCommRules` comum
+- Sunset: qualificação §00d também em `chat-local.ts` + `sunset-lodging-params.ts` — bump `version` ao mudar
 
-## Fluxos críticos
-1. `chat-local.ts → buildSystemPrompt(agentPrompt, tenantSlug, hasInventoryTool) → prompt completo para LLM`
-2. `chat-local.ts → getDispatcherPrompt(tenantSlug) → prompt de classificação/dispatch`
-3. `followup-worker → getFollowupPrompt(tenantSlug) → prompt para mensagem de follow-up`
-
-## Cuidados ao modificar
-- Antes de editar prompt de tenant, rodar teste correspondente (`*.prompt.test.ts`).
-- Não alterar `BASE_GREETING` sem verificar impacto em todos os tenants.
-- Encoding UTF-8 sem BOM — histórico de corrupção (commits cb51a1a, 31b6e85).
-- Não citar números de telefone em prompts (regra de compliance).
-- Adicionar novo tenant exige: criar arquivo + registrar no registry + redeploy.
+## Cuidados
+- UTF-8 sem BOM
+- Sem telefones
+- Não remover alias sem checar o slug no banco
+- Novo tenant: arquivo + registry + teste + redeploy
