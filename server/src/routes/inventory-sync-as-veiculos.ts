@@ -189,7 +189,6 @@ export async function inventorySyncASVeiculosRoutes(fastify: FastifyInstance) {
           titulo: raw.titulo_completo || `${car.brand} ${car.model} ${car.version}`.trim(),
           preco: formatarPreco(car.price),
           ano: anoModelo ? `${anoModelo}/${ano}` : ano,
-          km: formatarKm(car.mileage),
           motorizacao: raw.motorizacao || "",
           cambio: car.transmission || "Não informado",
           combustivel: car.fuel_type || "Flex",
