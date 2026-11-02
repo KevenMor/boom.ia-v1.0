@@ -183,10 +183,13 @@ export async function inventorySyncASVeiculosRoutes(fastify: FastifyInstance) {
 
         const ano = car.year ? String(car.year) : "Consulte";
         const anoModelo = raw.ano_modelo && raw.ano_modelo !== car.year ? raw.ano_modelo : null;
+        const titulo = raw.titulo_completo || `${car.brand} ${car.model} ${car.version}`.trim();
+        const fotosValidas = fotos.slice(0, 8);
+        const photosMarkdown = fotosValidas.map((url) => `![${titulo}](${url})`).join("\n");
 
         return {
           id: car.external_id,
-          titulo: raw.titulo_completo || `${car.brand} ${car.model} ${car.version}`.trim(),
+          titulo,
           preco: formatarPreco(car.price),
           ano: anoModelo ? `${anoModelo}/${ano}` : ano,
           motorizacao: raw.motorizacao || "",
@@ -195,7 +198,8 @@ export async function inventorySyncASVeiculosRoutes(fastify: FastifyInstance) {
           cor: car.color || "Não informada",
           opcionais: car.description || "Consulte opcionais",
           link: car.detail_url || `${AS_VEICULOS_BASE_URL}/carros/`,
-          fotos: fotos.slice(0, 10),
+          fotos: fotosValidas,
+          photos_markdown: photosMarkdown,
         };
       });
 
