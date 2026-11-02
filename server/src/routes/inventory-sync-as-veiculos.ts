@@ -156,8 +156,11 @@ export async function inventorySyncASVeiculosRoutes(fastify: FastifyInstance) {
       if (search) {
         const termo = search.replace(/[%,()]/g, " ").trim();
         if (termo) {
+          // Pega a palavra principal (ex: "EcoSport" de "EcoSport XLT 2.0 Preta automática")
+          const palavras = termo.split(/\s+/).filter((w) => w.length >= 3);
+          const palavraPrincipal = palavras[0] || termo;
           dbQuery = dbQuery.or(
-            `brand.ilike.%${termo}%,model.ilike.%${termo}%,version.ilike.%${termo}%,description.ilike.%${termo}%`,
+            `brand.ilike.%${termo}%,model.ilike.%${termo}%,version.ilike.%${termo}%,description.ilike.%${termo}%,model.ilike.%${palavraPrincipal}%,brand.ilike.%${palavraPrincipal}%`,
           );
         }
       }
