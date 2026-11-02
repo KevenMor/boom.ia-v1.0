@@ -11,6 +11,7 @@ import { decodeHtmlEntities, decodeInventoryRecord } from "../lib/html-entities.
 
 const LISTING_URL = "https://pplmotors.com.br/Veiculos";
 const PPL_MOTORS_TENANT_ID = "bc4a1dc9-a205-4b4b-9b6c-47bf677a2728";
+const AS_VEICULOS_TENANT_ID = "7a93ade5-2d07-4913-b5a0-bb74e1dae392";
 
 interface VehicleCard {
   external_id: string;
@@ -400,11 +401,25 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
   });
 
   fastify.post("/inventory/sync", async (req: FastifyRequest, reply: FastifyReply) => {
+    const body = (req.body as { tenant_id?: string } | null) || {};
     const embedTenant = getEmbedInventoryTenantId(req);
+    const requestedTenant = embedTenant ?? body.tenant_id?.trim() ?? PPL_MOTORS_TENANT_ID;
+
+    // Se a chamada veio para a AS Veículos (ex: botão "Sincronizar" do painel), delega para a rota especializada da AS Veículos
+    if (requestedTenant === AS_VEICULOS_TENANT_ID) {
+      const delegated = await fastify.inject({
+        method: "POST",
+        url: "/api/inventory/sync-as-veiculos",
+        headers: {
+          ...(req.headers["x-nexus-auth"] ? { "x-nexus-auth": req.headers["x-nexus-auth"] as string } : {}),
+        },
+      });
+      return reply.status(delegated.statusCode).send(delegated.json());
+    }
+
+    const tenant_id = requestedTenant === PPL_MOTORS_TENANT_ID ? PPL_MOTORS_TENANT_ID : requestedTenant;
     const nexusAuth = embedTenant ? "" : (req.headers["x-nexus-auth"] as string) || "";
     const supabase = createNexusClient(nexusAuth);
-
-    const tenant_id = embedTenant ?? PPL_MOTORS_TENANT_ID;
 
     try {
       const listResp = await fetch(LISTING_URL, {
@@ -485,6 +500,7 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
       await supabase
         .from("inventory")
         .update({ status: "sold", last_synced_at: new Date().toISOString() })
+        .eq("tenant_id", tenant_id)
         .eq("status", "available")
         .not("external_id", "in", `(${syncedIds.join(",")})`);
 

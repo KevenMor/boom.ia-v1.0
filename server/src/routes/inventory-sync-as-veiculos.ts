@@ -29,8 +29,8 @@ export async function inventorySyncASVeiculosRoutes(fastify: FastifyInstance) {
    * GET/POST /api/inventory/sync-as-veiculos[?tenant_id=uuid]
    */
   const handleSync = async (req: FastifyRequest, reply: FastifyReply) => {
-    const query = req.query as { tenant_id?: string };
-    const tenant_id = query?.tenant_id || AS_VEICULOS_TENANT_ID;
+    // Isolamento estrito: esta rota SEMPRE opera única e exclusivamente no tenant AS Veículos.
+    const tenant_id = AS_VEICULOS_TENANT_ID;
     const supabase = createNexusClient();
 
     try {
