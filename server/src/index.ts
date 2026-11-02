@@ -12,6 +12,7 @@ import { meRoutes } from "./routes/me.js";
 import { promptReadRoutes } from "./routes/prompts-read.js";
 import { inventoryRoutes } from "./routes/inventory.js";
 import { inventorySyncReferencyRoutes } from "./routes/inventory-sync-referency.js";
+import { inventorySyncASVeiculosRoutes } from "./routes/inventory-sync-as-veiculos.js";
 import { ragRoutes } from "./routes/rag.js";
 import { contactsRoutes } from "./routes/contacts.js";
 import { crmContactsRoutes } from "./routes/crm-contacts.js";
@@ -188,6 +189,7 @@ async function build() {
   fastify.register(meRoutes, { prefix: "/api" });
   fastify.register(inventoryRoutes, { prefix: "/api" });
   fastify.register(inventorySyncReferencyRoutes, { prefix: "/api" });
+  fastify.register(inventorySyncASVeiculosRoutes, { prefix: "/api" });
   fastify.register(ragRoutes, { prefix: "/api" });
   fastify.register(contactsRoutes, { prefix: "/api" });
   fastify.register(crmContactsRoutes, { prefix: "/api" });

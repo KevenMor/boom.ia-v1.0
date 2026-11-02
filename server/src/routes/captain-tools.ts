@@ -1,6 +1,8 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createNexusClient } from "../services/supabase.js";
 import { executeTool, type ToolDef } from "../services/tool-executor.js";
+import { getChatwootAuthHeaders } from "../services/delivery.js";
+import { buildHandoffNotification } from "../utils/agendaNotification.js";
 import { parseLodgingStayArgs } from "../utils/lodging-calendar-availability.js";
 
 const DIVINO_SLUGS = ["divino-chale", "divinochale"] as const;
