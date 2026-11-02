@@ -295,11 +295,23 @@ export async function inventorySyncASVeiculosRoutes(fastify: FastifyInstance) {
   /**
    * Endpoint de Consulta de Estoque para o Captain (Tânia)
    * GET /api/captain-tools/as-veiculos/estoque?search={termo}
+   * Auth: Authorization: Bearer <CAPTAIN_TOOLS_TOKEN>.
    * Devolve JSON enxuto, formatado e completo para a LLM apresentar sem inventar nada.
    */
   fastify.get(
     "/captain-tools/as-veiculos/estoque",
     async (req: FastifyRequest, reply: FastifyReply) => {
+      const expected = process.env.CAPTAIN_TOOLS_TOKEN;
+      if (!expected) {
+        return reply
+          .status(500)
+          .send({ error: "CAPTAIN_TOOLS_TOKEN não configurado no servidor" });
+      }
+      const auth = String(req.headers.authorization || "");
+      if (auth !== `Bearer ${expected}`) {
+        return reply.status(401).send({ error: "unauthorized" });
+      }
+
       const query = req.query as { search?: string; limit?: string };
       const search = (query.search || "").trim();
       const limit = parseInt(query.limit || "6", 10);
