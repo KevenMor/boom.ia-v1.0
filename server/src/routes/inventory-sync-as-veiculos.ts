@@ -212,4 +212,149 @@ export async function inventorySyncASVeiculosRoutes(fastify: FastifyInstance) {
       });
     },
   );
+
+  /**
+   * Transferência com Rodízio Infalível para o Comercial (ou Despachante) via Captain.
+   * POST /api/captain-tools/as-veiculos/transferir
+   *
+   * Rodízio estrito entre Rafael (67) e Eduardo (70):
+   * - Se último foi Rafael -> próximo é Eduardo
+   * - Se último foi Eduardo -> próximo é Rafael
+   * - Se departamento for "despachante" -> vai direto para Nicoly (69)
+   */
+  fastify.post(
+    "/captain-tools/as-veiculos/transferir",
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const expected = process.env.CAPTAIN_TOOLS_TOKEN;
+      if (!expected) {
+        return reply
+          .status(500)
+          .send({ error: "CAPTAIN_TOOLS_TOKEN não configurado no servidor" });
+      }
+      const auth = String(req.headers.authorization || "");
+      if (auth !== `Bearer ${expected}`) {
+        return reply.status(401).send({ error: "unauthorized" });
+      }
+
+      const body = (req.body || {}) as {
+        conversation_id?: number | string;
+        departamento?: "comercial" | "despachante";
+        nome_cliente?: string;
+        veiculo_interesse?: string;
+        resumo?: string;
+        motivo?: string;
+      };
+
+      const headerConvId = req.headers["x-chatwoot-conversation-id"];
+      const convIdRaw = body.conversation_id || headerConvId;
+      const conversationId = convIdRaw ? Number(convIdRaw) : null;
+
+      const supabase = createNexusClient();
+      const departamento = (body.departamento || "comercial").toLowerCase();
+
+      const VENDEDORES_COMERCIAL = [
+        { id: 67, nome: "Rafael" },
+        { id: 70, nome: "Eduardo" },
+      ];
+      const ATENDENTE_DESPACHANTE = { id: 69, nome: "Nicoly" };
+
+      let consultorEscolhido: { id: number; nome: string };
+
+      if (departamento === "despachante") {
+        consultorEscolhido = ATENDENTE_DESPACHANTE;
+      } else {
+        const RODIZIO_EXTERNAL_ID = "as-system-rodizio-comercial";
+        const { data: estadoRow } = await supabase
+          .from("inventory")
+          .select("raw_data")
+          .eq("external_id", RODIZIO_EXTERNAL_ID)
+          .maybeSingle();
+
+        let lastId = 70; // Começa com Rafael (67)
+        let totalCount = 0;
+        if (estadoRow?.raw_data) {
+          try {
+            const parsed = typeof estadoRow.raw_data === "string" ? JSON.parse(estadoRow.raw_data) : estadoRow.raw_data;
+            if (parsed.last_id) lastId = Number(parsed.last_id);
+            if (parsed.total_count) totalCount = Number(parsed.total_count);
+          } catch {
+            // fallback
+          }
+        }
+
+        if (lastId === 67) {
+          consultorEscolhido = VENDEDORES_COMERCIAL[1]; // Eduardo (70)
+        } else {
+          consultorEscolhido = VENDEDORES_COMERCIAL[0]; // Rafael (67)
+        }
+
+        await supabase.from("inventory").upsert(
+          {
+            external_id: RODIZIO_EXTERNAL_ID,
+            tenant_id: AS_VEICULOS_TENANT_ID,
+            brand: "System",
+            model: "Rodizio Comercial",
+            status: "system",
+            raw_data: JSON.stringify({
+              last_id: consultorEscolhido.id,
+              last_nome: consultorEscolhido.nome,
+              total_count: totalCount + 1,
+              updated_at: new Date().toISOString(),
+            }),
+            last_synced_at: new Date().toISOString(),
+          },
+          { onConflict: "external_id" },
+        );
+      }
+
+      const chatwootBaseUrl = (process.env.CHATWOOT_BASE_URL || "https://mega.atendai.app").replace(/\/+$/, "");
+      const chatwootToken = process.env.AS_VEICULOS_CHATWOOT_TOKEN || process.env.CHATWOOT_API_TOKEN;
+
+      if (conversationId && chatwootToken) {
+        try {
+          await fetch(`${chatwootBaseUrl}/api/v1/accounts/20/conversations/${conversationId}/assignments`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              api_access_token: chatwootToken,
+            },
+            body: JSON.stringify({ assignee_id: consultorEscolhido.id }),
+          });
+
+          const nomeCli = body.nome_cliente || "Cliente";
+          const veiculo = body.veiculo_interesse || "Não especificado";
+          const resumo = body.resumo || body.motivo || "Cliente qualificado pela Tânia e transferido via rodízio.";
+          const notaInterna = [
+            "🤖 *LEAD QUALIFICADO PELA TÂNIA (IA)*",
+            `👤 *Cliente:* ${nomeCli}`,
+            `🚗 *Veículo:* ${veiculo}`,
+            `📋 *Detalhes / Resumo:* ${resumo}`,
+            `🎯 *Atribuído via rodízio para:* ${consultorEscolhido.nome}`,
+          ].join("\n");
+
+          await fetch(`${chatwootBaseUrl}/api/v1/accounts/20/conversations/${conversationId}/messages`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              api_access_token: chatwootToken,
+            },
+            body: JSON.stringify({
+              content: notaInterna,
+              private: true,
+            }),
+          });
+        } catch (cwErr) {
+          console.error("[AS Veículos] Erro ao atualizar conversa no Chatwoot:", cwErr);
+        }
+      }
+
+      return reply.send({
+        success: true,
+        consultor_id: consultorEscolhido.id,
+        consultor_nome: consultorEscolhido.nome,
+        departamento,
+        instrucao_ia: `Lead transferido com sucesso para o consultor ${consultorEscolhido.nome}. Agora avise o cliente com muita simpatia e naturalidade que você já passou o caso dele para o consultor ${consultorEscolhido.nome}, e que ele já está assumindo a conversa aqui no WhatsApp para continuar o atendimento!`,
+      });
+    },
+  );
 }
