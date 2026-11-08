@@ -8,6 +8,10 @@ import {
   listarFotos,
   montarFicha,
 } from "../lib/as-veiculos-scraper.js";
+import {
+  sendChatwootImagesBatch,
+  sendChatwootTextMessage,
+} from "../services/delivery.js";
 
 export const AS_VEICULOS_TENANT_ID = "7a93ade5-2d07-4913-b5a0-bb74e1dae392";
 
@@ -354,6 +358,114 @@ export async function inventorySyncASVeiculosRoutes(fastify: FastifyInstance) {
         consultor_nome: consultorEscolhido.nome,
         departamento,
         instrucao_ia: `Lead transferido com sucesso para o consultor ${consultorEscolhido.nome}. Agora avise o cliente com muita simpatia e naturalidade que você já passou o caso dele para o consultor ${consultorEscolhido.nome}, e que ele já está assumindo a conversa aqui no WhatsApp para continuar o atendimento!`,
+      });
+    },
+  );
+
+  /**
+   * Envia fotos reais (anexo WhatsApp) via Chatwoot/Mega.
+   * POST /api/captain-tools/as-veiculos/enviar-fotos
+   *
+   * Body: { conversation_id, fotos: string[], caption?: string }
+   * Nunca devolve URL crua para a IA colar no chat — a tool sobe attachments[].
+   */
+  fastify.post(
+    "/captain-tools/as-veiculos/enviar-fotos",
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const expected = process.env.CAPTAIN_TOOLS_TOKEN;
+      if (!expected) {
+        return reply
+          .status(500)
+          .send({ error: "CAPTAIN_TOOLS_TOKEN não configurado no servidor" });
+      }
+      const auth = String(req.headers.authorization || "");
+      if (auth !== `Bearer ${expected}`) {
+        return reply.status(401).send({ error: "unauthorized" });
+      }
+
+      const body = (req.body || {}) as {
+        conversation_id?: number | string;
+        fotos?: string[] | string;
+        photo_urls?: string[] | string;
+        caption?: string;
+        veiculo?: string;
+      };
+
+      const headerConvId = req.headers["x-chatwoot-conversation-id"];
+      const convIdRaw = body.conversation_id || headerConvId;
+      const conversationId = convIdRaw ? Number(convIdRaw) : null;
+      if (!conversationId || Number.isNaN(conversationId)) {
+        return reply.status(400).send({
+          error: "conversation_id obrigatório",
+          instrucao_ia:
+            "Passe conversation_id da conversa atual. Não cole URL de foto no chat.",
+        });
+      }
+
+      const rawFotos = body.fotos ?? body.photo_urls ?? [];
+      const lista =
+        typeof rawFotos === "string"
+          ? rawFotos
+              .split(/[\n,]+/)
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : Array.isArray(rawFotos)
+            ? rawFotos.map((s) => String(s).trim()).filter(Boolean)
+            : [];
+
+      const fotos = filterValidInventoryPhotoUrls(lista).slice(0, 8);
+      if (!fotos.length) {
+        return reply.status(400).send({
+          error: "nenhuma foto válida",
+          instrucao_ia:
+            "Não há fotos válidas para enviar. Informe o cliente que você confirma com o pátio e ofereça visita ou falar com o consultor. Nunca cole URL no chat.",
+        });
+      }
+
+      const chatwootBaseUrl = (process.env.CHATWOOT_BASE_URL || "https://mega.atendai.app").replace(
+        /\/+$/,
+        "",
+      );
+      const chatwootToken =
+        process.env.AS_VEICULOS_CHATWOOT_TOKEN || process.env.CHATWOOT_API_TOKEN;
+      if (!chatwootToken) {
+        return reply.status(500).send({
+          error: "token Chatwoot ausente",
+          instrucao_ia:
+            "Falha técnica ao enviar fotos. Peça desculpas em 1 frase e ofereça que o consultor manda as imagens em seguida.",
+        });
+      }
+
+      const msgUrl = `${chatwootBaseUrl}/api/v1/accounts/20/conversations/${conversationId}/messages`;
+      const veiculoLabel = (body.veiculo || "").trim();
+      const caption =
+        (body.caption || "").trim() ||
+        (veiculoLabel
+          ? `Olha só as fotos do ${veiculoLabel}! Se quiser, te ajudo a simular o financiamento ou a agendar uma visita na loja.`
+          : "Olha só as fotos! Se quiser, te ajudo a simular o financiamento ou a agendar uma visita na loja.");
+
+      const enviadas = await sendChatwootImagesBatch(msgUrl, chatwootToken, fotos, caption);
+
+      if (enviadas === 0) {
+        await sendChatwootTextMessage(
+          msgUrl,
+          chatwootToken,
+          "Tive uma travada pra mandar as fotos agora. Posso te ligar o consultor pra enviar as imagens e seguir com você, ou prefere que eu tente de novo?",
+        );
+        return reply.send({
+          success: false,
+          enviadas: 0,
+          instrucao_ia:
+            "As fotos não subiram. NÃO cole URL. Ofereça tentar de novo ou transferir para o consultor.",
+        });
+      }
+
+      return reply.send({
+        success: true,
+        enviadas,
+        total_solicitadas: fotos.length,
+        instrucao_ia:
+          "Fotos já foram enviadas como imagem no WhatsApp. NÃO cole URL nem markdown. NÃO diga 'ficou com alguma dúvida?'. Faça UMA pergunta comercial leve (financiamento, visita ou carro na troca).",
       });
     },
   );

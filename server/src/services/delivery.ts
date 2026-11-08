@@ -606,6 +606,7 @@ export {
   shouldPromoteTextToImageCaption,
   sendChatwootTextMessage,
   sendChatwootImageMessage,
+  sendChatwootImagesBatch,
   sendChatwootMediaMessage,
   sendChatwootPrivateNote,
   getHumanizationConfig,
