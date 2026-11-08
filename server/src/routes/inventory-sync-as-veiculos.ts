@@ -438,7 +438,7 @@ export async function inventorySyncASVeiculosRoutes(fastify: FastifyInstance) {
         return reply.status(500).send({
           error: "token Chatwoot ausente",
           instrucao_ia:
-            "Falha técnica ao enviar fotos. Peça desculpas em 1 frase e ofereça que o consultor manda as imagens em seguida.",
+            "Falha técnica ao enviar fotos. NÃO cole URL. NÃO ofereça consultor ainda. Diga em 1 frase que vai mandar de novo e tente a tool outra vez.",
         });
       }
 
