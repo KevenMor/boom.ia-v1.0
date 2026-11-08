@@ -392,9 +392,15 @@ export async function inventorySyncASVeiculosRoutes(fastify: FastifyInstance) {
       };
 
       const headerConvId = req.headers["x-chatwoot-conversation-id"];
-      const convIdRaw = body.conversation_id || headerConvId;
-      const conversationId = convIdRaw ? Number(convIdRaw) : null;
-      if (!conversationId || Number.isNaN(conversationId)) {
+      const bodyConv = body.conversation_id != null ? Number(body.conversation_id) : 0;
+      const headerConv = headerConvId ? Number(headerConvId) : 0;
+      const conversationId =
+        bodyConv > 0 && !Number.isNaN(bodyConv)
+          ? bodyConv
+          : headerConv > 0 && !Number.isNaN(headerConv)
+            ? headerConv
+            : null;
+      if (!conversationId) {
         return reply.status(400).send({
           error: "conversation_id obrigatório",
           instrucao_ia:
