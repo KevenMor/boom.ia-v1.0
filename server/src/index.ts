@@ -36,6 +36,7 @@ import { mcpRoutes } from "./routes/mcp.js";
 import { providerRoutes } from "./routes/providers.js";
 import { mcpKeysRoutes } from "./routes/mcp-keys.js";
 import { captainToolsRoutes } from "./routes/captain-tools.js";
+import { asVeiculosWahaLabelsRoutes } from "./routes/as-veiculos-waha-labels.js";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 
@@ -203,6 +204,7 @@ async function build() {
   fastify.register(tenantAiToggleRoutes, { prefix: "/api" });
   fastify.register(mcpKeysRoutes, { prefix: "/api" });
   fastify.register(captainToolsRoutes, { prefix: "/api" });
+  fastify.register(asVeiculosWahaLabelsRoutes, { prefix: "/api" });
   fastify.register(mcpRoutes);
   fastify.register(demoRoutes, { prefix: "/api" });
   fastify.register(embedChatwootRoutes, { prefix: "/api" });
