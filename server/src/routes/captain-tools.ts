@@ -13,6 +13,14 @@ const PLURAX_COMPANY_ID = Number(process.env.PLURAX_COMPANY_ID || 5);
 const PLURAX_TENANT_ID = Number(process.env.PLURAX_TENANT_ID || 5);
 const PLURAX_SLUG = process.env.PLURAX_SLUG || "divino-chale";
 
+const DEFAULT_DIVINO_PHOTO_URLS = [
+  "https://www.plurax.com.br/web/image/hotel.room.image/4/image_1920",
+  "https://www.plurax.com.br/web/image/hotel.room.image/5/image_1920",
+  "https://www.plurax.com.br/web/image/hotel.room.image/6/image_1920",
+  "https://www.plurax.com.br/web/image/hotel.room.image/7/image_1920",
+  "https://www.plurax.com.br/web/image/hotel.room.image/8/image_1920",
+] as const;
+
 async function pluraxFetch(
   path: string,
   method: string,
@@ -36,6 +44,70 @@ async function pluraxFetch(
     data = text;
   }
   return { status: res.status, data };
+}
+
+/**
+ * Doc Mega: conversation_message_send + media_urls (account 17 / divino_chale).
+ */
+async function sendDivinoPhotosViaMegaMcp(
+  conversationId: number,
+  fotos: string[],
+  caption: string,
+): Promise<number> {
+  const mcpToken =
+    process.env.DIVINO_CHALE_MEGA_MCP_TOKEN || process.env.CHATWOOT_API_TOKEN;
+  if (!mcpToken) return 0;
+
+  const base = (process.env.CHATWOOT_BASE_URL || "https://mega.atendai.app").replace(
+    /\/+$/,
+    "",
+  );
+  const mcpUrl =
+    process.env.DIVINO_CHALE_MEGA_MCP_URL || `${base}/mcp/17/divino_chale`;
+
+  let enviadas = 0;
+  for (let i = 0; i < fotos.length; i++) {
+    const payload = {
+      jsonrpc: "2.0",
+      id: i + 1,
+      method: "tools/call",
+      params: {
+        name: "conversation_message_send",
+        arguments: {
+          conversation_id: String(conversationId),
+          content: i === 0 ? caption : "",
+          media_urls: [fotos[i]],
+        },
+      },
+    };
+    const resp = await fetch(mcpUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Api-Access-Token": mcpToken,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok) continue;
+    const data = (await resp.json()) as {
+      error?: unknown;
+      result?: {
+        structuredContent?: { ok?: boolean; body?: { attachments?: unknown[] } };
+        content?: Array<{ text?: string }>;
+      };
+    };
+    if (data.error) continue;
+    const atts = data.result?.structuredContent?.body?.attachments;
+    if (Array.isArray(atts) && atts.length > 0) {
+      enviadas += atts.length;
+      continue;
+    }
+    const blob = (data.result?.content || []).map((c) => c.text || "").join(" ");
+    if (blob.includes('"file_type": "image"') || data.result?.structuredContent?.ok) {
+      enviadas += 1;
+    }
+  }
+  return enviadas;
 }
 
 function checkBearer(req: FastifyRequest, reply: FastifyReply): boolean {
@@ -114,6 +186,8 @@ async function resolveAgentId(
  * POST /api/captain-tools/handoff   { slug?, reason?, chatwoot_conversation_id?, conversation_id? }
  * POST /api/captain-tools/plurax    { operation, model?, domain?, fields?, ids?, limit?, order?, values?, method?, args?, kwargs? }
  *   Proxy escopado no Divino Chalé (company_id 5, tenant_id 5, slug divino-chale).
+ * POST /api/captain-tools/divino-chale/enviar-fotos  { conversation_id, caption?, foto_urls? }
+ *   Envia fotos do chalé no WhatsApp via Mega MCP (media_urls).
  */
 export async function captainToolsRoutes(fastify: FastifyInstance) {
   fastify.post("/captain-tools/calendar", async (req: FastifyRequest, reply: FastifyReply) => {
@@ -225,6 +299,80 @@ export async function captainToolsRoutes(fastify: FastifyInstance) {
       }
       const out = await pluraxFetch(`/orm/${operation}`, "POST", payload);
       return reply.status(out.status).send(out.data);
+    } catch (err) {
+      return reply.status(500).send({ error: (err as Error)?.message || "internal error" });
+    }
+  });
+
+  fastify.post("/captain-tools/divino-chale/enviar-fotos", async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkBearer(req, reply)) return;
+    try {
+      const body = (req.body || {}) as {
+        conversation_id?: number | string;
+        caption?: string;
+        foto_urls?: string[] | string;
+      };
+
+      const headerConvId = req.headers["x-chatwoot-conversation-id"];
+      const bodyConv = body.conversation_id != null ? Number(body.conversation_id) : 0;
+      const headerConv = headerConvId ? Number(headerConvId) : 0;
+      const conversationId =
+        bodyConv > 0 && !Number.isNaN(bodyConv)
+          ? bodyConv
+          : headerConv > 0 && !Number.isNaN(headerConv)
+            ? headerConv
+            : null;
+      if (!conversationId) {
+        return reply.status(400).send({
+          error: "conversation_id obrigatório",
+          instrucao_ia:
+            "Passe conversation_id da conversa atual. Não cole URL de foto no chat.",
+        });
+      }
+
+      const rawFotos = body.foto_urls;
+      let fotos: string[];
+      if (rawFotos == null || (Array.isArray(rawFotos) && rawFotos.length === 0)) {
+        fotos = [...DEFAULT_DIVINO_PHOTO_URLS];
+      } else if (typeof rawFotos === "string") {
+        fotos = rawFotos
+          .split(/[\n,]+/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+        if (!fotos.length) fotos = [...DEFAULT_DIVINO_PHOTO_URLS];
+      } else {
+        fotos = rawFotos.map((s) => String(s).trim()).filter(Boolean);
+        if (!fotos.length) fotos = [...DEFAULT_DIVINO_PHOTO_URLS];
+      }
+
+      const caption = (body.caption || "").trim();
+
+      let enviadas = 0;
+      try {
+        enviadas = await sendDivinoPhotosViaMegaMcp(conversationId, fotos, caption);
+      } catch (err) {
+        req.log?.warn?.({ err }, "[Divino Chalé] MCP media_urls falhou");
+      }
+
+      if (enviadas === 0) {
+        return reply.send({
+          success: false,
+          enviadas: 0,
+          total_solicitadas: fotos.length,
+          via: "mcp_media_urls",
+          instrucao_ia:
+            "As fotos não subiram. NÃO cole URL. Diga em 1 frase curta que vai mandar de novo e chame a tool outra vez.",
+        });
+      }
+
+      return reply.send({
+        success: true,
+        enviadas,
+        total_solicitadas: fotos.length,
+        via: "mcp_media_urls",
+        instrucao_ia:
+          "Fotos já foram enviadas como imagem no WhatsApp. Confirme em 1 frase curta e faça 1 pergunta leve. NÃO cole URL.",
+      });
     } catch (err) {
       return reply.status(500).send({ error: (err as Error)?.message || "internal error" });
     }

@@ -63,6 +63,8 @@ services:
       - AS_VEICULOS_MEGA_INBOX_ID=${AS_VEICULOS_MEGA_INBOX_ID:-71}
       - AS_VEICULOS_CHATWOOT_TOKEN=${AS_VEICULOS_CHATWOOT_TOKEN}
       - CHATWOOT_BASE_URL=${CHATWOOT_BASE_URL:-https://mega.atendai.app}
+      - DIVINO_CHALE_MEGA_MCP_URL=${DIVINO_CHALE_MEGA_MCP_URL:-https://mega.atendai.app/mcp/17/divino_chale}
+      - DIVINO_CHALE_MEGA_MCP_TOKEN=${DIVINO_CHALE_MEGA_MCP_TOKEN:-}
     networks:
       - internal
     deploy:
