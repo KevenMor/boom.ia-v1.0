@@ -345,7 +345,8 @@ export async function captainToolsRoutes(fastify: FastifyInstance) {
         if (!fotos.length) fotos = [...DEFAULT_DIVINO_PHOTO_URLS];
       }
 
-      const caption = (body.caption || "").trim();
+      const caption =
+        (body.caption || "").trim() || "Olha as fotos do Divino Chalé!";
 
       let enviadas = 0;
       try {
